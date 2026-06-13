@@ -76,3 +76,40 @@ export function verifyPlainSignature(
   const computed = createHmac("sha256", secret).update(body).digest("hex");
   return computed === signature;
 }
+
+/**
+ * Verify Stripe webhook signature.
+ * Header: stripe-signature
+ * Format: t=<timestamp>,v1=<hmac-sha256(secret, "{t}.{body}")>[,v1=<rotated>]
+ * The secret is the endpoint signing secret (whsec_…), not the API key.
+ */
+export function verifyStripeSignature(
+  body: string,
+  signature: string,
+  secret: string
+): boolean {
+  if (!signature || !secret) return false;
+
+  const parts = signature.split(",").map((p) => p.trim());
+  const timestamp = parts.find((p) => p.startsWith("t="))?.slice(2);
+  // A secret rotation yields multiple v1 signatures; accept a match on any.
+  const candidates = parts.filter((p) => p.startsWith("v1=")).map((p) => p.slice(3));
+  if (!timestamp || candidates.length === 0) return false;
+
+  // Reject signatures outside a 5-minute tolerance (replay protection).
+  const ts = parseInt(timestamp, 10);
+  if (!Number.isFinite(ts) || Math.abs(Date.now() / 1000 - ts) > 300) return false;
+
+  const expected = createHmac("sha256", secret).update(`${timestamp}.${body}`, "utf8").digest("hex");
+  const expectedBuf = Buffer.from(expected);
+
+  return candidates.some((candidate) => {
+    const candidateBuf = Buffer.from(candidate);
+    if (candidateBuf.length !== expectedBuf.length) return false;
+    try {
+      return timingSafeEqual(candidateBuf, expectedBuf);
+    } catch {
+      return false;
+    }
+  });
+}

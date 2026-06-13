@@ -1287,6 +1287,18 @@ async function loadAgents(): Promise<AgentModule[]> {
     }
   }
 
+  // Gated on the signing secret: without it every webhook fails verification, so
+  // there's no point exposing the route. Set STRIPE_WEBHOOK_SECRET to activate.
+  if (process.env.ENABLE_STRIPE_AGENT !== "false" && process.env.STRIPE_WEBHOOK_SECRET) {
+    try {
+      const { StripeAgent } = await import("./src/agents/stripe/index");
+      agents.push(new StripeAgent());
+      console.log("[agents] Stripe agent loaded");
+    } catch (e) {
+      console.error("[agents] Failed to load stripe agent:", e);
+    }
+  }
+
   return agents;
 }
 
