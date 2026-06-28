@@ -10,17 +10,19 @@ interface Props {
 
 /** Devin-style collapsed segment: "Worked for 12s · 5 steps". */
 export function WorkBlock({ items, toolResults, live }: Props) {
-  // If any tool in the block returned an image, keep the block open so the
-  // screenshot stays visible after the run finishes (otherwise the user has
-  // to expand "Worked" then expand the tool to see what the model showed them).
-  const hasImages = items.some((it) =>
-    it.toolUseId ? (toolResults.get(it.toolUseId)?.images?.length ?? 0) > 0 : false,
-  );
-  const [expanded, setExpanded] = useState(live || hasImages);
+  // If any tool in the block returned media (image or video), keep the block
+  // open so the screenshot/recording stays visible after the run finishes
+  // (otherwise the user has to expand "Worked" then the tool to see what the
+  // model showed them).
+  const hasMedia = items.some((it) => {
+    const r = it.toolUseId ? toolResults.get(it.toolUseId) : undefined;
+    return (r?.images?.length ?? 0) > 0 || (r?.videos?.length ?? 0) > 0;
+  });
+  const [expanded, setExpanded] = useState(live || hasMedia);
 
   useEffect(() => {
-    if (live || hasImages) setExpanded(true);
-  }, [live, hasImages]);
+    if (live || hasMedia) setExpanded(true);
+  }, [live, hasMedia]);
 
   const duration = blockDuration(items, toolResults);
   const last = items[items.length - 1];
