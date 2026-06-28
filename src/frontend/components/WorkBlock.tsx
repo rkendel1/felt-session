@@ -10,12 +10,17 @@ interface Props {
 
 /** Devin-style collapsed segment: "Worked for 12s · 5 steps". */
 export function WorkBlock({ items, toolResults, live }: Props) {
-  const [expanded, setExpanded] = useState(live);
+  // If any tool in the block returned an image, keep the block open so the
+  // screenshot stays visible after the run finishes (otherwise the user has
+  // to expand "Worked" then expand the tool to see what the model showed them).
+  const hasImages = items.some((it) =>
+    it.toolUseId ? (toolResults.get(it.toolUseId)?.images?.length ?? 0) > 0 : false,
+  );
+  const [expanded, setExpanded] = useState(live || hasImages);
 
-  // Follow the stream while live; collapse once the block is finished
   useEffect(() => {
-    if (live) setExpanded(true);
-  }, [live]);
+    if (live || hasImages) setExpanded(true);
+  }, [live, hasImages]);
 
   const duration = blockDuration(items, toolResults);
   const last = items[items.length - 1];

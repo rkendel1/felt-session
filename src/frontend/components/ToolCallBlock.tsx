@@ -37,7 +37,7 @@ export function parseMcpTool(name: string): { server: string; tool: string } | n
 export function ToolCallBlock({ entry, result }: Props) {
   const hasMedia = Boolean(result?.images?.length || result?.videos?.length);
   // Default closed for text-only output, but auto-open when media arrives
-  // (covers both initial render and a tool_result streaming in later).
+  // (covers both initial render and the live tool_result streaming in later).
   const [expanded, setExpanded] = useState(hasMedia);
   useEffect(() => {
     if (hasMedia) setExpanded(true);

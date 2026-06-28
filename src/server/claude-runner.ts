@@ -24,6 +24,12 @@ export interface StreamEvent {
   toolUseId?: string;
   content?: string;
   result?: string;
+  /**
+   * Renderable image sources on a tool_result (data: URLs from base64 blocks,
+   * or direct urls). Forwarded to viewers so screenshots show up the moment
+   * the tool returns instead of waiting for the jsonl tail to catch up.
+   */
+  images?: string[];
   /** Which backend emitted this event (set on init/done). */
   provider?: "claude" | "codex";
   /** Effective model for the run (set on init/done). */
@@ -791,6 +797,21 @@ export async function* runClaude(opts: {
                 : Array.isArray(block.content)
                   ? block.content.filter((c: any) => c.type === "text").map((c: any) => c.text).join("\n")
                   : "";
+              // Pull image blocks out so the live stream carries them too
+              // (mirrors jsonl-parser.extractImages so a streamed result and
+              // the persisted one render identically).
+              const images: string[] = [];
+              if (Array.isArray(block.content)) {
+                for (const c of block.content) {
+                  if (c?.type !== "image" || !c.source) continue;
+                  const s = c.source;
+                  if (s.type === "base64" && s.media_type && s.data) {
+                    images.push(`data:${s.media_type};base64,${s.data}`);
+                  } else if (s.type === "url" && s.url) {
+                    images.push(s.url);
+                  }
+                }
+              }
               turnEvent({
                 direction: "in",
                 kind: "tool_result",
@@ -802,6 +823,7 @@ export async function* runClaude(opts: {
                 type: "tool_result",
                 toolUseId: block.tool_use_id,
                 content: text.length > 500 ? text.slice(0, 500) + "..." : text,
+                ...(images.length > 0 ? { images } : {}),
               };
             }
           }

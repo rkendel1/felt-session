@@ -487,6 +487,7 @@ async function runSessionPrompt(
             content: event.content || "",
             timestamp: new Date().toISOString(),
             toolUseId: event.toolUseId,
+            ...(event.images && event.images.length > 0 ? { images: event.images } : {}),
           },
         });
         break;
@@ -681,19 +682,24 @@ if (!IS_DEV && !g.__backstageFrontend) {
   // source shell (icons, splash, manifest links) and point it at the hashed
   // entry + the extracted CSS.
   const entry = result.outputs.find((o) => o.kind === "entry-point");
-  const css = result.outputs.find((o) => o.path.endsWith(".css"));
   if (!entry) throw new Error("frontend build produced no entry point");
   const entryName = entry.path.split("/").pop();
-  const cssName = css?.path.split("/").pop();
+
+  // Bun 1.3.14's CSS minifier strips the space after var(...) and breaks the
+  // .panel-overlay / .sidebar-overlay inset (and a few color-mix percentages),
+  // which knocks out the mobile overlay layer. Bypass it: write the source CSS
+  // unmodified with a content-hashed name and serve it ourselves.
+  const cssSrc = await Bun.file(`${srcDir}/styles/global.css`).text();
+  const cssHash = Bun.hash(cssSrc).toString(36);
+  const cssName = `global-${cssHash}.css`;
+  await Bun.write(`${FRONTEND_DIST}/${cssName}`, cssSrc);
 
   let indexHtml = await Bun.file(`${srcDir}/index.html`).text();
   indexHtml = indexHtml.replace(
     '<script type="module" src="./App.tsx"></script>',
     `<script type="module" crossorigin src="/backstage/${entryName}"></script>`
   );
-  if (cssName) {
-    indexHtml = indexHtml.replace("</head>", `  <link rel="stylesheet" href="/backstage/${cssName}">\n</head>`);
-  }
+  indexHtml = indexHtml.replace("</head>", `  <link rel="stylesheet" href="/backstage/${cssName}">\n</head>`);
   g.__backstageFrontend = { indexHtml, gzip: new Map<string, Blob>() };
   console.log(`Frontend built: ${result.outputs.length} files → ${FRONTEND_DIST}`);
 }
@@ -1536,6 +1542,31 @@ const server: import("bun").Server<WSClientData> = (g.__backstageServer ??= Bun.
                 ws.send(JSON.stringify({ type: "stream_text", text: event.text }));
                 broadcastToSession(bksId, { type: "stream_text", text: event.text }, ws);
               }
+              if (event.type === "tool_use") {
+                const entry = {
+                  id: event.toolUseId || crypto.randomUUID(),
+                  type: "tool_use" as const,
+                  content: `Using ${event.toolName}`,
+                  timestamp: new Date().toISOString(),
+                  toolName: event.toolName,
+                  toolInput: event.toolInput,
+                  toolUseId: event.toolUseId,
+                };
+                ws.send(JSON.stringify({ type: "stream_tool_use", entry }));
+                broadcastToSession(bksId, { type: "stream_tool_use", entry }, ws);
+              }
+              if (event.type === "tool_result") {
+                const entry = {
+                  id: event.toolUseId ? `tr-${event.toolUseId}` : crypto.randomUUID(),
+                  type: "tool_result" as const,
+                  content: event.content || "",
+                  timestamp: new Date().toISOString(),
+                  toolUseId: event.toolUseId,
+                  ...(event.images && event.images.length > 0 ? { images: event.images } : {}),
+                };
+                ws.send(JSON.stringify({ type: "stream_tool_result", entry }));
+                broadcastToSession(bksId, { type: "stream_tool_result", entry }, ws);
+              }
               if (event.type === "done") {
                 engineSessionId = event.sessionId || engineSessionId;
               }
@@ -1719,6 +1750,33 @@ registerSessionControl({
           }
           if (event.type === "text_chunk") {
             broadcastToSession(bksId, { type: "stream_text", text: event.text });
+          }
+          if (event.type === "tool_use") {
+            broadcastToSession(bksId, {
+              type: "stream_tool_use",
+              entry: {
+                id: event.toolUseId || crypto.randomUUID(),
+                type: "tool_use",
+                content: `Using ${event.toolName}`,
+                timestamp: new Date().toISOString(),
+                toolName: event.toolName,
+                toolInput: event.toolInput,
+                toolUseId: event.toolUseId,
+              },
+            });
+          }
+          if (event.type === "tool_result") {
+            broadcastToSession(bksId, {
+              type: "stream_tool_result",
+              entry: {
+                id: event.toolUseId ? `tr-${event.toolUseId}` : crypto.randomUUID(),
+                type: "tool_result",
+                content: event.content || "",
+                timestamp: new Date().toISOString(),
+                toolUseId: event.toolUseId,
+                ...(event.images && event.images.length > 0 ? { images: event.images } : {}),
+              },
+            });
           }
           if (event.type === "done") {
             engineSessionId = event.sessionId || engineSessionId;
