@@ -54,6 +54,16 @@ export interface GithubPrState {
     /** The run's progress comment id — reused only on restart recovery, not on a fresh re-trigger. */
     progressCommentId?: number;
   };
+  /** An in-flight @mention reply (conversational), persisted so a restart can re-run it. */
+  activeMention?: {
+    author: string;
+    body: string;
+    kind: "issue" | "review";
+    replyToId?: number;
+    inline?: { path: string; line?: number; diffHunk?: string };
+    progressCommentId?: number;
+    startedAt: string;
+  };
   updatedAt: string;
 }
 
