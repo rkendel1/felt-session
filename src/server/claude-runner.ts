@@ -30,6 +30,12 @@ export interface StreamEvent {
    * the tool returns instead of waiting for the jsonl tail to catch up.
    */
   images?: string[];
+  /**
+   * Renderable video sources on a tool_result, parsed from `BACKSTAGE_VIDEO:`
+   * markers in the (full, pre-truncation) tool output. Forwarded so recordings
+   * play the moment the tool returns, no reload needed.
+   */
+  videos?: string[];
   /** Which backend emitted this event (set on init/done). */
   provider?: "claude" | "codex";
   /** Effective model for the run (set on init/done). */
@@ -812,6 +818,14 @@ export async function* runClaude(opts: {
                   }
                 }
               }
+              // Parse BACKSTAGE_VIDEO markers out of the FULL text (before the
+              // 500-char truncation below, since the marker is usually printed
+              // last) so recordings stream in without a reload. Mirrors
+              // jsonl-parser.extractVideos so streamed and persisted match.
+              const videos: string[] = [];
+              for (const m of text.matchAll(/^\s*BACKSTAGE_VIDEO:\s*(\/\S+)\s*$/gm)) {
+                videos.push(`/backstage/media?path=${encodeURIComponent(m[1])}`);
+              }
               turnEvent({
                 direction: "in",
                 kind: "tool_result",
@@ -824,6 +838,7 @@ export async function* runClaude(opts: {
                 toolUseId: block.tool_use_id,
                 content: text.length > 500 ? text.slice(0, 500) + "..." : text,
                 ...(images.length > 0 ? { images } : {}),
+                ...(videos.length > 0 ? { videos } : {}),
               };
             }
           }

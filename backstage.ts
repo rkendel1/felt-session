@@ -488,6 +488,7 @@ async function runSessionPrompt(
             timestamp: new Date().toISOString(),
             toolUseId: event.toolUseId,
             ...(event.images && event.images.length > 0 ? { images: event.images } : {}),
+            ...(event.videos && event.videos.length > 0 ? { videos: event.videos } : {}),
           },
         });
         break;
@@ -1563,6 +1564,7 @@ const server: import("bun").Server<WSClientData> = (g.__backstageServer ??= Bun.
                   timestamp: new Date().toISOString(),
                   toolUseId: event.toolUseId,
                   ...(event.images && event.images.length > 0 ? { images: event.images } : {}),
+                  ...(event.videos && event.videos.length > 0 ? { videos: event.videos } : {}),
                 };
                 ws.send(JSON.stringify({ type: "stream_tool_result", entry }));
                 broadcastToSession(bksId, { type: "stream_tool_result", entry }, ws);
@@ -1775,6 +1777,7 @@ registerSessionControl({
                 timestamp: new Date().toISOString(),
                 toolUseId: event.toolUseId,
                 ...(event.images && event.images.length > 0 ? { images: event.images } : {}),
+                ...(event.videos && event.videos.length > 0 ? { videos: event.videos } : {}),
               },
             });
           }
