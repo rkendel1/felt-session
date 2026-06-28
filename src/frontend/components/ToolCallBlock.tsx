@@ -84,7 +84,7 @@ export function ToolCallBlock({ entry, result }: Props) {
               {result.videos && result.videos.length > 0 && (
                 <div className="tool-result-videos">
                   {result.videos.map((src, i) => (
-                    <video key={i} className="md-video" src={src} controls preload="metadata" />
+                    <video key={i} className="md-video" src={src} controls playsInline preload="metadata" />
                   ))}
                 </div>
               )}
