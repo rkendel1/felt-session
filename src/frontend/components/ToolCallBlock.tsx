@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useState } from "react";
+import React, { Suspense, lazy, useEffect, useState } from "react";
 import type { TranscriptEntry } from "../lib/types";
 import { langForFile, langForGrep } from "../lib/lang";
 
@@ -35,7 +35,13 @@ export function parseMcpTool(name: string): { server: string; tool: string } | n
 }
 
 export function ToolCallBlock({ entry, result }: Props) {
-  const [expanded, setExpanded] = useState(false);
+  const hasMedia = Boolean(result?.images?.length || result?.videos?.length);
+  // Default closed for text-only output, but auto-open when media arrives
+  // (covers both initial render and a tool_result streaming in later).
+  const [expanded, setExpanded] = useState(hasMedia);
+  useEffect(() => {
+    if (hasMedia) setExpanded(true);
+  }, [hasMedia]);
   const toolName = entry.toolName || "Tool";
   const mcp = parseMcpTool(toolName);
   const summary = getSummary(toolName, entry.toolInput, entry.content);
@@ -62,7 +68,7 @@ export function ToolCallBlock({ entry, result }: Props) {
           ) : (
             <pre className="tool-pre">{formatInput(entry.toolInput)}</pre>
           )}
-          {result && (result.content || result.images?.length) && (
+          {result && (result.content || result.images?.length || result.videos?.length) && (
             <>
               <div className="tool-result-divider">Output</div>
               {result.content && renderResultContent(toolName, entry.toolInput, result.content)}
@@ -72,6 +78,13 @@ export function ToolCallBlock({ entry, result }: Props) {
                     <a key={i} href={src} target="_blank" rel="noopener noreferrer" className="md-image-link">
                       <img className="md-image" src={src} alt="" loading="lazy" />
                     </a>
+                  ))}
+                </div>
+              )}
+              {result.videos && result.videos.length > 0 && (
+                <div className="tool-result-videos">
+                  {result.videos.map((src, i) => (
+                    <video key={i} className="md-video" src={src} controls preload="metadata" />
                   ))}
                 </div>
               )}

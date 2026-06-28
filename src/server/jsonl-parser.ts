@@ -79,6 +79,20 @@ function extractImages(content: any): string[] {
   return out;
 }
 
+// Tools can't return video blocks (unlike Read-of-image), so a tool that
+// produces a video prints `BACKSTAGE_VIDEO: <abs-path>` and we turn each marker
+// into a /backstage/media URL the frontend streams. Used by tella-local rec.mjs.
+const VIDEO_MARKER = /^\s*BACKSTAGE_VIDEO:\s*(\/\S+)\s*$/gm;
+
+function extractVideos(text: string): string[] {
+  if (!text) return [];
+  const out: string[] = [];
+  for (const m of text.matchAll(VIDEO_MARKER)) {
+    out.push(`/backstage/media?path=${encodeURIComponent(m[1])}`);
+  }
+  return out;
+}
+
 /**
  * Harness-injected user turns (not typed by a person). Task notifications get
  * a system line built from their <summary>; system-reminders are dropped.
@@ -124,6 +138,7 @@ function parseEntry(raw: RawJsonlEntry): TranscriptEntry[] {
                     .join("\n")
                 : "";
           const images = extractImages(block.content);
+          const videos = extractVideos(resultText);
           entries.push({
             // Keyed on the tool_use id: one jsonl line can carry several
             // tool_result blocks (parallel calls), and the live-stream copy
@@ -134,6 +149,7 @@ function parseEntry(raw: RawJsonlEntry): TranscriptEntry[] {
             timestamp: ts,
             toolUseId: block.tool_use_id,
             ...(images.length > 0 ? { images } : {}),
+            ...(videos.length > 0 ? { videos } : {}),
           });
         } else if (block.type === "text" && !raw.isMeta) {
           const harness = harnessEntryFor(block.text || "", ts);

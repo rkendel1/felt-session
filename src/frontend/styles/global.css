@@ -3233,6 +3233,21 @@ a {
   margin: 6px 0;
   display: block;
 }
+.tool-result-videos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+.md-video {
+  max-width: 100%;
+  max-height: 480px;
+  border-radius: 8px;
+  border: 1px solid rgba(127, 127, 127, 0.25);
+  margin: 6px 0;
+  display: block;
+  background: #000;
+}
 
 /* Composer image attachments (pasted/dropped screenshots) */
 .composer-images {

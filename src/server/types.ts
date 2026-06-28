@@ -110,6 +110,9 @@ export interface TranscriptEntry {
   // Ready-to-render image srcs (http(s) URLs or data: URLs) extracted from
   // image blocks — e.g. a Read of an image file, or a pasted image.
   images?: string[];
+  // Ready-to-render video srcs (served via /backstage/media) parsed from
+  // `BACKSTAGE_VIDEO: <path>` markers a tool printed — e.g. tella-local rec.mjs.
+  videos?: string[];
 }
 
 export interface FileWatcherState {
