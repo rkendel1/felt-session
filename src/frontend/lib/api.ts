@@ -85,6 +85,32 @@ export async function postPrCommentApi(
   return body as { ok: true; url?: string };
 }
 
+export async function submitPrReviewApi(
+  sessionId: string,
+  payload: {
+    user: string;
+    event: "COMMENT" | "APPROVE" | "REQUEST_CHANGES";
+    summary?: string;
+    comments: Array<{
+      text: string;
+      path: string;
+      line: number;
+      startLine?: number;
+      side?: "RIGHT" | "LEFT";
+      startSide?: "RIGHT" | "LEFT";
+    }>;
+  }
+) {
+  const res = await fetch(`${BASE}/sessions/${encodeURIComponent(sessionId)}/pr-review`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const body = await res.json();
+  if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
+  return body as { ok: true; url?: string };
+}
+
 export async function mergePrApi(
   sessionId: string,
   method: "squash" | "merge" | "rebase" = "squash"

@@ -1,8 +1,10 @@
 import React, { useEffect, useState, useCallback, useMemo } from "react";
 import type { PrDetails } from "../lib/types";
-import { fetchPr, fetchPrDiff, postPrCommentApi, mergePrApi } from "../lib/api";
-import { CommentableDiff, type CommentTarget } from "./CommentableDiff";
+import { fetchPr, fetchPrDiff, submitPrReviewApi, mergePrApi } from "../lib/api";
+import { CommentableDiff, type CommentTarget, type PendingComment } from "./CommentableDiff";
 import { getCurrentUser } from "./UserPicker";
+
+type ReviewEvent = "COMMENT" | "APPROVE" | "REQUEST_CHANGES";
 
 interface Props {
   sessionId: string;
@@ -22,7 +24,13 @@ export function PrPanel({ sessionId, onOpenSession, split }: Props) {
   const [pr, setPr] = useState<PrDetails | null>(null);
   const [diff, setDiff] = useState<PrDiffData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [lastCommentUrl, setLastCommentUrl] = useState<string | null>(null);
+  const [pending, setPending] = useState<PendingComment[]>([]);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [reviewEvent, setReviewEvent] = useState<ReviewEvent>("COMMENT");
+  const [summary, setSummary] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [reviewError, setReviewError] = useState<string | null>(null);
+  const [reviewDone, setReviewDone] = useState<string | null>(null);
   const [merging, setMerging] = useState(false);
   const [confirmMerge, setConfirmMerge] = useState(false);
   const [mergeError, setMergeError] = useState<string | null>(null);
@@ -49,16 +57,53 @@ export function PrPanel({ sessionId, onOpenSession, split }: Props) {
     return () => clearInterval(interval);
   }, [load]);
 
-  async function handlePrComment(target: CommentTarget, text: string) {
-    const result = await postPrCommentApi(sessionId, {
-      text,
-      user: getCurrentUser(),
-      path: target.path,
-      line: target.endLine,
-      startLine: target.startLine !== target.endLine ? target.startLine : undefined,
-      side: target.side === "deletions" ? "LEFT" : "RIGHT",
-    });
-    setLastCommentUrl(result.url || null);
+  // Inline comments don't post one-by-one — they accumulate as pending and ship
+  // together when the reviewer finishes the review (GitHub's native flow).
+  async function handleAddPending(target: CommentTarget, text: string) {
+    setPending((prev) => [
+      ...prev,
+      { ...target, text, id: crypto.randomUUID() },
+    ]);
+    setReviewDone(null);
+  }
+
+  function handleRemovePending(id: string) {
+    setPending((prev) => prev.filter((c) => c.id !== id));
+  }
+
+  async function handleSubmitReview() {
+    if (submitting) return;
+    if (pending.length === 0 && !summary.trim()) {
+      setReviewError("Add a comment or a summary first");
+      return;
+    }
+    setSubmitting(true);
+    setReviewError(null);
+    try {
+      const result = await submitPrReviewApi(sessionId, {
+        user: getCurrentUser(),
+        event: reviewEvent,
+        summary: summary.trim() || undefined,
+        comments: pending.map((c) => ({
+          text: c.text,
+          path: c.path,
+          line: c.endLine,
+          startLine: c.startLine !== c.endLine ? c.startLine : undefined,
+          side: c.side === "deletions" ? "LEFT" : "RIGHT",
+        })),
+      });
+      setPending([]);
+      setSummary("");
+      setReviewOpen(false);
+      setReviewEvent("COMMENT");
+      setReviewDone(result.url || "submitted");
+      setTimeout(() => setReviewDone(null), 6000);
+      await load();
+    } catch (e: any) {
+      setReviewError(e.message || "Failed to submit review");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   // Two-click confirm guards against accidental merges (this mutates the repo).
@@ -229,20 +274,79 @@ export function PrPanel({ sessionId, onOpenSession, split }: Props) {
         <div className="pr-panel-diff">
         <div className="pr-diff-section">
           <div className="pr-checks-title">
-            Review — comments land on the PR
-            {lastCommentUrl && (
-              <a className="pr-comment-link" href={lastCommentUrl} target="_blank" rel="noopener">
-                last comment ↗
-              </a>
+            Review — comments stay pending until you submit
+            {reviewDone && (
+              reviewDone === "submitted" ? (
+                <span className="pr-comment-link">review submitted ✓</span>
+              ) : (
+                <a className="pr-comment-link" href={reviewDone} target="_blank" rel="noopener">
+                  review submitted ↗
+                </a>
+              )
             )}
           </div>
           <CommentableDiff
             patch={diff.patch}
-            submitLabel="Comment on PR"
-            placeholder={`Review comment — posts on #${diff.number} as an inline comment…`}
-            onSubmit={handlePrComment}
+            submitLabel="Add comment"
+            placeholder={`Comment on #${diff.number} — added to your pending review…`}
+            pendingComments={pending}
+            onRemovePending={handleRemovePending}
+            onSubmit={handleAddPending}
           />
         </div>
+
+        {pending.length > 0 && (
+          <div className="pr-review-bar">
+            <div className="pr-review-bar-row">
+              <span className="pr-review-count">
+                {pending.length} pending comment{pending.length === 1 ? "" : "s"}
+              </span>
+              <button
+                className="pr-review-toggle"
+                onClick={() => setReviewOpen((o) => !o)}
+              >
+                {reviewOpen ? "Hide" : "Finish review"}
+              </button>
+            </div>
+
+            {reviewOpen && (
+              <div className="pr-review-form">
+                <textarea
+                  className="pr-review-summary"
+                  rows={3}
+                  placeholder="Overall review summary (optional)…"
+                  value={summary}
+                  onChange={(e) => setSummary(e.target.value)}
+                />
+                <div className="pr-review-events">
+                  {([
+                    ["COMMENT", "Comment"],
+                    ["APPROVE", "Approve"],
+                    ["REQUEST_CHANGES", "Request changes"],
+                  ] as Array<[ReviewEvent, string]>).map(([key, label]) => (
+                    <button
+                      key={key}
+                      className={`pr-review-event ${reviewEvent === key ? "active" : ""}`}
+                      onClick={() => setReviewEvent(key)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                {reviewError && <div className="diff-comment-error">{reviewError}</div>}
+                <button
+                  className="pr-review-submit"
+                  onClick={handleSubmitReview}
+                  disabled={submitting}
+                >
+                  {submitting
+                    ? "Submitting…"
+                    : `Submit review (${pending.length})`}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
         </div>
       )}
     </div>

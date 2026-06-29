@@ -1173,6 +1173,137 @@ a {
   padding-bottom: 8px;
 }
 
+/* A saved-but-not-yet-submitted inline comment, shown in-place on the diff. */
+.diff-pending-comment {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-strong);
+  border-left: 3px solid var(--accent);
+  border-radius: 8px;
+  padding: 9px 10px;
+  margin: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-family: var(--sans);
+}
+.diff-pending-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.diff-pending-remove {
+  background: none;
+  border: none;
+  color: var(--text-faint);
+  font-size: 11.5px;
+  padding: 2px 4px;
+  cursor: pointer;
+}
+.diff-pending-remove:hover { color: var(--red); }
+.diff-pending-text {
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Floating "you have pending comments" bar — sticks to the bottom of whichever
+   container scrolls the diff (the split drawer's diff pane, or the panel body). */
+.pr-review-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  margin-top: 10px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.35);
+  padding: 10px 12px;
+  padding-bottom: max(10px, env(safe-area-inset-bottom, 0px));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.pr-review-bar-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.pr-review-count {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.pr-review-toggle {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 7px;
+  padding: 7px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.pr-review-toggle:hover { filter: brightness(1.1); }
+.pr-review-form {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+.pr-review-summary {
+  background: var(--bg-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  color: var(--text);
+  padding: 8px 10px;
+  font-size: 13px;
+  font-family: var(--sans);
+  line-height: 1.45;
+  resize: vertical;
+  outline: none;
+}
+.pr-review-summary:focus { border-color: var(--accent); }
+.pr-review-events {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.pr-review-event {
+  flex: 1 1 auto;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  color: var(--text-dim);
+  padding: 7px 10px;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.pr-review-event:hover { color: var(--text); }
+.pr-review-event.active {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  border-color: var(--accent);
+  color: var(--text);
+}
+.pr-review-submit {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 7px;
+  padding: 9px 12px;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.pr-review-submit:disabled { opacity: 0.5; cursor: default; }
+.pr-review-submit:not(:disabled):hover { filter: brightness(1.1); }
+
 .pr-diff-section { display: flex; flex-direction: column; gap: 8px; }
 
 .pr-comment-link {
@@ -3126,6 +3257,10 @@ a {
   display: flex;
   flex-direction: column;
   height: 100%;
+  /* The form can outgrow the viewport (especially on phones, where the keyboard
+     shrinks it further) — let it scroll so the Start button is always reachable. */
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .btn-back {
@@ -3967,7 +4102,11 @@ a {
 
   .pr-panel { padding: 10px; }
 
-  .new-session-form { margin: 16px auto; }
+  .new-session-form {
+    margin: 16px auto;
+    /* Clear the home indicator / nav so the Start button isn't flush to the edge. */
+    padding-bottom: max(24px, env(safe-area-inset-bottom, 0px));
+  }
 
   .user-gate-card { padding: 22px; }
 }

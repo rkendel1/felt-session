@@ -46,7 +46,7 @@ import { createSessionsMcpServer } from "./src/agents/slack/sessions-tools";
 import { createAdminMcpServer } from "./src/agents/slack/admin-tools";
 import { createHumansMcpServer } from "./src/agents/slack/humans-tools";
 import { initHumanAsks, onSessionIdle as onHumanAsksSessionIdle } from "./src/server/human-asks";
-import { getPrDetails, getPrDiff, postPrComment, mergePr } from "./src/server/pr-info";
+import { getPrDetails, getPrDiff, postPrComment, submitPrReview, mergePr } from "./src/server/pr-info";
 import {
   listAutomations,
   getAutomation,
@@ -1320,6 +1320,45 @@ const server: import("bun").Server<WSClientData> = (g.__backstageServer ??= Bun.
         startSide: body.startSide,
       });
       if ("error" in result) return Response.json(result, { status: 502 });
+      return Response.json(result);
+    }
+
+    // Submit a batched review (all pending inline comments + an event) on the PR.
+    if (path.match(/^\/backstage\/api\/sessions\/(.+)\/pr-review$/) && req.method === "POST") {
+      const sessionId = decodeURIComponent(path.match(/^\/backstage\/api\/sessions\/(.+)\/pr-review$/)![1]);
+      const session = findSession(sessionId);
+      if (!session) return Response.json({ error: "Session not found" }, { status: 404 });
+      if (!session.branch) return Response.json({ error: "Session has no branch" }, { status: 400 });
+
+      const body = await req.json().catch(() => null);
+      const event =
+        body?.event === "APPROVE" || body?.event === "REQUEST_CHANGES" ? body.event : "COMMENT";
+      const comments = Array.isArray(body?.comments) ? body.comments : [];
+      if (!comments.length && !body?.summary?.trim()) {
+        return Response.json({ error: "Nothing to submit" }, { status: 400 });
+      }
+
+      const user = body?.user || "Someone";
+      const summary = body?.summary?.trim();
+      const reviewBody = summary
+        ? `**${user}** via Michael:\n\n${summary}`
+        : `Review by **${user}** via Michael.`;
+      const result = await submitPrReview(session.branch, {
+        event,
+        body: reviewBody,
+        comments: comments
+          .filter((c: any) => c?.text?.trim() && c?.path && c?.line)
+          .map((c: any) => ({
+            path: c.path,
+            line: c.line,
+            startLine: c.startLine,
+            side: c.side,
+            startSide: c.startSide,
+            body: `**${user}**: ${c.text.trim()}`,
+          })),
+      });
+      if ("error" in result) return Response.json(result, { status: 502 });
+      sessionsCache = null; // a review can change reviewDecision in the list
       return Response.json(result);
     }
 

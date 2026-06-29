@@ -125,6 +125,87 @@ export async function postPrComment(
   }
 }
 
+export interface PrReviewComment {
+  path: string;
+  /** Line in the file the comment anchors to (end line of a range). */
+  line: number;
+  side?: "RIGHT" | "LEFT";
+  startLine?: number;
+  startSide?: "RIGHT" | "LEFT";
+  body: string;
+}
+
+export type PrReviewEvent = "COMMENT" | "APPROVE" | "REQUEST_CHANGES";
+
+export interface PrReviewInput {
+  event: PrReviewEvent;
+  body?: string;
+  comments: PrReviewComment[];
+}
+
+/**
+ * Submit a single GitHub review bundling all pending inline comments, GitHub's
+ * native review flow (POST .../pulls/{n}/reviews). The whole batch posts at once
+ * with one event (comment / approve / request changes) instead of each inline
+ * comment landing as a loose standalone comment. Audited since approving or
+ * requesting changes affects the PR's merge state.
+ */
+export async function submitPrReview(
+  branch: string,
+  input: PrReviewInput
+): Promise<{ ok: true; url?: string } | { error: string }> {
+  const diff = await getPrDiff(branch);
+  if (!diff) return { error: "No PR found for this branch" };
+  if (!input.comments.length && !input.body?.trim()) {
+    return { error: "Nothing to submit" };
+  }
+
+  const payload = {
+    commit_id: diff.headRefOid,
+    event: input.event,
+    ...(input.body?.trim() ? { body: input.body.trim() } : {}),
+    comments: input.comments.map((c) => ({
+      path: c.path,
+      line: c.line,
+      side: c.side || "RIGHT",
+      ...(c.startLine && c.startLine !== c.line
+        ? { start_line: c.startLine, start_side: c.startSide || c.side || "RIGHT" }
+        : {}),
+      body: c.body,
+    })),
+  };
+
+  return audited(
+    {
+      context: "reviews",
+      action: "pr_review",
+      args: { branch, number: diff.number, event: input.event, comments: input.comments.length },
+    },
+    async () => {
+      const proc = Bun.spawn(
+        ["gh", "api", "-X", "POST", `repos/${REPO}/pulls/${diff.number}/reviews`, "--input", "-"],
+        { stdin: "pipe", stdout: "pipe", stderr: "pipe" }
+      );
+      proc.stdin.write(JSON.stringify(payload));
+      await proc.stdin.end();
+      const [out, err, code] = await Promise.all([
+        new Response(proc.stdout).text(),
+        new Response(proc.stderr).text(),
+        proc.exited,
+      ]);
+      if (code !== 0) return { error: (err || "gh api failed").slice(0, 300) } as const;
+      const url = (() => {
+        try {
+          return JSON.parse(out).html_url as string;
+        } catch {
+          return undefined;
+        }
+      })();
+      return { ok: true, url } as const;
+    }
+  );
+}
+
 export type MergeMethod = "squash" | "merge" | "rebase";
 
 /**

@@ -10,6 +10,11 @@ export interface CommentTarget {
   side: "additions" | "deletions";
 }
 
+export interface PendingComment extends CommentTarget {
+  id: string;
+  text: string;
+}
+
 interface Props {
   patch: string;
   submitLabel: string;
@@ -17,6 +22,13 @@ interface Props {
   disabled?: boolean;
   disabledHint?: string;
   onSubmit: (target: CommentTarget, text: string) => Promise<void>;
+  /**
+   * Review-batching mode: when provided, already-added comments render inline as
+   * pending cards (the parent owns the list and submits them as one review).
+   * Without it the component stays single-shot (e.g. session feedback).
+   */
+  pendingComments?: PendingComment[];
+  onRemovePending?: (id: string) => void;
 }
 
 interface Draft {
@@ -25,7 +37,7 @@ interface Draft {
   range: SelectedLineRange;
 }
 
-type Meta = { kind: "draft" };
+type Meta = { kind: "draft" } | { kind: "pending"; comment: PendingComment };
 
 const BASE_OPTIONS = {
   theme: "pierre-dark",
@@ -49,7 +61,10 @@ export function CommentableDiff({
   disabled,
   disabledHint,
   onSubmit,
+  pendingComments,
+  onRemovePending,
 }: Props) {
+  const reviewMode = pendingComments !== undefined;
   const files = useMemo<FileDiffMetadata[]>(() => {
     try {
       return parsePatchFiles(patch).flatMap((p) => p.files);
@@ -97,8 +112,11 @@ export function CommentableDiff({
       );
       setDraft(null);
       setText("");
-      setConfirmation(`${submitLabel} ✓`);
-      setTimeout(() => setConfirmation(null), 4000);
+      // In review mode the pending card is the confirmation; skip the toast.
+      if (!reviewMode) {
+        setConfirmation(`${submitLabel} ✓`);
+        setTimeout(() => setConfirmation(null), 4000);
+      }
     } catch (e: any) {
       setError(e.message || "Failed to submit");
     } finally {
@@ -106,7 +124,37 @@ export function CommentableDiff({
     }
   }
 
-  function renderAnnotation(): React.ReactNode {
+  function renderPending(comment: PendingComment): React.ReactNode {
+    const lineLabel =
+      comment.startLine === comment.endLine
+        ? `line ${comment.startLine}`
+        : `lines ${comment.startLine}–${comment.endLine}`;
+    return (
+      <div className="diff-pending-comment" onClick={(e) => e.stopPropagation()}>
+        <div className="diff-pending-head">
+          <span className="diff-comment-target">
+            {comment.path} · {lineLabel}
+            {comment.side === "deletions" ? " (removed)" : ""}
+          </span>
+          {onRemovePending && (
+            <button
+              className="diff-pending-remove"
+              onClick={() => onRemovePending(comment.id)}
+              title="Remove this pending comment"
+            >
+              Remove
+            </button>
+          )}
+        </div>
+        <div className="diff-pending-text">{comment.text}</div>
+      </div>
+    );
+  }
+
+  function renderAnnotation(annotation: DiffLineAnnotation<Meta>): React.ReactNode {
+    if (annotation.metadata?.kind === "pending") {
+      return renderPending(annotation.metadata.comment);
+    }
     const d = draftRef.current;
     if (!d) return null;
     const lineLabel =
@@ -169,16 +217,22 @@ export function CommentableDiff({
     <div className="commentable-diff">
       {confirmation && <div className="diff-comment-confirmation">{confirmation}</div>}
       {files.map((file, i) => {
-        const annotations: DiffLineAnnotation<Meta>[] =
-          draft && draft.fileIndex === i
-            ? [
-                {
-                  side: draft.range.side === "deletions" ? "deletions" : "additions",
-                  lineNumber: Math.max(draft.range.start, draft.range.end),
-                  metadata: { kind: "draft" },
-                },
-              ]
-            : [];
+        const annotations: DiffLineAnnotation<Meta>[] = [];
+        for (const c of pendingComments || []) {
+          if (c.path !== file.name) continue;
+          annotations.push({
+            side: c.side === "deletions" ? "deletions" : "additions",
+            lineNumber: c.endLine,
+            metadata: { kind: "pending", comment: c },
+          });
+        }
+        if (draft && draft.fileIndex === i) {
+          annotations.push({
+            side: draft.range.side === "deletions" ? "deletions" : "additions",
+            lineNumber: Math.max(draft.range.start, draft.range.end),
+            metadata: { kind: "draft" },
+          });
+        }
 
         return (
           <FileDiffWithSelection
@@ -192,7 +246,11 @@ export function CommentableDiff({
           />
         );
       })}
-      <div className="diff-comment-hint">Click a line number (drag for a range) to comment.</div>
+      <div className="diff-comment-hint">
+        {reviewMode
+          ? "Click a line number (drag for a range) to add a comment. They stay pending until you finish the review."
+          : "Click a line number (drag for a range) to comment."}
+      </div>
     </div>
   );
 }
@@ -210,7 +268,7 @@ function FileDiffWithSelection({
   annotations: DiffLineAnnotation<Meta>[];
   selectedLines: SelectedLineRange | null;
   onSelect: (fileIndex: number, path: string, range: SelectedLineRange | null) => void;
-  renderAnnotation: () => React.ReactNode;
+  renderAnnotation: (annotation: DiffLineAnnotation<Meta>) => React.ReactNode;
 }) {
   const options = useMemo(
     () => ({
