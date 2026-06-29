@@ -1,0 +1,127 @@
+import React, { useEffect, useRef, useState } from "react";
+import { fetchSubagent, type SubagentTranscript } from "../lib/api";
+import { TranscriptBlocks } from "./TranscriptBlocks";
+
+export interface SubagentRef {
+  agentId: string;
+  /** Human label for the breadcrumb (the Task summary, e.g. "Explore: find X"). */
+  label: string;
+}
+
+interface Props {
+  sessionId: string;
+  /** Breadcrumb stack; the last entry is the sub-agent currently shown. */
+  stack: SubagentRef[];
+  /** Open a nested sub-agent (a Task call inside this sub-agent). */
+  onOpenSubagent: (agentId: string, label: string) => void;
+  /** Pop back to the parent sub-agent in the stack. */
+  onBack: () => void;
+  /** Close the panel entirely. */
+  onClose: () => void;
+}
+
+/**
+ * Right sidebar showing a sub-agent's conversation, mirroring the Workspace
+ * panel. Fetches over REST and, while the parent session is still running,
+ * polls so a live sub-agent's transcript fills in. Sub-agents that spawn their
+ * own sub-agents are navigable via the breadcrumb stack.
+ */
+export function SubagentPanel({ sessionId, stack, onOpenSubagent, onBack, onClose }: Props) {
+  const current = stack[stack.length - 1];
+  const [data, setData] = useState<SubagentTranscript | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const bodyRef = useRef<HTMLDivElement | null>(null);
+  // Stick to the bottom only while the reader is already there, so polling a
+  // live sub-agent doesn't yank them up from scrollback.
+  const followRef = useRef(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    async function load(initial: boolean) {
+      if (initial) {
+        setLoading(true);
+        setError(null);
+        setData(null);
+        followRef.current = true;
+      }
+      try {
+        const next = await fetchSubagent(sessionId, current.agentId);
+        if (cancelled) return;
+        setData(next);
+        setLoading(false);
+        // Keep polling only while the parent session is live (the sub-agent may
+        // still be streaming); once idle the transcript is final.
+        if (next.sessionRunning) timer = setTimeout(() => load(false), 1500);
+      } catch (e: any) {
+        if (cancelled) return;
+        setError(e?.message || "Failed to load sub-agent");
+        setLoading(false);
+      }
+    }
+
+    load(true);
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [sessionId, current.agentId]);
+
+  // After new content lands, keep a following reader pinned to the live edge.
+  useEffect(() => {
+    const el = bodyRef.current;
+    if (el && followRef.current) el.scrollTop = el.scrollHeight;
+  }, [data]);
+
+  function onScroll() {
+    const el = bodyRef.current;
+    if (!el) return;
+    followRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+  }
+
+  const meta = data?.meta;
+  const title = meta?.agentType || current.label || "Sub-agent";
+
+  return (
+    <div className="viewer-panel subagent-panel">
+      <div className="subagent-head">
+        <div className="subagent-head-top">
+          <span className="subagent-chip">sub-agent</span>
+          <span className="subagent-title" title={meta?.description || current.label}>
+            {title}
+          </span>
+          {data?.sessionRunning && <span className="subagent-live-dot" title="Session running" />}
+          <button className="panel-close" onClick={onClose} aria-label="Close sub-agent panel">
+            ✕
+          </button>
+        </div>
+        {stack.length > 1 && (
+          <button className="subagent-back" onClick={onBack}>
+            ← {stack[stack.length - 2].label}
+          </button>
+        )}
+        {meta?.description && <div className="subagent-desc">{meta.description}</div>}
+      </div>
+
+      <div className="panel-body subagent-body" ref={bodyRef} onScroll={onScroll}>
+        {loading ? (
+          <div className="panel-placeholder">Loading sub-agent…</div>
+        ) : error ? (
+          <div className="panel-placeholder panel-error">{error}</div>
+        ) : data && data.entries.length > 0 ? (
+          <div className="subagent-messages">
+            <TranscriptBlocks
+              entries={data.entries}
+              live={data.sessionRunning}
+              onOpenSubagent={onOpenSubagent}
+            />
+          </div>
+        ) : (
+          <div className="panel-placeholder">No transcript yet for this sub-agent.</div>
+        )}
+      </div>
+    </div>
+  );
+}

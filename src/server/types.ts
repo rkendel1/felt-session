@@ -109,6 +109,10 @@ export interface TranscriptEntry {
   toolInput?: unknown;
   toolUseId?: string;
   requestId?: string;
+  // Set on a Task/Agent tool_result: the spawned sub-agent's id. The SDK writes
+  // the sub-agent's own transcript to <transcript>/subagents/agent-<agentId>.jsonl,
+  // so this links a tool call to its sub-agent conversation (see subagents.ts).
+  agentId?: string;
   // Ready-to-render image srcs (http(s) URLs or data: URLs) extracted from
   // image blocks — e.g. a Read of an image file, or a pasted image.
   images?: string[];

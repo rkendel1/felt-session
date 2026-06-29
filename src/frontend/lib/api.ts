@@ -14,6 +14,20 @@ export async function fetchTranscript(sessionId: string) {
   return res.json();
 }
 
+export interface SubagentTranscript {
+  meta: { agentId: string; agentType?: string; description?: string; toolUseId?: string; spawnDepth?: number };
+  entries: import("./types").TranscriptEntry[];
+  sessionRunning: boolean;
+}
+
+export async function fetchSubagent(sessionId: string, agentId: string): Promise<SubagentTranscript> {
+  const res = await fetch(
+    `${BASE}/sessions/${encodeURIComponent(sessionId)}/subagent/${encodeURIComponent(agentId)}`
+  );
+  if (!res.ok) throw new Error(`Failed to fetch sub-agent: ${res.status}`);
+  return res.json();
+}
+
 export async function fetchWorktrees(project?: string) {
   const qs = project ? `?project=${encodeURIComponent(project)}` : "";
   const res = await fetch(`${BASE}/worktrees${qs}`);

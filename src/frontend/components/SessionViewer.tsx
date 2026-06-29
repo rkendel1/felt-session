@@ -2,8 +2,8 @@ import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "re
 import { renderMarkdown } from "../lib/markdown";
 import { parseHumanReply } from "../lib/humanReply";
 import type { UnifiedSession, TranscriptEntry, WSServerMessage, AskQuestion } from "../lib/types";
-import { MessageBubble } from "./MessageBubble";
-import { WorkBlock } from "./WorkBlock";
+import { TranscriptBlocks } from "./TranscriptBlocks";
+import { SubagentPanel, type SubagentRef } from "./SubagentPanel";
 import { TerminalPanel } from "./TerminalPanel";
 import { getCurrentUser } from "./UserPicker";
 import { deleteSessionApi, fetchModels, type ModelOption } from "../lib/api";
@@ -24,10 +24,6 @@ interface Props {
 }
 
 type PanelTab = "changes" | "terminal" | "pr";
-
-type RenderBlock =
-  | { kind: "entry"; entry: TranscriptEntry }
-  | { kind: "work"; items: TranscriptEntry[] };
 
 /** Upsert incoming entries by id so stream events and the file watcher never duplicate. */
 function mergeEntries(prev: TranscriptEntry[], incoming: TranscriptEntry[]): TranscriptEntry[] {
@@ -73,6 +69,15 @@ export function SessionViewer({ session, onBack, send, addHandler, connected }: 
   const [copied, setCopied] = useState(false);
   const [pinned, setPinned] = useState(() => isPinned(session.id));
   const [panelTab, setPanelTab] = useState<PanelTab>("changes");
+  // Sub-agent sidebar: a breadcrumb stack of opened sub-agents (clicking a Task
+  // call pushes; nested Task calls push further). Non-empty → the right region
+  // shows the sub-agent conversation instead of the Workspace panel.
+  const [subagentStack, setSubagentStack] = useState<SubagentRef[]>([]);
+  function openSubagent(agentId: string, label: string) {
+    setSubagentStack((prev) =>
+      prev.some((s) => s.agentId === agentId) ? prev : [...prev, { agentId, label }]
+    );
+  }
   // Remembered per browser; on phones the panel overlays the chat, so default closed there
   const [panelOpen, setPanelOpenState] = useState(() => {
     const stored = localStorage.getItem("michael-panel-open");
@@ -467,28 +472,6 @@ export function SessionViewer({ session, onBack, send, addHandler, connected }: 
     });
   }
 
-  // Build tool_use → tool_result map
-  const toolResults = new Map<string, TranscriptEntry>();
-  for (const e of entries) {
-    if (e.type === "tool_result" && e.toolUseId) {
-      toolResults.set(e.toolUseId, e);
-    }
-  }
-
-  // Group consecutive tool calls into Devin-style work blocks
-  const blocks: RenderBlock[] = [];
-  for (const entry of entries) {
-    if (entry.type === "tool_use") {
-      const last = blocks[blocks.length - 1];
-      if (last?.kind === "work") last.items.push(entry);
-      else blocks.push({ kind: "work", items: [entry] });
-    } else if (entry.type === "tool_result") {
-      continue; // rendered inside work blocks via toolResults
-    } else {
-      blocks.push({ kind: "entry", entry });
-    }
-  }
-
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -579,8 +562,17 @@ export function SessionViewer({ session, onBack, send, addHandler, connected }: 
           <SpinOffMenu session={session} entries={entries} send={send} connected={connected} />
           {hasWorkspace && (
             <button
-              className={`btn-panel-toggle btn-workspace ${panelOpen ? "active" : ""}`}
-              onClick={() => setPanelOpen(!panelOpen)}
+              className={`btn-panel-toggle btn-workspace ${panelOpen && subagentStack.length === 0 ? "active" : ""}`}
+              onClick={() => {
+                // The sub-agent panel and Workspace share the right slot; opening
+                // Workspace closes the sub-agent view.
+                if (subagentStack.length > 0) {
+                  setSubagentStack([]);
+                  setPanelOpen(true);
+                } else {
+                  setPanelOpen(!panelOpen);
+                }
+              }}
               title="Toggle workspace panel (changes, terminal, PR)"
             >
               <span className="btn-panel-toggle-icon">◨</span>
@@ -640,22 +632,12 @@ export function SessionViewer({ session, onBack, send, addHandler, connected }: 
             ) : entries.length === 0 ? (
               <div className="empty">Empty transcript</div>
             ) : (
-              blocks.map((block, i) =>
-                block.kind === "work" ? (
-                  <WorkBlock
-                    key={block.items[0].id}
-                    items={block.items}
-                    toolResults={toolResults}
-                    live={isBusy && i === blocks.length - 1}
-                  />
-                ) : (
-                  <MessageBubble
-                    key={block.entry.id}
-                    entry={block.entry}
-                    onFork={isClaudeSession ? handleFork : undefined}
-                  />
-                )
-              )
+              <TranscriptBlocks
+                entries={entries}
+                live={isBusy}
+                onFork={isClaudeSession ? handleFork : undefined}
+                onOpenSubagent={openSubagent}
+              />
             )}
 
             {streamText && <StreamingMessage text={streamText} />}
@@ -809,10 +791,25 @@ export function SessionViewer({ session, onBack, send, addHandler, connected }: 
           </div>
         </div>
 
-        {hasWorkspace && panelOpen && (
-          <div className="panel-overlay" onClick={() => setPanelOpen(false)} />
+        {/* Right region: a sub-agent conversation takes precedence over the
+            Workspace panel when one is open. */}
+        {(subagentStack.length > 0 || (hasWorkspace && panelOpen)) && (
+          <div
+            className="panel-overlay"
+            onClick={() =>
+              subagentStack.length > 0 ? setSubagentStack([]) : setPanelOpen(false)
+            }
+          />
         )}
-        {hasWorkspace && panelOpen && (
+        {subagentStack.length > 0 ? (
+          <SubagentPanel
+            sessionId={session.id}
+            stack={subagentStack}
+            onOpenSubagent={openSubagent}
+            onBack={() => setSubagentStack((prev) => prev.slice(0, -1))}
+            onClose={() => setSubagentStack([])}
+          />
+        ) : hasWorkspace && panelOpen ? (
           <div className="viewer-panel">
             <div className="panel-tabs">
               <button
@@ -860,7 +857,7 @@ export function SessionViewer({ session, onBack, send, addHandler, connected }: 
               )}
             </div>
           </div>
-        )}
+        ) : null}
       </div>
     </div>
   );

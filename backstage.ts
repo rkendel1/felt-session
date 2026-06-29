@@ -5,6 +5,7 @@ import { mkdirSync, existsSync, writeFileSync, readFileSync, watch } from "fs";
 import homepage from "./src/frontend/index.html";
 import { getAllSessions, deleteSession } from "./src/server/sessions";
 import { parseTranscript } from "./src/server/jsonl-parser";
+import { getSubagentTranscript } from "./src/server/subagents";
 import { startWatching, stopAllWatchesForClient } from "./src/server/file-watcher";
 import { listWorktrees, createWorktree, removeWorktree, reviveWorktree, sweepArchivedWorktrees, getProject, projectForPath } from "./src/server/worktree";
 import { STRIPE_CONFIRM_TOOLS, activeRunRecords } from "./src/server/claude-runner";
@@ -1233,6 +1234,20 @@ const server: import("bun").Server<WSClientData> = (g.__backstageServer ??= Bun.
       if (!session) return Response.json({ error: "Session not found" }, { status: 404 });
       if (!session.transcriptPath) return Response.json([]);
       return Response.json(parseTranscript(session.transcriptPath));
+    }
+
+    // Sub-agent (Task/Agent) conversation for a session. The agentId comes from
+    // a Task tool_result's `agentId` field in the parent transcript.
+    {
+      const m = path.match(/^\/backstage\/api\/sessions\/(.+)\/subagent\/([^/]+)$/);
+      if (m && req.method === "GET") {
+        const session = findSession(decodeURIComponent(m[1]));
+        if (!session) return Response.json({ error: "Session not found" }, { status: 404 });
+        if (!session.transcriptPath) return Response.json({ error: "No transcript" }, { status: 404 });
+        const sub = getSubagentTranscript(session.transcriptPath, decodeURIComponent(m[2]));
+        if (!sub) return Response.json({ error: "Sub-agent not found" }, { status: 404 });
+        return Response.json({ ...sub, sessionRunning: session.isRunning });
+      }
     }
 
     // Live git diff for a session's worktree (Changes tab)

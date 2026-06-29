@@ -6,10 +6,11 @@ interface Props {
   items: TranscriptEntry[]; // tool_use entries, in order
   toolResults: Map<string, TranscriptEntry>;
   live: boolean; // this is the active block of a running stream
+  onOpenSubagent?: (agentId: string, label: string) => void;
 }
 
 /** Devin-style collapsed segment: "Worked for 12s · 5 steps". */
-export function WorkBlock({ items, toolResults, live }: Props) {
+export function WorkBlock({ items, toolResults, live, onOpenSubagent }: Props) {
   // If any tool in the block returned media (image or video), keep the block
   // open so the screenshot/recording stays visible after the run finishes
   // (otherwise the user has to expand "Worked" then the tool to see what the
@@ -53,6 +54,7 @@ export function WorkBlock({ items, toolResults, live }: Props) {
               key={entry.id}
               entry={entry}
               result={entry.toolUseId ? toolResults.get(entry.toolUseId) : undefined}
+              onOpenSubagent={onOpenSubagent}
             />
           ))}
         </div>

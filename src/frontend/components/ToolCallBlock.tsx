@@ -25,6 +25,8 @@ function CodeHighlight(props: {
 interface Props {
   entry: TranscriptEntry;
   result?: TranscriptEntry;
+  /** For Task/Agent calls with a known sub-agent id: open its conversation. */
+  onOpenSubagent?: (agentId: string, label: string) => void;
 }
 
 /** Split "mcp__linear__list_issues" into { server: "linear", tool: "list_issues" }. */
@@ -34,7 +36,7 @@ export function parseMcpTool(name: string): { server: string; tool: string } | n
   return { server: parts[1], tool: parts.slice(2).join("__") };
 }
 
-export function ToolCallBlock({ entry, result }: Props) {
+export function ToolCallBlock({ entry, result, onOpenSubagent }: Props) {
   const hasMedia = Boolean(result?.images?.length || result?.videos?.length);
   // Default closed for text-only output, but auto-open when media arrives
   // (covers both initial render and the live tool_result streaming in later).
@@ -46,8 +48,13 @@ export function ToolCallBlock({ entry, result }: Props) {
   const mcp = parseMcpTool(toolName);
   const summary = getSummary(toolName, entry.toolInput, entry.content);
 
+  // A Task/Agent call whose sub-agent transcript we can open in the sidebar.
+  const isAgent = toolName === "Task" || toolName === "Agent";
+  const agentId = result?.agentId;
+  const canOpenSubagent = isAgent && agentId && onOpenSubagent;
+
   return (
-    <div className="tool">
+    <div className={`tool ${canOpenSubagent ? "tool-agent" : ""}`}>
       <div className="tool-header" onClick={() => setExpanded(!expanded)}>
         <span className="tool-icon">{expanded ? "▾" : "▸"}</span>
         {mcp ? (
@@ -59,6 +66,18 @@ export function ToolCallBlock({ entry, result }: Props) {
           <span className="tool-name">{toolName}</span>
         )}
         <span className="tool-summary">{summary}</span>
+        {canOpenSubagent && (
+          <button
+            className="tool-open-subagent"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenSubagent!(agentId!, summary);
+            }}
+            title="Open this sub-agent's conversation"
+          >
+            Open ↗
+          </button>
+        )}
         {result && <span className="tool-ok">✓</span>}
       </div>
       {expanded && (

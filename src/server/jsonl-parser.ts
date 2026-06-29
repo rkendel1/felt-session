@@ -45,6 +45,9 @@ interface RawJsonlEntry {
   requestId?: string;
   // Harness-injected user lines (skill bodies, command output) — not typed by the user
   isMeta?: boolean;
+  // Present on a Task/Agent tool_result line: carries the spawned sub-agent's id
+  // (and its type/description), used to link the call to its sub-agent transcript.
+  toolUseResult?: { agentId?: string; agentType?: string; description?: string };
   message?: {
     role?: string;
     content?: any;
@@ -143,6 +146,9 @@ function parseEntry(raw: RawJsonlEntry): TranscriptEntry[] {
                 : "";
           const images = extractImages(block.content);
           const videos = extractVideos(resultText);
+          // A Task/Agent result carries the spawned sub-agent's id on the line's
+          // toolUseResult; attach it so the UI can open the sub-agent transcript.
+          const agentId = raw.toolUseResult?.agentId;
           entries.push({
             // Keyed on the tool_use id: one jsonl line can carry several
             // tool_result blocks (parallel calls), and the live-stream copy
@@ -152,6 +158,7 @@ function parseEntry(raw: RawJsonlEntry): TranscriptEntry[] {
             content: resultText,
             timestamp: ts,
             toolUseId: block.tool_use_id,
+            ...(agentId ? { agentId } : {}),
             ...(images.length > 0 ? { images } : {}),
             ...(videos.length > 0 ? { videos } : {}),
           });

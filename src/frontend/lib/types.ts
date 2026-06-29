@@ -37,6 +37,9 @@ export interface TranscriptEntry {
   toolInput?: unknown;
   toolUseId?: string;
   requestId?: string;
+  // Set on a Task/Agent tool_result: the spawned sub-agent's id. Lets the UI
+  // open that sub-agent's conversation in the right sidebar.
+  agentId?: string;
   // Ready-to-render image srcs (http(s) URLs or data: URLs), e.g. from a Read
   // of an image file or a pasted image.
   images?: string[];
