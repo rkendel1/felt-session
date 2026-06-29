@@ -3779,3 +3779,475 @@ a {
   white-space: nowrap;
   flex-shrink: 0;
 }
+
+/* ─────────────────────────────────────────────────────────────
+   Factory — a Factorio-style overview of sessions on the line.
+   Sources mine work (left) → assemblers run / wait (middle) →
+   PRs ship to the GitHub island (right). Belts animate the flow.
+   ───────────────────────────────────────────────────────────── */
+
+.factory {
+  height: 100%;
+  overflow: auto;
+  background:
+    radial-gradient(120% 80% at 50% -10%, #1c1410 0%, var(--bg) 60%);
+  -webkit-overflow-scrolling: touch;
+}
+
+.fac-boot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 14px;
+  letter-spacing: 0.04em;
+}
+
+.fac-scene {
+  position: relative;
+  min-height: 100%;
+  padding: 18px 20px 60px;
+  /* Engineering grid + faint factory haze */
+  background-image:
+    linear-gradient(rgba(210, 153, 34, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(210, 153, 34, 0.045) 1px, transparent 1px);
+  background-size: 32px 32px, 32px 32px;
+}
+
+/* ── HUD ── */
+.fac-hud {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 14px;
+  margin-bottom: 18px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: linear-gradient(180deg, #1a1411, #120d0b);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 6px 18px rgba(0, 0, 0, 0.35);
+}
+.fac-hud-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--mono);
+  font-weight: 600;
+  font-size: 14px;
+  letter-spacing: 0.03em;
+  color: var(--text);
+}
+.fac-hud-gear {
+  color: var(--yellow);
+  font-size: 18px;
+  animation: fac-spin 9s linear infinite;
+}
+.fac-hud-sub {
+  color: var(--text-faint);
+  font-weight: 400;
+  font-size: 12px;
+  border-left: 1px solid var(--border-strong);
+  padding-left: 10px;
+}
+.fac-stats {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.fac-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 78px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: #100b0a;
+}
+.fac-stat-val {
+  font-family: var(--mono);
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1;
+}
+.fac-stat-label {
+  margin-top: 4px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+}
+.fac-stat-run .fac-stat-val { color: var(--green); }
+.fac-stat-wait .fac-stat-val { color: var(--yellow); }
+.fac-stat-queue .fac-stat-val { color: var(--purple); }
+.fac-stat-pr .fac-stat-val { color: #58a6ff; }
+
+/* ── Floor layout ── */
+.fac-floor {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+}
+.fac-col { display: flex; flex-direction: column; }
+.fac-col-intake { width: 180px; flex: 0 0 180px; }
+.fac-col-assembly { flex: 1 1 auto; min-width: 0; gap: 14px; }
+.fac-col-island { width: 230px; flex: 0 0 230px; }
+.fac-col-label {
+  margin: 0 0 10px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+  font-weight: 600;
+}
+
+/* ── Belts (animated connectors) ── */
+.fac-belt {
+  position: relative;
+  flex: 0 0 54px;
+  width: 54px;
+  align-self: stretch;
+  min-height: 120px;
+}
+.fac-belt-lane {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 30px;
+  margin-top: -15px;
+  border-top: 2px solid #3a2f14;
+  border-bottom: 2px solid #14100a;
+  background: repeating-linear-gradient(
+    115deg,
+    #d8b24a 0 8px,
+    #ab8a2c 8px 16px
+  );
+  background-size: 22px 100%;
+  box-shadow: inset 0 0 8px rgba(0, 0, 0, 0.5);
+  animation: fac-belt-run 0.55s linear infinite;
+}
+@keyframes fac-belt-run { to { background-position: 22px 0; } }
+.fac-belt-item {
+  position: absolute;
+  top: 50%;
+  margin-top: -7px;
+  width: 14px;
+  height: 14px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, #4a3d1c, #2a2210);
+  box-shadow: inset 0 0 0 2px #7a6228, 0 1px 2px rgba(0, 0, 0, 0.6);
+  animation: fac-belt-travel 3.3s linear infinite;
+}
+@keyframes fac-belt-travel {
+  0% { left: -16px; opacity: 0; }
+  12% { opacity: 1; }
+  88% { opacity: 1; }
+  100% { left: 100%; opacity: 0; }
+}
+.fac-belt-island .fac-belt-lane {
+  /* the bridge to the island runs over water */
+  filter: saturate(0.85);
+}
+
+/* ── Mining drills (sources) ── */
+.fac-drills { display: flex; flex-direction: column; gap: 10px; }
+.fac-drill {
+  position: relative;
+  display: grid;
+  grid-template-columns: 26px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 11px;
+  border-radius: 7px;
+  border: 1px solid var(--border-strong);
+  border-left: 3px solid var(--src);
+  background: linear-gradient(180deg, #1b1512, #120d0b);
+  overflow: hidden;
+}
+.fac-drill.is-cold { opacity: 0.5; }
+.fac-drill.is-active {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--src) 40%, transparent),
+    0 0 14px color-mix(in srgb, var(--src) 22%, transparent);
+}
+.fac-drill-glyph {
+  font-family: var(--mono);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--src);
+  text-align: center;
+}
+.fac-drill-name { font-size: 12.5px; color: var(--text); font-weight: 500; }
+.fac-drill-count {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-dim);
+  min-width: 18px;
+  text-align: right;
+}
+.fac-drill-bit {
+  position: absolute;
+  left: 0; bottom: 0;
+  height: 3px;
+  width: 100%;
+  background: linear-gradient(90deg, transparent, var(--src), transparent);
+  opacity: 0;
+}
+.fac-drill.is-active .fac-drill-bit {
+  opacity: 0.9;
+  animation: fac-extract 1.4s ease-in-out infinite;
+}
+@keyframes fac-extract {
+  0%, 100% { transform: translateX(-100%); }
+  50% { transform: translateX(100%); }
+}
+
+/* ── Assembler stations (machines) ── */
+.fac-station {
+  border-radius: 9px;
+  border: 1px solid var(--border-strong);
+  background:
+    radial-gradient(6px 6px at 10px 10px, rgba(255,255,255,0.05), transparent),
+    radial-gradient(6px 6px at calc(100% - 10px) 10px, rgba(255,255,255,0.05), transparent),
+    linear-gradient(180deg, #1d1714, #140f0d);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  overflow: hidden;
+}
+.fac-machine-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(255,255,255,0.03), transparent);
+}
+.fac-machine-title {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+}
+.fac-machine-count {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-faint);
+  background: #0d0908;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1px 8px;
+}
+.fac-gear { color: var(--green); font-size: 13px; animation: fac-spin 3.5s linear infinite; }
+@keyframes fac-spin { to { transform: rotate(360deg); } }
+
+.fac-machine-body {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 11px;
+  min-height: 56px;
+}
+
+/* status lamps */
+.fac-lamp {
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  box-shadow: 0 0 6px currentColor;
+}
+.fac-lamp-run { color: var(--green); background: var(--green); animation: fac-pulse 1.6s ease-in-out infinite; }
+.fac-lamp-wait { color: var(--yellow); background: var(--yellow); animation: fac-blink 1s steps(1) infinite; }
+.fac-lamp-idle { color: var(--text-faint); background: var(--text-faint); }
+.fac-lamp-open { color: var(--yellow); background: var(--yellow); }
+.fac-lamp-merged { color: var(--purple); background: var(--purple); }
+.fac-lamp-closed { color: var(--red); background: var(--red); }
+@keyframes fac-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+@keyframes fac-blink { 0%,49% { opacity: 1; } 50%,100% { opacity: 0.25; } }
+
+.fac-station-run { border-color: color-mix(in srgb, var(--green) 30%, var(--border-strong)); }
+.fac-station-wait { border-color: color-mix(in srgb, var(--yellow) 32%, var(--border-strong)); }
+
+/* ── Session crates ── */
+.fac-crate {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--src);
+  background: linear-gradient(180deg, #181210, #110c0a);
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  transition: transform 0.08s ease, border-color 0.12s ease, background 0.12s ease;
+}
+.fac-crate:hover {
+  transform: translateX(2px);
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+}
+.fac-crate-glyph {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--src);
+  width: 20px;
+  text-align: center;
+  flex: 0 0 auto;
+}
+.fac-crate-main { min-width: 0; flex: 1 1 auto; display: flex; flex-direction: column; gap: 2px; }
+.fac-crate-title {
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.fac-crate-meta {
+  font-size: 11px;
+  color: var(--text-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.fac-crate-flag { flex: 0 0 auto; font-family: var(--mono); font-size: 11px; font-weight: 700; }
+.fac-crate-flag-run {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--green); box-shadow: 0 0 6px var(--green);
+  animation: fac-pulse 1.6s ease-in-out infinite;
+}
+.fac-crate-flag-wait {
+  width: 16px; height: 16px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  color: #1a1206; background: var(--yellow);
+  animation: fac-blink 1s steps(1) infinite;
+}
+.fac-crate-flag-queue {
+  min-width: 16px; height: 16px; border-radius: 8px; padding: 0 4px;
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; background: color-mix(in srgb, var(--purple) 70%, #000);
+}
+
+.fac-empty {
+  font-size: 12px;
+  color: var(--text-faint);
+  font-style: italic;
+  padding: 4px 2px;
+}
+.fac-more {
+  font-size: 11px;
+  color: var(--text-faint);
+  font-family: var(--mono);
+  padding: 2px;
+}
+
+/* ── GitHub island ── */
+.fac-island {
+  position: relative;
+  border-radius: 14px;
+  padding: 12px 12px 14px;
+  border: 1px solid #1e3a3a;
+  background:
+    radial-gradient(120% 60% at 50% 0%, #14201f, #0c1413);
+  box-shadow: 0 0 0 4px rgba(46, 160, 160, 0.05), 0 10px 30px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+}
+.fac-island-water {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(90deg, rgba(88, 166, 255, 0.05) 0 6px, transparent 6px 12px);
+  opacity: 0.5;
+  animation: fac-water 6s linear infinite;
+}
+@keyframes fac-water { to { background-position: 24px 0; } }
+.fac-island-label {
+  position: relative;
+  margin: 2px 0 11px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #7fd9d2;
+}
+.fac-hex { font-size: 14px; }
+
+.fac-shelf { position: relative; margin-bottom: 10px; }
+.fac-shelf:last-child { margin-bottom: 0; }
+.fac-shelf-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 6px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+}
+.fac-shelf-count {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-weight: 700;
+  color: var(--text-faint);
+}
+.fac-shelf-body { display: flex; flex-direction: column; gap: 6px; }
+.fac-pr {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  text-align: left;
+  padding: 7px 9px;
+  border-radius: 6px;
+  border: 1px solid #1d2f2f;
+  background: linear-gradient(180deg, #0f1817, #0c1312);
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  transition: transform 0.08s ease, border-color 0.12s ease;
+}
+.fac-pr:hover { transform: translateY(-1px); border-color: #2c4a48; }
+.fac-pr-hex { color: #58a6ff; font-size: 12px; flex: 0 0 auto; }
+.fac-shelf-merged .fac-pr-hex { color: var(--purple); }
+.fac-shelf-closed .fac-pr-hex { color: var(--red); }
+.fac-pr-title {
+  font-size: 12.5px;
+  min-width: 0;
+  flex: 1 1 auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.fac-pr-tag {
+  flex: 0 0 auto;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: #7b86e8;
+  border: 1px solid #2a2f55;
+  border-radius: 4px;
+  padding: 1px 4px;
+}
+
+/* ── Responsive: stack the line vertically on narrow screens ── */
+@media (max-width: 760px) {
+  .fac-floor { flex-direction: column; }
+  .fac-col-intake, .fac-col-island { width: 100%; flex: 1 1 auto; }
+  .fac-drills { flex-direction: row; flex-wrap: wrap; }
+  .fac-drill { flex: 1 1 130px; }
+  .fac-belt { width: 100%; flex-basis: 40px; min-height: 40px; }
+  .fac-belt-lane { top: 50%; }
+  .fac-col-label { margin-top: 4px; }
+}

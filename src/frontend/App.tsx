@@ -7,6 +7,7 @@ import { Home } from "./components/Home";
 import { Automations } from "./components/Automations";
 import { Wiki } from "./components/Wiki";
 import { Connections } from "./components/Connections";
+import { Factory } from "./components/Factory";
 import { Archived } from "./components/Archived";
 import { Reviews } from "./components/Reviews";
 import { UserPicker, UserGate } from "./components/UserPicker";
@@ -30,6 +31,7 @@ type Route =
   | { view: "automations" }
   | { view: "wiki"; path: string | null }
   | { view: "connections" }
+  | { view: "factory" }
   | { view: "archived" };
 
 function parseRoute(pathname: string): Route {
@@ -38,6 +40,7 @@ function parseRoute(pathname: string): Route {
   if (pathname === "/backstage/new") return { view: "new" };
   if (pathname === "/backstage/automations") return { view: "automations" };
   if (pathname === "/backstage/connections") return { view: "connections" };
+  if (pathname === "/backstage/factory") return { view: "factory" };
   if (pathname === "/backstage/archived") return { view: "archived" };
   const reviewsMatch = pathname.match(/^\/backstage\/reviews(?:\/(.+))?$/);
   if (reviewsMatch) return { view: "reviews", id: reviewsMatch[1] ? decodeURIComponent(reviewsMatch[1]) : undefined };
@@ -58,6 +61,8 @@ function routePath(route: Route): string {
       return "/backstage/automations";
     case "connections":
       return "/backstage/connections";
+    case "factory":
+      return "/backstage/factory";
     case "archived":
       return "/backstage/archived";
     case "reviews":
@@ -178,6 +183,7 @@ function App() {
     route.view === "automations" ||
     route.view === "wiki" ||
     route.view === "connections" ||
+    route.view === "factory" ||
     route.view === "reviews"
       ? route.view
       : ("sessions" as const);
@@ -266,6 +272,12 @@ function App() {
               <Automations onOpenSession={(id) => navigate({ view: "session", id })} />
             ) : route.view === "connections" ? (
               <Connections />
+            ) : route.view === "factory" ? (
+              <Factory
+                sessions={sessions}
+                loading={loading}
+                onOpenSession={(id) => navigate({ view: "session", id })}
+              />
             ) : route.view === "reviews" ? (
               <Reviews
                 sessions={sessions}

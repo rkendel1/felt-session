@@ -1223,7 +1223,16 @@ const server: import("bun").Server<WSClientData> = (g.__backstageServer ??= Bun.
 
     // List sessions
     if (path === "/backstage/api/sessions" && req.method === "GET") {
-      return Response.json(getCachedSessions());
+      // Enrich with live, in-process signals that aren't on the cached session
+      // objects: whether a run is blocked on a human question (pendingAsks) and
+      // how many prompts are queued behind it. Powers the Factory view's
+      // "waiting" station without a second round-trip.
+      const enriched = getCachedSessions().map((s) => ({
+        ...s,
+        waitingForInput: pendingAsks.has(s.id),
+        queuedCount: promptQueues.get(s.id)?.length || 0,
+      }));
+      return Response.json(enriched);
     }
 
     // Get transcript for a session

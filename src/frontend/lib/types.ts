@@ -26,6 +26,10 @@ export interface UnifiedSession {
   modelHistory?: Array<{ model: string; at: string; by?: string }>;
   linearIssue?: { identifier: string; title: string; url?: string };
   slackThread?: { channel: string; threadTs: string };
+  /** Blocked on an AskUserQuestion — a human needs to answer. Set by /api/sessions. */
+  waitingForInput?: boolean;
+  /** Number of prompts queued behind the current run. Set by /api/sessions. */
+  queuedCount?: number;
 }
 
 export interface TranscriptEntry {

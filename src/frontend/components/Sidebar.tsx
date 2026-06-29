@@ -18,7 +18,7 @@ const AUTOMATION_COLOR = "#d29922";
 
 const SOURCE_ORDER: SessionSource[] = ["slack", "linear", "backstage", "cli"];
 
-export type NavView = "sessions" | "reviews" | "automations" | "wiki" | "connections";
+export type NavView = "sessions" | "reviews" | "automations" | "wiki" | "connections" | "factory";
 
 interface Props {
   sessions: UnifiedSession[];
@@ -82,6 +82,15 @@ const NAV_ITEMS: Array<{ view: NavView; label: string; icon: React.ReactNode }> 
         <circle cx="11.5" cy="4" r="2" />
         <circle cx="11.5" cy="12" r="2" />
         <path d="M6.3 7.1l3.4-2.2M6.3 8.9l3.4 2.2" strokeLinecap="round" />
+      </svg>
+    ),
+  },
+  {
+    view: "factory",
+    label: "Factory",
+    icon: (
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3">
+        <path d="M2 13.5h12M2.5 13.5V7l3.5 2.2V7l3.5 2.2V4.2l3.5-1v10.3" strokeLinejoin="round" strokeLinecap="round" />
       </svg>
     ),
   },
