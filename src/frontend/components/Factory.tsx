@@ -1,6 +1,7 @@
 import React, { useMemo } from "react";
 import type { UnifiedSession } from "../lib/types";
 import { relativeTime } from "../lib/api";
+import { Assembler, Drill, Inserter, Chest, Siren, Bot, Cog } from "./factory-sprites";
 
 // A Factorio-flavoured overview of everything moving through Michael: sources
 // "mine" raw work on the left, sessions get "assembled" in the middle (running /
@@ -90,7 +91,11 @@ export function Factory({ sessions, loading, onOpenSession }: Props) {
       <div className="fac-scene">
         <header className="fac-hud">
           <div className="fac-hud-title">
-            <span className="fac-hud-gear">⚙</span>
+            <span className="fac-hud-gear">
+              <svg width="18" height="18" viewBox="0 0 18 18">
+                <Cog cx={9} cy={9} r={8} spin="spr-spin" color="#e6bd3f" />
+              </svg>
+            </span>
             <span>Production Floor</span>
             <span className="fac-hud-sub">{active.length} sessions on the line</span>
           </div>
@@ -117,7 +122,9 @@ export function Factory({ sessions, loading, onOpenSession }: Props) {
                     }`}
                     style={cssVar(SOURCE_META[k].color)}
                   >
-                    <span className="fac-drill-glyph">{SOURCE_META[k].glyph}</span>
+                    <span className="fac-drill-glyph">
+                      <Drill size={24} color={SOURCE_META[k].color} />
+                    </span>
                     <span className="fac-drill-name">{SOURCE_META[k].label}</span>
                     <span className="fac-drill-count">{c.total}</span>
                     <span className="fac-drill-bit" aria-hidden />
@@ -160,6 +167,12 @@ export function Factory({ sessions, loading, onOpenSession }: Props) {
           <section className="fac-col fac-col-island">
             <div className="fac-island">
               <div className="fac-island-water" aria-hidden />
+              <span className="fac-bot fac-bot-1" aria-hidden>
+                <Bot size={20} />
+              </span>
+              <span className="fac-bot fac-bot-2" aria-hidden>
+                <Bot size={15} />
+              </span>
               <h3 className="fac-island-label">
                 <span className="fac-hex">⬡</span> GitHub Island
               </h3>
@@ -183,13 +196,27 @@ function Stat({ tone, label, value }: { tone: string; label: string; value: numb
   );
 }
 
+const BELT_ITEMS = [
+  { delay: "0s", color: "#b8bcc2" },
+  { delay: "-1.1s", color: "#c8803a" },
+  { delay: "-2.2s", color: "#b8bcc2" },
+];
+
 function Belt({ toIsland }: { toIsland?: boolean }) {
   return (
     <div className={`fac-belt${toIsland ? " fac-belt-island" : ""}`} aria-hidden>
       <div className="fac-belt-lane" />
-      <span className="fac-belt-item" style={{ animationDelay: "0s" }} />
-      <span className="fac-belt-item" style={{ animationDelay: "-1.1s" }} />
-      <span className="fac-belt-item" style={{ animationDelay: "-2.2s" }} />
+      {BELT_ITEMS.map((it, i) => (
+        <span key={i} className="fac-belt-item" style={{ animationDelay: it.delay }}>
+          <svg width="15" height="15" viewBox="0 0 16 16">
+            <Cog cx={8} cy={8} r={6.4} spin="spr-spin" color={it.color} />
+          </svg>
+        </span>
+      ))}
+      {/* an inserter plucking items off the belt at the machine end */}
+      <span className="fac-belt-inserter">
+        <Inserter size={26} />
+      </span>
     </div>
   );
 }
@@ -209,12 +236,15 @@ function Station({
 }) {
   const shown = sessions.slice(0, STATION_CAP);
   const overflow = sessions.length - shown.length;
+  const Machine = kind === "run" ? Assembler : kind === "wait" ? Siren : Chest;
   return (
     <div className={`fac-station fac-station-${kind}`}>
       <div className="fac-machine-head">
+        <span className="fac-machine-sprite">
+          <Machine size={30} />
+        </span>
         <span className={`fac-lamp fac-lamp-${kind}`} />
         <span className="fac-machine-title">{title}</span>
-        {kind === "run" && <span className="fac-gear">⚙</span>}
         <span className="fac-machine-count">{sessions.length}</span>
       </div>
       <div className="fac-machine-body">

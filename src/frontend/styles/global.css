@@ -3850,9 +3850,8 @@ a {
   color: var(--text);
 }
 .fac-hud-gear {
-  color: var(--yellow);
-  font-size: 18px;
-  animation: fac-spin 9s linear infinite;
+  display: inline-flex;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.5));
 }
 .fac-hud-sub {
   color: var(--text-faint);
@@ -3918,8 +3917,11 @@ a {
   position: relative;
   flex: 0 0 54px;
   width: 54px;
-  align-self: stretch;
-  min-height: 120px;
+  /* a compact connector pinned near the top row of machines, rather than
+     stretching (and stranding the belt mid-page on tall columns) */
+  align-self: flex-start;
+  height: 150px;
+  margin-top: 18px;
 }
 .fac-belt-lane {
   position: absolute;
@@ -3943,13 +3945,22 @@ a {
 .fac-belt-item {
   position: absolute;
   top: 50%;
-  margin-top: -7px;
-  width: 14px;
-  height: 14px;
-  border-radius: 2px;
-  background: linear-gradient(180deg, #4a3d1c, #2a2210);
-  box-shadow: inset 0 0 0 2px #7a6228, 0 1px 2px rgba(0, 0, 0, 0.6);
+  margin-top: -8px;
+  width: 15px;
+  height: 15px;
+  display: flex;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.6));
   animation: fac-belt-travel 3.3s linear infinite;
+}
+/* inserter sitting at the machine end of each belt, plucking items off */
+.fac-belt-inserter {
+  position: absolute;
+  right: 2px;
+  top: 50%;
+  margin-top: -23px;
+  display: flex;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.5));
+  pointer-events: none;
 }
 @keyframes fac-belt-travel {
   0% { left: -16px; opacity: 0; }
@@ -3983,12 +3994,12 @@ a {
     0 0 14px color-mix(in srgb, var(--src) 22%, transparent);
 }
 .fac-drill-glyph {
-  font-family: var(--mono);
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--src);
-  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.5));
 }
+.fac-drill.is-cold .fac-drill-glyph { filter: grayscale(0.7) brightness(0.8); }
 .fac-drill-name { font-size: 12.5px; color: var(--text); font-weight: 500; }
 .fac-drill-count {
   font-family: var(--mono);
@@ -4248,6 +4259,65 @@ a {
   border: 1px solid #2a2f55;
   border-radius: 4px;
   padding: 1px 4px;
+}
+
+/* ── Pixel-art sprites & their moving parts ── */
+.spr { display: block; }
+/* SVG parts spin/translate about their own centre */
+.spr-spin, .spr-spin-rev, .spr-bob, .spr-hover, .spr-flap {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.spr-spin { animation: fac-spin 4.5s linear infinite; }
+.spr-spin-rev { animation: fac-spin 4.5s linear infinite reverse; }
+.spr-bob { animation: spr-bob 0.9s ease-in-out infinite; }
+@keyframes spr-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(2px); } }
+.spr-hover { animation: spr-hover 2.4s ease-in-out infinite; }
+@keyframes spr-hover { 0%, 100% { transform: translateY(-1px); } 50% { transform: translateY(2px); } }
+.spr-flap { animation: spr-flap 0.16s steps(2) infinite; }
+@keyframes spr-flap { from { transform: scaleY(0.55); } to { transform: scaleY(1); } }
+.spr-flash { animation: spr-flash 0.9s steps(1) infinite; }
+@keyframes spr-flash { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0.25; } }
+/* inserter arm pivots about its base (in viewBox user units) */
+.spr-arm {
+  transform-box: view-box;
+  transform-origin: 12px 18px;
+  animation: spr-arm 1.7s ease-in-out infinite;
+}
+@keyframes spr-arm { 0%, 100% { transform: rotate(-34deg); } 50% { transform: rotate(34deg); } }
+
+/* machine sprite in a station header */
+.fac-machine-sprite {
+  display: inline-flex;
+  flex: 0 0 auto;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.5));
+}
+.fac-station-run .fac-machine-sprite { filter: drop-shadow(0 0 5px rgba(63, 185, 80, 0.4)); }
+.fac-station-wait .fac-machine-sprite { filter: drop-shadow(0 0 5px rgba(229, 72, 77, 0.45)); }
+
+/* logistic bots drifting over the island */
+.fac-bot {
+  position: absolute;
+  z-index: 1;
+  pointer-events: none;
+  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.5));
+}
+.fac-bot-1 { top: 8px; right: 14px; animation: fac-bot-drift1 7s ease-in-out infinite; }
+.fac-bot-2 { top: 30px; right: 78px; animation: fac-bot-drift2 9s ease-in-out infinite; }
+@keyframes fac-bot-drift1 {
+  0%, 100% { transform: translate(0, 0); }
+  33% { transform: translate(-30px, 14px); }
+  66% { transform: translate(-10px, 26px); }
+}
+@keyframes fac-bot-drift2 {
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(34px, -16px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spr-spin, .spr-spin-rev, .spr-bob, .spr-hover, .spr-flap, .spr-arm,
+  .fac-bot-1, .fac-bot-2, .fac-belt-item, .fac-belt-lane,
+  .fac-island-water, .fac-drill.is-active .fac-drill-bit { animation: none; }
 }
 
 /* ── Responsive: stack the line vertically on narrow screens ── */
