@@ -1827,6 +1827,21 @@ a {
   flex-shrink: 0;
 }
 .reviews-drawer-close:hover { background: var(--bg-hover); color: var(--text); }
+.reviews-drawer-back {
+  display: none;
+  align-items: center;
+  gap: 7px;
+  background: none;
+  border: none;
+  padding: 4px 6px;
+  margin: -4px 0 -4px -2px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 550;
+  color: var(--text);
+  cursor: pointer;
+}
+.reviews-drawer-back svg { color: var(--text-dim); }
 .reviews-drawer-title {
   font-size: 13.5px;
   font-weight: 600;
@@ -1870,17 +1885,58 @@ a {
   .reviews-row { grid-template-columns: 88px minmax(0, 1fr) 150px 118px 78px; }
   .rv-c-review, .rv-c-author { display: none; }
 }
-@media (max-width: 860px) {
-  .reviews-drawer {
-    position: absolute;
-    inset: 0 0 0 auto;
-    width: min(560px, 100%);
-    z-index: 10;
-    box-shadow: -16px 0 40px rgba(0, 0, 0, 0.5);
+
+/* ── Mobile: card rows + nested full-screen detail ──────────
+   Below the phone breakpoint the table can't hold columns, so each PR becomes
+   a stacked card (title line, then a wrapped meta line with checks · diffstat ·
+   author · time), and opening a PR pushes a full-screen detail view with a
+   back affordance — a nested master→detail flow instead of a squished split. */
+@media (max-width: 720px) {
+  .reviews-table .reviews-row.reviews-row-head { display: none; }
+  .reviews-table .reviews-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    row-gap: 9px;
+    column-gap: 12px;
+    padding: 14px 16px;
   }
-  .reviews-row { grid-template-columns: 80px minmax(0, 1fr) 120px; }
-  .rv-c-changes, .rv-c-updated { display: none; }
-  .reviews-row-head { top: 0; }
+  .reviews-row .rv-c-state { order: 1; }
+  .reviews-row .rv-c-title {
+    order: 2;
+    flex: 1 1 calc(100% - 90px);
+    min-width: 0;
+  }
+  /* second line: every remaining signal, re-shown and reflowed */
+  .reviews-row .rv-c-checks { order: 3; display: inline-flex; }
+  .reviews-row .rv-c-changes { order: 4; display: inline-flex; flex-direction: row; align-items: center; gap: 8px; }
+  .reviews-row .rv-c-review { order: 5; display: inline-flex; }
+  .reviews-row .rv-c-author { order: 6; display: inline-flex; }
+  .reviews-row .rv-c-updated { order: 7; margin-left: auto; }
+  .rv-checks-bar { display: none; }
+
+  /* the list and detail are separate screens, not a split */
+  .reviews-has-detail .reviews-main { display: none; }
+  .reviews-has-detail .reviews-drawer {
+    position: absolute;
+    inset: 0;
+    z-index: 20;
+    border-left: none;
+  }
+  .reviews-drawer-close, .reviews-has-detail .reviews-drawer-title { display: none; }
+  .reviews-drawer-back { display: inline-flex; }
+  .reviews-drawer-body { overflow-y: auto; }
+
+  /* the PrPanel split stacks: info, then the diff below */
+  .pr-panel-split { flex-direction: column; height: auto; }
+  .pr-panel-split .pr-panel-info {
+    width: auto;
+    flex-shrink: 1;
+    overflow-y: visible;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+  .pr-panel-split .pr-panel-diff { overflow-y: visible; }
 }
 
 /* ── Messages ────────────────────────────────────────────── */
