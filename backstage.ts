@@ -986,6 +986,7 @@ const server: import("bun").Server<WSClientData> = (g.__backstageServer ??= Bun.
     "/backstage/wiki": spaEntry,
     "/backstage/wiki/*": spaEntry,
     "/backstage/connections": spaEntry,
+    "/backstage/factory": spaEntry,
     "/backstage/archived": spaEntry,
     "/backstage/reviews": spaEntry,
     "/backstage/reviews/*": spaEntry,
