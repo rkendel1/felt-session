@@ -13,11 +13,18 @@ export interface Project {
   repo: string;
   wtPrefix: string;
   defaultBranch: string;
+  // When true, code sessions run directly in the main checkout on the default
+  // branch instead of an isolated worktree. Backstage is self-hosting — the live
+  // server runs `bun --hot` from its main checkout, so editing there is the only
+  // way a change is testable without a second instance. Sessions share one tree
+  // and commit straight to the default branch (see "Backstage dev workflow" in
+  // CLAUDE.md: add → commit → push, never reset/discard the shared repo).
+  sharedCheckout?: boolean;
 }
 
 export const PROJECTS: Record<string, Project> = {
   "tella-fusion": { id: "tella-fusion", repo: TELLA_FUSION, wtPrefix: "tella-fusion", defaultBranch: "main" },
-  backstage: { id: "backstage", repo: "/home/ubuntu/projects/tella-backstage", wtPrefix: "backstage", defaultBranch: "master" },
+  backstage: { id: "backstage", repo: "/home/ubuntu/projects/tella-backstage", wtPrefix: "backstage", defaultBranch: "master", sharedCheckout: true },
 };
 
 export function getProject(id?: string): Project {
@@ -240,6 +247,13 @@ export async function createWorktreeForPrBranch(headRef: string): Promise<string
 
 export async function createWorktree(branch: string, projectId?: string): Promise<string> {
   const project = getProject(projectId);
+
+  // Shared-checkout projects (backstage) don't get a per-session worktree: the
+  // session works in the live main checkout on the default branch so its edits
+  // hot-reload in the running server. No branch is created or switched — every
+  // session stays on the default branch and commits there.
+  if (project.sharedCheckout) return project.repo;
+
   const wtPath = `${WORKTREES_DIR}/${project.wtPrefix}-${branch}`;
 
   await withGitLock(async () => {

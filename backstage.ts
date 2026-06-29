@@ -1799,6 +1799,10 @@ const server: import("bun").Server<WSClientData> = (g.__backstageServer ??= Bun.
             } else if (isAsk) {
               // Ask sessions run read-only on the main checkout — no worktree
               wtPath = project.repo;
+            } else if (project.sharedCheckout) {
+              // Backstage: code sessions edit the live main checkout on the
+              // default branch (hot-reloads in the running server). No worktree.
+              wtPath = project.repo;
             } else {
               // Check if worktree exists, create if needed
               const worktrees = await listWorktrees(project.id);
@@ -1821,7 +1825,13 @@ const server: import("bun").Server<WSClientData> = (g.__backstageServer ??= Bun.
                 claudeSessionId: isCodex ? "" : engineSessionId,
                 ...(isCodex && engineSessionId ? { codexThreadId: engineSessionId } : {}),
                 ...(model ? { model } : {}),
-                branch: forkSource ? forkSource.branch || "" : isAsk ? "" : branch,
+                branch: forkSource
+                  ? forkSource.branch || ""
+                  : isAsk
+                    ? ""
+                    : project.sharedCheckout
+                      ? project.defaultBranch
+                      : branch,
                 worktreeDir: wtPath,
                 project: projectForPath(wtPath).id,
                 createdBy: user || "Anonymous",

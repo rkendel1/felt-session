@@ -1,5 +1,35 @@
 Default to using Bun instead of Node.js.
 
+## Backstage dev workflow (self-hosting — read this first)
+
+Backstage runs itself: the live server is `bun --hot` from this main checkout
+(`/home/ubuntu/projects/tella-backstage`), so the fastest way to see a change is
+to **edit the main checkout on `master` directly** — `bun --hot` reloads it live.
+Because of that, backstage code sessions do **not** get their own worktree
+(`sharedCheckout` in `src/server/worktree.ts`); they all work in this one shared
+checkout on `master`. That's intentional wild-west iteration. The rules that keep
+it from descending into chaos:
+
+- **Only `add` → `commit` → `push`. Never `git reset --hard`, `git checkout .`,
+  `git revert`, or `git checkout <other-branch>` in the shared checkout.** A reset
+  or branch-switch yanks the working tree out from under the live server *and*
+  every other session — that's the "sessions undoing each other's work" trap. If
+  something looks wrong, inspect and fix forward; don't roll back the shared tree.
+- **`git add <specific files>`, not `git add -A`** — multiple sessions may have
+  uncommitted edits in this tree; only commit your own.
+- **Commit + push frequently.** Un-pushed work is the only thing a sync can't
+  protect (the deploy is now `merge --ff-only`, never `reset --hard`, so it aborts
+  loudly instead of wiping — but push anyway).
+- **Don't `systemctl restart` casually.** Most edits hot-reload. Only runner
+  internals / agent-loop / scheduler changes need a real restart, and a restart
+  drains every session — treat it as a deliberate, announced action. Frontend
+  changes never need it (`kill -USR2 <pid>` or the watcher rebuilds the bundle).
+- Want isolation for a risky/breaking change? Make a worktree by hand and run a
+  second instance on another `PORT` — but note `BACKSTAGE_DEV=1` only swaps the
+  frontend build; it does **not** yet disable the Slack/Linear/Stripe loops,
+  webhook server, or schedulers, so a naive second instance double-sends. (A real
+  isolated dev mode is a future task.)
+
 - Use `bun run backstage.ts` to start the server
 - Server binds to Tailscale IP (100.65.135.7:3850) — not publicly accessible
 - Access at `http://michael:3850/backstage/`
