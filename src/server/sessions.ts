@@ -270,11 +270,59 @@ function getRunningPids(): Map<string, number> {
   return running;
 }
 
-// PR cache: branch → { url, state }, refreshed every 60s
-interface PrInfo { url: string; state: "OPEN" | "MERGED" | "CLOSED"; }
+// PR cache: branch → rich PR info, refreshed every 60s. A single batched
+// `gh pr list` carries everything the Reviews table renders as columns
+// (diffstat, review decision, a CI checks rollup summary, author), so the list
+// never has to N+1 fetch per PR — only the detail pane does.
+interface PrChecksSummary {
+  total: number;
+  passed: number;
+  failed: number;
+  pending: number;
+}
+interface PrInfo {
+  url: string;
+  state: "OPEN" | "MERGED" | "CLOSED";
+  number: number;
+  title: string;
+  isDraft: boolean;
+  additions: number;
+  deletions: number;
+  changedFiles: number;
+  reviewDecision: string;
+  author: string;
+  updatedAt: string;
+  checks: PrChecksSummary;
+}
 let prCache: { data: Map<string, PrInfo>; ts: number } = { data: new Map(), ts: 0 };
 const PR_CACHE_TTL = 60_000;
 let prRefreshing = false;
+
+interface RollupCheck { status?: string; conclusion?: string; state?: string }
+
+// Collapse GitHub's per-check rollup into the four counts the UI shows. A check
+// is "pending" until COMPLETED; once complete its conclusion decides pass/fail.
+// Skipped/neutral checks count toward the total but are neither pass nor fail,
+// matching how GitHub's merge box treats them.
+function summarizeChecks(rollup: RollupCheck[] | undefined): PrChecksSummary {
+  const summary: PrChecksSummary = { total: 0, passed: 0, failed: 0, pending: 0 };
+  for (const c of rollup || []) {
+    summary.total++;
+    // StatusContext (legacy commit statuses) report `state`; CheckRun reports
+    // status + conclusion.
+    const status = (c.status || "").toUpperCase();
+    const conclusion = (c.conclusion || c.state || "").toUpperCase();
+    if (status && status !== "COMPLETED") {
+      summary.pending++;
+    } else if (["FAILURE", "TIMED_OUT", "ERROR", "STARTUP_FAILURE", "ACTION_REQUIRED", "CANCELLED"].includes(conclusion)) {
+      summary.failed++;
+    } else if (conclusion === "SUCCESS") {
+      summary.passed++;
+    }
+    // SKIPPED / NEUTRAL / "" fall through — counted in total only.
+  }
+  return summary;
+}
 
 // Stale-while-revalidate: never block the event loop on gh (it takes ~10s on
 // this repo, which used to freeze every agent in the process).
@@ -283,20 +331,67 @@ function getPrsByBranch(): Map<string, PrInfo> {
   return prCache.data;
 }
 
+async function ghJson<T>(args: string[]): Promise<T | null> {
+  try {
+    const proc = Bun.spawn(["gh", ...args], { stdout: "pipe", stderr: "ignore" });
+    const raw = await new Response(proc.stdout).text();
+    if ((await proc.exited) !== 0 || !raw.trim()) return null;
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
+}
+
 async function refreshPrCache(): Promise<void> {
   if (prRefreshing) return;
   prRefreshing = true;
   try {
-    const proc = Bun.spawn(
-      ["gh", "pr", "list", "--repo", "tellahq/tella-fusion", "--state", "all",
-       "--limit", "200", "--json", "headRefName,url,state"],
-      { stdout: "pipe", stderr: "ignore" }
-    );
-    const raw = await new Response(proc.stdout).text();
-    const prs = JSON.parse(raw) as Array<{ headRefName: string; url: string; state: string }>;
+    // GitHub's GraphQL 504s when asked for statusCheckRollup across hundreds of
+    // PRs, so split the work: one cheap bulk call for every PR's metadata, and
+    // a second scoped call that pulls the CI rollup only for the recent open
+    // PRs (the ones a reviewer actually triages). Closed/merged PRs simply show
+    // no checks column.
+    const [bulk, rollups] = await Promise.all([
+      ghJson<Array<{
+        headRefName: string; url: string; state: string; number: number; title: string;
+        isDraft: boolean; additions: number; deletions: number; changedFiles: number;
+        reviewDecision: string; author?: { login?: string; name?: string }; updatedAt: string;
+      }>>([
+        "pr", "list", "--repo", "tellahq/tella-fusion", "--state", "all", "--limit", "200",
+        "--json", "headRefName,url,state,number,title,isDraft,additions,deletions,changedFiles,reviewDecision,author,updatedAt",
+      ]),
+      ghJson<Array<{ number: number; statusCheckRollup?: RollupCheck[] }>>([
+        "pr", "list", "--repo", "tellahq/tella-fusion", "--state", "open", "--limit", "40",
+        "--json", "number,statusCheckRollup",
+      ]),
+    ]);
+
+    if (!bulk) {
+      prCache.ts = Date.now(); // back off on failure, keep stale data
+      return;
+    }
+
+    const checksByNumber = new Map<number, PrChecksSummary>();
+    for (const r of rollups || []) {
+      checksByNumber.set(r.number, summarizeChecks(r.statusCheckRollup));
+    }
+
     const map = new Map<string, PrInfo>();
-    for (const pr of prs) {
-      map.set(pr.headRefName, { url: pr.url, state: pr.state as PrInfo["state"] });
+    for (const pr of bulk) {
+      map.set(pr.headRefName, {
+        url: pr.url,
+        state: pr.state as PrInfo["state"],
+        number: pr.number,
+        title: pr.title || "",
+        isDraft: !!pr.isDraft,
+        additions: pr.additions || 0,
+        deletions: pr.deletions || 0,
+        changedFiles: pr.changedFiles || 0,
+        reviewDecision: pr.reviewDecision || "",
+        author: pr.author?.login || pr.author?.name || "",
+        updatedAt: pr.updatedAt || "",
+        checks: checksByNumber.get(pr.number) || { total: 0, passed: 0, failed: 0, pending: 0 },
+      });
     }
     prCache = { data: map, ts: Date.now() };
   } catch (e) {
@@ -355,6 +450,16 @@ export function getAllSessions(): UnifiedSession[] {
       if (pr) {
         session.prUrl = pr.url;
         session.prState = pr.state;
+        session.prNumber = pr.number;
+        session.prTitle = pr.title;
+        session.prIsDraft = pr.isDraft;
+        session.prAdditions = pr.additions;
+        session.prDeletions = pr.deletions;
+        session.prChangedFiles = pr.changedFiles;
+        session.prReviewDecision = pr.reviewDecision;
+        session.prAuthor = pr.author;
+        session.prUpdatedAt = pr.updatedAt;
+        session.prChecks = pr.checks;
       }
     }
   }

@@ -14,6 +14,18 @@ export interface UnifiedSession {
   transcriptPath: string | null;
   prUrl?: string;
   prState?: "OPEN" | "MERGED" | "CLOSED";
+  // Rich PR fields, populated from the batched gh pr list for the Reviews
+  // table's columns (so the list never fetches per-PR).
+  prNumber?: number;
+  prTitle?: string;
+  prIsDraft?: boolean;
+  prAdditions?: number;
+  prDeletions?: number;
+  prChangedFiles?: number;
+  prReviewDecision?: string;
+  prAuthor?: string;
+  prUpdatedAt?: string;
+  prChecks?: { total: number; passed: number; failed: number; pending: number };
   mode?: "ask" | "code";
   automation?: string;
   archived?: boolean;
