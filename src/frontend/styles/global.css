@@ -4252,11 +4252,29 @@ a {
 
 /* ── Responsive: stack the line vertically on narrow screens ── */
 @media (max-width: 760px) {
+  .fac-scene { padding: 12px 12px 48px; }
+
+  /* HUD: title on its own row, stats as a tidy 2×2 grid (no stranded chip) */
+  .fac-hud { padding: 11px 12px; margin-bottom: 12px; gap: 11px; }
+  .fac-hud-title { flex: 1 1 100%; flex-wrap: wrap; }
+  .fac-hud-sub { border-left: none; padding-left: 0; flex-basis: 100%; }
+  .fac-stats { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .fac-stat { min-width: 0; width: 100%; }
+
+  /* Stack the line; belts become full-width horizontal connectors */
   .fac-floor { flex-direction: column; }
   .fac-col-intake, .fac-col-island { width: 100%; flex: 1 1 auto; }
-  .fac-drills { flex-direction: row; flex-wrap: wrap; }
-  .fac-drill { flex: 1 1 130px; }
-  .fac-belt { width: 100%; flex-basis: 40px; min-height: 40px; }
+  .fac-col-assembly { gap: 11px; }
+  .fac-belt { width: 100%; flex: 0 0 34px; min-height: 34px; }
   .fac-belt-lane { top: 50%; }
-  .fac-col-label { margin-top: 4px; }
+  .fac-col-label { margin: 4px 0 8px; }
+
+  /* Drills: a clean 2-up grid, Automation spans the full last row */
+  .fac-drills { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .fac-drill { flex: none; }
+  .fac-drill:last-child { grid-column: 1 / -1; }
+
+  /* Roomier tap targets for crates / PRs */
+  .fac-crate { padding: 10px 11px; }
+  .fac-pr { padding: 9px 10px; }
 }
