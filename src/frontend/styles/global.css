@@ -3790,17 +3790,43 @@ a {
 }
 
 /* ─────────────────────────────────────────────────────────────
-   Factory — a Factorio-style overview of sessions on the line.
-   Sources mine work (left) → assemblers run / wait (middle) →
-   PRs ship to the GitHub island (right). Belts animate the flow.
+   Factory — a Factorio-style production floor.
+   Styled after the game's GUI: chunky beveled steel panels with
+   rivets, recessed gauge readouts, a concrete tile floor, brass/amber
+   accents and yellow transport belts. Sources mine work (left) →
+   assemblers run / wait (middle) → PRs ship to the island (right).
    ───────────────────────────────────────────────────────────── */
 
 .factory {
+  /* Factorio-ish industrial palette, scoped to this view only */
+  --f-floor: #1b1916;
+  --f-face1: #46453d;       /* panel top */
+  --f-face2: #33322b;       /* panel bottom */
+  --f-edge: #0e0d0b;        /* dark outer edge */
+  --f-hi: rgba(255, 255, 255, 0.11);
+  --f-lo: rgba(0, 0, 0, 0.5);
+  --f-well: #16140f;        /* recessed wells */
+  --f-rivet: #5b584d;
+  --f-brass: #c79a40;
+  --f-amber: #e8a33d;
+  --f-belt: #e6bd3f;
+  --f-text: #ece6d6;
+  --f-dim: #a59d89;
+  --f-faint: #6e6757;
+
   height: 100%;
   overflow: auto;
-  background:
-    radial-gradient(120% 80% at 50% -10%, #1c1410 0%, var(--bg) 60%);
+  color: var(--f-text);
+  background: var(--f-floor);
   -webkit-overflow-scrolling: touch;
+  scrollbar-color: #4a473d var(--f-floor);
+}
+.factory::-webkit-scrollbar { width: 12px; height: 12px; }
+.factory::-webkit-scrollbar-track { background: #100f0c; }
+.factory::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #514e43, #3a382f);
+  border: 2px solid #100f0c;
+  border-radius: 2px;
 }
 
 .fac-boot {
@@ -3808,120 +3834,124 @@ a {
   align-items: center;
   justify-content: center;
   height: 100%;
-  color: var(--text-dim);
+  color: var(--f-dim);
   font-family: var(--mono);
-  font-size: 14px;
   letter-spacing: 0.04em;
 }
 
 .fac-scene {
   position: relative;
   min-height: 100%;
-  padding: 18px 20px 60px;
-  /* Engineering grid + faint factory haze */
+  padding: 18px 20px 64px;
+  /* concrete floor: 64px slabs with dark grout + a fine inner grid, lit
+     from the top and darkened toward the edges (vignette) */
+  background-color: #1b1916;
   background-image:
-    linear-gradient(rgba(210, 153, 34, 0.045) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(210, 153, 34, 0.045) 1px, transparent 1px);
-  background-size: 32px 32px, 32px 32px;
+    radial-gradient(130% 100% at 50% -10%, rgba(70, 64, 52, 0.5), transparent 55%),
+    radial-gradient(120% 120% at 50% 50%, transparent 55%, rgba(0, 0, 0, 0.55)),
+    linear-gradient(rgba(0, 0, 0, 0.28) 2px, transparent 2px),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.28) 2px, transparent 2px),
+    linear-gradient(rgba(255, 255, 255, 0.018) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px),
+    linear-gradient(180deg, #211e18, #18160f);
+  background-size: cover, cover, 64px 64px, 64px 64px, 16px 16px, 16px 16px, cover;
 }
 
-/* ── HUD ── */
+/* ── HUD: brass-trimmed control panel ── */
 .fac-hud {
+  position: relative;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 14px;
-  padding: 12px 14px;
+  padding: 13px 16px;
   margin-bottom: 18px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
-  background: linear-gradient(180deg, #1a1411, #120d0b);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 6px 18px rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--f-edge);
+  border-top: 2px solid var(--f-brass);
+  border-radius: 4px;
+  background: linear-gradient(180deg, var(--f-face1), var(--f-face2));
+  box-shadow:
+    inset 0 1px 0 var(--f-hi),
+    inset 0 -3px 7px rgba(0, 0, 0, 0.4),
+    0 3px 0 #0c0b09,
+    0 8px 20px rgba(0, 0, 0, 0.5);
 }
 .fac-hud-title {
   display: flex;
   align-items: center;
   gap: 10px;
   font-family: var(--mono);
-  font-weight: 600;
-  font-size: 14px;
-  letter-spacing: 0.03em;
-  color: var(--text);
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: 0.04em;
+  color: var(--f-amber);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
 }
-.fac-hud-gear {
-  display: inline-flex;
-  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.5));
-}
+.fac-hud-gear { display: inline-flex; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.6)); }
 .fac-hud-sub {
-  color: var(--text-faint);
+  color: var(--f-faint);
   font-weight: 400;
   font-size: 12px;
-  border-left: 1px solid var(--border-strong);
+  border-left: 1px solid rgba(0, 0, 0, 0.5);
   padding-left: 10px;
 }
-.fac-stats {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-}
+.fac-stats { display: flex; gap: 9px; flex-wrap: wrap; }
+/* each stat is a recessed gauge well with glowing digits */
 .fac-stat {
   display: flex;
   flex-direction: column;
   align-items: center;
-  min-width: 78px;
-  padding: 6px 12px;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  background: #100b0a;
+  min-width: 80px;
+  padding: 7px 12px;
+  border-radius: 3px;
+  border: 1px solid var(--f-edge);
+  background: var(--f-well);
+  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.65), inset 0 -1px 0 rgba(255, 255, 255, 0.04);
 }
 .fac-stat-val {
   font-family: var(--mono);
-  font-size: 20px;
+  font-size: 21px;
   font-weight: 700;
   line-height: 1;
+  color: var(--f-text);
 }
 .fac-stat-label {
-  margin-top: 4px;
+  margin-top: 5px;
   font-size: 10px;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--text-faint);
+  letter-spacing: 0.07em;
+  color: var(--f-faint);
 }
-.fac-stat-run .fac-stat-val { color: var(--green); }
-.fac-stat-wait .fac-stat-val { color: var(--yellow); }
-.fac-stat-queue .fac-stat-val { color: var(--purple); }
-.fac-stat-pr .fac-stat-val { color: #58a6ff; }
+.fac-stat-run .fac-stat-val { color: #74d680; text-shadow: 0 0 8px rgba(63, 185, 80, 0.5); }
+.fac-stat-wait .fac-stat-val { color: var(--f-amber); text-shadow: 0 0 8px rgba(232, 163, 61, 0.5); }
+.fac-stat-queue .fac-stat-val { color: #b69aff; text-shadow: 0 0 8px rgba(163, 113, 247, 0.45); }
+.fac-stat-pr .fac-stat-val { color: #6cb6ff; text-shadow: 0 0 8px rgba(88, 166, 255, 0.45); }
 
 /* ── Floor layout ── */
-.fac-floor {
-  display: flex;
-  align-items: stretch;
-  gap: 0;
-}
+.fac-floor { display: flex; align-items: stretch; gap: 0; }
 .fac-col { display: flex; flex-direction: column; }
-.fac-col-intake { width: 180px; flex: 0 0 180px; }
+.fac-col-intake { width: 190px; flex: 0 0 190px; }
 .fac-col-assembly { flex: 1 1 auto; min-width: 0; gap: 14px; }
-.fac-col-island { width: 230px; flex: 0 0 230px; }
+.fac-col-island { width: 234px; flex: 0 0 234px; }
 .fac-col-label {
   margin: 0 0 10px;
+  font-family: var(--mono);
   font-size: 11px;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-faint);
-  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: var(--f-brass);
+  font-weight: 700;
 }
 
-/* ── Belts (animated connectors) ── */
+/* ── Transport belts ── */
 .fac-belt {
   position: relative;
   flex: 0 0 54px;
   width: 54px;
-  /* a compact connector pinned near the top row of machines, rather than
-     stretching (and stranding the belt mid-page on tall columns) */
   align-self: flex-start;
   height: 150px;
-  margin-top: 18px;
+  margin-top: 20px;
 }
 .fac-belt-lane {
   position: absolute;
@@ -3930,15 +3960,12 @@ a {
   right: 0;
   height: 30px;
   margin-top: -15px;
-  border-top: 2px solid #3a2f14;
-  border-bottom: 2px solid #14100a;
-  background: repeating-linear-gradient(
-    115deg,
-    #d8b24a 0 8px,
-    #ab8a2c 8px 16px
-  );
+  /* steel side rails top & bottom, yellow chevron tread between */
+  border-top: 3px solid #2a2410;
+  border-bottom: 3px solid #100c05;
+  background: repeating-linear-gradient(115deg, var(--f-belt) 0 8px, #ab8a2c 8px 16px);
   background-size: 22px 100%;
-  box-shadow: inset 0 0 8px rgba(0, 0, 0, 0.5);
+  box-shadow: inset 0 0 8px rgba(0, 0, 0, 0.55), 0 0 0 1px #0c0b08;
   animation: fac-belt-run 0.55s linear infinite;
 }
 @keyframes fac-belt-run { to { background-position: 22px 0; } }
@@ -3952,7 +3979,12 @@ a {
   filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.6));
   animation: fac-belt-travel 3.3s linear infinite;
 }
-/* inserter sitting at the machine end of each belt, plucking items off */
+@keyframes fac-belt-travel {
+  0% { left: -16px; opacity: 0; }
+  12% { opacity: 1; }
+  88% { opacity: 1; }
+  100% { left: 100%; opacity: 0; }
+}
 .fac-belt-inserter {
   position: absolute;
   right: 2px;
@@ -3962,36 +3994,32 @@ a {
   filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.5));
   pointer-events: none;
 }
-@keyframes fac-belt-travel {
-  0% { left: -16px; opacity: 0; }
-  12% { opacity: 1; }
-  88% { opacity: 1; }
-  100% { left: 100%; opacity: 0; }
-}
-.fac-belt-island .fac-belt-lane {
-  /* the bridge to the island runs over water */
-  filter: saturate(0.85);
-}
 
 /* ── Mining drills (sources) ── */
 .fac-drills { display: flex; flex-direction: column; gap: 10px; }
 .fac-drill {
   position: relative;
   display: grid;
-  grid-template-columns: 26px 1fr auto;
+  grid-template-columns: 30px 1fr auto;
   align-items: center;
-  gap: 8px;
-  padding: 10px 11px;
-  border-radius: 7px;
-  border: 1px solid var(--border-strong);
-  border-left: 3px solid var(--src);
-  background: linear-gradient(180deg, #1b1512, #120d0b);
+  gap: 9px;
+  padding: 9px 11px;
+  border-radius: 3px;
+  border: 1px solid var(--f-edge);
+  background: linear-gradient(180deg, var(--f-face1), var(--f-face2));
+  box-shadow:
+    inset 0 1px 0 var(--f-hi),
+    inset 0 -2px 5px rgba(0, 0, 0, 0.4),
+    0 2px 0 #0c0b09;
   overflow: hidden;
 }
-.fac-drill.is-cold { opacity: 0.5; }
+.fac-drill.is-cold { opacity: 0.62; }
 .fac-drill.is-active {
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--src) 40%, transparent),
-    0 0 14px color-mix(in srgb, var(--src) 22%, transparent);
+  box-shadow:
+    inset 0 1px 0 var(--f-hi),
+    inset 0 -2px 5px rgba(0, 0, 0, 0.4),
+    0 2px 0 #0c0b09,
+    0 0 12px color-mix(in srgb, var(--src) 30%, transparent);
 }
 .fac-drill-glyph {
   display: flex;
@@ -3999,16 +4027,17 @@ a {
   justify-content: center;
   filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.5));
 }
-.fac-drill.is-cold .fac-drill-glyph { filter: grayscale(0.7) brightness(0.8); }
-.fac-drill-name { font-size: 12.5px; color: var(--text); font-weight: 500; }
+.fac-drill.is-cold .fac-drill-glyph { filter: grayscale(0.75) brightness(0.8); }
+.fac-drill-name { font-size: 12.5px; color: var(--f-text); font-weight: 500; }
 .fac-drill-count {
   font-family: var(--mono);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 700;
-  color: var(--text-dim);
+  color: var(--src);
   min-width: 18px;
   text-align: right;
 }
+.fac-drill.is-cold .fac-drill-count { color: var(--f-faint); }
 .fac-drill-bit {
   position: absolute;
   left: 0; bottom: 0;
@@ -4017,195 +4046,186 @@ a {
   background: linear-gradient(90deg, transparent, var(--src), transparent);
   opacity: 0;
 }
-.fac-drill.is-active .fac-drill-bit {
-  opacity: 0.9;
-  animation: fac-extract 1.4s ease-in-out infinite;
-}
-@keyframes fac-extract {
-  0%, 100% { transform: translateX(-100%); }
-  50% { transform: translateX(100%); }
-}
+.fac-drill.is-active .fac-drill-bit { opacity: 0.9; animation: fac-extract 1.4s ease-in-out infinite; }
+@keyframes fac-extract { 0%, 100% { transform: translateX(-100%); } 50% { transform: translateX(100%); } }
 
-/* ── Assembler stations (machines) ── */
+/* ── Assembler stations (machine housings) ── */
 .fac-station {
-  border-radius: 9px;
-  border: 1px solid var(--border-strong);
-  background:
-    radial-gradient(6px 6px at 10px 10px, rgba(255,255,255,0.05), transparent),
-    radial-gradient(6px 6px at calc(100% - 10px) 10px, rgba(255,255,255,0.05), transparent),
-    linear-gradient(180deg, #1d1714, #140f0d);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  border-radius: 4px;
+  border: 1px solid var(--f-edge);
+  background: linear-gradient(180deg, #3c3b33, #2d2c25);
+  box-shadow:
+    inset 0 1px 0 var(--f-hi),
+    0 3px 0 #0c0b09,
+    0 7px 18px rgba(0, 0, 0, 0.5);
   overflow: hidden;
 }
 .fac-machine-head {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 9px;
-  padding: 9px 12px;
-  border-bottom: 1px solid var(--border);
-  background: linear-gradient(180deg, rgba(255,255,255,0.03), transparent);
+  gap: 10px;
+  padding: 9px 13px 9px 12px;
+  border-bottom: 1px solid var(--f-edge);
+  /* riveted steel title band */
+  background:
+    radial-gradient(circle at 7px 50%, var(--f-rivet) 1.3px, rgba(0,0,0,0.5) 2px, transparent 2.4px),
+    radial-gradient(circle at calc(100% - 7px) 50%, var(--f-rivet) 1.3px, rgba(0,0,0,0.5) 2px, transparent 2.4px),
+    linear-gradient(180deg, #4b4a40, #393830);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), inset 0 -2px 4px rgba(0, 0, 0, 0.35);
 }
+.fac-machine-sprite { display: inline-flex; flex: 0 0 auto; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.5)); }
+.fac-station-run .fac-machine-sprite { filter: drop-shadow(0 0 5px rgba(63, 185, 80, 0.45)); }
+.fac-station-wait .fac-machine-sprite { filter: drop-shadow(0 0 5px rgba(229, 72, 77, 0.5)); }
 .fac-machine-title {
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--text-dim);
+  letter-spacing: 0.07em;
+  color: var(--f-dim);
 }
 .fac-machine-count {
   margin-left: auto;
   font-family: var(--mono);
   font-size: 12px;
   font-weight: 700;
-  color: var(--text-faint);
-  background: #0d0908;
-  border: 1px solid var(--border);
+  color: var(--f-dim);
+  background: var(--f-well);
+  border: 1px solid var(--f-edge);
   border-radius: 10px;
-  padding: 1px 8px;
+  padding: 1px 9px;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.6);
 }
-.fac-gear { color: var(--green); font-size: 13px; animation: fac-spin 3.5s linear infinite; }
-@keyframes fac-spin { to { transform: rotate(360deg); } }
-
 .fac-machine-body {
   display: flex;
   flex-direction: column;
   gap: 7px;
   padding: 11px;
   min-height: 56px;
+  /* recessed interior */
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.28), rgba(0, 0, 0, 0.12));
+  box-shadow: inset 0 3px 7px rgba(0, 0, 0, 0.4);
 }
 
 /* status lamps */
-.fac-lamp {
-  width: 9px; height: 9px;
-  border-radius: 50%;
-  flex: 0 0 auto;
-  box-shadow: 0 0 6px currentColor;
-}
-.fac-lamp-run { color: var(--green); background: var(--green); animation: fac-pulse 1.6s ease-in-out infinite; }
-.fac-lamp-wait { color: var(--yellow); background: var(--yellow); animation: fac-blink 1s steps(1) infinite; }
-.fac-lamp-idle { color: var(--text-faint); background: var(--text-faint); }
-.fac-lamp-open { color: var(--yellow); background: var(--yellow); }
-.fac-lamp-merged { color: var(--purple); background: var(--purple); }
-.fac-lamp-closed { color: var(--red); background: var(--red); }
-@keyframes fac-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
-@keyframes fac-blink { 0%,49% { opacity: 1; } 50%,100% { opacity: 0.25; } }
+.fac-lamp { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto; box-shadow: 0 0 6px currentColor, inset 0 0 2px rgba(0,0,0,0.5); }
+.fac-lamp-run { color: #3fb950; background: #3fb950; animation: fac-pulse 1.6s ease-in-out infinite; }
+.fac-lamp-wait { color: var(--f-amber); background: var(--f-amber); animation: fac-blink 1s steps(1) infinite; }
+.fac-lamp-idle { color: #6e6757; background: #6e6757; }
+.fac-lamp-open { color: var(--f-amber); background: var(--f-amber); }
+.fac-lamp-merged { color: #a371f7; background: #a371f7; }
+.fac-lamp-closed { color: #e5484d; background: #e5484d; }
+@keyframes fac-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+@keyframes fac-blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0.25; } }
+/* faint kind-coloured top edge on the housing */
+.fac-station-run { border-top-color: color-mix(in srgb, #3fb950 35%, var(--f-edge)); }
+.fac-station-wait { border-top-color: color-mix(in srgb, var(--f-amber) 40%, var(--f-edge)); }
 
-.fac-station-run { border-color: color-mix(in srgb, var(--green) 30%, var(--border-strong)); }
-.fac-station-wait { border-color: color-mix(in srgb, var(--yellow) 32%, var(--border-strong)); }
-
-/* ── Session crates ── */
+/* ── Session crates (item tiles in an inventory slot) ── */
 .fac-crate {
   display: flex;
   align-items: center;
   gap: 9px;
   width: 100%;
   text-align: left;
-  padding: 8px 10px;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  border-left: 3px solid var(--src);
-  background: linear-gradient(180deg, #181210, #110c0a);
-  color: var(--text);
+  padding: 7px 9px;
+  border-radius: 3px;
+  border: 1px solid var(--f-edge);
+  background: linear-gradient(180deg, #3a3931, #2b2a23);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), inset 0 -2px 4px rgba(0, 0, 0, 0.4);
+  color: var(--f-text);
   cursor: pointer;
   font: inherit;
   transition: transform 0.08s ease, border-color 0.12s ease, background 0.12s ease;
 }
 .fac-crate:hover {
-  transform: translateX(2px);
-  background: var(--bg-hover);
-  border-color: var(--border-strong);
+  transform: translateY(-1px);
+  background: linear-gradient(180deg, #46453b, #36352c);
+  border-color: var(--f-brass);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.4),
+    0 0 0 1px rgba(199, 154, 64, 0.35);
 }
+/* source identity = a recessed inventory slot holding the source mark */
 .fac-crate-glyph {
+  flex: 0 0 auto;
+  width: 23px;
+  height: 23px;
+  border-radius: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--src);
-  width: 20px;
-  text-align: center;
-  flex: 0 0 auto;
+  background: var(--f-well);
+  box-shadow: inset 0 0 0 1px #0a0907, inset 0 1px 3px rgba(0, 0, 0, 0.7);
 }
 .fac-crate-main { min-width: 0; flex: 1 1 auto; display: flex; flex-direction: column; gap: 2px; }
-.fac-crate-title {
-  font-size: 13px;
-  font-weight: 500;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.fac-crate-meta {
-  font-size: 11px;
-  color: var(--text-faint);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
+.fac-crate-title { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fac-crate-meta { font-size: 11px; color: var(--f-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .fac-crate-flag { flex: 0 0 auto; font-family: var(--mono); font-size: 11px; font-weight: 700; }
 .fac-crate-flag-run {
   width: 8px; height: 8px; border-radius: 50%;
-  background: var(--green); box-shadow: 0 0 6px var(--green);
+  background: #3fb950; box-shadow: 0 0 6px #3fb950;
   animation: fac-pulse 1.6s ease-in-out infinite;
 }
 .fac-crate-flag-wait {
   width: 16px; height: 16px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
-  color: #1a1206; background: var(--yellow);
+  color: #1a1206; background: var(--f-amber);
   animation: fac-blink 1s steps(1) infinite;
 }
 .fac-crate-flag-queue {
   min-width: 16px; height: 16px; border-radius: 8px; padding: 0 4px;
   display: flex; align-items: center; justify-content: center;
-  color: #fff; background: color-mix(in srgb, var(--purple) 70%, #000);
+  color: #fff; background: color-mix(in srgb, #a371f7 70%, #000);
 }
 
-.fac-empty {
-  font-size: 12px;
-  color: var(--text-faint);
-  font-style: italic;
-  padding: 4px 2px;
-}
-.fac-more {
-  font-size: 11px;
-  color: var(--text-faint);
-  font-family: var(--mono);
-  padding: 2px;
-}
+.fac-empty { font-size: 12px; color: var(--f-faint); font-style: italic; padding: 4px 2px; }
+.fac-more { font-size: 11px; color: var(--f-faint); font-family: var(--mono); padding: 2px; }
 
-/* ── GitHub island ── */
+/* ── GitHub island: a walled platform over dark water ── */
 .fac-island {
   position: relative;
-  border-radius: 14px;
+  border-radius: 5px;
   padding: 12px 12px 14px;
-  border: 1px solid #1e3a3a;
-  background:
-    radial-gradient(120% 60% at 50% 0%, #14201f, #0c1413);
-  box-shadow: 0 0 0 4px rgba(46, 160, 160, 0.05), 0 10px 30px rgba(0, 0, 0, 0.4);
+  border: 2px solid var(--f-edge);
+  background: linear-gradient(180deg, #2a2823, #201e18);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    inset 0 2px 12px rgba(0, 0, 0, 0.5),
+    0 6px 18px rgba(0, 0, 0, 0.5);
   overflow: hidden;
 }
 .fac-island-water {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background:
-    repeating-linear-gradient(90deg, rgba(88, 166, 255, 0.05) 0 6px, transparent 6px 12px);
-  opacity: 0.5;
+  background: repeating-linear-gradient(90deg, rgba(90, 130, 150, 0.05) 0 7px, transparent 7px 14px);
+  opacity: 0.45;
   animation: fac-water 6s linear infinite;
 }
-@keyframes fac-water { to { background-position: 24px 0; } }
+@keyframes fac-water { to { background-position: 28px 0; } }
 .fac-island-label {
   position: relative;
+  z-index: 2;
   margin: 2px 0 11px;
   display: flex;
   align-items: center;
   gap: 7px;
+  font-family: var(--mono);
   font-size: 12px;
   font-weight: 700;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: #7fd9d2;
+  color: var(--f-brass);
 }
 .fac-hex { font-size: 14px; }
 
-.fac-shelf { position: relative; margin-bottom: 10px; }
+.fac-shelf { position: relative; z-index: 2; margin-bottom: 11px; }
 .fac-shelf:last-child { margin-bottom: 0; }
 .fac-shelf-head {
   display: flex;
@@ -4215,14 +4235,9 @@ a {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--text-dim);
+  color: var(--f-dim);
 }
-.fac-shelf-count {
-  margin-left: auto;
-  font-family: var(--mono);
-  font-weight: 700;
-  color: var(--text-faint);
-}
+.fac-shelf-count { margin-left: auto; font-family: var(--mono); font-weight: 700; color: var(--f-faint); }
 .fac-shelf-body { display: flex; flex-direction: column; gap: 6px; }
 .fac-pr {
   display: flex;
@@ -4231,45 +4246,39 @@ a {
   width: 100%;
   text-align: left;
   padding: 7px 9px;
-  border-radius: 6px;
-  border: 1px solid #1d2f2f;
-  background: linear-gradient(180deg, #0f1817, #0c1312);
-  color: var(--text);
+  border-radius: 3px;
+  border: 1px solid var(--f-edge);
+  background: linear-gradient(180deg, #312f28, #25241e);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), inset 0 -1px 3px rgba(0, 0, 0, 0.4);
+  color: var(--f-text);
   cursor: pointer;
   font: inherit;
   transition: transform 0.08s ease, border-color 0.12s ease;
 }
-.fac-pr:hover { transform: translateY(-1px); border-color: #2c4a48; }
-.fac-pr-hex { color: #58a6ff; font-size: 12px; flex: 0 0 auto; }
-.fac-shelf-merged .fac-pr-hex { color: var(--purple); }
-.fac-shelf-closed .fac-pr-hex { color: var(--red); }
-.fac-pr-title {
-  font-size: 12.5px;
-  min-width: 0;
-  flex: 1 1 auto;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
+.fac-pr:hover { transform: translateY(-1px); border-color: var(--f-brass); }
+.fac-pr-hex { color: #6cb6ff; font-size: 12px; flex: 0 0 auto; filter: drop-shadow(0 0 3px rgba(108, 182, 255, 0.4)); }
+.fac-shelf-merged .fac-pr-hex { color: #a371f7; filter: drop-shadow(0 0 3px rgba(163, 113, 247, 0.4)); }
+.fac-shelf-closed .fac-pr-hex { color: #e5484d; filter: drop-shadow(0 0 3px rgba(229, 72, 77, 0.4)); }
+.fac-pr-title { font-size: 12.5px; min-width: 0; flex: 1 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .fac-pr-tag {
   flex: 0 0 auto;
   font-family: var(--mono);
   font-size: 10px;
-  color: #7b86e8;
-  border: 1px solid #2a2f55;
-  border-radius: 4px;
+  color: var(--f-brass);
+  border: 1px solid rgba(199, 154, 64, 0.4);
+  border-radius: 3px;
   padding: 1px 4px;
 }
 
 /* ── Pixel-art sprites & their moving parts ── */
 .spr { display: block; }
-/* SVG parts spin/translate about their own centre */
 .spr-spin, .spr-spin-rev, .spr-bob, .spr-hover, .spr-flap {
   transform-box: fill-box;
   transform-origin: center;
 }
 .spr-spin { animation: fac-spin 4.5s linear infinite; }
 .spr-spin-rev { animation: fac-spin 4.5s linear infinite reverse; }
+@keyframes fac-spin { to { transform: rotate(360deg); } }
 .spr-bob { animation: spr-bob 0.9s ease-in-out infinite; }
 @keyframes spr-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(2px); } }
 .spr-hover { animation: spr-hover 2.4s ease-in-out infinite; }
@@ -4278,30 +4287,11 @@ a {
 @keyframes spr-flap { from { transform: scaleY(0.55); } to { transform: scaleY(1); } }
 .spr-flash { animation: spr-flash 0.9s steps(1) infinite; }
 @keyframes spr-flash { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0.25; } }
-/* inserter arm pivots about its base (in viewBox user units) */
-.spr-arm {
-  transform-box: view-box;
-  transform-origin: 12px 18px;
-  animation: spr-arm 1.7s ease-in-out infinite;
-}
+.spr-arm { transform-box: view-box; transform-origin: 12px 18px; animation: spr-arm 1.7s ease-in-out infinite; }
 @keyframes spr-arm { 0%, 100% { transform: rotate(-34deg); } 50% { transform: rotate(34deg); } }
 
-/* machine sprite in a station header */
-.fac-machine-sprite {
-  display: inline-flex;
-  flex: 0 0 auto;
-  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.5));
-}
-.fac-station-run .fac-machine-sprite { filter: drop-shadow(0 0 5px rgba(63, 185, 80, 0.4)); }
-.fac-station-wait .fac-machine-sprite { filter: drop-shadow(0 0 5px rgba(229, 72, 77, 0.45)); }
-
 /* logistic bots drifting over the island */
-.fac-bot {
-  position: absolute;
-  z-index: 1;
-  pointer-events: none;
-  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.5));
-}
+.fac-bot { position: absolute; z-index: 3; pointer-events: none; filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.5)); }
 .fac-bot-1 { top: 8px; right: 14px; animation: fac-bot-drift1 7s ease-in-out infinite; }
 .fac-bot-2 { top: 30px; right: 78px; animation: fac-bot-drift2 9s ease-in-out infinite; }
 @keyframes fac-bot-drift1 {
@@ -4324,27 +4314,23 @@ a {
 @media (max-width: 760px) {
   .fac-scene { padding: 12px 12px 48px; }
 
-  /* HUD: title on its own row, stats as a tidy 2×2 grid (no stranded chip) */
-  .fac-hud { padding: 11px 12px; margin-bottom: 12px; gap: 11px; }
+  .fac-hud { padding: 12px; margin-bottom: 12px; gap: 11px; }
   .fac-hud-title { flex: 1 1 100%; flex-wrap: wrap; }
   .fac-hud-sub { border-left: none; padding-left: 0; flex-basis: 100%; }
   .fac-stats { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .fac-stat { min-width: 0; width: 100%; }
 
-  /* Stack the line; belts become full-width horizontal connectors */
   .fac-floor { flex-direction: column; }
   .fac-col-intake, .fac-col-island { width: 100%; flex: 1 1 auto; }
   .fac-col-assembly { gap: 11px; }
-  .fac-belt { width: 100%; flex: 0 0 34px; min-height: 34px; }
+  .fac-belt { width: 100%; flex: 0 0 36px; height: 36px; margin-top: 0; }
   .fac-belt-lane { top: 50%; }
   .fac-col-label { margin: 4px 0 8px; }
 
-  /* Drills: a clean 2-up grid, Automation spans the full last row */
   .fac-drills { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .fac-drill { flex: none; }
   .fac-drill:last-child { grid-column: 1 / -1; }
 
-  /* Roomier tap targets for crates / PRs */
-  .fac-crate { padding: 10px 11px; }
+  .fac-crate { padding: 9px 10px; }
   .fac-pr { padding: 9px 10px; }
 }
