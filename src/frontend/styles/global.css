@@ -1471,7 +1471,10 @@ a {
 
 .msg-system {
   text-align: center;
-  margin: 12px 0;
+  /* `auto` left/right keeps this in the same centered column as user/assistant
+     bubbles — a bare `0` here pins it to the left edge and the pill reads
+     off-center against the conversation. */
+  margin: 12px auto;
 }
 .msg-system-text {
   display: inline-block;
@@ -2381,14 +2384,30 @@ a {
 
 .btn-cancel {
   margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   background: none;
-  border: 1px solid var(--border-strong);
-  border-radius: 6px;
-  color: var(--text-dim);
-  padding: 5px 14px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  color: var(--text-faint);
+  padding: 5px 12px;
   font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.12s ease, background 0.12s ease, border-color 0.12s ease;
 }
-.btn-cancel:hover { color: var(--red); border-color: var(--red); }
+.btn-cancel-icon {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: currentColor;
+}
+.btn-cancel:hover {
+  color: var(--red);
+  background: var(--red-soft);
+  border-color: var(--red-soft);
+}
 
 .input-disabled {
   color: var(--text-faint);

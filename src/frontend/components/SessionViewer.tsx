@@ -725,8 +725,9 @@ export function SessionViewer({ session, onBack, send, addHandler, connected }: 
                         {queued.length > 0 && `${queued.length} queued`}
                       </span>
                     )}
-                    <button className="btn-cancel" onClick={handleCancel}>
-                      Cancel
+                    <button className="btn-cancel" onClick={handleCancel} title="Stop the current run">
+                      <span className="btn-cancel-icon" />
+                      Stop
                     </button>
                   </div>
                 )}
