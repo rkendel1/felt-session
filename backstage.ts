@@ -21,6 +21,7 @@ import {
 } from "./src/server/agent-runner";
 import type { ImageInput } from "./src/server/claude-runner";
 import type { ActiveRunRecord } from "./src/server/claude-runner";
+import { getPins as getUserPins, setPins as setUserPins } from "./src/server/pins";
 import {
   KNOWN_MODELS,
   getDefaultModel,
@@ -1688,6 +1689,23 @@ const server: import("bun").Server<WSClientData> = (g.__backstageServer ??= Bun.
       } catch (e: any) {
         return Response.json({ error: e?.message || "Failed to set default model" }, { status: 400 });
       }
+    }
+
+    // ── Per-user pinned tabs ──
+    // Keyed on the self-selected `user` name (team-internal, not auth). GET reads
+    // a user's pins; PUT replaces them wholesale (the frontend sends the full list
+    // on every toggle and on first-load localStorage migration).
+    if (path === "/backstage/api/pins" && req.method === "GET") {
+      const user = url.searchParams.get("user") || "Anonymous";
+      return Response.json({ pins: getUserPins(user) });
+    }
+
+    if (path === "/backstage/api/pins" && req.method === "PUT") {
+      const body = await req.json().catch(() => null);
+      if (!body || typeof body.user !== "string" || !Array.isArray(body.pins)) {
+        return Response.json({ error: "user (string) and pins (array) are required" }, { status: 400 });
+      }
+      return Response.json({ pins: setUserPins(body.user, body.pins) });
     }
 
     // ── Codex (OpenAI) account pool ──

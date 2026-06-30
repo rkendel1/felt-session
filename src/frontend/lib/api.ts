@@ -217,6 +217,26 @@ export async function runAutomationApi(id: string) {
   if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
 }
 
+// ── Pins (per-user pinned tabs) ──
+
+export async function fetchPins(user: string): Promise<string[]> {
+  const res = await fetch(`${BASE}/pins?user=${encodeURIComponent(user)}`);
+  if (!res.ok) throw new Error(`Failed to fetch pins: ${res.status}`);
+  const body = await res.json();
+  return Array.isArray(body?.pins) ? body.pins : [];
+}
+
+export async function savePinsApi(user: string, pins: string[]): Promise<string[]> {
+  const res = await fetch(`${BASE}/pins`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ user, pins }),
+  });
+  if (!res.ok) throw new Error(`Failed to save pins: ${res.status}`);
+  const body = await res.json();
+  return Array.isArray(body?.pins) ? body.pins : pins;
+}
+
 // ── Wiki ──
 
 export async function fetchWikiTree() {
