@@ -38,6 +38,7 @@ import { PreviewButton } from "./PreviewButton";
 import { SpinOffMenu } from "./SpinOffMenu";
 import { IconSidebarRight } from "./icons";
 import { Tooltip } from "./Tooltip";
+import { Elapsed } from "./Elapsed";
 import { isPinned, togglePin, onPinsChanged } from "../lib/pins";
 import { useChatScroll } from "../hooks/useChatScroll";
 
@@ -258,6 +259,26 @@ export function SessionViewer({
 		: "";
 	const panelAvailable = hasWorkspace || hasPlain;
 	const isBusy = isRunningLive || isStreaming;
+
+	// Anchor for the "how long has Michael been working" ticker: the current
+	// turn's user message (server truth, so it survives reopening a session
+	// mid-run), the optimistic just-sent bubble, or — for turns with no user
+	// entry — when this client saw the run begin.
+	const busyStartRef = useRef(Date.now());
+	useEffect(() => {
+		if (isBusy) busyStartRef.current = Date.now();
+	}, [isBusy]);
+	const turnStartedAt = useMemo(() => {
+		if (!isBusy) return null;
+		let t = 0;
+		for (const e of entries) {
+			if (e.type !== "user") continue;
+			const ts = new Date(e.timestamp).getTime();
+			if (isFinite(ts) && ts > t) t = ts;
+		}
+		for (const p of pending) if (p.sentAt > t) t = p.sentAt;
+		return t || busyStartRef.current;
+	}, [isBusy, entries, pending]);
 
 	// Ctrl+R focuses the composer (overrides browser reload while in a session)
 	const composerRef = useRef<HTMLTextAreaElement | null>(null);
@@ -1245,6 +1266,12 @@ export function SessionViewer({
 										{streamBy && streamBy !== me
 											? `${streamBy} is driving — Michael is working…`
 											: "Michael is working…"}
+										{turnStartedAt !== null && (
+											<Elapsed
+												since={turnStartedAt}
+												className="busy-elapsed"
+											/>
+										)}
 										{(queued.length > 0 || visibleSteered.length > 0) && (
 											<span className="queue-count">
 												{visibleSteered.length > 0 &&

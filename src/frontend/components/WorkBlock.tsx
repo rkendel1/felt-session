@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import type { TranscriptEntry } from "../lib/types";
 import { ToolCallBlock, parseMcpTool } from "./ToolCallBlock";
+import { Elapsed } from "./Elapsed";
 
 interface Props {
   items: TranscriptEntry[]; // tool_use entries, in order
@@ -27,14 +28,26 @@ export function WorkBlock({ items, toolResults, live, onOpenSubagent }: Props) {
 
   const duration = blockDuration(items, toolResults);
   const last = items[items.length - 1];
+  // While live, tick against the wall clock from the block's first step so the
+  // header reads like the CLI spinner ("Working for 9m 7s") instead of only
+  // advancing when a new tool result lands.
+  const startMs = items.length > 0 ? new Date(items[0].timestamp).getTime() : NaN;
 
   return (
     <div className={`work-block ${live ? "work-block-live" : ""}`}>
       <button className="work-block-header" onClick={() => setExpanded(!expanded)}>
         <span className="work-block-chevron">{expanded ? "▾" : "▸"}</span>
         <span className="work-block-title">
-          {live ? "Working" : "Worked"}
-          {duration ? ` for ${duration}` : ""}
+          {live && isFinite(startMs) ? (
+            <>
+              Working for <Elapsed since={startMs} className="work-block-elapsed" />
+            </>
+          ) : (
+            <>
+              {live ? "Working" : "Worked"}
+              {duration ? ` for ${duration}` : ""}
+            </>
+          )}
         </span>
         <span className="work-block-steps">
           {items.length} step{items.length === 1 ? "" : "s"}

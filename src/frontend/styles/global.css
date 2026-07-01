@@ -5120,6 +5120,15 @@ button.preview-open:not(:disabled):hover {
 	flex-shrink: 0;
 }
 
+/* Live tickers ("Working for 9m 7s"); tabular digits so they don't jitter. */
+.work-block-elapsed,
+.busy-elapsed {
+	font-variant-numeric: tabular-nums;
+}
+.busy-elapsed {
+	color: var(--text-faint);
+}
+
 .work-block-preview {
 	font-family: var(--mono);
 	font-size: 11px;
