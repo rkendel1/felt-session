@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { Sidebar } from "./components/Sidebar";
 import { SessionViewer } from "./components/SessionViewer";
 import { NewSession } from "./components/NewSession";
+import { SessionSearch } from "./components/SessionSearch";
 import { Home } from "./components/Home";
 import { Automations } from "./components/Automations";
 import { Goals } from "./components/Goals";
@@ -246,6 +247,12 @@ function App() {
 		setPalette({ open: true, prompt });
 		setSidebarOpen(false);
 	}, []);
+
+	// The ⌘K session-search command palette. Like the new-session palette it's an
+	// overlay driven by its own state so it can open over any view.
+	const [searchOpen, setSearchOpen] = useState(false);
+	const searchOpenRef = useRef(searchOpen);
+	searchOpenRef.current = searchOpen;
 	const closePalette = React.useCallback(() => {
 		setPalette({ open: false });
 		// A deep link left the URL on /backstage/new — return home on close.
@@ -259,16 +266,26 @@ function App() {
 		return () => window.removeEventListener("popstate", onPop);
 	}, []);
 
-	// ⌘K / ⌘N toggles the palette; Esc closes it.
+	// ⌘K toggles the session-search palette; ⌘N the new-session palette. Esc
+	// closes whichever is open (search's own input also handles Esc, but this
+	// covers the case where focus has left it).
 	useEffect(() => {
 		const onKey = (e: KeyboardEvent) => {
 			const k = e.key.toLowerCase();
-			if ((e.metaKey || e.ctrlKey) && (k === "k" || k === "n")) {
+			if ((e.metaKey || e.ctrlKey) && k === "k") {
+				e.preventDefault();
+				setSearchOpen((o) => !o);
+				return;
+			}
+			if ((e.metaKey || e.ctrlKey) && k === "n") {
 				e.preventDefault();
 				paletteOpenRef.current ? closePalette() : openPalette();
 				return;
 			}
-			if (e.key === "Escape" && paletteOpenRef.current) closePalette();
+			if (e.key === "Escape") {
+				if (searchOpenRef.current) setSearchOpen(false);
+				else if (paletteOpenRef.current) closePalette();
+			}
 		};
 		window.addEventListener("keydown", onKey);
 		return () => window.removeEventListener("keydown", onKey);
@@ -673,7 +690,19 @@ function App() {
 					<div className="right-panel-slot" ref={setRightPanelEl} />
 				</div>
 
-				{/* ⌘K new-session palette — overlays every view. */}
+				{/* ⌘K session-search palette — overlays every view. */}
+				{searchOpen && (
+					<SessionSearch
+						sessions={sessions}
+						onSelect={(id) => {
+							setSearchOpen(false);
+							navigate({ view: "session", id });
+						}}
+						onClose={() => setSearchOpen(false)}
+					/>
+				)}
+
+				{/* ⌘N new-session palette — overlays every view. */}
 				{palette.open && (
 					<NewSession
 						onBack={closePalette}
