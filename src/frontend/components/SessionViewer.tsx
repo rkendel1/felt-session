@@ -1045,7 +1045,14 @@ export function SessionViewer({
 											: "Switch the model for this session"
 									}
 									mentionFetch={(q) => fetchFileMentions(q, session.id)}
+									onGoal={() => {
+										setInput((prev) =>
+											prev.trimStart().startsWith("/goal") ? prev : `/goal ${prev}`,
+										);
+										composerRef.current?.focus();
+									}}
 									hint="Enter to send · Shift+Enter for newline · @ to mention a file · /goal pins a goal · /loop runs on an interval"
+									focusHint="⌃R to focus"
 									textareaRef={composerRef}
 								/>
 							</>

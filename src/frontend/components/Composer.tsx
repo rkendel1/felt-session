@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import type { ModelOption, FileMention } from "../lib/api";
 import { splitAttachments, imageFilesFromPaste, type FileAttachment } from "../lib/images";
 import { ImageThumbs } from "./ImageThumbs";
@@ -30,7 +30,18 @@ interface Props {
    * interrupting (the main send button interrupts immediately when busy).
    */
   onSteerSend?: () => void;
+  /**
+   * When set, renders a goal button in the toolbar (◎). Wired by the session
+   * viewer to prefix the draft with "/goal", the command that pins a goal.
+   */
+  onGoal?: () => void;
   hint?: string;
+  /**
+   * Faint shortcut label tucked into the input's top-right corner (e.g.
+   * "⌃R to focus"). Shown only while the field is empty and unfocused so it
+   * never competes with what you're typing.
+   */
+  focusHint?: string;
   autoFocus?: boolean;
   /** Exposes the textarea so parents can focus it (e.g. keyboard shortcuts). */
   textareaRef?: React.RefObject<HTMLTextAreaElement | null>;
@@ -59,11 +70,53 @@ function modelShortLabel(id: string, models: ModelOption[]): string {
   return m ? m.label : id;
 }
 
+/** Inline icon: a 16px glyph that inherits color from its button. */
+function Icon({ path, fill }: { path: string; fill?: boolean }) {
+  return (
+    <svg
+      className="composer-icon"
+      viewBox="0 0 24 24"
+      fill={fill ? "currentColor" : "none"}
+      stroke={fill ? "none" : "currentColor"}
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d={path} />
+    </svg>
+  );
+}
+
+const PLUS = "M12 5v14M5 12h14";
+const ARROW_UP = "M12 19V5M6 11l6-6 6 6";
+const BOLT = "M13 2 4 14h6l-1 8 9-12h-6l1-8z";
+const FOLD_IN = "M12 4v10m0 0 4-4m-4 4-4-4M5 20h14";
+
+/** Concentric-ring target — the "goal" glyph. */
+function GoalIcon() {
+  return (
+    <svg
+      className="composer-icon"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="9" />
+      <circle cx="12" cy="12" r="4.5" />
+      <circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
 /**
  * Shared chat composer (Claude/Codex-style): rounded container with an
- * auto-growing textarea and a bottom toolbar carrying the model pill and a
- * circular send button. Enter sends, Shift+Enter newlines. With `mentionFetch`,
- * typing "@" opens a file-path autocomplete (arrows to move, Enter/Tab to pick).
+ * auto-growing textarea and a bottom toolbar carrying the model pill, ghost
+ * icon actions (goal, attach), and the send button. Enter sends, Shift+Enter
+ * newlines. With `mentionFetch`, typing "@" opens a file-path autocomplete
+ * (arrows to move, Enter/Tab to pick).
  */
 export function Composer({
   value,
@@ -82,7 +135,9 @@ export function Composer({
   modelTitle,
   leftExtra,
   onSteerSend,
+  onGoal,
   hint,
+  focusHint,
   autoFocus,
   textareaRef: externalRef,
   images,
@@ -94,6 +149,7 @@ export function Composer({
   const internalRef = useRef<HTMLTextAreaElement>(null);
   const textareaRef = externalRef ?? internalRef;
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [focused, setFocused] = useState(false);
   const imgs = images || [];
   const fls = files || [];
   // Any attachment affordance (paste/drop/pick + thumbnails) is enabled when the
@@ -164,6 +220,9 @@ export function Composer({
         <FileChips files={fls} onRemove={removeFile} disabled={disabled} />
         <div className="composer-input-wrap" ref={mentions.inputWrapRef}>
           {mentions.popup}
+          {focusHint && !focused && !value && (
+            <span className="composer-focus-hint">{focusHint}</span>
+          )}
           <textarea
             ref={textareaRef}
             className="composer-textarea"
@@ -177,7 +236,9 @@ export function Composer({
             onKeyDown={handleKeyDown}
             onKeyUp={mentions.sync}
             onClick={mentions.sync}
+            onFocus={() => setFocused(true)}
             onBlur={() => {
+              setFocused(false);
               // Let a click on a suggestion (mousedown) win the race first.
               setTimeout(mentions.close, 120);
             }}
@@ -207,17 +268,29 @@ export function Composer({
             </select>
             <span className="composer-model-chevron">▾</span>
           </div>
+          {onGoal && (
+            <button
+              type="button"
+              className="composer-tool-btn"
+              onClick={onGoal}
+              disabled={disabled}
+              title="Pin a goal (/goal)"
+              aria-label="Pin a goal"
+            >
+              <GoalIcon />
+            </button>
+          )}
           {canAttach && (
             <>
               <button
                 type="button"
-                className="composer-attach-btn"
+                className="composer-tool-btn"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={disabled}
-                title={onFilesChange ? "Attach a file" : "Attach an image"}
-                aria-label={onFilesChange ? "Attach a file" : "Attach an image"}
+                title={onFilesChange ? "Add files or images" : "Add images"}
+                aria-label={onFilesChange ? "Add files or images" : "Add images"}
               >
-                📎
+                <Icon path={PLUS} />
               </button>
               <input
                 ref={fileInputRef}
@@ -241,8 +314,9 @@ export function Composer({
               onClick={onSteerSend}
               disabled={disabled || sendDisabled}
               title="Fold in at Michael's next stopping point — don't interrupt the current turn"
+              aria-label="Queue message"
             >
-              +
+              <Icon path={FOLD_IN} />
             </button>
           )}
           <button
@@ -253,8 +327,9 @@ export function Composer({
               sendTitle ||
               (busy ? "Send now — interrupts the current turn and redirects Michael (Enter)" : "Send (Enter)")
             }
+            aria-label="Send"
           >
-            {busy ? "⚡" : "↑"}
+            <Icon path={busy ? BOLT : ARROW_UP} fill={busy} />
           </button>
         </div>
       </div>
