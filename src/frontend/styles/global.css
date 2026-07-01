@@ -8924,8 +8924,56 @@ button.preview-open:not(:disabled):hover {
 	background: var(--bg-hover);
 }
 
-/* Account switcher inside the Michael menu — one row per teammate, the active
-   one checked. Replaces the old header user-picker chip. */
+/* Account switcher inside the Michael menu — collapsed to a single "Acting as"
+   row that opens a flyout submenu with one row per teammate. */
+.settings-submenu {
+	position: relative;
+}
+.settings-submenu-trigger {
+	margin-bottom: 0;
+}
+.settings-submenu-label {
+	display: flex;
+	flex-direction: column;
+	flex: 1;
+	min-width: 0;
+	line-height: 1.25;
+}
+.settings-submenu-title {
+	font-weight: 500;
+}
+.settings-submenu-value {
+	font-size: 11px;
+	color: var(--text-dim);
+}
+.settings-submenu-chevron {
+	flex-shrink: 0;
+	color: var(--text-faint);
+}
+.settings-submenu-trigger.active .settings-submenu-chevron {
+	color: var(--text);
+}
+.settings-submenu-panel {
+	position: absolute;
+	top: -12px;
+	left: calc(100% + 6px);
+	z-index: 210;
+	min-width: 200px;
+	background: var(--bg-panel);
+	border: 1px solid var(--border-strong);
+	border-radius: 10px;
+	box-shadow: 0 10px 30px rgba(0, 0, 0, 0.32);
+	padding: 8px;
+}
+/* Transparent bridge over the gap so moving from trigger to panel doesn't close it. */
+.settings-submenu-panel::before {
+	content: "";
+	position: absolute;
+	top: 0;
+	left: -8px;
+	width: 8px;
+	height: 100%;
+}
 .settings-user-list {
 	display: flex;
 	flex-direction: column;
