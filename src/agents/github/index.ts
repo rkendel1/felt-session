@@ -14,8 +14,13 @@ import {
   saveAutomation,
 } from "../../server/automations";
 import { githubConfigured } from "./github-rest";
-import { PR_EVENT_KEY, REVIEW_AUTOMATION_NAME } from "./constants";
-import { DEFAULT_REVIEW_PROMPT } from "./prompts";
+import {
+  PR_EVENT_KEY,
+  REVIEW_AUTOMATION_NAME,
+  PR_MERGED_EVENT_KEY,
+  DOCS_SYNC_AUTOMATION_NAME,
+} from "./constants";
+import { DEFAULT_REVIEW_PROMPT, DOCS_SYNC_PROMPT } from "./prompts";
 import { setGithubSessionInvalidate, resolveReviewConfig } from "./webhook";
 import { listPrStates, activeCodeLoops, clearPendingMention } from "./state";
 import type { PrRef } from "./review";
@@ -42,6 +47,32 @@ function ensureReviewAutomation(): void {
   // Seed it OFF — start label-only; flip on in the Automations UI to review every non-draft PR.
   saveAutomation({ ...created, enabled: false });
   console.log(`[github] Seeded review automation "${REVIEW_AUTOMATION_NAME}" (disabled)`);
+}
+
+/**
+ * Seed the docs-sync automation if it doesn't exist yet. Keyed on eventKey.
+ * Code mode: each merged PR runs a headless session in a fresh worktree that
+ * updates the Mintlify docs and opens a PR. Seeded ENABLED — this is the live
+ * replacement for the old Mintlify-hosted docs-sync workflow. Toggle it in the
+ * Automations UI.
+ */
+function ensureDocsSyncAutomation(): void {
+  const existing = listAutomations().find((a) => a.eventKey === PR_MERGED_EVENT_KEY);
+  if (existing) return;
+  const created = createAutomation({
+    name: DOCS_SYNC_AUTOMATION_NAME,
+    prompt: DOCS_SYNC_PROMPT,
+    schedule: "",
+    mode: "code",
+    createdBy: "Michael (github agent)",
+    eventKey: PR_MERGED_EVENT_KEY,
+    model: "claude-opus-4-8",
+  });
+  if ("error" in created) {
+    console.error(`[github] Failed to seed docs-sync automation:`, created.error);
+    return;
+  }
+  console.log(`[github] Seeded docs-sync automation "${DOCS_SYNC_AUTOMATION_NAME}" (enabled)`);
 }
 
 /** Re-enter auto-fix loops that a restart interrupted. */
@@ -171,6 +202,7 @@ export class GithubAgent implements AgentModule {
     }
     if (this.onSessionInvalidate) setGithubSessionInvalidate(this.onSessionInvalidate);
     ensureReviewAutomation();
+    ensureDocsSyncAutomation();
     await recoverFixLoops();
     await recoverOneShots();
     await recoverMentions();

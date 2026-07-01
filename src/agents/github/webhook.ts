@@ -6,10 +6,11 @@
  * Defensive: never throws into the Slack handler; all behaviors are fired
  * fire-and-forget (GitHub's 10s webhook timeout).
  */
-import { listAutomations } from "../../server/automations";
+import { listAutomations, fireAutomationsForEvent } from "../../server/automations";
 import { GITHUB_REPO, BOT_LOGIN } from "./github-rest";
 import {
   PR_EVENT_KEY,
+  PR_MERGED_EVENT_KEY,
   REVIEW_AUTOMATION_NAME,
   LABEL_REVIEW,
   LABEL_AUTOFIX,
@@ -106,11 +107,24 @@ export async function handleGithubPrEvent(event: string, payload: any): Promise<
       return;
     }
 
-    // ── Merge → queue seo-sweep PRs for later Ahrefs validation ──
+    // ── Merge → queue seo-sweep PRs + fire docs-sync ──
     if (action === "closed" && pr.merged) {
       if ((pr.labels || []).some((l) => l.name === SEO_LABEL)) {
         const { recordMergedSeoPr } = await import("../loops/seo");
         recordMergedSeoPr(pr.number, pr.merged_at || new Date().toISOString());
+      }
+      // Docs-sync: review the merged PR for user-facing changes and update the
+      // Mintlify docs. Skip PRs authored by our bot account — that includes the
+      // docs-sync automation's own PRs, so this can never loop on itself.
+      if (pr.user?.login !== BOT_LOGIN) {
+        const payload = JSON.stringify({
+          prNumber: pr.number,
+          title: pr.title || `PR #${pr.number}`,
+          headRef: pr.head?.ref || "",
+          author: pr.user?.login || "",
+        });
+        const fired = fireAutomationsForEvent(PR_MERGED_EVENT_KEY, payload);
+        if (fired) console.log(`[github] PR #${pr.number} merged → fired ${fired} docs-sync automation(s)`);
       }
       return;
     }
