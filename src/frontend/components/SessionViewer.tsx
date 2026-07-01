@@ -751,9 +751,10 @@ export function SessionViewer({
 		return () => ro.disconnect();
 	}, [topbarEl]);
 	// Collapse before the inline row can overrun: the title's non-shrinkable
-	// floor (source chip + model pill + Working pill) plus all six action buttons
-	// needs ~820px, so below that the secondary actions move into the ⋯ menu.
-	const compactHeader = headerW > 0 && headerW < 820;
+	// floor (source chip + repo chips + model pill + Working pill) plus all six
+	// action buttons needs ~900px, so below that the secondary actions move into
+	// the ⋯ menu.
+	const compactHeader = headerW > 0 && headerW < 900;
 
 	const [overflowOpen, setOverflowOpen] = useState(false);
 	const overflowRef = useRef<HTMLDivElement>(null);
@@ -897,6 +898,16 @@ export function SessionViewer({
 						<span className={`source-chip source-${session.source}`}>
 							{session.source}
 						</span>
+					)}
+					{/* Repo chips ride in the header in front of the workspace title —
+					    the top bar reads "repo · workspace", no separate repo row. */}
+					{session.worktreeDir && !isAsk && (
+						<RepoBar
+							sessionId={session.id}
+							primaryRepo={session.repo || "tella-fusion"}
+							branch={session.branch}
+							initialAttached={session.attachedRepos || []}
+						/>
 					)}
 					{renameDraft !== null ? (
 						<input
@@ -1070,15 +1081,6 @@ export function SessionViewer({
 				);
 				return topbarEl ? createPortal(header, topbarEl) : header;
 			})()}
-
-			{session.worktreeDir && !isAsk && (
-				<RepoBar
-					sessionId={session.id}
-					primaryRepo={session.repo || "tella-fusion"}
-					branch={session.branch}
-					initialAttached={session.attachedRepos || []}
-				/>
-			)}
 
 			{(session.goal || session.loop) && (
 				<div className="session-banners">

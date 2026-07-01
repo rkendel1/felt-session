@@ -5537,14 +5537,14 @@ button.preview-open:not(:disabled):hover {
 	color: var(--text-faint);
 }
 
-/* Cross-repo bar (primary + attached repos) above a code session */
+/* Cross-repo chips (primary + attached repos), inline in the viewer header in
+   front of the workspace title. Chips keep their width — the title next to
+   them is what truncates. */
 .repobar {
 	display: flex;
-	flex-wrap: wrap;
 	align-items: center;
 	gap: 6px;
-	padding: 8px 16px;
-	border-bottom: 1px solid var(--border);
+	flex-shrink: 0;
 }
 .repobar-chip {
 	display: inline-flex;
@@ -6869,6 +6869,11 @@ button.preview-open:not(:disabled):hover {
 	/* The model pill duplicates the composer's model selector — drop it from the
      title row on phones so the title gets the full width (less truncation). */
 	.viewer-title .model-pill {
+		display: none;
+	}
+	/* Repo chips stay on phones, but the attach button is desktop furniture —
+	   drop it so the title keeps its width. */
+	.viewer-title .repobar-add-wrap {
 		display: none;
 	}
 
