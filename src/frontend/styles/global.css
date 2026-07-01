@@ -9386,6 +9386,75 @@ button.preview-open:not(:disabled):hover {
 	gap: 8px;
 }
 
+/* Default-model picker: provider-grouped radio rows inside a setting card */
+.model-picker {
+	padding: 6px;
+}
+.model-picker-empty {
+	padding: 12px 10px;
+	font-size: 13px;
+	color: var(--text-faint);
+}
+.model-group + .model-group {
+	margin-top: 6px;
+	padding-top: 6px;
+	border-top: 1px solid var(--border);
+}
+.model-group-label {
+	font-size: 10.5px;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+	color: var(--text-faint);
+	padding: 8px 10px 4px;
+}
+.model-row {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	width: 100%;
+	text-align: left;
+	background: none;
+	border: none;
+	cursor: pointer;
+	color: var(--text);
+	font-size: 13.5px;
+	font-family: inherit;
+	padding: 8px 10px;
+	border-radius: 8px;
+}
+.model-row:hover {
+	background: var(--bg-hover);
+}
+.model-row-radio {
+	width: 15px;
+	height: 15px;
+	flex-shrink: 0;
+	border-radius: 50%;
+	border: 1.5px solid var(--border-strong);
+	transition: border 0.12s ease;
+}
+.model-row.active .model-row-radio {
+	border: 5px solid var(--accent);
+}
+.model-row-name {
+	flex: 1;
+	min-width: 0;
+	font-weight: 500;
+}
+.model-row.active .model-row-name {
+	font-weight: 600;
+}
+.model-row-alias {
+	font-family: var(--mono);
+	font-size: 11px;
+	color: var(--text-faint);
+	background: var(--bg-active);
+	border-radius: 4px;
+	padding: 1px 6px;
+	flex-shrink: 0;
+}
+
 /* Toggle switch */
 .ui-switch {
 	width: 38px;

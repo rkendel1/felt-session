@@ -310,8 +310,11 @@ export function DefaultModel() {
     load();
   }, [load]);
 
+  // Optimistic: highlight the clicked row immediately, revert if the save fails.
   async function handleChange(id: string) {
-    if (id === current) return;
+    if (id === current || saving) return;
+    const prev = current;
+    setCurrent(id);
     setSaving(true);
     setError(null);
     try {
@@ -325,48 +328,52 @@ export function DefaultModel() {
       setCurrent(body.default);
     } catch (e: any) {
       setError(e.message);
+      setCurrent(prev);
     }
     setSaving(false);
   }
 
-  const claudeModels = (models || []).filter((m) => m.provider === "claude");
-  const codexModels = (models || []).filter((m) => m.provider === "codex");
+  const groups = [
+    { label: "Claude", items: (models || []).filter((m) => m.provider === "claude") },
+    { label: "Codex", items: (models || []).filter((m) => m.provider === "codex") },
+  ].filter((g) => g.items.length > 0);
 
   return (
     <>
       {error && (
         <div className="form-error" onClick={() => setError(null)}>{error}</div>
       )}
-      <div className="conn-card" style={{ maxWidth: 460 }}>
-        <div className="conn-blurb">
-          New sessions and agent runs (Slack, Linear, Plain, automations without their own model)
-          start on this model. Per-session overrides still win. Applies to the next run — no restart.
-        </div>
-        <div className="conn-detail" style={{ alignItems: "center", gap: 10 }}>
-          <select
-            value={current}
-            disabled={!models || saving}
-            onChange={(e) => handleChange(e.target.value)}
-            aria-label="Default model"
-            style={{ flex: 1, minWidth: 0 }}
-          >
-            {claudeModels.length > 0 && (
-              <optgroup label="Claude">
-                {claudeModels.map((m) => (
-                  <option key={m.id} value={m.id}>{m.label}</option>
-                ))}
-              </optgroup>
-            )}
-            {codexModels.length > 0 && (
-              <optgroup label="Codex">
-                {codexModels.map((m) => (
-                  <option key={m.id} value={m.id}>{m.label}</option>
-                ))}
-              </optgroup>
-            )}
-          </select>
-          {saving && <span className="conn-target">Saving…</span>}
-        </div>
+      <div className="setting-card model-picker" role="radiogroup" aria-label="Default model">
+        {!models && <div className="model-picker-empty">Loading models…</div>}
+        {models && groups.length === 0 && (
+          <div className="model-picker-empty">No models available.</div>
+        )}
+        {groups.map((g) => (
+          <div className="model-group" key={g.label}>
+            <div className="model-group-label">{g.label}</div>
+            {g.items.map((m) => {
+              const active = m.id === current;
+              return (
+                <button
+                  key={m.id}
+                  role="radio"
+                  aria-checked={active}
+                  className={`model-row ${active ? "active" : ""}`}
+                  onClick={() => handleChange(m.id)}
+                >
+                  <span className="model-row-radio" aria-hidden="true" />
+                  <span className="model-row-name">{m.label}</span>
+                  {m.aliases[0] && <span className="model-row-alias">{m.aliases[0]}</span>}
+                </button>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+      <div className="settings-hint">
+        New sessions and agent runs (Slack, Linear, Plain, automations without their own model)
+        start on this model. Per-session overrides still win. Applies to the next run — no
+        restart needed.
       </div>
     </>
   );
