@@ -6810,6 +6810,27 @@ button.preview-open:not(:disabled):hover {
 	.app-header {
 		display: flex;
 		padding: env(safe-area-inset-top, 0px) 10px 0;
+		position: relative;
+	}
+	/* iOS-sheet nav bar: the page title is centered across the whole bar (not
+	   after the Back chevron). Symmetric side insets keep it honestly centered
+	   while clearing the Back button; it truncates rather than pushing layout.
+	   Non-interactive so taps fall through to Back / the actions below. */
+	.app-header-title {
+		position: absolute;
+		left: 62px;
+		right: 62px;
+		top: 50%;
+		transform: translateY(-50%);
+		text-align: center;
+		font-size: 15px;
+		font-weight: 600;
+		letter-spacing: -0.01em;
+		color: var(--text);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		pointer-events: none;
 	}
 	.sidebar-brand {
 		display: none;
@@ -6826,23 +6847,10 @@ button.preview-open:not(:disabled):hover {
 		flex-wrap: wrap;
 		row-gap: 6px;
 	}
+	/* The session title now lives centered in the top bar (.app-header-title),
+	   so the in-header title row is redundant on phones — drop it and let the
+	   header be just the compact actions row. */
 	.viewer-title {
-		gap: 7px;
-		flex: 1 1 100%;
-		min-width: 0;
-	}
-	.viewer-started-by {
-		display: none;
-	}
-	.viewer-branch {
-		font-size: 14px;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-	}
-	/* The model pill duplicates the composer's model selector — drop it from the
-     title row on phones so the title gets the full width (less truncation). */
-	.viewer-title .model-pill {
 		display: none;
 	}
 

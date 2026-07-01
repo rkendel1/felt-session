@@ -509,6 +509,12 @@ function App() {
 									? "New session"
 									: "";
 
+	// iOS-sheet style: on a mobile session page the session name sits centered in
+	// the top bar, next to the Back chevron. Other pushed views keep their plain
+	// left-aligned .detail-topbar-title, so this is session-only.
+	const mobileHeaderTitle: string =
+		route.view === "session" ? currentSession?.title ?? "" : "";
+
 	const activeView =
 		route.view === "automations" ||
 		route.view === "goals" ||
@@ -600,6 +606,11 @@ function App() {
 							brand
 						)}
 					</div>
+					{mobileDetail && mobileHeaderTitle && (
+						<span className="app-header-title" title={mobileHeaderTitle}>
+							{mobileHeaderTitle}
+						</span>
+					)}
 				</header>
 
 				{route.view === "settings" ? (
