@@ -12,7 +12,7 @@ import { Notes, type NotesSelection } from "./components/Notes";
 import { Connections } from "./components/Connections";
 import { Archived } from "./components/Archived";
 import { Reviews } from "./components/Reviews";
-import { UserPicker, UserGate, getCurrentUser } from "./components/UserPicker";
+import { UserGate, getCurrentUser } from "./components/UserPicker";
 import { SettingsMenu } from "./components/SettingsMenu";
 import { Settings } from "./components/Settings";
 import { SessionTabs } from "./components/SessionTabs";
@@ -163,6 +163,19 @@ function App() {
 	// that (see the `.mobile-detail` CSS and the back button below). It's inert on
 	// desktop, where the sidebar + detail are a static split.
 	const detailPaneRef = useRef<HTMLElement | null>(null);
+	// Desktop-only: collapse the left sidebar entirely (persisted per browser). On
+	// mobile the page-stack (mobileDetail) governs the sidebar instead; this hides
+	// the static desktop column and swaps in a floating re-open control.
+	const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(
+		() => localStorage.getItem("michael-sidebar-collapsed") === "1",
+	);
+	function toggleSidebarCollapsed() {
+		setSidebarCollapsed((v) => {
+			const next = !v;
+			localStorage.setItem("michael-sidebar-collapsed", next ? "1" : "0");
+			return next;
+		});
+	}
 	// The top bar above the tab strip. The session viewer portals its header
 	// (session name + actions, incl. the workspace-panel toggle) into this slot so
 	// the layout reads name-on-top / tabs-below; other views render a plain title.
@@ -474,9 +487,9 @@ function App() {
 				: route.view
 			: ("sessions" as const);
 
-	// Brand (Michael + settings chevron) and the connection/user controls. Shared
-	// between the mobile top bar and the desktop sidebar's brand row, so they read
-	// identically in both layouts.
+	// Brand: the Michael title + its dropdown (the "Michael menu"), which now carries
+	// the account switcher and connection status that used to sit as a separate chip.
+	// Shared between the mobile top bar and the desktop sidebar's brand row.
 	const brand = (
 		<div className="app-brand">
 			<a
@@ -490,16 +503,36 @@ function App() {
 				<span className="app-logo">M</span>
 				<span className="app-title-text">Michael</span>
 			</a>
-			<SettingsMenu onOpenSettings={() => navigate({ view: "settings" })} />
+			<SettingsMenu
+				onOpenSettings={() => navigate({ view: "settings" })}
+				connected={connected}
+			/>
 		</div>
 	);
-	const userControls = (
-		<div className="app-header-right">
-			<span
-				className={`connection-dot ${connected ? "connected" : "disconnected"}`}
+
+	// The "toggle left sidebar" panel glyph — a framed rectangle with a divider
+	// marking the collapsible left column. Reused by the brand-row collapse button
+	// and the floating re-open control.
+	const panelIcon = (
+		<svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+			<rect
+				x="1.75"
+				y="2.75"
+				width="12.5"
+				height="10.5"
+				rx="2"
+				stroke="currentColor"
+				strokeWidth="1.4"
 			/>
-			<UserPicker />
-		</div>
+			<line
+				x1="6.25"
+				y1="2.75"
+				x2="6.25"
+				y2="13.25"
+				stroke="currentColor"
+				strokeWidth="1.4"
+			/>
+		</svg>
 	);
 
 	return (
@@ -534,24 +567,35 @@ function App() {
 							brand
 						)}
 					</div>
-					{userControls}
 				</header>
 
 				{route.view === "settings" ? (
 					<Settings onBack={() => navigate({ view: "home" })} />
 				) : (
-				<div className={`app-body ${mobileDetail ? "mobile-detail" : "mobile-root"}`}>
+				<div
+					className={`app-body ${mobileDetail ? "mobile-detail" : "mobile-root"}${
+						sidebarCollapsed ? " sidebar-collapsed" : ""
+					}`}
+				>
 					<div
 						className="sidebar-container"
 						style={
 							{ "--sidebar-w": `${sidebarWidth}px` } as React.CSSProperties
 						}
 					>
-						{/* Desktop brand row: Michael left, user right (hidden on mobile,
-						    where the top bar carries these instead). */}
+						{/* Desktop brand row: Michael menu on the left, the collapse toggle
+						    on the right (hidden on mobile, where the top bar carries the
+						    brand instead). */}
 						<div className="sidebar-brand">
 							{brand}
-							{userControls}
+							<button
+								className="sidebar-toggle-btn"
+								onClick={toggleSidebarCollapsed}
+								aria-label="Hide sidebar"
+								title="Toggle left sidebar"
+							>
+								{panelIcon}
+							</button>
 						</div>
 						<Sidebar
 							sessions={sessions}
@@ -660,6 +704,17 @@ function App() {
 					</div>
 
 					<main className="detail-pane" ref={detailPaneRef}>
+						{/* Floating re-open control, shown only while the desktop sidebar
+						    is collapsed (CSS-gated). Mirrors the brand-row toggle so the
+						    sidebar can always be brought back. */}
+						<button
+							className="sidebar-reopen"
+							onClick={toggleSidebarCollapsed}
+							aria-label="Show sidebar"
+							title="Toggle left sidebar"
+						>
+							{panelIcon}
+						</button>
 						{/* Top bar: session name + actions (portaled in by SessionViewer)
 						    on session routes, a plain title otherwise. Sits above the tab
 						    strip so the session identity reads first, tabs below it. */}

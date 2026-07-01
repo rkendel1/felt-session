@@ -13,6 +13,11 @@ export function getCurrentUser(): string {
   return localStorage.getItem(KEY) || "Anonymous";
 }
 
+/** Switch the current user (used by the Michael dropdown's account switcher). */
+export function setCurrentUser(name: string) {
+  setStoredUser(name);
+}
+
 /** Reactive current user — updates when the picker (or another tab) changes it. */
 export function useCurrentUser(): string {
   const [user, setUser] = useState(getCurrentUser);
@@ -28,34 +33,6 @@ export function useCurrentUser(): string {
   }, []);
 
   return user;
-}
-
-export function UserPicker() {
-  const user = useCurrentUser();
-
-  function handleChange(e: React.ChangeEvent<HTMLSelectElement>) {
-    setStoredUser(e.target.value);
-  }
-
-  return (
-    <div className="user-picker">
-      <span className="user-picker-val">{user}</span>
-      <span className="user-picker-caret">▾</span>
-      <select
-        className="user-picker-select"
-        value={user}
-        onChange={handleChange}
-        aria-label="Current user"
-      >
-        {!TEAM.includes(user) && <option value={user}>{user}</option>}
-        {TEAM.map((name) => (
-          <option key={name} value={name}>
-            {name}
-          </option>
-        ))}
-      </select>
-    </div>
-  );
 }
 
 export function UserGate({ children }: { children: React.ReactNode }) {

@@ -1,12 +1,21 @@
 import React, { useEffect, useRef, useState } from "react";
+import { TEAM, setCurrentUser, useCurrentUser } from "./UserPicker";
 
-// The dropdown behind the "Michael" title in the top bar. It's a small menu whose
-// one entry opens the full Settings page (theme, notifications, …). Appearance and
-// other preferences live in Settings now, not inline here.
+// The dropdown behind the "Michael" title in the top bar — the "Michael menu". It
+// holds the account switcher (who you're acting as), the live connection status,
+// and an entry into the full Settings page (theme, notifications, …). Appearance
+// and other preferences live in Settings now, not inline here.
 
-export function SettingsMenu({ onOpenSettings }: { onOpenSettings?: () => void }) {
+export function SettingsMenu({
+	onOpenSettings,
+	connected,
+}: {
+	onOpenSettings?: () => void;
+	connected?: boolean;
+}) {
 	const [open, setOpen] = useState(false);
 	const ref = useRef<HTMLDivElement | null>(null);
+	const currentUser = useCurrentUser();
 
 	// Dismiss on outside click / Escape while open.
 	useEffect(() => {
@@ -48,6 +57,60 @@ export function SettingsMenu({ onOpenSettings }: { onOpenSettings?: () => void }
 			</button>
 			{open && (
 				<div className="settings-dropdown" role="menu">
+					<div className="settings-section">
+						<div className="settings-section-label">Acting as</div>
+						<div className="settings-user-list">
+							{TEAM.map((name) => (
+								<button
+									key={name}
+									className={`settings-user-item${
+										name === currentUser ? " active" : ""
+									}`}
+									role="menuitemradio"
+									aria-checked={name === currentUser}
+									onClick={() => {
+									setCurrentUser(name);
+									setOpen(false);
+								}}
+								>
+									<span className="settings-user-avatar">
+										{name.charAt(0).toUpperCase()}
+									</span>
+									<span className="settings-user-name">{name}</span>
+									{name === currentUser && (
+										<svg
+											className="settings-user-check"
+											width="13"
+											height="13"
+											viewBox="0 0 16 16"
+											fill="none"
+										>
+											<path
+												d="M3.5 8.5l3 3 6-7"
+												stroke="currentColor"
+												strokeWidth="1.6"
+												strokeLinecap="round"
+												strokeLinejoin="round"
+											/>
+										</svg>
+									)}
+								</button>
+							))}
+						</div>
+					</div>
+
+					<div className="settings-section">
+						<div className="settings-status-row">
+							<span
+								className={`connection-dot ${
+									connected ? "connected" : "disconnected"
+								}`}
+							/>
+							{connected ? "Connected" : "Reconnecting…"}
+						</div>
+					</div>
+
+					<div className="settings-section">
 					<button
 						className="settings-menu-item"
 						role="menuitem"
@@ -67,6 +130,7 @@ export function SettingsMenu({ onOpenSettings }: { onOpenSettings?: () => void }
 						</svg>
 						Settings
 					</button>
+					</div>
 				</div>
 			)}
 		</div>
