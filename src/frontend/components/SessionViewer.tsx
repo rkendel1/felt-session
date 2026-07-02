@@ -1004,10 +1004,11 @@ export function SessionViewer({
 		}
 	}
 
-	// Preview / Staging / PR — the code-workspace affordances, docked at the top
-	// of the right panel (the "right sidebar") rather than the main header bar.
+	// Preview / Staging — the code-workspace affordances, docked at the top of
+	// the right panel (the "right sidebar") rather than the main header bar.
 	// Each self-gates (renders null when not applicable), so on a plain/ask
-	// session the row collapses to nothing (`.panel-actions:empty`).
+	// session the row collapses to nothing (`.panel-actions:empty`). The PR
+	// itself is surfaced by the PrStatusBar above this row, so no PR pill here.
 	const panelActions = (
 		<>
 			<PreviewButton
@@ -1015,28 +1016,6 @@ export function SessionViewer({
 				onAttachImage={(img) => setImages((prev) => [...prev, img])}
 			/>
 			<StagingLink session={session} />
-			{hasWorkspace && session.prUrl && (
-				<button
-					className={`btn-panel-toggle btn-pr-header ${
-						subagentStack.length === 0 && panelTab === "pr" ? "active" : ""
-					}`}
-					onClick={() => {
-						// Jump straight to the PR tab in the workspace panel — a PR is
-						// worth surfacing without first hunting through Workspace.
-						setSubagentStack([]);
-						selectPanelTab("pr");
-						setPanelOpen(true);
-					}}
-					title={`Open PR #${session.prNumber ?? ""} (${(session.prState || "OPEN").toLowerCase()})`}
-				>
-					<span
-						className={`panel-tab-dot pr-dot-${(session.prState || "OPEN").toLowerCase()}`}
-					/>
-					<span className="btn-pr-label">
-						PR{session.prNumber ? ` #${session.prNumber}` : ""}
-					</span>
-				</button>
-			)}
 		</>
 	);
 
@@ -1672,7 +1651,6 @@ export function SessionViewer({
 				) : panelAvailable && panelOpen ? (
 					<div className="viewer-panel" style={panelStyle}>
 						{panelResizeHandle}
-						<div className="panel-actions">{panelActions}</div>
 						{hasWorkspace && (
 							<PrStatusBar
 								sessionId={session.id}
@@ -1682,6 +1660,7 @@ export function SessionViewer({
 								onOpenPrTab={() => setPanelTab("pr")}
 							/>
 						)}
+						<div className="panel-actions">{panelActions}</div>
 						<WorkspaceInfo
 							workspaceId={session.projectId || null}
 							workspaceName={workspaceName}
