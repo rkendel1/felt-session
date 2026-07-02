@@ -19,6 +19,7 @@ import { Settings } from "./components/Settings";
 import { SessionTabs } from "./components/SessionTabs";
 import { RestartOverlay } from "./components/RestartOverlay";
 import { UpdateToast } from "./components/UpdateToast";
+import { ImageLightbox } from "./components/ImageLightbox";
 import { useSessions } from "./hooks/useSessions";
 import { useWebSocket } from "./hooks/useWebSocket";
 import { useBackSwipe } from "./hooks/useBackSwipe";
@@ -1135,5 +1136,6 @@ const root = createRoot(document.getElementById("root")!);
 root.render(
 	<TooltipProvider>
 		<App />
+		<ImageLightbox />
 	</TooltipProvider>,
 );
