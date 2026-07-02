@@ -609,7 +609,8 @@ export function Sidebar({
 
 	// One sidebar row per open PR of the focus person. `session` is the most
 	// recently active session on that PR (the click target); a sessionless PR
-	// opens on GitHub instead.
+	// opens its auto-created workspace when one exists (PRs opened outside
+	// Backstage, e.g. from Conductor), and GitHub otherwise.
 	interface PrRow {
 		url: string;
 		number?: number;
@@ -618,6 +619,7 @@ export function Sidebar({
 		updatedAt: string;
 		repo: string;
 		session: UnifiedSession | null;
+		workspaceId: string | null;
 	}
 
 	// Open PRs for the focus person (the Person filter, defaulting to you;
@@ -667,6 +669,7 @@ export function Sidebar({
 				updatedAt: pr.updatedAt,
 				repo: pr.repo,
 				session,
+				workspaceId: pr.workspaceId || null,
 			});
 		}
 
@@ -689,6 +692,7 @@ export function Sidebar({
 				updatedAt: s.prUpdatedAt || s.lastActivity,
 				repo: sessionRepo(s),
 				session: s,
+				workspaceId: s.projectId || null,
 			});
 		}
 
@@ -1892,11 +1896,18 @@ export function Sidebar({
 											}`}
 											onClick={() => {
 												if (r.session) onSelect(r.session);
+												else if (r.workspaceId) onOpenProject(r.workspaceId);
 												else window.open(r.url, "_blank", "noopener");
 											}}
 											title={`${r.number ? `#${r.number} ` : ""}${r.title} — ${
 												r.repo
-											}${r.session ? "" : " (no session — opens on GitHub)"}`}
+											}${
+												r.session
+													? ""
+													: r.workspaceId
+														? " (opens its workspace)"
+														: " (no session — opens on GitHub)"
+											}`}
 										>
 											{filter.repo === "all" && <RepoTile name={r.repo} />}
 											<span className="text-faint text-[11px] max-[720px]:text-[13px] tabular-nums shrink-0">

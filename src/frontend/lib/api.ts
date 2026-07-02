@@ -89,9 +89,11 @@ export interface OpenPr {
 	/** Web user-picker key ("kent"), or null when the author isn't a teammate. */
 	person: string | null;
 	updatedAt: string;
+	/** The PR's auto-created workspace (`ghpr-<n>`), when one exists. */
+	workspaceId: string | null;
 }
 
-/** Every open PR in the repo, attributed to teammates by GitHub author. */
+/** Every open PR across the covered repos, attributed by GitHub author. */
 export async function fetchOpenPrs(): Promise<OpenPr[]> {
 	const data = await request<{ prs: OpenPr[] }>("/open-prs", {
 		label: "Failed to fetch open PRs",

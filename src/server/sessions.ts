@@ -6,6 +6,7 @@ import {
 	githubLoginToPersonKey,
 } from "./shared/user-mappings";
 import { isArchivedId } from "./archive";
+import { listWorkspaces } from "./workspaces";
 import { getTitleOverride } from "./title-overrides";
 import { getGeneratedTitle } from "./generated-titles";
 import { findCodexRollout } from "./codex-accounts";
@@ -481,9 +482,21 @@ export interface OpenPrEntry {
 	/** Web user-picker key ("kent"), or null when the author isn't a teammate. */
 	person: string | null;
 	updatedAt: string;
+	/** The PR's auto-created workspace (`ghpr-<n>`), when one exists. */
+	workspaceId: string | null;
 }
 
 export function getOpenPrs(): OpenPrEntry[] {
+	// PR-backed workspaces, keyed per repo + PR number, so a sessionless PR row
+	// can still open the workspace the PR automations already created for it.
+	// The ghpr key carries no repo, and workspaces predating the repo field are
+	// tella-fusion's (its automations created them all), so absent repo = fusion.
+	const wsByPr = new Map<string, string>();
+	for (const w of listWorkspaces()) {
+		const num = w.prNumber ?? Number(/^ghpr-(\d+)$/.exec(w.key || "")?.[1]);
+		if (num) wsByPr.set(`${w.repo || "tella-fusion"}#${num}`, w.id);
+	}
+
 	const out: OpenPrEntry[] = [];
 	for (const [repoId, byBranch] of getPrsByRepo()) {
 		for (const [branch, pr] of byBranch) {
@@ -499,6 +512,7 @@ export function getOpenPrs(): OpenPrEntry[] {
 				author: pr.author,
 				person: githubLoginToPersonKey(pr.author),
 				updatedAt: pr.updatedAt,
+				workspaceId: wsByPr.get(`${repoId}#${pr.number}`) || null,
 			});
 		}
 	}
