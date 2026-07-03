@@ -785,7 +785,6 @@ function App() {
 										strokeLinejoin="round"
 									/>
 								</svg>
-								<span>Back</span>
 							</button>
 						) : (
 							brand
