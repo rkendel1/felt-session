@@ -16,6 +16,7 @@ import {
   IconChevronDown,
 } from "./icons";
 import { Tooltip } from "../ui/tooltip";
+import { BottomSheet } from "../ui/sheet";
 import { VoiceInput } from "./VoiceInput";
 import { useIsPhone } from "../hooks/useIsPhone";
 
@@ -255,17 +256,22 @@ export function Composer({
   // parent wired up either channel.
   const canAttach = !!onImagesChange || !!onFilesChange;
 
+  const isPhone = useIsPhone();
+
   // Which toolbar popover is open ("add" menu or "goal" editor). Closed on an
   // outside click or after an action.
   const [menu, setMenu] = useState<null | "add" | "goal">(null);
   useEffect(() => {
     if (!menu) return;
+    // The phone "add" sheet is a portal that owns its own dismissal (backdrop,
+    // Esc, drag) — an outside-click listener would fire on every sheet tap.
+    if (isPhone && menu === "add") return;
     function onDown(e: MouseEvent) {
       if (!(e.target as HTMLElement).closest(".composer-pop-wrap")) setMenu(null);
     }
     document.addEventListener("mousedown", onDown);
     return () => document.removeEventListener("mousedown", onDown);
-  }, [menu]);
+  }, [menu, isPhone]);
 
   // "@"-mention file autocomplete (shared with the New-session prompt field).
   const mentions = useFileMentions({
@@ -328,7 +334,6 @@ export function Composer({
   // Auto-grow between a resting floor and the CSS max-height. Phones get a
   // one-line floor (ChatGPT-style lightweight bar); desktop keeps the tall
   // inviting field.
-  const isPhone = useIsPhone();
   useEffect(() => {
     const el = textareaRef.current;
     if (!el) return;
@@ -410,38 +415,80 @@ export function Composer({
                   <IconPlus size={24} />
                 </button>
               </Tooltip>
-              {menu === "add" && (
-                <div className="composer-menu">
-                  <button
-                    type="button"
-                    className="composer-menu-item"
-                    onClick={() => {
-                      setMenu(null);
-                      fileInputRef.current?.click();
-                    }}
-                  >
-                    <span className="composer-menu-icon">
-                      <IconPaperclip size={22} />
-                    </span>
-                    {onFilesChange ? "Attach files" : "Attach an image"}
-                  </button>
-                  {mentionFetch && (
+              {menu === "add" &&
+                (isPhone ? (
+                  <BottomSheet label="Add" onClose={() => setMenu(null)}>
+                    {(dismiss) => (
+                      <div className="px-4 pb-4 pt-1">
+                        <div className="overflow-hidden rounded-xl border border-line bg-panel">
+                          <button
+                            type="button"
+                            className="flex w-full items-center gap-3 border-x-0 border-b border-t-0 border-solid border-line bg-transparent px-3.5 py-3.5 text-left last:border-b-0 active:bg-hover"
+                            onClick={() => {
+                              dismiss();
+                              fileInputRef.current?.click();
+                            }}
+                          >
+                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-active text-dim">
+                              <IconPaperclip size={20} />
+                            </span>
+                            <span className="min-w-0 flex-1 text-[15px] font-medium text-fg">
+                              {onFilesChange ? "Attach files" : "Attach an image"}
+                            </span>
+                          </button>
+                          {mentionFetch && (
+                            <button
+                              type="button"
+                              className="flex w-full items-center gap-3 border-x-0 border-b border-t-0 border-solid border-line bg-transparent px-3.5 py-3.5 text-left last:border-b-0 active:bg-hover"
+                              onClick={() => {
+                                dismiss();
+                                startMention();
+                              }}
+                            >
+                              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-active text-dim">
+                                <IconAtSign size={20} />
+                              </span>
+                              <span className="min-w-0 flex-1 text-[15px] font-medium text-fg">
+                                Reference a file
+                              </span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </BottomSheet>
+                ) : (
+                  <div className="composer-menu">
                     <button
                       type="button"
                       className="composer-menu-item"
                       onClick={() => {
                         setMenu(null);
-                        startMention();
+                        fileInputRef.current?.click();
                       }}
                     >
                       <span className="composer-menu-icon">
-                        <IconAtSign size={22} />
+                        <IconPaperclip size={22} />
                       </span>
-                      Reference a file
+                      {onFilesChange ? "Attach files" : "Attach an image"}
                     </button>
-                  )}
-                </div>
-              )}
+                    {mentionFetch && (
+                      <button
+                        type="button"
+                        className="composer-menu-item"
+                        onClick={() => {
+                          setMenu(null);
+                          startMention();
+                        }}
+                      >
+                        <span className="composer-menu-icon">
+                          <IconAtSign size={22} />
+                        </span>
+                        Reference a file
+                      </button>
+                    )}
+                  </div>
+                ))}
               <input
                 ref={fileInputRef}
                 type="file"
