@@ -2458,6 +2458,7 @@ body.resizing-x {
 .viewer-overflow-menu > .preview-wrap,
 .viewer-overflow-menu > .spinoff,
 .viewer-overflow-menu > .spinoff > .btn-panel-toggle,
+.viewer-overflow-menu > .viewer-repo-menu,
 .viewer-overflow-menu > .viewer-delete-confirm {
 	width: 100%;
 }
@@ -2697,6 +2698,59 @@ body.resizing-x {
 .btn-viewer-newchat:hover {
 	color: var(--text);
 	background: var(--bg-hover);
+}
+
+/* Repo switcher block in the phone ⋯ menu (RepoSwitchMenu). A small group
+   label over one tappable row per repo; the current repo reads as a disabled,
+   checked row. Rows mirror the archive/newchat look — icon + label, neutral
+   until hover. */
+.viewer-repo-menu {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+.viewer-repo-menu-label {
+	padding: 2px 4px 0;
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--text-faint);
+}
+.btn-viewer-repo {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+	white-space: nowrap;
+	background: none;
+	border: 1px solid var(--border-strong);
+	border-radius: 10px;
+	color: var(--text-faint);
+	padding: 5px 12px;
+	font-size: 13px;
+	text-align: left;
+}
+.btn-viewer-repo:hover:not(:disabled) {
+	color: var(--text);
+	background: var(--bg-hover);
+}
+.btn-viewer-repo-name {
+	min-width: 0;
+	flex: 1;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+/* Current repo: a non-interactive checked row, so the switch list still shows
+   where you are. */
+.btn-viewer-repo.current {
+	color: var(--text);
+	opacity: 1;
+	cursor: default;
+}
+.btn-viewer-repo-check {
+	flex-shrink: 0;
+	color: var(--text-dim);
 }
 
 /* Preview (local dev server) control — a segmented split button:
@@ -8473,20 +8527,37 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
-	/* Small centered model line under the title — the composer's model pill is
-	   hidden on phones, so this is where a session's model surfaces. It doubles
+	/* Small centered `repo · model` line under the title. The composer's model
+	   pill is hidden on phones, so this is where a session's model surfaces; the
+	   repo prefix names the codebase this session targets. The model half doubles
 	   as a tap-to-switch control (see .header-model-select), so re-enable pointer
 	   events that the pointer-events:none title wrapper turns off. */
 	.app-header-model {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 5px;
 		max-width: 100%;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
+		min-width: 0;
 		font-size: 11px;
 		font-weight: 500;
 		line-height: 1.1;
 		color: var(--text-dim);
 		pointer-events: auto;
+	}
+	/* Repo half of the subtitle — read-only context (switch it from the ⋯ menu).
+	   Truncates first so the model label stays legible on narrow phones. */
+	.header-repo-label {
+		flex-shrink: 1;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		color: var(--text-faint);
+	}
+	.header-model-sep {
+		flex-shrink: 0;
+		color: var(--text-faint);
 	}
 	/* Model line as a tap target: a compact label + chevron with a full-bleed
 	   transparent native <select> over it (opens the OS picker). Kept tiny to

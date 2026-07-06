@@ -38,6 +38,7 @@ import type { FileAttachment } from "../lib/images";
 import { loadDraft, saveDraft, clearDraft } from "../lib/drafts";
 import { DiffPanel } from "./DiffPanel";
 import { RepoBar } from "./RepoBar";
+import { RepoSwitchMenu } from "./RepoSwitchMenu";
 import { AskCard } from "./AskCard";
 import { PrPanel } from "./PrPanel";
 import { PrStatusBar } from "./PrStatusBar";
@@ -1618,6 +1619,17 @@ export function SessionViewer({
 						New chat in workspace
 					</button>
 				);
+				// Switch the primary repo from the ⋯ menu — phone-only, since the
+				// inline header RepoBar is hidden on phones. Skipped for ask
+				// sessions (no primary repo) and sessions without a worktree.
+				const repoAction = isPhone && session.worktreeDir && !isAsk && (
+					<RepoSwitchMenu
+						sessionId={session.id}
+						primaryRepo={session.repo || "tella-fusion"}
+						branch={session.branch}
+						onSwitched={() => setOverflowOpen(false)}
+					/>
+				);
 				// Star (pin) and Spin off live in the ⋯ menu at every width,
 				// alongside Delete — occasional actions, not header chrome.
 				const overflowActions = (
@@ -1862,6 +1874,7 @@ export function SessionViewer({
 								{isPhone && secondaryActions}
 								{(compactHeader || isPhone) && collapsibleActions}
 								{newChatAction}
+								{repoAction}
 								{overflowActions}
 								{archiveAction}
 								{deleteAction}
@@ -1920,47 +1933,68 @@ export function SessionViewer({
 						: header;
 			})()}
 
-			{/* Compact model switcher under the mobile top-bar title. The composer's
-			    model pill is hidden on phones (keeps the input clean), so this small
-			    label — the session's model — doubles as a tap target: a native
-			    <select> overlays it and opens the OS picker. Backstage sessions only;
-			    Slack/Linear-owned sessions set their model from the owning thread. */}
-			{isPhone && headerModelEl && models.length > 0 &&
+			{/* Line under the mobile top-bar title: `repo · model`. The repo is the
+			    read-only session context (switch it from the ⋯ menu, where the
+			    inline header RepoBar folds on phones); the model is a tap target —
+			    the composer's model pill is hidden on phones, so this small label
+			    doubles as one: a native <select> overlays it and opens the OS
+			    picker. Backstage sessions only; Slack/Linear-owned sessions set
+			    their model from the owning thread. */}
+			{isPhone &&
+				headerModelEl &&
+				(models.length > 0 || (session.worktreeDir && !isAsk)) &&
 				createPortal(
-					<span
-						className="header-model-select"
-						title={
-							session.source !== "backstage"
-								? "Set the model from the owning agent (/model in the Slack thread)"
-								: "Switch the model for this session"
-						}
-					>
-						<span className="header-model-label">
-							{models.find((m) => m.id === effectiveModel)?.label ||
-								prettyModel(effectiveModel)}
-						</span>
-						<IconChevronDown className="header-model-chevron" size={14} />
-						{session.source === "backstage" && (
-							<select
-								className="palette-select-overlay"
-								value={model}
-								onChange={(e) => handleModelChange(e.target.value)}
-								aria-label="Model"
+					<>
+						{session.worktreeDir && !isAsk && (
+							<span
+								className="header-repo-label"
+								title="Repo for this session — change it from the ⋯ menu"
 							>
-								<option value="">
-									{models.find((m) => m.id === defaultModel)?.label ||
-										prettyModel(defaultModel)}
-								</option>
-								{models
-									.filter((m) => m.id !== defaultModel)
-									.map((m) => (
-										<option key={m.id} value={m.id}>
-											{m.label}
-										</option>
-									))}
-							</select>
+								{session.repo || "tella-fusion"}
+							</span>
 						)}
-					</span>,
+						{session.worktreeDir && !isAsk && models.length > 0 && (
+							<span className="header-model-sep" aria-hidden="true">
+								·
+							</span>
+						)}
+						{models.length > 0 && (
+							<span
+								className="header-model-select"
+								title={
+									session.source !== "backstage"
+										? "Set the model from the owning agent (/model in the Slack thread)"
+										: "Switch the model for this session"
+								}
+							>
+								<span className="header-model-label">
+									{models.find((m) => m.id === effectiveModel)?.label ||
+										prettyModel(effectiveModel)}
+								</span>
+								<IconChevronDown className="header-model-chevron" size={14} />
+								{session.source === "backstage" && (
+									<select
+										className="palette-select-overlay"
+										value={model}
+										onChange={(e) => handleModelChange(e.target.value)}
+										aria-label="Model"
+									>
+										<option value="">
+											{models.find((m) => m.id === defaultModel)?.label ||
+												prettyModel(defaultModel)}
+										</option>
+										{models
+											.filter((m) => m.id !== defaultModel)
+											.map((m) => (
+												<option key={m.id} value={m.id}>
+													{m.label}
+												</option>
+											))}
+									</select>
+								)}
+							</span>
+						)}
+					</>,
 					headerModelEl,
 				)}
 
