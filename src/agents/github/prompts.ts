@@ -41,6 +41,15 @@ How to review well:
 - Do NOT edit files, run interactive tools, ask questions, or post anything yourself — the system posts your review.`;
 
 /**
+ * Default model for PR reviews and PR mentions when the seeded `github-pr-review`
+ * automation doesn't pin one. Michiel's directive (2026-07-10): reviews must run
+ * on opus or fable, never sonnet — cost is not a concern on the subscription pool.
+ * Opus is the designated reviewer/critic model (see CLAUDE.md model routing).
+ * A human can still override per-run by setting the automation's `model`.
+ */
+export const REVIEW_DEFAULT_MODEL = "claude-opus-4-8";
+
+/**
  * Docs-sync automation prompt (code mode). Fires once per merged tella-fusion PR.
  * The run starts in a fresh worktree on a dedicated `auto-docs-sync-*` branch off
  * main; the merged PR's changes are already in the checkout. The triggering event
@@ -137,6 +146,9 @@ export function diffBlock(patch: string): string {
     "## The diff",
     "",
     "The PR's diff is inlined below (this run has no shell — do not try to run `gh` or `git`).",
+    "The COMPLETE diff is already here: do NOT webfetch the PR's `.diff` URL,",
+    "`patch-diff.githubusercontent.com`, or any `api.github.com/…/pulls/…` URL to fetch it —",
+    "those 404 on fork/closed PRs, this ask-mode run has no need for them, and everything is below.",
     "Your checkout is at the BASE branch: the PR's changes are NOT applied to the files on",
     "disk. Use the diff for what changed and Read/Grep on the checkout for surrounding context.",
     "",

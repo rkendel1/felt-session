@@ -19,7 +19,7 @@ import {
   clearPendingMention,
 } from "./state";
 import { runGithubAgent, authorForLogin, finalSummary, sessionUrl } from "./run";
-import { buildMentionPrompt, buildFollowupMentionPrompt } from "./prompts";
+import { buildMentionPrompt, buildFollowupMentionPrompt, REVIEW_DEFAULT_MODEL } from "./prompts";
 import { triggerPrAction } from "./trigger";
 import {
   postIssueComment,
@@ -177,7 +177,7 @@ export async function runConversationalMention(
       return;
     }
     headRef = details.headRefName;
-    const model = listAutomations().find((a) => a.eventKey === PR_EVENT_KEY)?.model;
+    const model = listAutomations().find((a) => a.eventKey === PR_EVENT_KEY)?.model || REVIEW_DEFAULT_MODEL;
     const link = `[📺 open session](${sessionUrl(prNumber, "mention")})`;
 
     const st = getOrInitPrState(prNumber, headRef);
@@ -276,7 +276,7 @@ async function runFollowupMention(
     `${REPLY_MARKER}\n🔄 On it — PR #${prNumber} is ${stateLabel}, so I'm starting a fresh follow-up branch off \`${baseRef}\` for @${args.author}'s request… · ${link}`,
   );
 
-  const model = listAutomations().find((a) => a.eventKey === PR_EVENT_KEY)?.model;
+  const model = listAutomations().find((a) => a.eventKey === PR_EVENT_KEY)?.model || REVIEW_DEFAULT_MODEL;
   const worktreeDir = await createWorktreeForFollowup(branch, baseRef);
   console.log(
     `[github] Follow-up mention on ${stateLabel} PR #${prNumber} from @${args.author} → branch ${branch}`,

@@ -19,7 +19,7 @@ import {
   LABEL_ADVERSARIAL,
 } from "./constants";
 import { runReview, type PrRef, type ReviewConfig } from "./review";
-import { DEFAULT_REVIEW_PROMPT } from "./prompts";
+import { DEFAULT_REVIEW_PROMPT, REVIEW_DEFAULT_MODEL } from "./prompts";
 import { SEO_LABEL } from "../loops/seo";
 
 let onSessionInvalidate: (() => void) | undefined;
@@ -58,7 +58,7 @@ export function resolveReviewConfig(): { autoEnabled: boolean; config: ReviewCon
     autoEnabled: !!automation?.enabled,
     config: {
       prompt: automation?.prompt || DEFAULT_REVIEW_PROMPT,
-      model: automation?.model,
+      model: automation?.model || REVIEW_DEFAULT_MODEL,
     },
   };
 }
