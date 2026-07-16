@@ -709,8 +709,12 @@ function App() {
 	// Whether the current session's Review pane is foregrounded (the top tab
 	// strip's Review view-tab). Reset to chat whenever the open session changes.
 	const [reviewActive, setReviewActive] = useState(false);
-	// Sessions whose Review view-tab was dismissed (×); onOpenReview re-adds it.
-	const [reviewClosed, setReviewClosed] = useState<Set<string>>(() => new Set());
+	// Sessions whose Review view-tab is open (opened from the sidebar); empty by default.
+	const [reviewOpen, setReviewOpen] = useState<Set<string>>(() => new Set());
+	// One-shot: the session whose Review tab should foreground once it lands, set
+	// when opening Review from the sidebar. Survives the session-change reset
+	// below (a pulse consumed by the effect next to it), then cleared.
+	const [pendingReviewOpen, setPendingReviewOpen] = useState<string | null>(null);
 
 	// Set for the render right after opening a workspace from the sidebar, so the
 	// session it lands on autofocuses its composer (you picked the workspace to
@@ -980,12 +984,21 @@ function App() {
 	useEffect(() => {
 		setReviewActive(false);
 	}, [currentSession?.id]);
+	// ...unless we just opened Review for that session from the sidebar: once it
+	// lands (this render or the one after navigation), foreground Review and
+	// consume the pulse. Runs after the reset effect above, so it wins.
+	useEffect(() => {
+		if (pendingReviewOpen && pendingReviewOpen === currentSession?.id) {
+			setReviewActive(true);
+			setPendingReviewOpen(null);
+		}
+	}, [currentSession?.id, pendingReviewOpen]);
 	// The current code session's Review pane, surfaced as a leftmost view-tab in
 	// the top strip (siblings share the worktree/PR, so one Review tab suffices).
 	const currentHasWorkspace =
 		!!currentSession && Boolean(currentSession.worktreeDir || currentSession.branch);
 	const reviewViewTabs: ViewTab[] =
-		currentSession && currentHasWorkspace && !reviewClosed.has(currentSession.id)
+		currentSession && currentHasWorkspace && reviewOpen.has(currentSession.id)
 			? [
 					{
 						id: `review:${currentSession.id}`,
@@ -1005,21 +1018,33 @@ function App() {
 	function openReview() {
 		if (!currentSession) return;
 		const id = currentSession.id;
-		setReviewClosed((prev) => {
-			if (!prev.has(id)) return prev;
-			const next = new Set(prev);
-			next.delete(id);
-			return next;
+		setReviewOpen((prev) => {
+			if (prev.has(id)) return prev;
+			return new Set(prev).add(id);
 		});
 		setReviewActive(true);
 	}
 	function closeReviewTab() {
 		if (currentSession) {
 			const id = currentSession.id;
-			setReviewClosed((prev) => new Set(prev).add(id));
+			setReviewOpen((prev) => {
+				if (!prev.has(id)) return prev;
+				const next = new Set(prev);
+				next.delete(id);
+				return next;
+			});
 		}
 		setReviewActive(false);
 	}
+	// Open a session's Review tab from the sidebar: select it and foreground its
+	// Review once it lands (pendingReviewOpen survives the session-change reset).
+	const openReviewForSession = React.useCallback((session: UnifiedSession) => {
+		setReviewOpen((prev) =>
+			prev.has(session.id) ? prev : new Set(prev).add(session.id),
+		);
+		setPendingReviewOpen(session.id);
+		navigate({ view: "session", id: session.id });
+	}, []);
 	currentSessionRef.current = currentSession;
 
 	// Mark the open session read up to its latest activity — both when it's first
@@ -1597,6 +1622,7 @@ function App() {
 							reportsActive={route.view === "reports"}
 							onOpenReports={() => navigate({ view: "reports" })}
 							onSelect={(s) => navigate({ view: "session", id: s.id })}
+							onOpenReview={openReviewForSession}
 							onOpenPr={(repo, branch) =>
 								navigate({ view: "pr", repo, branch })
 							}

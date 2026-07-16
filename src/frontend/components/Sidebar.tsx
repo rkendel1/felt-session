@@ -205,6 +205,8 @@ interface Props {
 	/** Open automation-produced recurring reports. */
 	onOpenReports: () => void;
 	onSelect: (session: UnifiedSession) => void;
+	/** Foreground a session's Review view-tab (from a chat row's context menu). */
+	onOpenReview: (session: UnifiedSession) => void;
 	/** Open the session-less PR preview for a PR row with no chat behind it. */
 	onOpenPr: (repo: string, branch: string) => void;
 	/** The PR preview currently open (highlights its row), or null. */
@@ -792,6 +794,7 @@ export function Sidebar({
 	reportsActive,
 	onOpenReports,
 	onSelect,
+	onOpenReview,
 	onOpenPr,
 	selectedPr = null,
 	onOpenSupportThread,
@@ -3118,6 +3121,15 @@ export function Sidebar({
 								copyToClipboard(absoluteLink(chatPath(first)), () =>
 									onToast?.("Link copied"),
 								),
+						});
+					// A chat that owns a worktree/branch (and thus a PR/diff) can open
+					// its Review tab here — it's off by default in the viewer.
+					if (first && (first.worktreeDir || first.branch))
+						entries.push({
+							kind: "item",
+							icon: <IconEye size={20} />,
+							label: "Open review",
+							onClick: () => onOpenReview(first),
 						});
 					// Archive is the removal action here (a chat/workspace is finished
 					// by archiving, never inferred-deleted). A chatless workspace has
