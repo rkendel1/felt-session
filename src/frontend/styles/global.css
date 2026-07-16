@@ -16307,45 +16307,12 @@ html[data-theme="light"] .pixel-spinner .pixel {
 
 
 /* ------------------------------------------------------------------ *
- * Main chat-area Chat/Review switch + full-width review host.
- * The PR review moves out of the cramped right panel: a segmented control
- * at the top of the chat column swaps the transcript+composer for a
- * full-width PrPanel (its .pr-panel-split rail + diff then get the whole
- * main area). The switch mirrors the .panel-tab pill look so both tab
- * strips read as one family; only shown on code sessions.
+ * Full-width review host for the chat column.
+ * The PR review moves out of the cramped right panel: selecting the top tab
+ * strip's Review view-tab swaps the transcript+composer for a full-width
+ * PrPanel (its .pr-panel-split rail + diff get the whole main area). Only
+ * offered on code sessions.
  * ------------------------------------------------------------------ */
-.main-view-switch {
-	display: flex;
-	align-items: center;
-	gap: 2px;
-	flex-shrink: 0;
-	padding: 10px 16px 4px;
-}
-.main-view-tab {
-	background: none;
-	border: none;
-	border-radius: calc(8px * var(--rf)); corner-shape: var(--cs);
-	color: var(--text-dim);
-	font-size: 13px;
-	font-weight: 500;
-	padding: 5px 14px;
-	display: inline-flex;
-	align-items: center;
-	gap: 6px;
-	cursor: pointer;
-	transition:
-		background 0.14s ease,
-		color 0.14s ease;
-}
-.main-view-tab:hover {
-	color: var(--text);
-	background: var(--bg-hover);
-}
-.main-view-tab.active {
-	color: var(--text);
-	background: var(--bg-active);
-}
-
 /* Full-width review host: a flex child of .viewer-chat that stretches, so
    the PrPanel (its .pr-panel-split is height:100%) fills the whole column. */
 .viewer-review-main {
@@ -16384,8 +16351,3 @@ html[data-theme="light"] .pixel-spinner .pixel {
 	border-color: var(--text-faint);
 }
 
-@media (max-width: 720px) {
-	.main-view-switch {
-		padding: 8px 12px 4px;
-	}
-}

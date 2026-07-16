@@ -189,6 +189,14 @@ interface Props {
 		id: string,
 		req: { to: string; by: string; at: string; accepted?: { by: string; at: string } } | null,
 	) => void;
+	/**
+	 * Whether the Review pane is foregrounded — driven by the top tab strip's
+	 * Review view-tab (App state), replacing the old inline Chat|Review toggle.
+	 * When false, the chat transcript shows.
+	 */
+	showReview?: boolean;
+	/** Open/foreground this session's Review view-tab (PR/review triggers). */
+	onOpenReview?: () => void;
 }
 
 type PanelTab =
@@ -301,6 +309,8 @@ export function SessionViewer({
 	onOpenSession,
 	onRunningChange,
 	onReviewChange,
+	showReview = false,
+	onOpenReview,
 }: Props) {
 	const [entries, setEntries] = useState<TranscriptEntry[]>([]);
 	// No transcript file yet (a fresh chat that hasn't run) → nothing to load;
@@ -454,11 +464,11 @@ export function SessionViewer({
 		setPanelTab(tab);
 		localStorage.setItem("michael-panel-tab", tab);
 	}
-	// Main chat-area view: the transcript+composer ("chat") or a full-width
-	// PR review ("review") that takes over the whole chat column so the code
-	// diff gets the full width. Only reachable on a code session (hasWorkspace);
-	// the effect below drops back to "chat" whenever there is no workspace.
-	const [mainView, setMainView] = useState<"chat" | "review">("chat");
+	// Main chat-area view: the transcript+composer vs. the full-width PR review
+	// that takes over the whole chat column. Which one shows is now owned by App
+	// (the top tab strip's Review view-tab) and passed in as `showReview`; the
+	// open triggers call onOpenReview. Only meaningful on a code session
+	// (hasWorkspace) — App only offers the Review tab there.
 	// Bumped by the ⋯ menu's "New side chat" — tells the SideChatsPanel to
 	// create (and open) a fresh side chat as soon as it shows. The panel calls
 	// onCreateConsumed to reset it to 0, so tab remounts don't re-create.
@@ -715,11 +725,6 @@ export function SessionViewer({
 		)
 			setPanelTab("info");
 	}, [workflowsLoaded, panelTab, workflowRuns.length, hasWorkspace]);
-
-	// A session with no code workspace has no Review — never sit on it.
-	useEffect(() => {
-		if (!hasWorkspace && mainView !== "chat") setMainView("chat");
-	}, [hasWorkspace, mainView]);
 
 	// Ask→code promotion: creates a worktree and flips the chat to code mode.
 	// The 5s session poll picks up the mode change and re-renders with the full
@@ -2729,34 +2734,7 @@ export function SessionViewer({
 
 			<div className="viewer-split">
 				<div className="viewer-chat">
-					{hasWorkspace && (
-						<div className="main-view-switch" role="tablist">
-							<button
-								type="button"
-								role="tab"
-								aria-selected={mainView === "chat"}
-								className={`main-view-tab ${mainView === "chat" ? "active" : ""}`}
-								onClick={() => setMainView("chat")}
-							>
-								Chat
-							</button>
-							<button
-								type="button"
-								role="tab"
-								aria-selected={mainView === "review"}
-								className={`main-view-tab ${mainView === "review" ? "active" : ""}`}
-								onClick={() => setMainView("review")}
-							>
-								Review
-								{session.prState && (
-									<span
-										className={`panel-tab-dot ${session.prState === "OPEN" && session.prMergeable === "CONFLICTING" ? "pr-dot-conflict" : `pr-dot-${session.prState.toLowerCase()}`}`}
-									/>
-								)}
-							</button>
-						</div>
-					)}
-					{mainView === "review" && hasWorkspace ? (
+					{showReview && hasWorkspace ? (
 						<div className="viewer-review-main">
 							<PrPanel
 								sessionId={session.id}
@@ -3175,7 +3153,7 @@ export function SessionViewer({
 								repo={session.repo || undefined}
 								archived={session.archived}
 								send={connected ? send : undefined}
-								onOpenPrTab={() => setMainView("review")}
+								onOpenPrTab={() => onOpenReview?.()}
 								running={isRunningLive}
 								refreshTick={gitRefreshTick}
 								// Globe (staging deploy) rides inside the strip, left of the
@@ -3296,7 +3274,7 @@ export function SessionViewer({
 									reviewRequestSessionId={effectiveReview?.ownerId}
 									onReviewChange={onReviewChange}
 									send={connected ? send : undefined}
-									onOpenTab={(tab) => (tab === "pr" ? setMainView("review") : selectPanelTab(tab))}
+									onOpenTab={(tab) => (tab === "pr" ? onOpenReview?.() : selectPanelTab(tab))}
 									onAddToInput={(text) =>
 										setComposerPrefill((p) => ({
 											seq: (p?.seq ?? 0) + 1,

@@ -27,7 +27,7 @@ import { PreviewWait, matchPreviewWaitRoute } from "./components/PreviewWait";
 import { SettingsMenu } from "./components/SettingsMenu";
 import { TitleBar } from "./components/TitleBar";
 import { Settings, type SettingsSectionKey } from "./components/Settings";
-import { SessionTabs } from "./components/SessionTabs";
+import { SessionTabs, type ViewTab } from "./components/SessionTabs";
 import { RestartOverlay } from "./components/RestartOverlay";
 import { MediaLightboxHost } from "./components/MediaLightbox";
 import { UpdatePill } from "./components/UpdatePill";
@@ -706,6 +706,11 @@ function App() {
 	// open SessionViewer to clear its composer and scroll to the live edge. With no
 	// session open there's nothing to stay in, so it falls back to the palette.
 	const [newChatSeq, setNewChatSeq] = useState(0);
+	// Whether the current session's Review pane is foregrounded (the top tab
+	// strip's Review view-tab). Reset to chat whenever the open session changes.
+	const [reviewActive, setReviewActive] = useState(false);
+	// Sessions whose Review view-tab was dismissed (×); onOpenReview re-adds it.
+	const [reviewClosed, setReviewClosed] = useState<Set<string>>(() => new Set());
 
 	// Set for the render right after opening a workspace from the sidebar, so the
 	// session it lands on autofocuses its composer (you picked the workspace to
@@ -971,6 +976,50 @@ function App() {
 	// The open chat, read by the mount-once tab-shortcut handler (⌘⌥C / ⌘W —
 	// see the effect next to closeChat below).
 	const currentSessionRef = useRef<UnifiedSession | null>(null);
+	// Opening a different session always starts on its chat, never a stale Review.
+	useEffect(() => {
+		setReviewActive(false);
+	}, [currentSession?.id]);
+	// The current code session's Review pane, surfaced as a leftmost view-tab in
+	// the top strip (siblings share the worktree/PR, so one Review tab suffices).
+	const currentHasWorkspace =
+		!!currentSession && Boolean(currentSession.worktreeDir || currentSession.branch);
+	const reviewViewTabs: ViewTab[] =
+		currentSession && currentHasWorkspace && !reviewClosed.has(currentSession.id)
+			? [
+					{
+						id: `review:${currentSession.id}`,
+						label: "Review",
+						active: reviewActive,
+						dotClass: currentSession.prState
+							? currentSession.prState === "OPEN" &&
+								currentSession.prMergeable === "CONFLICTING"
+								? "pr-dot-conflict"
+								: `pr-dot-${currentSession.prState.toLowerCase()}`
+							: null,
+					},
+				]
+			: [];
+	// Foreground/dismiss the Review view-tab; onOpenReview re-adds a dismissed
+	// one (fired by the PR status chip / "open PR" affordances in SessionViewer).
+	function openReview() {
+		if (!currentSession) return;
+		const id = currentSession.id;
+		setReviewClosed((prev) => {
+			if (!prev.has(id)) return prev;
+			const next = new Set(prev);
+			next.delete(id);
+			return next;
+		});
+		setReviewActive(true);
+	}
+	function closeReviewTab() {
+		if (currentSession) {
+			const id = currentSession.id;
+			setReviewClosed((prev) => new Set(prev).add(id));
+		}
+		setReviewActive(false);
+	}
 	currentSessionRef.current = currentSession;
 
 	// Mark the open session read up to its latest activity — both when it's first
@@ -1739,10 +1788,16 @@ function App() {
 						<SessionTabs
 							tabs={projectChats}
 							archived={archivedChats}
-							activeId={currentSession?.id || null}
+							activeId={reviewActive ? null : currentSession?.id || null}
 							colors={tabColors}
-							onSelect={(s) => navigate({ view: "session", id: s.id })}
+							onSelect={(s) => {
+								setReviewActive(false);
+								navigate({ view: "session", id: s.id });
+							}}
 							onSetColor={(key, color) => setTabColors(setTabColor(key, color))}
+							viewTabs={reviewViewTabs}
+							onSelectView={() => setReviewActive(true)}
+							onCloseView={closeReviewTab}
 							onNewChat={handleNewChat}
 							onRename={async (id, title) => {
 								try {
@@ -1883,6 +1938,8 @@ function App() {
 										})
 									}
 									workspaceChats={projectChats}
+									showReview={reviewActive}
+									onOpenReview={openReview}
 									allSessions={sessions}
 									allProjects={projects}
 									onNewChat={handleNewChat}

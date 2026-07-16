@@ -23,6 +23,18 @@ import { useIsPhone } from "../hooks/useIsPhone";
  * button starts a new chat in this workspace sharing its worktree;
  * right-clicking + offers the other modes (stacked worktree / ask).
  */
+/** A non-chat pane (Review, …) surfaced as a leftmost tab in the strip. */
+export type ViewTab = {
+	/** Stable id, e.g. `review:<sessionId>`. */
+	id: string;
+	/** Tab label ("Review"). */
+	label: string;
+	/** Whether this pane is the foregrounded tab. */
+	active: boolean;
+	/** Optional status-dot class (e.g. PR state) shown before the label. */
+	dotClass?: string | null;
+};
+
 interface Props {
 	/** Sibling chats in the current workspace, in display order. */
 	tabs: UnifiedSession[];
@@ -34,6 +46,17 @@ interface Props {
 	colors: Record<string, string>;
 	onSelect: (session: UnifiedSession) => void;
 	onSetColor: (key: string, color: string | null) => void;
+	/**
+	 * Non-chat "view" tabs (currently just Review) pinned to the LEFT of the
+	 * chat tabs. Each is bound to a session; selecting one foregrounds that
+	 * pane, its × dismisses it. Generalized so more panes (diff, terminal, …)
+	 * can drop in later.
+	 */
+	viewTabs: ViewTab[];
+	/** Foreground a view tab (show its pane). */
+	onSelectView: (id: string) => void;
+	/** Dismiss a view tab from the strip. */
+	onCloseView: (id: string) => void;
 	/**
 	 * Start a new chat in this workspace. share = reuse the workspace worktree
 	 * (the + button's plain-click default), stack = new worktree branched off it,
@@ -66,6 +89,9 @@ export function SessionTabs({
 	colors,
 	onSelect,
 	onSetColor,
+	viewTabs,
+	onSelectView,
+	onCloseView,
 	onNewChat,
 	onRename,
 	onClose,
@@ -105,9 +131,11 @@ export function SessionTabs({
 		};
 	}, [newMenu]);
 
-	// One chat (or a standalone chat) → no tab strip. The lone workspace's
-	// "+ New tab" button lives next to the session title in the header instead.
-	if (tabs.length <= 1) return null;
+	// One chat and no view tabs → no strip. The lone workspace's "+ New tab"
+	// button lives next to the session title in the header instead. But once a
+	// non-chat pane (Review) is open, the strip appears so it has somewhere to
+	// live — a lone code chat then reads as [Review][chat].
+	if (tabs.length <= 1 && viewTabs.length === 0) return null;
 
 	// New-tab "+" — plain-click shares the workspace worktree; right-click offers
 	// the stacked/ask modes.
@@ -167,6 +195,32 @@ export function SessionTabs({
 	return (
 		<div className="session-tabs" role="tablist">
 			<div className="session-tabs-scroll">
+				{/* Non-chat panes (Review, …) ride at the FRONT of the strip. */}
+				{viewTabs.map((v) => (
+					<div
+						key={v.id}
+						role="tab"
+						aria-selected={v.active}
+						className={`session-tab session-tab-view ${v.active ? "session-tab-active" : ""}`}
+						onClick={() => onSelectView(v.id)}
+						title={v.label}
+					>
+						{v.dotClass && <span className={`panel-tab-dot ${v.dotClass}`} />}
+						<span className="session-tab-title">{v.label}</span>
+						<button
+							type="button"
+							className="session-tab-close"
+							aria-label={`Close ${v.label}`}
+							title={`Close ${v.label}`}
+							onClick={(e) => {
+								e.stopPropagation();
+								onCloseView(v.id);
+							}}
+						>
+							×
+						</button>
+					</div>
+				))}
 				{tabs.map((session) => {
 					const key = session.id;
 					const waiting = !!session.waitingForInput;
