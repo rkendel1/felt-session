@@ -702,17 +702,26 @@ const ASK_BASH_PERMISSIONS: Record<string, "allow" | "deny"> = {
   "*": "deny",
   "cat *": "allow", "ls*": "allow", "rg *": "allow", "grep *": "allow",
   "find *": "allow", "head *": "allow", "tail *": "allow", "wc *": "allow",
+  // sed -n: read-only line-range printing ("show me lines N-M"), on par with
+  // head/tail/cat for paging a file — the canonical read command review agents
+  // reach for (7 denials on 2026-07-16). Only the -n form; bare "sed *" (incl.
+  // in-place "sed -i") stays denied.
+  "sed -n *": "allow",
   "tree*": "allow", "file *": "allow", "stat *": "allow", "du *": "allow",
   "df*": "allow", "which *": "allow", "pwd": "allow", "echo *": "allow",
   "git status*": "allow", "git log*": "allow", "git diff*": "allow",
   "git show*": "allow", "git branch*": "allow", "git blame*": "allow",
   "git grep*": "allow", "git ls-files*": "allow",
+  "git merge-base*": "allow", "git rev-parse*": "allow",
   // Read-only GitHub inspection (PR-backlog digests, review triage). Only the
   // non-mutating `gh pr` read verbs — NOT bare "gh *" (that would allow
   // pr create/merge/close/comment) and NOT "gh api *" (which can -X POST/PATCH
   // any endpoint). These four only ever read.
   "gh pr list*": "allow", "gh pr view*": "allow",
   "gh pr checks*": "allow", "gh pr status*": "allow",
+  // Read-only CI-run inspection (review agents check a PR's Actions runs).
+  // Only the read verbs — bare "gh run *" would allow rerun/cancel/delete.
+  "gh run view*": "allow", "gh run list*": "allow", "gh run watch*": "allow",
   // jq: a pure read-only JSON filter (no file writes, no shell-out, no code
   // exec — its language is sandboxed data transformation), so it's on par with
   // grep/wc for the allowlist. Lets ask-mode runs process `gh --json` / API
