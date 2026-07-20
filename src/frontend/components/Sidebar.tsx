@@ -1863,7 +1863,7 @@ export function Sidebar({
 				return;
 			const candidates = Array.from(
 				document.querySelectorAll<HTMLButtonElement>(
-					".sidebar-workspace button.sidebar-item",
+					".sidebar-list button.sidebar-item",
 				),
 			);
 			if (candidates.length === 0) return;
