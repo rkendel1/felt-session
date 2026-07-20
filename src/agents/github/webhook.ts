@@ -132,6 +132,12 @@ export async function handleGithubPrEvent(event: string, payload: any): Promise<
         void fireSimplify(ref, requestedBy);
       } else if (labelMatches(label, LABEL_ADVERSARIAL)) {
         void fireAdversarial(ref, requestedBy);
+      } else if (isDefaultRepo && label === SEO_LABEL) {
+        // A human tagged an existing PR as seo-sweep — track it in #proj-seo too.
+        const { announceSeoPr } = await import("./seo-notify");
+        void announceSeoPr(pr.number, pr.title || `PR #${pr.number}`, pr.html_url || "").catch((e) =>
+          console.error(`[github] announceSeoPr failed for #${pr.number}:`, e),
+        );
       }
       return;
     }
@@ -152,6 +158,11 @@ export async function handleGithubPrEvent(event: string, payload: any): Promise<
       if ((pr.labels || []).some((l) => l.name === SEO_LABEL)) {
         const { recordMergedSeoPr } = await import("../loops/seo");
         recordMergedSeoPr(pr.number, pr.merged_at || new Date().toISOString());
+        // Tick the #proj-seo announcement done so the channel shows landed vs open.
+        const { markSeoPrMerged } = await import("./seo-notify");
+        void markSeoPrMerged(pr.number).catch((e) =>
+          console.error(`[github] markSeoPrMerged failed for #${pr.number}:`, e),
+        );
       }
       // Docs-sync: review the merged PR for user-facing changes and update the
       // Mintlify docs. Skip only the docs-sync automation's OWN PRs (they land on
@@ -177,6 +188,22 @@ export async function handleGithubPrEvent(event: string, payload: any): Promise<
         if (fired) console.log(`[github] PR #${pr.number} merged → fired ${fired} docs-sync automation(s)`);
       }
       return;
+    }
+
+    // ── seo-sweep PR opened → announce in #proj-seo so it can be tracked ──
+    // The sweep opens as the bot with the `seo-sweep` label already applied, so
+    // this fires for our own PRs (a human labelling an existing PR is handled in
+    // the `labeled` block above). announceSeoPr is idempotent, so the two paths
+    // can't double-post. Falls through so a normal review still runs below.
+    if (
+      isDefaultRepo &&
+      (action === "opened" || action === "reopened" || action === "ready_for_review") &&
+      (pr.labels || []).some((l) => l.name === SEO_LABEL)
+    ) {
+      const { announceSeoPr } = await import("./seo-notify");
+      void announceSeoPr(pr.number, pr.title || `PR #${pr.number}`, pr.html_url || "").catch((e) =>
+        console.error(`[github] announceSeoPr failed for #${pr.number}:`, e),
+      );
     }
 
     // ── Open / update actions → review when opted in and non-draft ──

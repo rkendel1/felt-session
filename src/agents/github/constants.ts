@@ -45,6 +45,8 @@ export const DOCS_SYNC_AUTOMATION_NAME = "docs-sync";
 export const DOCS_SYNC_BRANCH_PREFIX = "auto-docs-sync-";
 /** #proj-help-center — where docs-sync announces the PRs it opens. */
 export const DOCS_SYNC_SLACK_CHANNEL = "C09BAFFK8F8";
+/** #proj-seo — where every seo-sweep PR is announced (opened) and ticked ✅ (merged). */
+export const SEO_SLACK_CHANNEL = "C0BE3E5JGTH";
 
 /**
  * PR trigger labels. Canonical names are the generic os-* ones; the legacy

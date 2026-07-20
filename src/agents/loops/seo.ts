@@ -12,6 +12,11 @@
  *      to the learnings file. The sweep reads that file each run, so the loop gets
  *      better over time.
  *
+ * Tracking: every seo-sweep PR is announced in #proj-seo when it opens and ✅'d
+ * there when it merges (github/seo-notify.ts, wired from the PR webhook), so the
+ * channel is a running log of proposed vs landed SEO work. The validation loop
+ * posts its measured outcomes to the same channel.
+ *
  * Feedback state lives on the box (decoupled from repo PR churn):
  *   ~/.opensession-seo/pending.jsonl  — merged seo-sweep PRs awaiting validation
  *   ~/.opensession-seo/learnings.md   — measured outcomes; the sweep's memory
@@ -93,6 +98,8 @@ The PR body MUST contain this machine-readable block so the post-merge validator
 
 Then a human summary: what changed, the Ahrefs rationale (positions/volumes), and the next candidate move.
 
+You do NOT need to post to Slack yourself — backstage auto-announces every \`${SEO_LABEL}\` PR in #proj-seo when it opens and adds a ✅ there when it merges, so the channel tracks proposed vs landed SEO work automatically.
+
 ## 7. If there's nothing safe to ship
 Post your measurement + recommendation as the session summary and open NO PR. Consistency beats forcing a change.`;
 
@@ -114,7 +121,7 @@ Permissions note: this is read-only with respect to the tella-fusion codebase/gi
 Classify each PR: IMPROVED / FLAT / REGRESSED, with the actual numbers. Append a dated entry to \`${LEARNINGS_FILE}\` (create it if absent) with: the date, PR #, the KIND of change (metadata / internal-links / content refresh / schema …), the target keywords + pages, the measured before→after, the verdict, and a one-line ACTIONABLE takeaway for the daily sweep (e.g. "internal links from /recorder lifted 'screen recorder' #12→#7 — do more of this"; or "metadata-only tweak on /chrome moved nothing in 3wks — deprioritize"). Be concrete — this file steers future runs.
 
 ## 4. Report + clean up
-- Post ONE concise summary to Slack channel \`C0AFQ7PV057\` (#michael-tinker) via the Slack MCP \`conversations_add_message\`: start with "📈 Michael SEO validation:" then, per PR: #<n> '<title>' — <verdict> (<key numbers>); takeaway: <…>. Cover all PRs validated this run in the one message.
+- Post ONE concise summary to Slack channel \`C0BE3E5JGTH\` (#proj-seo — the SEO tracking channel) via the Slack MCP \`conversations_add_message\`: start with "📈 Michael SEO validation:" then, per PR: #<n> '<title>' — <verdict> (<key numbers>); takeaway: <…>. Cover all PRs validated this run in the one message.
 - Remove each validated PR's line from \`${PENDING_FILE}\` (rewrite the file without those lines so it isn't re-validated).`;
 
 interface SeoLoopSeed {
