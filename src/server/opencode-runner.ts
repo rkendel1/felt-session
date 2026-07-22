@@ -1197,8 +1197,8 @@ export function buildOpencodeInstructions(input: {
   }
   if (inproc["opensession-report"]) {
     parts.push(
-      "## Publish your report\nThis run can publish a report: a single self-contained HTML " +
-        "document (inline CSS, no external resources) that appears in the Reports view, " +
+      "## Publish your report\nThis run can publish an HTML report with durable assets " +
+        "that appears in the Reports view, " +
         "grouped under this automation with its history. When your task's outcome is a " +
         "recurring readable report (a digest, an analysis), finish by calling " +
         "opensession-report's `publish_report` with a title, the full HTML, and a 1-2 " +

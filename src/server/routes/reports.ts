@@ -9,8 +9,10 @@ import {
 	listReportGroups,
 	listReports,
 	listReportsForSession,
+	readReportAsset,
 	readReportHtml,
 } from "../reports";
+import { assetMime } from "../session-assets";
 
 export async function handleReportsRoutes(
 	ctx: RouteContext,
@@ -51,6 +53,29 @@ export async function handleReportsRoutes(
 				"Content-Type": "text/html; charset=utf-8",
 				"Cache-Control": "no-store",
 				"Content-Security-Policy": "sandbox allow-same-origin",
+			},
+		});
+	}
+
+	// Durable files referenced by report HTML as assets/<path>.
+	const assetMatch = path.match(
+		/^\/backstage\/api\/reports\/([^/]+)\/([^/]+)\/assets\/(.+)$/,
+	);
+	if (assetMatch) {
+		const asset = readReportAsset(
+			decodeURIComponent(assetMatch[1]),
+			decodeURIComponent(assetMatch[2]),
+			decodeURIComponent(assetMatch[3]),
+		);
+		if (!asset) return new Response("Report asset not found", { status: 404 });
+		const file = Bun.file(asset.path);
+		return new Response(file, {
+			headers: {
+				"Content-Type": assetMime(asset.rel),
+				"Content-Length": String(file.size),
+				"Cache-Control": "no-store",
+				"Content-Security-Policy": "sandbox",
+				"X-Content-Type-Options": "nosniff",
 			},
 		});
 	}
