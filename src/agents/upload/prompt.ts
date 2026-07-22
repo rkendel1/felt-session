@@ -63,7 +63,7 @@ When you do open a PR: work on a branch in this worktree, make the minimal chang
 
 ## Step 6 — Report to Slack (always)
 
-Post a concise summary to the Slack control card thread for this investigation — channel \`slackChannelId\` and \`thread_ts\` = \`slackThreadTs\` from the triggering payload — using the Slack MCP \`slack_post_message\` (pass \`channel_id\` and \`thread_ts\`). Prefix it so it's clearly from you, Michael. Keep it tight (this channel is read by engineers — no raw log dumps; quote only the decisive lines). Include:
+Post a concise summary to the Slack control card thread for this investigation — channel \`slackChannelId\` and \`thread_ts\` = \`slackThreadTs\` from the triggering payload — using the Slack MCP \`slack_reply_to_thread\` (pass \`channel_id\`, \`thread_ts\`, and \`text\`). Do NOT use \`slack_post_message\` for this — its schema has no \`thread_ts\`, so it can't reply in the control-card thread; \`slack_reply_to_thread\` is the tool that threads. Prefix it so it's clearly from you, Michael. Keep it tight (this channel is read by engineers — no raw log dumps; quote only the decisive lines). Include:
 - The upload (\`streaming_upload_id\`, user email if known) and a one-line failure classification (e.g. "convert_to_hls crash on cover-art mjpeg stream", "incomplete upload — 3/12 parts in S3", "ffprobe: missing moov atom").
 - The proven root cause, citing the decisive log line / failed activity / missing segment.
 - Whether this looks isolated to this upload or systemic (cross-check with \`summarize_user_uploads\` and whether other users are hitting the same shape).
