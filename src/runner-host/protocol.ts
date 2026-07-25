@@ -172,19 +172,40 @@ export function ndjsonReader(
   onMsg: (msg: any) => void,
   label: string
 ): (data: Buffer | string) => void {
-  let buf = "";
+  let fragments: Buffer[] = [];
+  let fragmentBytes = 0;
+  const emit = (line: Buffer) => {
+    const text = line.toString();
+    if (!text.trim()) return;
+    try {
+      onMsg(JSON.parse(text));
+    } catch (e) {
+      console.error(`[${label}] dropping malformed NDJSON line:`, e);
+    }
+  };
   return (data) => {
-    buf += data.toString();
-    let idx: number;
-    while ((idx = buf.indexOf("\n")) >= 0) {
-      const line = buf.slice(0, idx);
-      buf = buf.slice(idx + 1);
-      if (!line.trim()) continue;
-      try {
-        onMsg(JSON.parse(line));
-      } catch (e) {
-        console.error(`[${label}] dropping malformed NDJSON line:`, e);
+    const chunk = typeof data === "string" ? Buffer.from(data) : data;
+    let start = 0;
+    for (;;) {
+      const newline = chunk.indexOf(10, start);
+      if (newline < 0) {
+        if (start < chunk.length) {
+          const fragment = Buffer.from(chunk.subarray(start));
+          fragments.push(fragment);
+          fragmentBytes += fragment.length;
+        }
+        return;
       }
+      const tail = chunk.subarray(start, newline);
+      if (fragments.length) {
+        const line = Buffer.concat([...fragments, tail], fragmentBytes + tail.length);
+        fragments = [];
+        fragmentBytes = 0;
+        emit(line);
+      } else {
+        emit(tail);
+      }
+      start = newline + 1;
     }
   };
 }
