@@ -170,9 +170,21 @@ export function resolveOpencodeDbFor(ocSessionId: string | null | undefined): st
 // failure ever throws into a runner append.
 
 /** ocSessionId → unified session id, written by the runner call sites. */
-const OPENCODE_BKS_MAP_PATH =
+let OPENCODE_BKS_MAP_PATH =
   envAlias("OPENSESSION_OPENCODE_BKS_MAP", "BACKSTAGE_OPENCODE_BKS_MAP") ||
   `${HOME}/.opensession-chats/opencode/bks-map.json`;
+
+/**
+ * Test seam (bun tests only): same contract as __setOpencodeDbPathForTest —
+ * repoints the live binding so recordBksSessionFor's writes land in a
+ * scratch file instead of the real one, regardless of import order. Returns
+ * the previous value so afterAll can restore it.
+ */
+export function __setOpencodeBksMapPathForTest(path: string): string {
+  const prev = OPENCODE_BKS_MAP_PATH;
+  OPENCODE_BKS_MAP_PATH = path;
+  return prev;
+}
 
 interface BksMapState {
   map: Map<string, string>;
@@ -185,6 +197,43 @@ interface BksMapState {
 const bksMapState: BksMapState = ((globalThis as Record<string, unknown> & {
   __osOcBksMap?: BksMapState;
 }).__osOcBksMap ??= { map: new Map(), loaded: false, warnedUnmapped: new Set() });
+
+/**
+ * Test seam (bun tests only): bksMapState is parked on globalThis just like
+ * transcriptStore()'s singleton, so an in-memory map loaded from the real
+ * bks-map.json before __setOpencodeBksMapPathForTest takes effect would
+ * still be sitting there after a test restores the real path — the next
+ * write from ANY code (in-process, this test run) would flush that stale
+ * map, including test-added entries, back into the real file. Mutates the
+ * shared state object in place (module code holds a reference to it, not a
+ * copy) and returns the previous field values so afterAll can restore them.
+ */
+export function __setOpencodeBksMapStateForTest(): {
+  map: Map<string, string>;
+  loaded: boolean;
+  warnedUnmapped: Set<string>;
+} {
+  const prev = {
+    map: bksMapState.map,
+    loaded: bksMapState.loaded,
+    warnedUnmapped: bksMapState.warnedUnmapped,
+  };
+  bksMapState.map = new Map();
+  bksMapState.loaded = false;
+  bksMapState.warnedUnmapped = new Set();
+  return prev;
+}
+
+/** Restores field values captured by __setOpencodeBksMapStateForTest. */
+export function __restoreOpencodeBksMapStateForTest(prev: {
+  map: Map<string, string>;
+  loaded: boolean;
+  warnedUnmapped: Set<string>;
+}): void {
+  bksMapState.map = prev.map;
+  bksMapState.loaded = prev.loaded;
+  bksMapState.warnedUnmapped = prev.warnedUnmapped;
+}
 
 function bksMap(): Map<string, string> {
   if (!bksMapState.loaded) {

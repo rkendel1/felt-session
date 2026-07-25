@@ -30,6 +30,9 @@ import { withOpencodeTranscriptMirror } from "./sandbox/adapters/bootstrap";
 import {
   __setOpencodeTranscriptsDirForTest,
   __setOpencodeDbPathForTest,
+  __setOpencodeBksMapPathForTest,
+  __setOpencodeBksMapStateForTest,
+  __restoreOpencodeBksMapStateForTest,
 } from "./opencode-transcript";
 import { __setChatsDirForTest } from "./paths";
 import {
@@ -54,12 +57,25 @@ import type { RunHostSpec } from "../runner-host/protocol";
 // OpenCode's own SQLite fallback probe), and __setChatsDirForTest covers any
 // other OPENSESSION_CHATS_DIR reads reachable from that gate — together they
 // make sure a fresh unified session never picks up stray real data.
+//
+// recordBksSessionFor (called on every init) writes the oc→unified mapping
+// through a THIRD globalThis-parked seam, OPENCODE_BKS_MAP_PATH — not
+// derived from OPENSESSION_CHATS_DIR, so __setChatsDirForTest doesn't touch
+// it. __setOpencodeBksMapPathForTest redirects the path; the in-memory map
+// itself is also parked on globalThis (same shape as transcriptStore()), so
+// __setOpencodeBksMapStateForTest swaps it for a blank one too — otherwise a
+// map already loaded from the real file before this module's redirect took
+// effect would still be sitting there after afterAll restores the real
+// path, and the next in-process write from ANY code would flush our test
+// entries into it.
 const scratch = mkdtempSync(join(tmpdir(), "bks-oc-mirror-"));
 const priorTranscriptsDir = __setOpencodeTranscriptsDirForTest(
   join(scratch, "mirror-archive"),
 );
 const priorOpencodeDb = __setOpencodeDbPathForTest(join(scratch, "opencode.db"));
 const priorChatsDir = __setChatsDirForTest(scratch);
+const priorBksMapPath = __setOpencodeBksMapPathForTest(join(scratch, "bks-map.json"));
+const priorBksMapState = __setOpencodeBksMapStateForTest();
 
 const expectedDbPath = join(scratch, "transcripts.db");
 // Unlike zz-fake-run.test.ts's redirect probe, this doesn't need to skip when
@@ -78,6 +94,8 @@ afterAll(() => {
   __setOpencodeTranscriptsDirForTest(priorTranscriptsDir);
   __setOpencodeDbPathForTest(priorOpencodeDb);
   __setChatsDirForTest(priorChatsDir);
+  __setOpencodeBksMapPathForTest(priorBksMapPath);
+  __restoreOpencodeBksMapStateForTest(priorBksMapState);
   rmSync(scratch, { recursive: true, force: true });
 });
 
