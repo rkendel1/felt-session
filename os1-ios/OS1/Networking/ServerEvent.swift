@@ -3,7 +3,8 @@ import Foundation
 /// Parsed server-to-client WebSocket frames. Frame types the client does not
 /// care about yet decode to `.ignored` instead of failing, so protocol
 /// additions on the server are harmless.
-enum ServerEvent {
+/// Sendable so large frames can decode off the main actor (see OS1Socket).
+enum ServerEvent: Sendable {
     case hello(bootId: String)
     case pong
     case transcriptInit(sessionId: String, entries: [TranscriptEntry], cursor: HistoryCursor)
@@ -93,7 +94,7 @@ enum ServerEvent {
 /// `truncated` means older history exists; paging back sends `load_history`
 /// with `beforeOffset` + `beforeRev` (byte cursor into the mirror file) or
 /// `beforeSeq` when the server serves the seq-mode transcript store.
-struct HistoryCursor: Equatable {
+struct HistoryCursor: Equatable, Sendable {
     var truncated: Bool
     var startOffset: Int?
     var rev: String?
@@ -107,7 +108,7 @@ struct HistoryCursor: Equatable {
 
 /// One message waiting on a busy run — either queued (held until the run
 /// finishes) or steered (delivering at the next turn boundary).
-struct QueueItem: Identifiable, Equatable {
+struct QueueItem: Identifiable, Equatable, Sendable {
     let id: String
     let content: String
     let user: String?

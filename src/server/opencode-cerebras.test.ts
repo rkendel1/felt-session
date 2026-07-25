@@ -90,7 +90,7 @@ describe("Cerebras provider", () => {
     ).toMatchObject({ model: "anthropic/claude-haiku-4-5" });
     expect(
       orchestratorWorkerForBridge("worker", "openai", new Set(["cerebras"])),
-    ).toMatchObject({ model: "openai/gpt-5.6-sol" });
+    ).toMatchObject({ model: "openai/gpt-5.6-terra" });
   });
 
   test("exposes friendly labels and GPT OSS reasoning efforts", () => {

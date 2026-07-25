@@ -1,7 +1,7 @@
 import Foundation
 
 /// Arbitrary JSON — used for `toolInput`, which has no fixed schema.
-enum JSONValue: Decodable, Equatable {
+enum JSONValue: Decodable, Equatable, Sendable {
     case string(String)
     case number(Double)
     case bool(Bool)
@@ -68,7 +68,7 @@ enum JSONValue: Decodable, Equatable {
 
 /// One transcript entry, as returned by `GET /api/sessions/:id/transcript` and
 /// carried inside WS `transcript_*` / `stream_tool_*` frames.
-struct TranscriptEntry: Identifiable, Decodable, Equatable {
+struct TranscriptEntry: Identifiable, Decodable, Equatable, Sendable {
     let id: String
     let type: String // "user" | "assistant" | "tool_use" | "tool_result" | "system"
     var content: String?

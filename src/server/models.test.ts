@@ -105,10 +105,11 @@ describe("toOpencodeModel", () => {
     expect(toOpencodeModel("gpt-5.6-terra")).toBe("opencode/openai/gpt-5.6-terra");
     expect(toOpencodeModel(BEST_AVAILABLE_CODEX_MODEL)).toBe("opencode/openai/gpt-5.6-sol");
   });
-  it("reroutes retired 272k-window codex models to Sol in every id shape", () => {
+  it("reroutes retired 272k-window codex models to a 5.6 model in every id shape", () => {
     expect(toOpencodeModel("gpt-5.5")).toBe("opencode/openai/gpt-5.6-sol");
     expect(toOpencodeModel("gpt-5.4")).toBe("opencode/openai/gpt-5.6-sol");
-    expect(toOpencodeModel("gpt-5.4-mini")).toBe("opencode/openai/gpt-5.6-sol");
+    expect(toOpencodeModel("gpt-5.4-mini")).toBe("opencode/openai/gpt-5.6-luna");
+    expect(toOpencodeModel("gpt-5.3-codex-spark")).toBe("opencode/openai/gpt-5.6-luna");
     expect(toOpencodeModel("openai/gpt-5.5")).toBe("opencode/openai/gpt-5.6-sol");
     expect(toOpencodeModel("opencode/openai/gpt-5.5")).toBe("opencode/openai/gpt-5.6-sol");
   });
@@ -329,8 +330,9 @@ describe("The Orchestrator", () => {
   });
 
   it("keeps every worker strictly cheaper than its preset's main (tier or effort)", () => {
-    // With 5.5/5.4 retired the openai bridge has no cheaper usable model tier —
-    // "cheaper" there means the SAME model at a LOWER effort variant.
+    // With the 272k codex models retired the openai bridge has no cheaper
+    // model TIER — its cheap workers are the same-tier 5.6 siblings
+    // (Terra/Luna) at a LOWER effort variant.
     const effortRank: Record<string, number> = { none: 0, low: 1, medium: 2, high: 3, xhigh: 4, max: 5 };
     for (const p of ORCHESTRATOR_PRESETS) {
       // Workers resolve on the MAIN model's bridge in prod — that's the only
@@ -343,8 +345,7 @@ describe("The Orchestrator", () => {
         const mainTier = fallbackTier(p.model);
         const cheaper =
           workerTier < mainTier ||
-          (b.model.split("/").pop() === p.model &&
-            effortRank[b.variant] < effortRank[p.effort]);
+          (workerTier === mainTier && effortRank[b.variant] < effortRank[p.effort]);
         expect(cheaper).toBe(true);
       }
     }
@@ -356,6 +357,8 @@ describe("fallback graph (nextFallbackModel)", () => {
   // claude ids adapt to bridge state via toOpencodeModel so the assertions hold
   // whether the bridge is on or off.
   const sol = "opencode/openai/gpt-5.6-sol";
+  const terra = "opencode/openai/gpt-5.6-terra";
+  const luna = "opencode/openai/gpt-5.6-luna";
   const opus = toOpencodeModel("claude-opus-5")!;
   const fable = toOpencodeModel("claude-fable-5")!;
   const sonnet = toOpencodeModel("claude-sonnet-5")!;
@@ -366,25 +369,33 @@ describe("fallback graph (nextFallbackModel)", () => {
       id: sol,
       mode: "auto",
     });
-    // Fable, Sol gone → Opus: downgrade, ASK.
+    // Fable, Sol gone → Terra: same-tier 5.6 sibling, automatic.
     expect(
       nextFallbackModel(fable, new Set([fable, sol]), "claude-opus-5")
+    ).toEqual({ id: terra, mode: "auto" });
+    // Fable + all 5.6 siblings gone → Opus: downgrade, ASK.
+    expect(
+      nextFallbackModel(fable, new Set([fable, sol, terra, luna]), "claude-opus-5")
     ).toEqual({ id: opus, mode: "ask" });
     // Opus → Sol: upgrade-ish, automatic.
     expect(nextFallbackModel(opus, new Set([opus]), "claude-opus-5")).toEqual({
       id: sol,
       mode: "auto",
     });
-    // Opus + Sol gone → Sonnet next (5.5/5.4 are retired, no longer
-    // destinations): downgrade, ASK.
+    // Opus + every 5.6 gone → Sonnet next (5.5/5.4/spark are retired, no
+    // longer destinations): downgrade, ASK.
     expect(
-      nextFallbackModel(opus, new Set([opus, sol]), "claude-opus-5")
+      nextFallbackModel(opus, new Set([opus, sol, terra, luna]), "claude-opus-5")
     ).toEqual({ id: sonnet, mode: "ask" });
-    // Sol → Opus: downgrade, ASK.
+    // Sol → Terra: same-tier sibling, automatic.
     expect(nextFallbackModel(sol, new Set([sol]), "claude-opus-5")).toEqual({
-      id: opus,
-      mode: "ask",
+      id: terra,
+      mode: "auto",
     });
+    // Sol + siblings gone → Opus: downgrade, ASK.
+    expect(
+      nextFallbackModel(sol, new Set([sol, terra, luna]), "claude-opus-5")
+    ).toEqual({ id: opus, mode: "ask" });
   });
 
   it("never routes back into Fable (scarce weekly-scoped credit pool)", () => {
@@ -456,7 +467,7 @@ describe("resolveConcreteModel", () => {
   it("skips codex models marked exhausted", () => {
     markCodexModelExhausted("gpt-5.6-sol");
 
-    // 5.5/5.4 are retired — spark is the only remaining step-down.
-    expect(resolveConcreteModel(BEST_AVAILABLE_CODEX_MODEL)).toBe("gpt-5.3-codex-spark");
+    // 5.5/5.4/spark are retired — the step-downs are the 5.6 siblings.
+    expect(resolveConcreteModel(BEST_AVAILABLE_CODEX_MODEL)).toBe("gpt-5.6-terra");
   });
 });

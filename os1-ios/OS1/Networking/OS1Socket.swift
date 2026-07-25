@@ -169,7 +169,21 @@ final class OS1Socket: SessionSocket {
                 @unknown default: nil
                 }
                 guard let data else { continue }
-                let event = ServerEvent.parse(data)
+                // A heavy session's transcript_init frame can be multiple
+                // megabytes; decoding it on the main actor froze the UI for
+                // the whole JSONDecoder pass (opening a session, resyncing
+                // on foreground). Big frames decode on a background task;
+                // small hot ones (stream_text at streaming rates) stay
+                // inline to skip two executor hops per frame. Awaiting the
+                // decode before the next receive() keeps frames ordered.
+                let event: ServerEvent
+                if data.count >= 16 * 1024 {
+                    event = await Task.detached(priority: .userInitiated) {
+                        ServerEvent.parse(data)
+                    }.value
+                } else {
+                    event = ServerEvent.parse(data)
+                }
                 // Any inbound frame proves the socket is alive — during a
                 // heavy stream the server may not answer pings promptly, and
                 // stream frames are just as good a liveness signal.

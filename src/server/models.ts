@@ -101,11 +101,12 @@ export const KNOWN_MODELS: ModelInfo[] = [
   { id: "gpt-5.6-sol", provider: "codex", label: "GPT-5.6 Sol", aliases: ["sol", "gpt5.6", "codex", "gpt"] },
   { id: "gpt-5.6-terra", provider: "codex", label: "GPT-5.6 Terra", aliases: ["terra"] },
   { id: "gpt-5.6-luna", provider: "codex", label: "GPT-5.6 Luna", aliases: ["luna"] },
-  // Retired 2026-07-25 (Michiel: "no 5.5 and 5.4") but kept resolvable for old
-  // sessions' labels/pricing — toOpencodeModel reroutes any dispatch of them
-  // to Sol (see RETIRED_CODEX_REROUTE for why: 272k backend window − 128k
-  // output reservation leaves a 144k input cap, which our ~125k fixed session
-  // payload turns into a compact-every-turn loop).
+  // Retired 2026-07-25 (Michiel: "no 5.5 and 5.4", "also remove spark") but
+  // kept resolvable for old sessions' labels/pricing — toOpencodeModel
+  // reroutes any dispatch of them to a 5.6 model (see RETIRED_CODEX_REROUTE
+  // for why: 272k backend window − 128k output reservation leaves a 144k
+  // input cap, which our ~125k fixed session payload turns into a
+  // compact-every-turn loop).
   { id: "gpt-5.5", provider: "codex", label: "GPT-5.5 (Codex)", aliases: ["gpt5.5"] },
   { id: "gpt-5.4", provider: "codex", label: "GPT-5.4 (Codex)", aliases: ["gpt5.4"] },
   { id: "gpt-5.4-mini", provider: "codex", label: "GPT-5.4 mini (Codex)", aliases: ["mini"] },
@@ -353,10 +354,10 @@ export const ORCHESTRATOR_WORKER_AGENTS: Record<
       "conversation. Not for design decisions or final review.",
     bridges: {
       anthropic: { model: "anthropic/claude-sonnet-5", variant: "medium", label: "Sonnet 5" },
-      // Sol medium, not 5.5/5.4: the 272k-window codex models are retired
-      // (see RETIRED_CODEX_REROUTE) — "cheap" on subscription accounts means
-      // lower effort, not a smaller-window model that can't fit our payload.
-      openai: { model: "openai/gpt-5.6-sol", variant: "medium", label: "Sol" },
+      // Terra medium, not 5.5/5.4: the 272k-window codex models are retired
+      // (see RETIRED_CODEX_REROUTE) — the cheap codex tiers are the 5.6
+      // siblings Terra/Luna, never a smaller-window model.
+      openai: { model: "openai/gpt-5.6-terra", variant: "medium", label: "Terra" },
     },
   },
   "worker-fast": {
@@ -367,7 +368,7 @@ export const ORCHESTRATOR_WORKER_AGENTS: Record<
       "to the standard worker or do it yourself.",
     bridges: {
       anthropic: { model: "anthropic/claude-haiku-4-5", variant: "high", label: "Haiku 4.5" },
-      openai: { model: "openai/gpt-5.6-sol", variant: "low", label: "Sol low" },
+      openai: { model: "openai/gpt-5.6-luna", variant: "low", label: "Luna low" },
       cerebras: { model: "cerebras/gpt-oss-120b", variant: "medium", label: "GPT OSS 120B" },
     },
   },
@@ -560,7 +561,8 @@ export const BEST_AVAILABLE_CODEX_MODEL = "codex-best-available";
 
 const CODEX_MODEL_ORDER = [
   "gpt-5.6-sol",
-  "gpt-5.3-codex-spark",
+  "gpt-5.6-terra",
+  "gpt-5.6-luna",
 ];
 
 /**
@@ -601,17 +603,20 @@ const FALLBACK_TIER: Record<string, number> = {
  */
 const FALLBACK_DESTINATIONS = [
   "gpt-5.6-sol",
+  // Terra/Luna: same-tier 5.6 siblings — a per-model Sol exhaustion keeps the
+  // run on the codex pool automatically before crossing to Anthropic.
+  "gpt-5.6-terra",
+  "gpt-5.6-luna",
   // Opus 5 supersedes 4.8 as the Anthropic destination — the bridge serves one
   // canonical Opus per server (see KNOWN_MODELS note), so listing both would
   // just walk the same exhausted pool twice.
   "claude-opus-5",
-  // gpt-5.5 / gpt-5.4 / gpt-5.4-mini removed 2026-07-25: retired 272k-window
-  // models (RETIRED_CODEX_REROUTE) — falling back onto them would land every
-  // session in the compact-every-turn loop.
+  // gpt-5.5 / gpt-5.4 / gpt-5.4-mini / spark removed 2026-07-25: retired
+  // 272k-window models (RETIRED_CODEX_REROUTE) — falling back onto them would
+  // land every session in the compact-every-turn loop.
   "claude-sonnet-5",
   "claude-sonnet-4-6",
   "claude-haiku-4-5",
-  "gpt-5.3-codex-spark",
 ];
 
 /**
@@ -839,19 +844,22 @@ export function interactiveFallbackModel(_primaryModel?: string): string | undef
  * still run on the Claude/Codex SDK when the direct agent loops (Slack, Linear,
  * github, Plain) dispatch them — those loops are not migrated in this pass.
  */
-/** Codex models retired 2026-07-25 (Michiel: "no 5.5 and 5.4"). Their real
- *  ChatGPT-backend window is 272k, and the backend reserves the 128k output
- *  ceiling out of it → a 144k input cap. Backstage sessions carry a ~125k
- *  fixed per-turn payload (MCP tool schemas + system prompt + instructions),
- *  which sits exactly on opencode's autocompact arm point (~124k) — so every
- *  turn trips a pointless compaction (bks-019f982d: 12 compactions in 5
- *  minutes). Any dispatch of these ids — old sessions, orchestrators
- *  delegating to "cheap" workers, aliases — is served as Sol (372k) instead;
- *  the ids stay in KNOWN_MODELS for old sessions' labels/pricing. */
+/** Codex models retired 2026-07-25 (Michiel: "no 5.5 and 5.4", then "also
+ *  remove spark, there are cheap 5.6 models instead, terra and luna"). Their
+ *  real ChatGPT-backend window is 272k, and the backend reserves the 128k
+ *  output ceiling out of it → a 144k input cap. Backstage sessions carry a
+ *  ~125k fixed per-turn payload (MCP tool schemas + system prompt +
+ *  instructions), which sits exactly on opencode's autocompact arm point
+ *  (~124k) — so every turn trips a pointless compaction (bks-019f982d: 12
+ *  compactions in 5 minutes). Any dispatch of these ids — old sessions,
+ *  orchestrators delegating to "cheap" workers, aliases — is served by a
+ *  372k-window 5.6 model instead (spark's fast/cheap role maps to Luna); the
+ *  ids stay in KNOWN_MODELS for old sessions' labels/pricing. */
 const RETIRED_CODEX_REROUTE: Record<string, string> = {
   "gpt-5.5": "gpt-5.6-sol",
   "gpt-5.4": "gpt-5.6-sol",
-  "gpt-5.4-mini": "gpt-5.6-sol",
+  "gpt-5.4-mini": "gpt-5.6-luna",
+  "gpt-5.3-codex-spark": "gpt-5.6-luna",
 };
 
 export function toOpencodeModel(model?: string | null): string | undefined {
