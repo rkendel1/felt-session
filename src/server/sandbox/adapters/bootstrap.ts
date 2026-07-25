@@ -1010,7 +1010,15 @@ export async function* withOpencodeTranscriptMirror(
       } else if (ev.type === "tool_use" && ev.toolUseId) {
         mirror([transcriptLineToolUse(ev.toolUseId, ev.toolName || "tool", ev.toolInput)]);
       } else if (ev.type === "tool_result" && ev.toolUseId) {
-        mirror([transcriptLineToolResult(ev.toolUseId, ev.content || "", false)]);
+        mirror([
+          transcriptLineToolResult(
+            ev.toolUseId,
+            ev.content || "",
+            false,
+            undefined,
+            ev.images,
+          ),
+        ]);
       }
     } catch {
       // Mirroring must never break the run stream.
@@ -1239,6 +1247,7 @@ export async function resumeRemoteSandboxRun(
     cwd: run.cwd,
     mode: run.mode,
     model: run.model,
+    sandboxed: true,
     mcpServers: run.mcpServers,
     proxyMcpServers: oldSpec?.proxyMcpServers,
     rpcToken,

@@ -121,6 +121,26 @@ describe("opencodeToolResultImages", () => {
       },
     })).toEqual([]);
   });
+  test("uses validated attachment data URLs when the path belongs to a sandbox", () => {
+    const dataUrl = "data:image/png;base64,iVBORw0KGgo=";
+    const part = {
+      type: "tool",
+      tool: "read",
+      state: {
+        status: "completed",
+        input: { filePath: "/tmp/read-result.png" },
+        attachments: [{ type: "file", mime: "image/png", url: dataUrl }],
+      },
+    };
+    expect(opencodeToolResultImages(part, { sandboxed: true })).toEqual([dataUrl]);
+    expect(opencodeToolResultImages({
+      ...part,
+      state: {
+        ...part.state,
+        attachments: [{ type: "file", mime: "image/png", url: "https://example.com/image.png" }],
+      },
+    }, { sandboxed: true })).toEqual([]);
+  });
 });
 
 describe("readOpencodeTranscript (SQLite)", () => {

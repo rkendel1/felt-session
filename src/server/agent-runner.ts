@@ -76,6 +76,8 @@ export interface RunAgentOpts {
   reposNote?: string;
   /** Images attached to the opening message. */
   images?: ImageInput[];
+  /** The engine runs in a sandbox whose filesystem is not host-readable. */
+  sandboxed?: boolean;
   /**
    * Stable uuid for the prompt's user transcript line. Callers that persist
    * the user line at intake (run-session) — and boot re-runs of journaled

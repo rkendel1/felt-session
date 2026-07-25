@@ -409,6 +409,7 @@ try {
     mode: spec.mode,
     model: spec.model,
     images: spec.images,
+    sandboxed: spec.sandboxed,
     forkSession: spec.forkSession,
     resumeSessionAt: spec.resumeSessionAt,
     mcpServers: spec.mcpServers,

@@ -848,11 +848,14 @@ const LOCAL_IMAGE_MIMES = new Set([
 
 /**
  * OpenCode's Read tool persists image bytes as a base64 file attachment on the
- * tool state. The transcript must not copy those bytes, so use the attachment
- * only as proof that Read returned an image and render its original local path
- * through the authenticated media route instead.
+ * tool state. Host runs avoid copying those bytes by rendering the original
+ * local path through the authenticated media route. Sandbox paths are not
+ * host-readable, so sandbox runs retain the validated data URL instead.
  */
-export function opencodeToolResultImages(part: PartData): string[] {
+export function opencodeToolResultImages(
+  part: PartData,
+  opts: { sandboxed?: boolean } = {},
+): string[] {
   if (part.type !== "tool" || part.state?.status !== "completed") return [];
   if (part.tool !== "read" && part.tool !== "view_image") return [];
   const input = part.state.input;
@@ -871,15 +874,21 @@ export function opencodeToolResultImages(part: PartData): string[] {
   ) {
     return [];
   }
-  const returnedImage = part.state.attachments?.some(
+  const returnedImage = part.state.attachments?.find(
     (attachment) =>
       attachment?.type === "file" &&
       typeof attachment.mime === "string" &&
       LOCAL_IMAGE_MIMES.has(attachment.mime.toLowerCase()),
   );
-  return returnedImage
-    ? [`/backstage/media?path=${encodeURIComponent(path)}`]
-    : [];
+  if (!returnedImage) return [];
+  if (opts.sandboxed) {
+    const mime = returnedImage.mime!.toLowerCase();
+    return typeof returnedImage.url === "string" &&
+      returnedImage.url.startsWith(`data:${mime};base64,`)
+      ? [returnedImage.url]
+      : [];
+  }
+  return [`/backstage/media?path=${encodeURIComponent(path)}`];
 }
 
 function toIso(ms: number | undefined, fallback: string): string {

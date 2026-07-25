@@ -3605,7 +3605,9 @@ async function* runOpencodeAttempt(
             if ((state?.status === "completed" || state?.status === "error") && !finishedTools.has(part.id)) {
               finishedTools.add(part.id);
               const result = state.status === "completed" ? state.output || "" : `Error: ${state.error}`;
-              const images = opencodeToolResultImages(part);
+              const images = opencodeToolResultImages(part, {
+                sandboxed: opts.sandboxed,
+              });
               turnEvent({
                 direction: "in",
                 kind: "tool_result",
@@ -4588,7 +4590,9 @@ export async function tryReattachOpencodeRun(
                 finishedTools.add(part.id);
                 const result =
                   state.status === "completed" ? state.output || "" : `Error: ${state.error}`;
-                const images = opencodeToolResultImages(part);
+                const images = opencodeToolResultImages(part, {
+                  sandboxed: !!run.sandboxId,
+                });
                 turnEvent({
                   direction: "in",
                   kind: "tool_result",
