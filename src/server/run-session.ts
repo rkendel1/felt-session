@@ -1089,7 +1089,6 @@ export async function maybeLaunchSandboxedRun(
 			mode: session.mode,
 			model: session.model,
 			images: opts.images,
-			sandboxed: true,
 			mcpServers: opts.mcpServers,
 			proxyMcpServers,
 			rpcToken,

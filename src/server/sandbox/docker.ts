@@ -1543,7 +1543,6 @@ export async function resumeDockerSandboxRun(
     cwd: run.cwd,
     mode: run.mode,
     model: run.model,
-    sandboxed: true,
     mcpServers: run.mcpServers,
     proxyMcpServers: oldSpec?.proxyMcpServers,
     rpcToken,

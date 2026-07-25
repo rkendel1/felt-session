@@ -130,6 +130,21 @@ describe("WsFrameBuffer", () => {
     expect(r.lines.length).toBeLessThan(5);
     expect(r.gap?.from).toBe(1);
   });
+
+  test("retains one oversized frame and subsequent replay metadata", () => {
+    const buf = new WsFrameBuffer(10, 90);
+    buf.stamp({
+      t: "event",
+      event: {
+        type: "tool_result",
+        images: [`data:image/png;base64,${"x".repeat(200)}`],
+      },
+    });
+    buf.stamp({ t: "event", event: { type: "done" } });
+    const r = buf.replayFrom(0);
+    expect(r.gap).toBeNull();
+    expect(r.lines.map((line) => JSON.parse(line).seq)).toEqual([1, 2]);
+  });
 });
 
 describe("replayStartFor", () => {

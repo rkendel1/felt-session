@@ -838,42 +838,27 @@ interface PartData {
   };
 }
 
-const LOCAL_IMAGE_PATH_RE = /\.(png|jpe?g|gif|webp)$/i;
 const LOCAL_IMAGE_MIMES = new Set([
   "image/png",
   "image/jpeg",
   "image/gif",
   "image/webp",
 ]);
+// Leave ample room under public-ingress's 64 MiB WS ceiling for the event
+// envelope and tool output. OpenCode/provider image limits are much lower in
+// normal operation; this is a transport safety bound, not an expected size.
+const MAX_INLINE_TOOL_IMAGE_BYTES = 32 * 1024 * 1024;
 
 /**
  * OpenCode's Read tool persists image bytes as a base64 file attachment on the
- * tool state. Host runs avoid copying those bytes by rendering the original
- * local path through the authenticated media route. Sandbox paths are not
- * host-readable, so sandbox runs retain the validated data URL instead.
+ * tool state. Preserve that immutable snapshot rather than linking back to the
+ * source path, which may be sandbox-only, outside the default worktree root, or
+ * overwritten after Read completes. The transcript store externalizes large
+ * entries into its blob table, so the entry itself remains bounded.
  */
-export function opencodeToolResultImages(
-  part: PartData,
-  opts: { sandboxed?: boolean } = {},
-): string[] {
+export function opencodeToolResultImages(part: PartData): string[] {
   if (part.type !== "tool" || part.state?.status !== "completed") return [];
   if (part.tool !== "read" && part.tool !== "view_image") return [];
-  const input = part.state.input;
-  if (!input || typeof input !== "object") return [];
-  const values = input as Record<string, unknown>;
-  const path =
-    typeof values.filePath === "string"
-      ? values.filePath
-      : typeof values.file_path === "string"
-        ? values.file_path
-        : "";
-  if (
-    (!path.startsWith("/tmp/") && !path.startsWith("/home/ubuntu/")) ||
-    path.includes("..") ||
-    !LOCAL_IMAGE_PATH_RE.test(path)
-  ) {
-    return [];
-  }
   const returnedImage = part.state.attachments?.find(
     (attachment) =>
       attachment?.type === "file" &&
@@ -881,14 +866,12 @@ export function opencodeToolResultImages(
       LOCAL_IMAGE_MIMES.has(attachment.mime.toLowerCase()),
   );
   if (!returnedImage) return [];
-  if (opts.sandboxed) {
-    const mime = returnedImage.mime!.toLowerCase();
-    return typeof returnedImage.url === "string" &&
-      returnedImage.url.startsWith(`data:${mime};base64,`)
-      ? [returnedImage.url]
-      : [];
-  }
-  return [`/backstage/media?path=${encodeURIComponent(path)}`];
+  const mime = returnedImage.mime!.toLowerCase();
+  return typeof returnedImage.url === "string" &&
+    returnedImage.url.startsWith(`data:${mime};base64,`) &&
+    Buffer.byteLength(returnedImage.url) <= MAX_INLINE_TOOL_IMAGE_BYTES
+    ? [returnedImage.url]
+    : [];
 }
 
 function toIso(ms: number | undefined, fallback: string): string {

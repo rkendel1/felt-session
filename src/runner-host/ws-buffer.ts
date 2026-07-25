@@ -12,10 +12,11 @@
  * consumed, so a replay overlap never double-applies.
  *
  * Bounds: WS_BUFFER_MAX_FRAMES frames / WS_BUFFER_MAX_BYTES of serialized
- * lines. On overflow the OLDEST frames are dropped and the buffer remembers
- * the highest dropped seq; a later replay that needs to reach behind that
- * point reports the hole as a `gap` so the server can log the loss (the
- * transcript jsonl remains the durable copy).
+ * lines, with one oversized frame allowed alongside the normal byte budget.
+ * On overflow the OLDEST frames are dropped and the buffer remembers the
+ * highest dropped seq; a later replay that needs to reach behind that point
+ * reports the hole as a `gap` so the server can log the loss (the transcript
+ * jsonl remains the durable copy).
  *
  * Epochs: the server's ack carries an `epoch` — a random id minted when the
  * host's seq record is created server-side and kept for the registration's
@@ -84,9 +85,20 @@ export class WsFrameBuffer {
   stamp(msg: Record<string, unknown>): string {
     const seq = ++this.seq;
     const line = JSON.stringify({ ...msg, seq }) + "\n";
-    this.frames.push({ seq, line, bytes: line.length });
-    this.bytes += line.length;
-    while (this.frames.length > this.maxFrames || this.bytes > this.maxBytes) {
+    const bytes = Buffer.byteLength(line);
+    this.frames.push({ seq, line, bytes });
+    this.bytes += bytes;
+    // Keep one oversized frame plus the normal byte budget. Read-tool images
+    // can exceed the ring's byte cap after base64 expansion; evicting that sole
+    // frame immediately makes it impossible to replay after a disconnect.
+    for (;;) {
+      const largestFrame = this.frames.reduce(
+        (max, frame) => Math.max(max, frame.bytes),
+        0,
+      );
+      const byteLimit =
+        largestFrame > this.maxBytes ? largestFrame + this.maxBytes : this.maxBytes;
+      if (this.frames.length <= this.maxFrames && this.bytes <= byteLimit) break;
       const dropped = this.frames.shift()!;
       this.bytes -= dropped.bytes;
       this.droppedThrough = dropped.seq;

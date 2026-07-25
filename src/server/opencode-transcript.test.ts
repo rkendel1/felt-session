@@ -92,7 +92,7 @@ describe("isOpencodeSessionId", () => {
 });
 
 describe("opencodeToolResultImages", () => {
-  test("supports the media route image formats and rejects unscoped paths", () => {
+  test("preserves validated image snapshots regardless of source path", () => {
     for (const [extension, mime] of [
       ["png", "image/png"],
       ["jpg", "image/jpeg"],
@@ -100,46 +100,44 @@ describe("opencodeToolResultImages", () => {
       ["gif", "image/gif"],
       ["webp", "image/webp"],
     ]) {
-      const path = `/tmp/read-result.${extension}`;
+      const path = `/srv/worktrees/configured-root/read-result.${extension}`;
+      const dataUrl = `data:${mime};base64,AA==`;
       expect(opencodeToolResultImages({
         type: "tool",
         tool: "read",
         state: {
           status: "completed",
           input: { filePath: path },
-          attachments: [{ type: "file", mime }],
+          attachments: [{ type: "file", mime, url: dataUrl }],
         },
-      })).toEqual([`/backstage/media?path=${encodeURIComponent(path)}`]);
+      })).toEqual([dataUrl]);
     }
-    expect(opencodeToolResultImages({
-      type: "tool",
-      tool: "read",
-      state: {
-        status: "completed",
-        input: { filePath: "/etc/secrets.png" },
-        attachments: [{ type: "file", mime: "image/png" }],
-      },
-    })).toEqual([]);
   });
-  test("uses validated attachment data URLs when the path belongs to a sandbox", () => {
-    const dataUrl = "data:image/png;base64,iVBORw0KGgo=";
+  test("rejects missing, external, and MIME-mismatched attachment URLs", () => {
     const part = {
       type: "tool",
       tool: "read",
       state: {
         status: "completed",
-        input: { filePath: "/tmp/read-result.png" },
-        attachments: [{ type: "file", mime: "image/png", url: dataUrl }],
+        input: { filePath: "/srv/worktrees/read-result.png" },
+        attachments: [{ type: "file", mime: "image/png" }],
       },
     };
-    expect(opencodeToolResultImages(part, { sandboxed: true })).toEqual([dataUrl]);
+    expect(opencodeToolResultImages(part)).toEqual([]);
     expect(opencodeToolResultImages({
       ...part,
       state: {
         ...part.state,
         attachments: [{ type: "file", mime: "image/png", url: "https://example.com/image.png" }],
       },
-    }, { sandboxed: true })).toEqual([]);
+    })).toEqual([]);
+    expect(opencodeToolResultImages({
+      ...part,
+      state: {
+        ...part.state,
+        attachments: [{ type: "file", mime: "image/png", url: "data:image/jpeg;base64,AA==" }],
+      },
+    })).toEqual([]);
   });
 });
 
@@ -190,7 +188,7 @@ describe("readOpencodeTranscript (SQLite)", () => {
       "/backstage/media?path=%2Ftmp%2Fopencode-demo.mov",
     ]);
   });
-  test("maps Read image attachments to the authenticated local media route", () => {
+  test("maps Read image attachments to their immutable snapshots", () => {
     const sessionId = "ses_read_image";
     const createdAt = 1783501500000;
     const db = new Database(dbPath);
@@ -232,7 +230,7 @@ describe("readOpencodeTranscript (SQLite)", () => {
     expect(entries[1]).toMatchObject({
       type: "tool_result",
       content: "Image read successfully",
-      images: ["/backstage/media?path=%2Ftmp%2Fstoryboard-videos.png"],
+      images: ["data:image/png;base64,iVBORw0KGgo="],
     });
   });
   test("autocompact summaries become compaction system entries", () => {

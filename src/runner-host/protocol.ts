@@ -38,8 +38,6 @@ export interface RunHostSpec {
   mode?: "ask" | "code";
   model?: string;
   images?: ImageInput[];
-  /** The host process runs inside a sandbox whose paths are not web-host paths. */
-  sandboxed?: boolean;
   forkSession?: boolean;
   resumeSessionAt?: string;
   /** mcp-config.json allowlist (automation scoping); omitted = all servers. */
