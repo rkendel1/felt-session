@@ -137,6 +137,22 @@ export function transcriptStore(): TranscriptStore {
   return (g.__osTranscriptStore ??= new TranscriptStore(transcriptDbPath()));
 }
 
+/**
+ * Test seam (bun tests only): force-replace the singleton, unconditionally —
+ * unlike transcriptStore()'s `??=`, this overwrites a singleton another test
+ * file already warmed. Returns the previous value (possibly undefined) so
+ * afterAll can restore it before the scratch dir backing the replacement is
+ * deleted; restoring the store itself, not just path bindings, is what keeps
+ * a still-live singleton from being left pointed at a removed database.
+ */
+export function __setTranscriptStoreForTest(
+  store: TranscriptStore | undefined,
+): TranscriptStore | undefined {
+  const prev = g.__osTranscriptStore;
+  g.__osTranscriptStore = store;
+  return prev;
+}
+
 // ── Row shapes ───────────────────────────────────────────────────────────────
 
 interface EventRow {

@@ -32,7 +32,11 @@ import {
   __setOpencodeDbPathForTest,
 } from "./opencode-transcript";
 import { __setChatsDirForTest } from "./paths";
-import { transcriptStore } from "./transcript-store";
+import {
+  TranscriptStore,
+  transcriptStore,
+  __setTranscriptStoreForTest,
+} from "./transcript-store";
 import { RESUME_CONTINUATION_PROMPT } from "./agent-runner";
 import type { StreamEvent } from "./run-events";
 import type { RunHostSpec } from "../runner-host/protocol";
@@ -42,13 +46,14 @@ import type { RunHostSpec } from "../runner-host/protocol";
 // other transcript-store tests, which construct their own
 // `new TranscriptStore(tempPath)` and never touch the singleton (invariant 8:
 // one writer), this file has no way to inject a different store into the
-// writer under test. So it redirects the singleton itself: repointing
-// OPENSESSION_CHATS_DIR before transcriptStore() is ever called makes the
-// lazy singleton open a scratch DB instead of the live transcripts.db.
-// __setOpencodeTranscriptsDirForTest/__setOpencodeDbPathForTest do the same
-// for the two on-disk seams the store's import-first gate still reads (the
-// frozen mirror archive + OpenCode's own SQLite fallback probe), so a fresh
-// unified session never picks up stray real data.
+// writer under test. So it force-replaces the singleton itself (below, via
+// __setTranscriptStoreForTest) with one backed by a scratch DB instead of the
+// live transcripts.db. __setOpencodeTranscriptsDirForTest/
+// __setOpencodeDbPathForTest do the same for the two on-disk seams the
+// store's import-first gate still reads (the frozen mirror archive +
+// OpenCode's own SQLite fallback probe), and __setChatsDirForTest covers any
+// other OPENSESSION_CHATS_DIR reads reachable from that gate — together they
+// make sure a fresh unified session never picks up stray real data.
 const scratch = mkdtempSync(join(tmpdir(), "bks-oc-mirror-"));
 const priorTranscriptsDir = __setOpencodeTranscriptsDirForTest(
   join(scratch, "mirror-archive"),
@@ -57,22 +62,19 @@ const priorOpencodeDb = __setOpencodeDbPathForTest(join(scratch, "opencode.db"))
 const priorChatsDir = __setChatsDirForTest(scratch);
 
 const expectedDbPath = join(scratch, "transcripts.db");
-// Full-suite caveat (same pattern as zz-fake-run.test.ts): if an earlier test
-// file already called transcriptStore() before this file's redirect above
-// took effect, the singleton is permanently pinned to that dir — it's a
-// globalThis `??=`, nothing here can un-create it. Probe once and skip
-// loudly rather than silently asserting against a stranger's store (or the
-// developer's real one). Run this file directly for full coverage.
-const redirected = transcriptStore().dbPath === expectedDbPath;
-if (!redirected) {
-  console.warn(
-    "[zz-opencode-mirror] transcripts.db redirect didn't take (singleton " +
-      "already warm from an earlier test file) — skipping; run this file " +
-      "directly: bun test src/server/zz-opencode-mirror.test.ts",
-  );
-}
+// Unlike zz-fake-run.test.ts's redirect probe, this doesn't need to skip when
+// an earlier test file has already warmed the singleton: __setTranscriptStoreForTest
+// force-replaces it (transcriptStore()'s `??=` can't), so the writer under
+// test always lands in our scratch DB regardless of load order. Saving the
+// previous store lets afterAll hand the singleton back intact — restoring
+// only the path bindings and deleting `scratch` out from under a still-live
+// singleton would leave it pointed at a removed database.
+const scratchStore = new TranscriptStore(expectedDbPath);
+const priorStore = __setTranscriptStoreForTest(scratchStore);
 
 afterAll(() => {
+  __setTranscriptStoreForTest(priorStore);
+  scratchStore.close();
   __setOpencodeTranscriptsDirForTest(priorTranscriptsDir);
   __setOpencodeDbPathForTest(priorOpencodeDb);
   __setChatsDirForTest(priorChatsDir);
@@ -106,7 +108,6 @@ const entriesFor = (unifiedId: string) => transcriptStore().readTail(unifiedId, 
 
 describe("withOpencodeTranscriptMirror", () => {
   test("two turns: both user prompts present with full text, in order, no dupes", async () => {
-    if (!redirected) return;
     const bks = "bks-two-turns";
     const oc = "ses_mirror_two_turns";
     // Turn 1: fresh session — engine id arrives via init.
@@ -148,7 +149,6 @@ describe("withOpencodeTranscriptMirror", () => {
   });
 
   test("account rotation: the prompt survives in the unified store, no dupes", async () => {
-    if (!redirected) return;
     const bks = "bks-rotation";
     const s = spec({ bksSessionId: bks, prompt: "rotate me" });
     await drain(
@@ -176,7 +176,6 @@ describe("withOpencodeTranscriptMirror", () => {
   });
 
   test("runner_notice events persist as system entries across a rotation", async () => {
-    if (!redirected) return;
     const bks = "bks-notice";
     const s = spec({ bksSessionId: bks, prompt: "notice me" });
     await drain(
@@ -202,7 +201,6 @@ describe("withOpencodeTranscriptMirror", () => {
   });
 
   test("synthetic resume-continuation prompt is not a user entry", async () => {
-    if (!redirected) return;
     const bks = "bks-resume";
     const oc = "ses_mirror_resume";
     await drain(
@@ -225,7 +223,6 @@ describe("withOpencodeTranscriptMirror", () => {
   });
 
   test("re-delivery with the same hostId upserts instead of duplicating", async () => {
-    if (!redirected) return;
     const bks = "bks-redeliver";
     const oc = "ses_mirror_redeliver";
     const s = spec({ bksSessionId: bks, prompt: "once only", engineSessionId: oc });
@@ -248,7 +245,6 @@ describe("withOpencodeTranscriptMirror", () => {
   });
 
   test("tool use/result mirror as tool entries (not empty user bubbles)", async () => {
-    if (!redirected) return;
     const bks = "bks-tools";
     const oc = "ses_mirror_tools";
     await drain(
