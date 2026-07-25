@@ -62,9 +62,9 @@ export interface StreamEvent {
   content?: string;
   result?: string;
   /**
-   * Renderable image sources on a tool_result (data: URLs from base64 blocks,
-   * or direct urls). Forwarded to viewers so screenshots show up the moment
-   * the tool returns instead of waiting for the jsonl tail to catch up.
+   * Renderable image sources on a tool_result (data: URLs, direct URLs, or
+   * authenticated local-media paths). Forwarded to viewers so screenshots
+   * show up the moment the tool returns instead of waiting for persistence.
    */
   images?: string[];
   /**

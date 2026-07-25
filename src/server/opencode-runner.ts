@@ -213,6 +213,7 @@ import {
   transcriptLineCompactionSummary,
   transcriptLineToolUse,
   transcriptLineToolResult,
+  opencodeToolResultImages,
 } from "./opencode-transcript";
 import { parseTranscriptAsync } from "./jsonl-parser";
 import { buildEngineSwitchHandoffNote } from "./fork-handoff";
@@ -3604,6 +3605,7 @@ async function* runOpencodeAttempt(
             if ((state?.status === "completed" || state?.status === "error") && !finishedTools.has(part.id)) {
               finishedTools.add(part.id);
               const result = state.status === "completed" ? state.output || "" : `Error: ${state.error}`;
+              const images = opencodeToolResultImages(part);
               turnEvent({
                 direction: "in",
                 kind: "tool_result",
@@ -3612,12 +3614,19 @@ async function* runOpencodeAttempt(
                 ...summarizeText(result),
               });
               appendOpencodeTranscript(ocSessionId, [
-                transcriptLineToolResult(part.id, result, state.status === "error"),
+                transcriptLineToolResult(
+                  part.id,
+                  result,
+                  state.status === "error",
+                  undefined,
+                  images,
+                ),
               ]);
               push({
                 type: "tool_result",
                 toolUseId: part.id,
                 content: result.length > 500 ? result.slice(0, 500) + "..." : result,
+                ...(images.length ? { images } : {}),
               });
             }
           }
@@ -4579,6 +4588,7 @@ export async function tryReattachOpencodeRun(
                 finishedTools.add(part.id);
                 const result =
                   state.status === "completed" ? state.output || "" : `Error: ${state.error}`;
+                const images = opencodeToolResultImages(part);
                 turnEvent({
                   direction: "in",
                   kind: "tool_result",
@@ -4587,12 +4597,19 @@ export async function tryReattachOpencodeRun(
                   ...summarizeText(result),
                 });
                 appendOpencodeTranscript(ocSessionId!, [
-                  transcriptLineToolResult(part.id, result, state.status === "error"),
+                  transcriptLineToolResult(
+                    part.id,
+                    result,
+                    state.status === "error",
+                    undefined,
+                    images,
+                  ),
                 ]);
                 push({
                   type: "tool_result",
                   toolUseId: part.id,
                   content: result.length > 500 ? result.slice(0, 500) + "..." : result,
+                  ...(images.length ? { images } : {}),
                 });
               }
             }

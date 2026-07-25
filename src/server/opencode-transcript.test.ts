@@ -34,6 +34,7 @@ const {
   transcriptLineToolUse,
   transcriptLineToolResult,
   transcriptLineForEntry,
+  opencodeToolResultImages,
 } = mod;
 const { parseTranscript, parseJsonlLines } = await import("./jsonl-parser");
 
@@ -90,6 +91,38 @@ describe("isOpencodeSessionId", () => {
   });
 });
 
+describe("opencodeToolResultImages", () => {
+  test("supports the media route image formats and rejects unscoped paths", () => {
+    for (const [extension, mime] of [
+      ["png", "image/png"],
+      ["jpg", "image/jpeg"],
+      ["jpeg", "image/jpeg"],
+      ["gif", "image/gif"],
+      ["webp", "image/webp"],
+    ]) {
+      const path = `/tmp/read-result.${extension}`;
+      expect(opencodeToolResultImages({
+        type: "tool",
+        tool: "read",
+        state: {
+          status: "completed",
+          input: { filePath: path },
+          attachments: [{ type: "file", mime }],
+        },
+      })).toEqual([`/backstage/media?path=${encodeURIComponent(path)}`]);
+    }
+    expect(opencodeToolResultImages({
+      type: "tool",
+      tool: "read",
+      state: {
+        status: "completed",
+        input: { filePath: "/etc/secrets.png" },
+        attachments: [{ type: "file", mime: "image/png" }],
+      },
+    })).toEqual([]);
+  });
+});
+
 describe("readOpencodeTranscript (SQLite)", () => {
   test("maps messages/parts to entries, strips context fences and synthetic parts", () => {
     const entries = readOpencodeTranscript(SES);
@@ -136,6 +169,51 @@ describe("readOpencodeTranscript (SQLite)", () => {
     expect(entries[0].videos).toEqual([
       "/backstage/media?path=%2Ftmp%2Fopencode-demo.mov",
     ]);
+  });
+  test("maps Read image attachments to the authenticated local media route", () => {
+    const sessionId = "ses_read_image";
+    const createdAt = 1783501500000;
+    const db = new Database(dbPath);
+    db.query("INSERT INTO session VALUES (?, 'p', 't', 1, 1)").run(sessionId);
+    db.query("INSERT INTO message VALUES (?, ?, ?, ?, ?)").run(
+      "msg_read_image",
+      sessionId,
+      createdAt,
+      createdAt,
+      JSON.stringify({ role: "assistant", time: { created: createdAt } }),
+    );
+    db.query("INSERT INTO part VALUES (?, ?, ?, ?, ?, ?)").run(
+      "prt_read_image",
+      "msg_read_image",
+      sessionId,
+      createdAt,
+      createdAt,
+      JSON.stringify({
+        type: "tool",
+        tool: "read",
+        state: {
+          status: "completed",
+          input: { filePath: "/tmp/storyboard-videos.png" },
+          output: "Image read successfully",
+          attachments: [
+            {
+              type: "file",
+              mime: "image/png",
+              url: "data:image/png;base64,iVBORw0KGgo=",
+            },
+          ],
+        },
+      }),
+    );
+    db.close();
+
+    const entries = readOpencodeTranscript(sessionId);
+    expect(entries).toHaveLength(2);
+    expect(entries[1]).toMatchObject({
+      type: "tool_result",
+      content: "Image read successfully",
+      images: ["/backstage/media?path=%2Ftmp%2Fstoryboard-videos.png"],
+    });
   });
   test("autocompact summaries become compaction system entries", () => {
     const sessionId = "ses_compaction";
@@ -216,6 +294,24 @@ describe("readOpencodeTranscript (SQLite)", () => {
 });
 
 describe("persisted transcript file", () => {
+  test("tool result lines round-trip local image URLs without base64 payloads", () => {
+    const url = "/backstage/media?path=%2Ftmp%2Fstoryboard-videos.png";
+    const line = transcriptLineToolResult(
+      "tu-image",
+      "Image read successfully",
+      false,
+      "2026-07-08T00:00:00.000Z",
+      [url],
+    );
+    expect(JSON.stringify(line)).not.toContain("base64");
+    expect(parseJsonlLines([JSON.stringify(line)])[0]).toMatchObject({
+      id: "tr-tu-image",
+      type: "tool_result",
+      content: "Image read successfully",
+      images: [url],
+    });
+  });
+
   test("appended claude-shape lines round-trip through parseTranscript", () => {
     const id = "ses_roundtrip";
     appendOpencodeTranscript(id, [

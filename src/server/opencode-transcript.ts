@@ -603,7 +603,8 @@ export function transcriptLineToolResult(
   toolUseId: string,
   content: string,
   isError?: boolean,
-  ts?: string
+  ts?: string,
+  images?: string[],
 ): JsonlLine {
   return {
     type: "user",
@@ -615,7 +616,15 @@ export function transcriptLineToolResult(
         {
           type: "tool_result",
           tool_use_id: toolUseId,
-          content,
+          content: images?.length
+            ? [
+                { type: "text", text: content },
+                ...images.map((url) => ({
+                  type: "image",
+                  source: { type: "url", url },
+                })),
+              ]
+            : content,
           ...(isError ? { is_error: true } : {}),
         },
       ],
@@ -656,7 +665,7 @@ export function transcriptLineForEntry(e: TranscriptEntry): JsonlLine | null {
       );
     case "tool_result":
       return e.toolUseId
-        ? transcriptLineToolResult(e.toolUseId, e.content, e.isError, e.timestamp)
+        ? transcriptLineToolResult(e.toolUseId, e.content, e.isError, e.timestamp, e.images)
         : null;
     case "system":
       // Compaction summaries round-trip (readOpencodeTranscript emits them and
@@ -821,7 +830,56 @@ interface PartData {
     input?: unknown;
     output?: string;
     error?: string;
+    attachments?: Array<{
+      type?: string;
+      mime?: string;
+      url?: string;
+    }>;
   };
+}
+
+const LOCAL_IMAGE_PATH_RE = /\.(png|jpe?g|gif|webp)$/i;
+const LOCAL_IMAGE_MIMES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+]);
+
+/**
+ * OpenCode's Read tool persists image bytes as a base64 file attachment on the
+ * tool state. The transcript must not copy those bytes, so use the attachment
+ * only as proof that Read returned an image and render its original local path
+ * through the authenticated media route instead.
+ */
+export function opencodeToolResultImages(part: PartData): string[] {
+  if (part.type !== "tool" || part.state?.status !== "completed") return [];
+  if (part.tool !== "read" && part.tool !== "view_image") return [];
+  const input = part.state.input;
+  if (!input || typeof input !== "object") return [];
+  const values = input as Record<string, unknown>;
+  const path =
+    typeof values.filePath === "string"
+      ? values.filePath
+      : typeof values.file_path === "string"
+        ? values.file_path
+        : "";
+  if (
+    (!path.startsWith("/tmp/") && !path.startsWith("/home/ubuntu/")) ||
+    path.includes("..") ||
+    !LOCAL_IMAGE_PATH_RE.test(path)
+  ) {
+    return [];
+  }
+  const returnedImage = part.state.attachments?.some(
+    (attachment) =>
+      attachment?.type === "file" &&
+      typeof attachment.mime === "string" &&
+      LOCAL_IMAGE_MIMES.has(attachment.mime.toLowerCase()),
+  );
+  return returnedImage
+    ? [`/backstage/media?path=${encodeURIComponent(path)}`]
+    : [];
 }
 
 function toIso(ms: number | undefined, fallback: string): string {
@@ -999,6 +1057,7 @@ export function readOpencodeTranscript(
             ...(assistant?.videos.length ? { videos: assistant.videos } : {}),
           });
         } else if (part.type === "tool") {
+          const images = opencodeToolResultImages(part);
           entries.push({
             id: p.id,
             type: "tool_use",
@@ -1020,6 +1079,7 @@ export function readOpencodeTranscript(
               timestamp: ts,
               toolUseId: p.id,
               ...(state.status === "error" ? { isError: true } : {}),
+              ...(images.length ? { images } : {}),
             });
           }
         }
