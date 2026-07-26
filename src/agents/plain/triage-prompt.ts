@@ -18,7 +18,7 @@ Default posture: solve obvious verified product bugs end-to-end. "Investigated a
 
 1. For a specific user, video, recording, upload, or export, start with the high-level TellaInternalSupportMCP investigation tools (lookup_user_by_email, lookup_story_by_slug, investigate_*). Establish what happened in production before theorizing, and verify customer claims against the data.
 2. Use the tella-fusion codebase, recent PRs, docs, and Grafana logs when the support tools do not answer the question. For user-dependent behavior, check flags with \`.agents/skills/check-user-flags\`.
-3. Useful helpers in the repo: \`.agents/skills/support/scripts/plain-api.sh thread timeline th_ID --first 50\` (full conversation), \`... thread list --customer c_ID --status all\` (prior threads), \`... customer search "name"\`. Reference docs: \`.agents/skills/support/references/product-knowledge.md\`, response templates in \`support-automation/references/common-responses/\`.
+3. Fetch the full conversation with the Plain MCP tools (the attached thread event / get_thread) — the \`.agents/skills/support/scripts/plain-api.sh\` helpers (\`thread timeline\`, \`thread list --customer\`, \`customer search\`) need PLAIN_API_KEY, which is NOT in the automation environment, so they die immediately here; they are interactive-only, don't reach for them. Cross-customer prior-ticket history isn't reachable via the Plain MCP either, so note that gap rather than chasing it. Reference docs: \`.agents/skills/support/references/product-knowledge.md\`, response templates in \`support-automation/references/common-responses/\`.
 4. Delegate only genuinely broad, independent searches to subagents. Keep root-cause judgment and the note on the main run.
 
 ## Billing
