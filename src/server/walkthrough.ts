@@ -124,7 +124,10 @@ export async function publishWalkthrough(
   if (shots.length) walkthrough.shots = shots;
 
   touchBackstageSession(sessionId, { walkthrough });
-  const pr = await mirrorWalkthroughToPr(sessionId);
+  // Pass the walkthrough we just built: the unified-session re-read must not
+  // be the thing that decides whether it exists (slack/linear sessions only
+  // surface sidecar fields via the overlay in sessions.ts — belt and braces).
+  const pr = await mirrorWalkthroughToPr(sessionId, walkthrough);
   return { walkthrough, pr };
 }
 
@@ -182,10 +185,14 @@ export function spliceWalkthroughSection(body: string, section: string): string 
  */
 export async function mirrorWalkthroughToPr(
   sessionId: string,
+  /** Freshly-built walkthrough from publishWalkthrough — wins over the
+   *  unified-session re-read so a persistence/scan gap can't lose it. */
+  fresh?: SessionWalkthrough,
 ): Promise<{ mirrored: boolean; url?: string; reason?: string }> {
   const session: UnifiedSession | undefined = findSession(sessionId);
-  const walkthrough = session?.walkthrough;
-  if (!session || !walkthrough)
+  if (!session) return { mirrored: false, reason: "session not found" };
+  const walkthrough = fresh ?? session.walkthrough;
+  if (!walkthrough)
     return { mirrored: false, reason: "no walkthrough on session" };
   const target = resolvePrTarget(session, null, null);
   if (!target) return { mirrored: false, reason: "session has no branch" };

@@ -564,6 +564,27 @@ function getFileMtime(path: string): string {
   }
 }
 
+/**
+ * Overlay backstage-owned extras onto a slack/linear-scanned session.
+ * touchBackstageSession writes fields like walkthrough/linkedPrs keyed by the
+ * UNIFIED id into ~/.opensession-chats/<id>.json — for non-backstage sessions
+ * that sidecar has no `id` field, so scanBackstageSessions skips it and the
+ * fields silently vanished from the unified view (publish_walkthrough on a
+ * Slack session kept answering "no walkthrough on session" right after
+ * persisting one — tellahq/tella-mac#71, 2026-07-26).
+ */
+function overlaySidecarExtras(session: UnifiedSession): UnifiedSession {
+  const path = `${SESSIONS_DIR}/${session.id}.json`;
+  if (!existsSync(path)) return session;
+  const data = readJsonSafe<BackstageSessionFile>(path);
+  if (!data) return session;
+  if (data.walkthrough) session.walkthrough = data.walkthrough;
+  if (data.linkedPrs?.length) session.linkedPrs = data.linkedPrs;
+  if (data.attachedRepos?.length) session.attachedRepos = data.attachedRepos;
+  if (data.previewPath) session.previewPath = data.previewPath;
+  return session;
+}
+
 function scanSlackSessions(): UnifiedSession[] {
   if (!existsSync(SLACK_SESSIONS_DIR)) return [];
   const sessions: UnifiedSession[] = [];
@@ -583,7 +604,7 @@ function scanSlackSessions(): UnifiedSession[] {
     // Use a stable ID based on filename
     const id = `slack-${file.replace(".json", "")}`;
 
-    sessions.push({
+    sessions.push(overlaySidecarExtras({
       id,
       claudeSessionId: data.claudeSessionId || null,
       source: "slack",
@@ -613,7 +634,7 @@ function scanSlackSessions(): UnifiedSession[] {
         : undefined,
       model: data.model,
       codexThreadId: data.codexThreadId || undefined,
-    });
+    }));
   }
   return sessions;
 }
@@ -644,7 +665,7 @@ function scanLinearSessions(): UnifiedSession[] {
 
     const id = `linear-${data.branch}`;
 
-    sessions.push({
+    sessions.push(overlaySidecarExtras({
       id,
       claudeSessionId: data.claudeSessionId,
       source: "linear",
@@ -674,7 +695,7 @@ function scanLinearSessions(): UnifiedSession[] {
           }
         : undefined,
       model: data.model,
-    });
+    }));
   }
   return sessions;
 }

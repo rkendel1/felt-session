@@ -1367,7 +1367,11 @@ export function buildOpencodeInstructions(input: {
         "in the session's Review tab, and is mirrored into the PR " +
         "description; if you publish before the PR exists, call it again after `gh pr create` " +
         "so it lands there too. Skip it for pure refactors, backend-only changes, or trivial " +
-        "tweaks — a walkthrough should demonstrate something a human can see."
+        "tweaks — a walkthrough should demonstrate something a human can see. When a " +
+        "screenshot belongs in the PR conversation itself (review evidence, a visual bug " +
+        "report), use `comment_on_pr_with_images` instead: it commits the images to the " +
+        "repo's orphan assets branch and posts a PR comment where they render inline for " +
+        "the team — never commit screenshots to the PR branch."
     );
   }
   if (inproc["opensession-report"]) {

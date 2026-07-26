@@ -6,6 +6,12 @@
  * GitHub PR description as a managed section (media as tailnet links there —
  * see src/server/walkthrough.ts for why they can't inline on GitHub).
  *
+ * Also carries `comment_on_pr_with_images`: post a PR comment whose
+ * screenshots RENDER inline on GitHub — images are committed to an orphan
+ * assets branch of the target repo and referenced as private blob URLs (see
+ * src/server/pr-images.ts for the mechanism and the alternatives that don't
+ * work).
+ *
  * Wired like opensession-preview: interactive runs only (web sessions +
  * Slack), never automations, and only when a sessionId is in scope.
  */
@@ -13,6 +19,15 @@
 import { createSdkMcpServer, tool } from "../../server/inprocess-mcp";
 import { z } from "zod";
 import { publishWalkthrough } from "../../server/walkthrough";
+import {
+  ASSETS_BRANCH,
+  spliceImagesIntoMarkdown,
+  uploadPrImages,
+} from "../../server/pr-images";
+import { postPrComment } from "../../server/pr-info";
+import { findSession } from "../../server/session-cache";
+import { resolvePrTarget } from "../../server/session-repos";
+import { REPOS } from "../../server/worktree";
 
 export interface WalkthroughToolContext {
   sessionId: string;
@@ -84,6 +99,83 @@ export function createWalkthroughMcpServer(ctx: WalkthroughToolContext) {
           return text(parts.join(" "));
         } catch (e: any) {
           return text(`publish_walkthrough failed: ${e?.message || String(e)}`);
+        }
+      },
+    ),
+    tool(
+      "comment_on_pr_with_images",
+      "Post a comment on this session's PR (or an explicit PR) with screenshots that RENDER INLINE on GitHub. Local image files are committed to the target repo's orphan `opensession-assets` branch (its own root — never the PR branch or any code branch) and referenced as private blob URLs: they render for anyone with repo access and 404 for everyone else, so screenshots never leave channels we control. Place images in the markdown with {{image:1}}, {{image:2}}, … (1-based); images you don't reference are appended at the end. Use it when a picture belongs in the PR conversation — review evidence, visual bug reports, before/after context for reviewers.",
+      {
+        comment: z
+          .string()
+          .describe(
+            "Comment markdown. Optionally position images with {{image:N}} placeholders (1-based).",
+          ),
+        images: z
+          .array(
+            z.object({
+              path: z
+                .string()
+                .describe("Absolute path to the image (png/jpg/jpeg/webp/gif) under /tmp or /home/ubuntu."),
+              alt: z.string().optional().describe("Alt/caption text for the image."),
+            }),
+          )
+          .min(1)
+          .describe("Images to upload and attach."),
+        repo: z
+          .string()
+          .optional()
+          .describe(
+            "Project id (e.g. tella-fusion, backstage, tella-mac) when the PR isn't on the session's primary repo — attached and linked repos resolve too.",
+          ),
+        pr_number: z
+          .number()
+          .optional()
+          .describe("Explicit PR number in that repo. Defaults to the open PR on the session's branch."),
+      },
+      async (args: {
+        comment: string;
+        images: Array<{ path: string; alt?: string }>;
+        repo?: string;
+        pr_number?: number;
+      }) => {
+        try {
+          if (args.repo && !REPOS[args.repo])
+            return text(
+              `Unknown repo "${args.repo}" — known project ids: ${Object.keys(REPOS).join(", ")}.`,
+            );
+          let ghRepo: string | undefined;
+          let selector: string | undefined; // branch name or PR number for gh
+          const session = findSession(ctx.sessionId);
+          if (args.repo && args.pr_number) {
+            // Fully explicit — works even when the session can't be resolved.
+            ghRepo = REPOS[args.repo].ghRepo;
+            selector = String(args.pr_number);
+          } else if (session) {
+            const target = resolvePrTarget(session, args.repo || null, null);
+            if (!target)
+              return text(
+                "Couldn't resolve a PR target from this session — pass repo and pr_number explicitly.",
+              );
+            ghRepo = target.ghRepo;
+            selector = args.pr_number ? String(args.pr_number) : target.branch;
+          } else {
+            return text(
+              "Session not found — pass both repo and pr_number so the PR can be targeted explicitly.",
+            );
+          }
+          const uploaded = await uploadPrImages(ghRepo, args.images);
+          const body = spliceImagesIntoMarkdown(args.comment, uploaded);
+          const res = await postPrComment(selector, { body }, ghRepo);
+          if ("error" in res)
+            return text(
+              `Posting the comment failed: ${res.error}. The ${uploaded.length} image(s) WERE uploaded to ${ghRepo}@${ASSETS_BRANCH} and can be reused: ${uploaded.map((u) => u.url).join(" ")}`,
+            );
+          return text(
+            `Comment posted${res.url ? `: ${res.url}` : ""} — ${uploaded.length} image(s) attached (committed to ${ghRepo}@${ASSETS_BRANCH}; they render inline for anyone with repo access).`,
+          );
+        } catch (e: any) {
+          return text(`comment_on_pr_with_images failed: ${e?.message || String(e)}`);
         }
       },
     ),
