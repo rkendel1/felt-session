@@ -52,6 +52,7 @@ import {
 	webAuthRequired,
 } from "./src/server/web-auth";
 import { startWebhookServer } from "./src/server/webhook-server";
+import { prImagePublicRoutes } from "./src/server/pr-images";
 import { sweepArchivedWorktrees } from "./src/server/worktree";
 import {
 	type WSClientData,
@@ -531,14 +532,16 @@ if (!g.__backstageBooted) {
 	}
 
 	// Start webhook server with enabled agents + automation webhook triggers
+	// + the public PR-image capability URLs (comment_on_pr_with_images).
 	agents = await loadAgents();
 	g.__agents = agents;
-	const webhookServer = startWebhookServer(
-		agents,
-		getWebhookRoutes(() => {
-			invalidateSessionsCache();
-		}),
-	);
+	const webhookRoutes = getWebhookRoutes(() => {
+		invalidateSessionsCache();
+	});
+	for (const [key, handler] of prImagePublicRoutes()) {
+		webhookRoutes.set(key, handler);
+	}
+	const webhookServer = startWebhookServer(agents, webhookRoutes);
 	void webhookServer;
 
 	// Seed the make_*_editor.sh action family (create-if-absent, UI edits preserved).

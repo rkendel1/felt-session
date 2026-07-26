@@ -1369,9 +1369,9 @@ export function buildOpencodeInstructions(input: {
         "so it lands there too. Skip it for pure refactors, backend-only changes, or trivial " +
         "tweaks — a walkthrough should demonstrate something a human can see. When a " +
         "screenshot belongs in the PR conversation itself (review evidence, a visual bug " +
-        "report), use `comment_on_pr_with_images` instead: it commits the images to the " +
-        "repo's orphan assets branch and posts a PR comment where they render inline for " +
-        "the team — never commit screenshots to the PR branch."
+        "report), use `comment_on_pr_with_images` instead: it serves the images from our " +
+        "own public host so they render inline in the PR comment for the team — never " +
+        "commit screenshots to the PR branch."
     );
   }
   if (inproc["opensession-report"]) {

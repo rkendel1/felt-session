@@ -7,10 +7,10 @@
  * see src/server/walkthrough.ts for why they can't inline on GitHub).
  *
  * Also carries `comment_on_pr_with_images`: post a PR comment whose
- * screenshots RENDER inline on GitHub — images are committed to an orphan
- * assets branch of the target repo and referenced as private blob URLs (see
- * src/server/pr-images.ts for the mechanism and the alternatives that don't
- * work).
+ * screenshots RENDER inline on GitHub — images are staged to durable storage
+ * and served from unguessable public URLs on michael.tella.dev, which
+ * GitHub's camo proxy can fetch (see src/server/pr-images.ts for the
+ * mechanism and the alternatives that don't work).
  *
  * Wired like opensession-preview: interactive runs only (web sessions +
  * Slack), never automations, and only when a sessionId is in scope.
@@ -20,7 +20,6 @@ import { createSdkMcpServer, tool } from "../../server/inprocess-mcp";
 import { z } from "zod";
 import { publishWalkthrough } from "../../server/walkthrough";
 import {
-  ASSETS_BRANCH,
   spliceImagesIntoMarkdown,
   uploadPrImages,
 } from "../../server/pr-images";
@@ -104,7 +103,7 @@ export function createWalkthroughMcpServer(ctx: WalkthroughToolContext) {
     ),
     tool(
       "comment_on_pr_with_images",
-      "Post a comment on this session's PR (or an explicit PR) with screenshots that RENDER INLINE on GitHub. Local image files are committed to the target repo's orphan `opensession-assets` branch (its own root — never the PR branch or any code branch) and referenced as private blob URLs: they render for anyone with repo access and 404 for everyone else, so screenshots never leave channels we control. Place images in the markdown with {{image:1}}, {{image:2}}, … (1-based); images you don't reference are appended at the end. Use it when a picture belongs in the PR conversation — review evidence, visual bug reports, before/after context for reviewers.",
+      "Post a comment on this session's PR (or an explicit PR) with screenshots that RENDER INLINE on GitHub. Images are copied to durable storage and served from unguessable public URLs on michael.tella.dev (our own infra — never a third-party host, never a commit on any branch); GitHub's camo proxy fetches them so they render everywhere, private repos included. The URLs are capability links: anyone holding one can fetch the image, so don't attach anything that must stay strictly repo-member-only. Place images in the markdown with {{image:1}}, {{image:2}}, … (1-based); images you don't reference are appended at the end. Use it when a picture belongs in the PR conversation — review evidence, visual bug reports, before/after context for reviewers.",
       {
         comment: z
           .string()
@@ -164,15 +163,15 @@ export function createWalkthroughMcpServer(ctx: WalkthroughToolContext) {
               "Session not found — pass both repo and pr_number so the PR can be targeted explicitly.",
             );
           }
-          const uploaded = await uploadPrImages(ghRepo, args.images);
+          const uploaded = uploadPrImages(args.images);
           const body = spliceImagesIntoMarkdown(args.comment, uploaded);
           const res = await postPrComment(selector, { body }, ghRepo);
           if ("error" in res)
             return text(
-              `Posting the comment failed: ${res.error}. The ${uploaded.length} image(s) WERE uploaded to ${ghRepo}@${ASSETS_BRANCH} and can be reused: ${uploaded.map((u) => u.url).join(" ")}`,
+              `Posting the comment failed: ${res.error}. The ${uploaded.length} image(s) WERE staged and their URLs can be reused: ${uploaded.map((u) => u.url).join(" ")}`,
             );
           return text(
-            `Comment posted${res.url ? `: ${res.url}` : ""} — ${uploaded.length} image(s) attached (committed to ${ghRepo}@${ASSETS_BRANCH}; they render inline for anyone with repo access).`,
+            `Comment posted${res.url ? `: ${res.url}` : ""} — ${uploaded.length} image(s) attached (served from michael.tella.dev; they render inline via GitHub's image proxy).`,
           );
         } catch (e: any) {
           return text(`comment_on_pr_with_images failed: ${e?.message || String(e)}`);
