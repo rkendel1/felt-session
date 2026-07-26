@@ -618,7 +618,12 @@ export async function editPrReviewers(
  * Rewrite the PR description through a mutator over the current body — used by
  * the walkthrough mirror to splice its managed section in place. Reads the
  * live body first (never a cached one: humans edit descriptions) and writes
- * via --body-file so markdown/quotes/newlines survive shell-free.
+ * via REST (PATCH pulls/{n} with an --input file so markdown/quotes/newlines
+ * survive shell-free). NOT `gh pr edit`: its GraphQL preamble resolves org
+ * teams and needs read:org, which neither the bot PAT nor the device-flow
+ * OAuth tokens carry — it fails unconditionally on tellahq repos (verified
+ * live on tellahq/backstage#78, 2026-07-26; same class as the label-edit
+ * gotcha).
  */
 export async function updatePrBody(
   branch: string,
@@ -640,11 +645,11 @@ export async function updatePrBody(
     const pr = JSON.parse(out) as { body: string; number: number; url: string };
     const next = mutate(pr.body || "");
     if (next === (pr.body || "")) return { ok: true, number: pr.number, url: pr.url };
-    const tmp = `/tmp/opensession-pr-body-${Date.now()}-${Math.random().toString(36).slice(2)}.md`;
-    await Bun.write(tmp, next);
+    const tmp = `/tmp/opensession-pr-body-${Date.now()}-${Math.random().toString(36).slice(2)}.json`;
+    await Bun.write(tmp, JSON.stringify({ body: next }));
     try {
       const edit = Bun.spawn(
-        ["gh", "pr", "edit", branch, "--repo", repo, "--body-file", tmp],
+        ["gh", "api", "-X", "PATCH", `repos/${repo}/pulls/${pr.number}`, "--input", tmp],
         { stdout: "pipe", stderr: "pipe" }
       );
       const [, editErr, editCode] = await Promise.all([
@@ -653,7 +658,7 @@ export async function updatePrBody(
         edit.exited,
       ]);
       if (editCode !== 0)
-        return { error: (editErr || "gh pr edit failed").slice(0, 300) };
+        return { error: (editErr || "gh api pulls PATCH failed").slice(0, 300) };
     } finally {
       await Bun.file(tmp).unlink().catch(() => {});
     }
