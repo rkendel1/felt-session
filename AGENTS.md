@@ -38,9 +38,9 @@ repo. If every controlled channel fails, stop and report the failure instead of
 escalating to a third-party host. The same rule is injected into every engine
 run via `buildOpencodeInstructions` (opencode-runner.ts).
 
-## The four client apps — resolve which one BEFORE working
+## The five client apps — resolve which one BEFORE working
 
-OS1 has four user-facing clients in this repo, and requests about "the app"
+OS1 has five user-facing clients in this repo, and requests about "the app"
 are ambiguous between them:
 
 - **Web UI** — `src/frontend/` (React, served by the Bun server; also what the
@@ -54,6 +54,10 @@ are ambiguous between them:
   screenshot, element pick with React fiber info — and starts sessions via the
   REST surface with Bearer auth; loaded unpacked, never the Web Store; see
   `os1-chrome/README.md`).
+- **Terminal client** — `os1-tui/` (the `os` binary; herdr-style TUI on OpenTUI,
+  tmux keys, tabs). Pure client: HTTP + one WebSocket per watched session, no
+  server imports, so it compiles to a standalone binary. `opensession tui` is an
+  alias. Read `os1-tui/AGENTS.md` before touching it.
 
 Conversation scoping rule: once a conversation is about a specific app, every
 following message is about THAT app unless the user says otherwise — don't

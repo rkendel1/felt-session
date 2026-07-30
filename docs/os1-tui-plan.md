@@ -1,6 +1,9 @@
 # os1-tui — a herdr-style TUI client for OpenSession
 
-Status: **plan, not built** (2026-07-30)
+Status: **built** (2026-07-30) — see `os1-tui/README.md` for the shipped
+surface and `os1-tui/AGENTS.md` for the build loop. Phases 0–3 and 5 landed in
+one pass; phase 4 (diff pane, PR panel, terminal pane) is still open, and splits
+were dropped deliberately — tabs only, per review.
 
 ## What it is
 
@@ -192,12 +195,19 @@ a smoke test drives the compiled binary against the live server in a pty
 (`Bun.spawn` with a fake TTY), sends a scripted keystroke sequence, and asserts
 on the rendered screen buffer.
 
-## Open questions
+## Decisions taken at review (2026-07-30)
 
-1. **Splits vs tabs first** — is a split-pane view actually wanted, or is
-   tabs + fast switching enough? Splits are most of the layout complexity.
-2. **`os` as a name** — short and matches `os1-*`, but collides with nothing
-   today only by luck. `oss` is taken by the OpenSSL-ish world; `osn` is ugly.
-3. **Publishing** — is `os` a Tella-internal binary, or does it ship with the
-   open-source `opensession` release? That decides whether install.sh grows a
-   client-only mode.
+1. **Tabs, no splits.** Splits were the bulk of the layout complexity for a
+   layout nobody had asked for yet. `^b w` + `ctrl+←/→` covers the same ground.
+2. **`os` is the binary name.**
+3. **It ships with the open-source release**, so `install.sh` should eventually
+   grow a client-only mode (not done yet).
+
+## Still open
+
+- Phase 4: diff pane (OpenTUI `Diff`), PR panel, and the terminal pane over
+  `term_start` (full-screen alt-screen handoff — rendering a pty inside a TUI
+  pane needs an emulator we don't have).
+- `install.sh` client-only mode + published binaries per target.
+- Mouse support. OpenTUI has it; herdr leans on it. Untouched here because the
+  keyboard story had to be right first.
