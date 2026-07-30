@@ -5,7 +5,7 @@ server and shows you *your* sessions: workspace sidebar, live transcripts, tabs,
 tmux keys.
 
 ```
-os --host os.tella.dev
+os --host os.company.dev
 ```
 
 It is a **client and nothing else** — HTTP plus one WebSocket per watched
@@ -19,7 +19,7 @@ From a checkout:
 
 ```bash
 cd os1-tui && bun install
-bun src/index.ts --host os.tella.dev      # or: bun run dev
+bun src/index.ts --host os.company.dev    # or: bun run dev
 ```
 
 Standalone binary (no Bun needed on the target machine):

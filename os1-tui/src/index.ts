@@ -5,7 +5,7 @@
  * A client and nothing else: HTTP + one WebSocket per watched session. It never
  * imports the server, never spawns an agent, never touches a worktree. That's
  * what keeps the compiled binary small enough to drop on a laptop and what makes
- * `os --host os.tella.dev` the whole setup story.
+ * `os --host os.company.dev` the whole setup story.
  *
  * Subcommands stay deliberately few (login/logout/whoami/sessions/help) —
  * everything else is the TUI.
@@ -48,7 +48,7 @@ function usage(): void {
 os — OpenSession in your terminal (v${VERSION})
 
   os                        open the TUI against the configured server
-  os --host os.tella.dev    …against a specific server (and remember it)
+  os --host os.company.dev  …against a specific server (and remember it)
   os <session-id>           open the TUI focused on one session
 
   os login                  sign in (GitHub device flow)

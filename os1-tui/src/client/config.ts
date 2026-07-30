@@ -27,8 +27,8 @@ export type TuiConfig = {
 const DEFAULT_HOST = "http://127.0.0.1:3850";
 
 /**
- * Accept what people actually type: `os.tella.dev`, `os.tella.dev/`,
- * `https://os.tella.dev`, `localhost:3850`. Bare hosts get https, except
+ * Accept what people actually type: `os.company.dev`, `os.company.dev/`,
+ * `https://os.company.dev`, `localhost:3850`. Bare hosts get https, except
  * loopback/`.local`, which never has a cert.
  */
 export function normalizeHost(raw: string): string {
