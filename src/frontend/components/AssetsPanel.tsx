@@ -265,12 +265,16 @@ export function AssetsPanel({
 						>
 							Download
 						</a>
-						<button
-                            className="shrink-0 rounded-sm px-1.5 py-0.5 text-meta text-dim hover:bg-hover hover:text-red"
+						{/* Sits in a row with the Open/Download links above and matches
+						    them exactly; only the hover color differs. */}
+						<Button
+							variant="ghost"
+							size="xs"
+							className="min-h-0 shrink-0 rounded-sm border-0 px-1.5 py-0.5 text-meta font-medium hover:bg-hover hover:text-red"
 							onClick={onDelete}
 						>
 							Delete
-						</button>
+						</Button>
 					</div>
 					<div className="min-h-0 flex-1 overflow-auto">
 						{kind === "html" ? (

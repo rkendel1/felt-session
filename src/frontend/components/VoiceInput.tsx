@@ -165,7 +165,7 @@ export function VoiceInput({
           disabled={disabled || phase !== "idle"}
           aria-label="Dictate"
         >
-          <IconMic size={24} />
+          <IconMic size={20} />
         </button>
       </Tooltip>
       {error && phase === "idle" && (

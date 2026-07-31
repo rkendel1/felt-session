@@ -9187,8 +9187,8 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 		height: 40px;
 	}
 	.palette-icon-btn svg {
-		width: 24px;
-		height: 24px;
+		width: 20px;
+		height: 20px;
 	}
 }
 
@@ -10354,7 +10354,7 @@ html[data-theme="light"] .composer-hl .cmp-fence {
    box: the button keeps its 40px pointer target on every viewport, but the wash
    it paints is 32px — the same visual weight as the model pill and the send
    button it sits beside in the composer toolbar. Filling all 40px read as a
-   slab twice the size of its 24px glyph. */
+   slab twice the size of its 20px glyph. */
 .palette-icon-btn::before {
 	content: "";
 	position: absolute;

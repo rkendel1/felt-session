@@ -14,7 +14,7 @@ import { pendingAsks } from "../asks";
 import { transcriptMatchSnippet } from "../jsonl-parser";
 import { transcriptDbPath, transcriptStore } from "../transcript-store";
 import { clearSessionFileArchive } from "../plain-archive";
-import { editPrReviewers } from "../pr-info";
+import { editPrReviewers, isNoPrError } from "../pr-info";
 import { promptQueues, requeueSteerReceipts, stoppedSessions } from "../queue-state";
 import { markPrReviewNotified } from "../pr-review-notifications";
 import { getReviewRequest, setReviewAccepted, setReviewRequest } from "../review-requests";
@@ -677,6 +677,9 @@ export async function handleSessionsRoutes(
 				? githubLoginFor(prevReviewer)
 				: null;
 		const target = resolvePrTarget(session, body?.repo);
+		// Whether the reviewer actually reached GitHub's list — false when there
+		// was no PR to mirror onto, which the push marker below depends on.
+		let mirroredToGithub = false;
 		if (target && (addLogin || removeLogin)) {
 			const credential = githubMutationCredential(ctx);
 			if (!credential) return githubCredentialRequiredResponse();
@@ -686,8 +689,16 @@ export async function handleSessionsRoutes(
 				target.ghRepo,
 				credential,
 			).catch((e: any) => ({ error: e?.message || String(e) }));
-			if ("error" in mirrored)
-				return Response.json(mirrored, { status: 502 });
+			// `resolvePrTarget` resolves from branch metadata alone, so it yields a
+			// target for a branch that has no PR yet — asking a teammate to look at
+			// a session before it has one is normal. That's an answer, not a
+			// failure: there is nothing to mirror, so the local request stands on
+			// its own. Every other error still blocks, so a PR that DOES exist can
+			// never silently disagree with the request stored here.
+			if ("error" in mirrored) {
+				if (!isNoPrError(mirrored.error))
+					return Response.json(mirrored, { status: 502 });
+			} else mirroredToGithub = true;
 		}
 		setReviewRequest(
 			sessionId,
@@ -697,7 +708,9 @@ export async function handleSessionsRoutes(
 		);
 		invalidateSessionsCache();
 		if (reviewer) {
-			if (target && addLogin)
+			// Only suppress the watcher's own push when the request really landed on
+			// GitHub; marking a skipped mirror would swallow a later genuine one.
+			if (mirroredToGithub && target && addLogin)
 				markPrReviewNotified(target.ghRepo, target.branch, reviewer);
 			// Best-effort phone buzz — never let a push hiccup fail the request.
 			void (async () => {

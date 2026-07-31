@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import type { UnifiedSession } from "./types";
-import { sessionPrApproved, sessionPrMerged } from "./session-prs";
+import {
+	sessionPrApproved,
+	sessionPrMerged,
+	sessionPrPresentation,
+} from "./session-prs";
 
 function session(overrides: Partial<UnifiedSession>): UnifiedSession {
 	return {
@@ -112,5 +116,61 @@ describe("session PR lifecycle", () => {
 
 		expect(sessionPrMerged(value)).toBe(false);
 		expect(sessionPrApproved(value)).toBe(false);
+	});
+});
+
+describe("session PR presentation", () => {
+	test("promotes a sole linked PR when the session branch has no PR", () => {
+		const linked = {
+			repo: "tella-fusion",
+			branch: "i-want-to-add-a-browse",
+			source: "linked" as const,
+			number: 5426,
+			url: "https://github.com/tellahq/tella-fusion/pull/5426",
+		};
+
+		expect(sessionPrPresentation([linked])).toEqual({
+			primary: linked,
+			additional: [],
+		});
+	});
+
+	test("keeps multiple linked PRs in the additional stack", () => {
+		const linked = [
+			{
+				repo: "tella-fusion",
+				branch: "feature-one",
+				source: "linked" as const,
+				number: 1,
+			},
+			{
+				repo: "shared-infra",
+				branch: "feature-two",
+				source: "linked" as const,
+				number: 2,
+			},
+		];
+
+		expect(sessionPrPresentation(linked)).toEqual({ additional: linked });
+	});
+
+	test("keeps a branch-derived PR primary when additional PRs exist", () => {
+		const primary = {
+			repo: "tella-fusion",
+			branch: "feature",
+			source: "primary" as const,
+			number: 1,
+		};
+		const linked = {
+			repo: "shared-infra",
+			branch: "infra-feature",
+			source: "linked" as const,
+			number: 2,
+		};
+
+		expect(sessionPrPresentation([primary, linked])).toEqual({
+			primary,
+			additional: [linked],
+		});
 	});
 });

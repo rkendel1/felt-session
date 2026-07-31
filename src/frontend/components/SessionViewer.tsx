@@ -75,6 +75,7 @@ import {
 	pollWhileVisible,
 	PR_WEBHOOK_FALLBACK_POLL_MS,
 } from "../lib/poll";
+import { sessionPrPresentation } from "../lib/session-prs";
 import { useBackSwipe } from "../hooks/useBackSwipe";
 import { personKey, prReviewCompletion } from "../lib/review-queue";
 import { Composer } from "./Composer";
@@ -620,6 +621,14 @@ export function SessionViewer({
 			primary: false,
 		})),
 	];
+	const prPresentation = useMemo(
+		() => sessionPrPresentation(session.prs),
+		[session.prs],
+	);
+	const promotedPr =
+		prPresentation.primary?.source !== "primary"
+			? prPresentation.primary
+			: undefined;
 	// PRs the server matched to this session through their body's attribution
 	// footer — opened on a branch the session doesn't own, so they'd otherwise
 	// have no Review tab of their own.
@@ -668,6 +677,7 @@ export function SessionViewer({
 					(target) => localRepos.find((repo) => repo.id === target.repo)?.ghRepo,
 				)
 			: reviewRepos;
+	const panelReviewRepos = promotedPr ? [] : githubReviewRepos;
 	const localRepoHasNoGitHubRemote =
 		localMode &&
 		session.local &&
@@ -4811,7 +4821,7 @@ export function SessionViewer({
 											text,
 										}))
 									}
-									repos={githubReviewRepos}
+									repos={panelReviewRepos}
 									linkedPrs={session.linkedPrs}
 									discoveredPrs={discoveredPrs}
 									focusTarget={reviewFocus}

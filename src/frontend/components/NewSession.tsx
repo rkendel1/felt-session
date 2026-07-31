@@ -816,7 +816,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
                 aria-label="Advanced options — base branch, plan first, run environment"
                 aria-expanded={showOptions}
               >
-                <IconSliders size={24} />
+                <IconSliders size={20} />
               </button>
             )}
             <button
@@ -827,7 +827,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
               title="Attach a file"
               aria-label="Attach a file"
             >
-              <IconPaperclip size={24} />
+              <IconPaperclip size={20} />
             </button>
             <input
               ref={fileInputRef}
@@ -850,7 +850,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
                   title={`Connected services${selectedMcpServers.length ? ` (${selectedMcpServers.length})` : ""}`}
                   aria-label="Choose connected services"
                 >
-                  <IconConnections size={24} />
+                  <IconConnections size={20} />
                   {selectedMcpServers.length > 0 && (
                     <span className="palette-mcp-picker-badge absolute -right-1 -top-1 z-20 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent text-meta font-semibold text-panel">{selectedMcpServers.length}</span>
                   )}
@@ -890,7 +890,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
                 aria-label="Choose connected services"
                 aria-expanded={mcpPickerOpen}
               >
-                <IconConnections size={24} />
+                <IconConnections size={20} />
                 {selectedMcpServers.length > 0 && (
                   <span className="palette-mcp-picker-badge absolute -right-1 -top-1 z-20 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent text-meta font-semibold text-panel">{selectedMcpServers.length}</span>
                 )}
@@ -928,7 +928,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
                   aria-label={planFirst ? "Exit plan mode" : "Enter plan mode"}
                   aria-pressed={planFirst}
                 >
-                  <IconMap size={24} />
+                  <IconMap size={20} />
                 </button>
               </Tooltip>
             )}
@@ -945,7 +945,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
                   }`}
                   aria-label="Run environment"
                 >
-                  <IconBox size={24} />
+                  <IconBox size={20} />
                 </Menu.Trigger>
                 <Menu.Popup align="start" sideOffset={6} className="max-w-[min(340px,calc(100vw-1rem))]">
                   <Menu.Group>

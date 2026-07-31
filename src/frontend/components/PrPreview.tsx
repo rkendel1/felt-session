@@ -623,8 +623,9 @@ export function PrPreview({
 											: diffError || "No text diff is available for this PR."}
 									</div>
 									{!diffLoading && diffError && (
-										<button
-											className="mt-3 rounded-sm border border-line bg-panel px-3 py-1.5 text-label text-fg hover:bg-hover"
+										<Button
+											size="sm"
+											className="mt-3"
 											onClick={() => {
 												setDiffLoading(true);
 												setDiffError(null);
@@ -632,7 +633,7 @@ export function PrPreview({
 											}}
 										>
 											Retry
-										</button>
+										</Button>
 									)}
 								</div>
 							)}

@@ -6,11 +6,15 @@ import { Button } from "../ui/button";
 import { useIsPhone } from "../hooks/useIsPhone";
 import { useCurrentUser } from "./UserPicker";
 import { UserAvatar } from "./UserAvatar";
-import { RepoTile } from "./RepoTile";
+import { RepoTile, repoLabel } from "./RepoTile";
 import { TeamFacepile, useTeamPresence } from "./TeamPresence";
+import { Menu } from "../ui/menu";
+import { Tooltip } from "../ui/tooltip";
 import {
   IconArchive,
+  IconCheck,
   IconChevronDown,
+  IconDotsHorizontal,
   IconFolder,
   IconGitMerge,
   IconPullRequest,
@@ -578,32 +582,58 @@ export function Home({ sessions, projects, onSelect, onNewSession, onOpenAnalyti
           </label>
 
           {repoOptions.length > 1 && (
-            <label className="relative flex items-center gap-2 text-control-label text-dim hover:text-fg">
-              <IconRepo size={20} />
-              <select
-                className="max-w-[190px] cursor-pointer appearance-none border-0 bg-transparent py-1 pl-0 pr-6 text-inherit outline-none"
-                value={repo}
-                onChange={(event) => setRepo(event.target.value)}
-              >
-                <option value="all">In all repos</option>
-                {repoOptions.map((name) => (
-                  <option key={name} value={name}>
-                    In {name}
-                  </option>
-                ))}
-              </select>
-              <IconChevronDown className="pointer-events-none absolute right-0" size={20} />
-            </label>
+            <Menu.Root>
+              <Menu.Trigger className="flex items-center gap-2 rounded-md border-0 bg-transparent p-1 text-control-label text-dim hover:text-fg data-[popup-open]:text-fg">
+                <IconRepo size={20} />
+                <span className="max-w-[190px] truncate">
+                  {repo === "all" ? "In all repos" : `In ${repoLabel(repo)}`}
+                </span>
+                <IconChevronDown size={20} />
+              </Menu.Trigger>
+              <Menu.Popup align="start">
+                <Menu.RadioGroup value={repo} onValueChange={(value) => setRepo(String(value))}>
+                  <Menu.RadioItem value="all" closeOnClick>
+                    {/* Sized to the tiles below so every label shares one edge. */}
+                    <span className="size-[18px] shrink-0" />
+                    <span className="min-w-0 flex-1 truncate">All repos</span>
+                    {repo === "all" && <IconCheck className="shrink-0 text-accent" size={17} />}
+                  </Menu.RadioItem>
+                  {repoOptions.map((name) => (
+                    <Menu.RadioItem key={name} value={name} closeOnClick>
+                      <RepoTile name={name} size={18} />
+                      <span className="min-w-0 flex-1 truncate">{repoLabel(name)}</span>
+                      {repo === name && <IconCheck className="shrink-0 text-accent" size={17} />}
+                    </Menu.RadioItem>
+                  ))}
+                </Menu.RadioGroup>
+              </Menu.Popup>
+            </Menu.Root>
           )}
 
-          <button
-            className={`flex items-center gap-2 border-0 bg-transparent p-1 text-control-label hover:text-fg ${showArchived ? "text-fg" : "text-dim"}`}
-            onClick={() => setShowArchived((value) => !value)}
-            aria-pressed={showArchived}
-          >
-            <IconArchive size={20} />
-            {showArchived ? "Showing archived" : "Hiding archived"}
-          </button>
+          {/* Archived is a rarely-flipped switch, so it lives behind the
+              overflow menu rather than spending a slot in the bar. It keeps
+              its own colour when on, so the bar still says it's narrowed. */}
+          <Menu.Root>
+            <Tooltip label="More filters">
+              <Menu.Trigger
+                aria-label="More filters"
+                className={`flex items-center justify-self-end rounded-md border-0 bg-transparent p-1 hover:text-fg data-[popup-open]:text-fg ${showArchived ? "text-fg" : "text-dim"}`}
+              >
+                <IconDotsHorizontal size={20} />
+              </Menu.Trigger>
+            </Tooltip>
+            <Menu.Popup align="end">
+              <Menu.CheckboxItem
+                checked={showArchived}
+                onCheckedChange={setShowArchived}
+                closeOnClick
+              >
+                <IconArchive size={18} />
+                <span className="min-w-0 flex-1 truncate">Show archived</span>
+                {showArchived && <IconCheck className="shrink-0 text-accent" size={17} />}
+              </Menu.CheckboxItem>
+            </Menu.Popup>
+          </Menu.Root>
         </div>
 
         {sections.length === 0 ? (

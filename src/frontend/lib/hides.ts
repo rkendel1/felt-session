@@ -7,10 +7,17 @@
 // chat id) that only ever affects you; the chat keeps running and stays in
 // everyone else's sidebar.
 //
-// A hide is sticky (unlike a snooze, it has no expiry), with one exception the
-// Sidebar applies: a hidden row resurfaces while any of its chats is blocked on
-// a question, and the entry is consumed when that happens — so a hide can never
-// swallow work that needs you. The public API stays synchronous (an in-memory
+// There is deliberately no "Hidden" band: hiding means the row is off your
+// sidebar, not filed into a drawer you'd never open. A hidden chat stays
+// findable in the ⌘K palette (which ignores hides), and the Sidebar always
+// shows the OPEN chat's row — so opening one brings its row back and its menu
+// offers "Restore to my sidebar". Prompting in a chat clears its hide outright
+// (`unhideForChat`): you can't be done with work you're actively doing.
+//
+// A hide is otherwise sticky (unlike a snooze, it has no expiry), with one
+// exception the Sidebar applies: a hidden row resurfaces while any of its chats
+// is blocked on a question, and the entry is consumed when that happens — so a
+// hide can never swallow work that needs you. The public API stays synchronous (an in-memory
 // cache) mirroring snoozes.ts: hydrated on load and on user switch, writes are
 // optimistic — update the cache + fire the change event immediately, then PUT
 // the full map.
@@ -55,11 +62,6 @@ export function getHides(): Record<string, string> {
 	return cache;
 }
 
-/** True when the user has hidden this row key. */
-export function isHidden(key: string): boolean {
-	return key in cache;
-}
-
 export function setHide(key: string): void {
 	if (key in cache) return;
 	cache = { ...cache, [key]: new Date().toISOString() };
@@ -79,10 +81,6 @@ export function clearHides(keys: string[]): void {
 	cache = next;
 	emit();
 	void saveHidesApi(getCurrentUser(), cache).catch(() => {});
-}
-
-export function clearHide(key: string): void {
-	clearHides([key]);
 }
 
 /**

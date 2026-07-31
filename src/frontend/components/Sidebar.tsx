@@ -51,7 +51,6 @@ import {
 	snoozePresets,
 } from "../lib/snoozes";
 import {
-	clearHide,
 	clearHides,
 	getHides,
 	onHidesChanged,
@@ -2402,21 +2401,29 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// Resurfacing consumes the entry (see the sweep below), which keeps the
 	// rule "it came back because it needed me, and stays back until I hide it
 	// again" instead of flickering as questions get asked and answered.
+	//
+	// Otherwise you get a hidden row back by opening one of its chats — ⌘K
+	// still finds it — which resurfaces the row (below) so its menu can offer
+	// "Restore to my sidebar"; prompting in it clears the hide outright
+	// (SessionViewer → unhideForChat). There is no Hidden band: hiding is
+	// removal from your sidebar, not a folder to browse.
 	const { hiddenKeys: hiddenRowKeys, resurfaced: resurfacedRows } = useMemo(
 		() => partitionHidden(allWsRows, hides),
 		[allWsRows, hides],
 	);
+	// The open chat's row always shows, hidden or not — the same rule that keeps
+	// it from disappearing inside a collapsed band. It's what makes hiding
+	// reversible without a Hidden band to browse: ⌘K finds a hidden chat (the
+	// palette ignores hides), opening it brings its row back, and the row menu
+	// then offers "Restore to my sidebar".
 	const wsRows = useMemo(
-		() => allWsRows.filter((r) => !hiddenRowKeys.has(r.key)),
-		[allWsRows, hiddenRowKeys],
-	);
-	/** Hidden rows, for the Hidden band's restore list — newest activity first. */
-	const hiddenWsRows = useMemo(
 		() =>
-			allWsRows
-				.filter((r) => hiddenRowKeys.has(r.key))
-				.sort((a, b) => (b.lastActivity || "").localeCompare(a.lastActivity || "")),
-		[allWsRows, hiddenRowKeys],
+			allWsRows.filter(
+				(r) =>
+					!hiddenRowKeys.has(r.key) ||
+					r.chats.some((c) => c.id === selectedId),
+			),
+		[allWsRows, hiddenRowKeys, selectedId],
 	);
 	// Consume the hide of any row that just resurfaced (blocked on a question),
 	// marking its chats unread so the return reads as fresh activity — the same
@@ -3722,90 +3729,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 									</span>
 								</button>
 							)}
-						</div>
-					);
-				})()
-			: null;
-
-	// "Hidden" is Archived's personal twin, and renders as its sibling: same
-	// collapsible shape, but these rows are only hidden for you — the chats are
-	// live and still in everyone else's sidebar. It appears only when you've
-	// hidden something, so it costs no chrome for people who never use it.
-	const hiddenBand =
-		hiddenWsRows.length > 0
-			? (() => {
-					const open = isOpen("hidden");
-					return (
-						<div className="sidebar-status-group">
-							<button
-								className="sidebar-group-header flex w-full items-center gap-[9px] rounded-md px-[10px] py-1 text-body font-medium text-dim transition-colors hover:bg-hover hover:text-fg"
-								onClick={() => toggleGroup("hidden")}
-							>
-								<span className="inline-flex shrink-0 items-center text-faint">
-									<IconEyeOff size={18} />
-								</span>
-								<span className="sidebar-group-name">Hidden</span>
-								<span className="sidebar-group-count">
-									{hiddenWsRows.length}
-								</span>
-								<IconChevronDown
-									className="sidebar-group-chevron"
-									size={22}
-									style={{ transform: open ? "none" : "rotate(-90deg)" }}
-								/>
-							</button>
-							{open &&
-								hiddenWsRows.map((r) => (
-									<button
-										key={r.key}
-										className="sidebar-item sidebar-ws-row sidebar-archived-row"
-										onClick={() => onSelect(r.chats[0])}
-										aria-label={r.name}
-									>
-										<span className="sidebar-rail">
-											<span className="sidebar-item-status sidebar-status-idle" />
-										</span>
-										<span
-											className="sidebar-item-title"
-											style={{ color: "var(--text-dim)" }}
-										>
-											{stripPrTitlePrefix(r.name)}
-										</span>
-										{!isPhone && r.lastActivity && (
-											<span className="sidebar-ws-time">
-												{shortTime(r.lastActivity)}
-											</span>
-										)}
-										<span className="sidebar-ws-actions">
-											<Tooltip
-												label={
-													r.chats.length > 1
-														? `Restore workspace (${r.chats.length} chats) to my sidebar`
-														: "Restore to my sidebar"
-												}
-											>
-												<span
-													role="button"
-													tabIndex={0}
-													className="sidebar-ws-action"
-													aria-label="Restore to my sidebar"
-													onClick={(e) => {
-														e.stopPropagation();
-														clearHide(r.key);
-													}}
-													onKeyDown={(e) => {
-														if (e.key === "Enter" || e.key === " ") {
-															e.stopPropagation();
-															clearHide(r.key);
-														}
-													}}
-												>
-													<IconEye size={21} />
-												</span>
-											</Tooltip>
-										</span>
-									</button>
-								))}
 						</div>
 					);
 				})()
@@ -5293,12 +5216,18 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						// Hide sits above Archive as the gentler removal: Archive is
 						// global (it ends the work for the whole team), Hide only
 						// clears it off your own sidebar while a teammate keeps
-						// working in it.
+						// working in it. On an already-hidden row — which you can
+						// only be looking at because you searched for it — the same
+						// slot offers the way back, since there's no Hidden band.
+						const rowHidden = hiddenRowKeys.has(menuRow.key);
 						entries.push({
 							kind: "item",
-							icon: <IconEyeOff size={20} />,
-							label: "Hide from my sidebar",
-							onClick: () => hideRow(menuRow),
+							icon: rowHidden ? <IconEye size={20} /> : <IconEyeOff size={20} />,
+							label: rowHidden
+								? "Restore to my sidebar"
+								: "Hide from my sidebar",
+							onClick: () =>
+								rowHidden ? clearHides([menuRow.key]) : hideRow(menuRow),
 						});
 						entries.push({
 							kind: "item",
@@ -5813,8 +5742,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 									.map((d) => renderFeedBand(d, false)),
 							]}
 				</div>
-
-				{hiddenBand && <div className="sidebar-group">{hiddenBand}</div>}
 
 				{archivedBand && (
 					<div className="sidebar-group">{archivedBand}</div>

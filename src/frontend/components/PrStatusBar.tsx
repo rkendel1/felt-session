@@ -14,6 +14,7 @@ import {
 } from "../lib/poll";
 import { getCurrentUser } from "./UserPicker";
 import { providerFromUrl } from "../lib/provider";
+import { sessionPrPresentation } from "../lib/session-prs";
 import { Tooltip } from "../ui/tooltip";
 import { ContextMenu, Menu } from "../ui/menu";
 import { cn } from "../ui/cn";
@@ -537,7 +538,12 @@ export function PrStatusBar({
 	running,
 	refreshTick,
 }: Props) {
-	const cacheId = `${sessionId}\0${repo || ""}`;
+	const presentation = useMemo(() => sessionPrPresentation(prs), [prs]);
+	const promoted =
+		presentation.primary?.source !== "primary" ? presentation.primary : undefined;
+	const targetRepo = promoted?.repo || repo;
+	const targetBranch = promoted?.branch;
+	const cacheId = `${sessionId}\0${targetRepo || ""}\0${targetBranch || ""}`;
 	const seed = lastKnown.get(cacheId);
 	const [pr, setPr] = useState<PrDetails | null>(seed?.pr ?? null);
 	const [git, setGit] = useState<GitStatusInfo | null>(seed?.git ?? null);
@@ -552,19 +558,21 @@ export function PrStatusBar({
 
 	const load = useCallback(async () => {
 		const [prData, gitData] = await Promise.all([
-			fetchPr(sessionId, repo).catch(() => null),
-			fetchGitStatus(sessionId, repo).catch(() => null),
+			fetchPr(sessionId, targetRepo, targetBranch).catch(() => null),
+			promoted
+				? Promise.resolve(null)
+				: fetchGitStatus(sessionId, repo).catch(() => null),
 		]);
 		setPr(prData);
 		setGit(gitData);
 		setLoaded(true);
-		lastKnown.set(`${sessionId}\0${repo || ""}`, { pr: prData, git: gitData });
-	}, [sessionId, repo]);
+		lastKnown.set(cacheId, { pr: prData, git: gitData });
+	}, [sessionId, targetRepo, targetBranch, promoted, repo, cacheId]);
 
 	useEffect(() => {
 		// Session/repo switch on a mounted component: fall back to that target's
 		// last-known state (or the checking placeholder) while the fetch runs.
-		const cached = lastKnown.get(`${sessionId}\0${repo || ""}`);
+		const cached = lastKnown.get(cacheId);
 		setPr(cached?.pr ?? null);
 		setGit(cached?.git ?? null);
 		setLoaded(!!cached);
@@ -592,14 +600,11 @@ export function PrStatusBar({
 	// Everything except the primary branch's PR (which the headline covers):
 	// attached repos, manual links, and PRs discovered through their body
 	// footer. Numberless refs are branches with no PR yet — nothing to chip.
-	const siblings = useMemo(
-		() => (prs || []).filter((r) => r.source !== "primary" && !!r.number),
-		[prs],
-	);
+	const siblings = presentation.additional;
 	// Slack/Linear sessions carry no explicit `repo` — fall back to the primary
 	// ref's, so cross-repo chips still get their repo hint.
 	const primaryRepoId =
-		repo || (prs || []).find((r) => r.source === "primary")?.repo;
+		targetRepo || (prs || []).find((r) => r.source === "primary")?.repo;
 	const openSiblings = siblings.filter(
 		(r) => r.state !== "MERGED" && r.state !== "CLOSED",
 	).length;
@@ -639,7 +644,9 @@ export function PrStatusBar({
 			return;
 		}
 		setConfirmMerge(false);
-		run("merge", () => mergePrApi(sessionId, "squash", repo));
+		run("merge", () =>
+			mergePrApi(sessionId, "squash", targetRepo, targetBranch),
+		);
 	}
 
 	// Session-driven actions: ask the agent instead of doing bare git plumbing —
