@@ -7815,9 +7815,7 @@ function WsOverviewInfo({
 						<button
 							key={`${m.sessionId}:${m.at}:${i}`}
 							type="button"
-							onClick={(event) =>
-								openLightbox(media, i, event.currentTarget)
-							}
+							onClick={() => openLightbox(media, i)}
 							className="relative block aspect-video w-[124px] shrink-0 snap-start overflow-hidden rounded-sm border border-line bg-surface p-0"
 							title={[m.chatTitle, new Date(m.at).toLocaleString()]
 								.filter(Boolean)

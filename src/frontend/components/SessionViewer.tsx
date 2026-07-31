@@ -4204,7 +4204,7 @@ export function SessionViewer({
 									/>
 								}
 								className={cn(
-									// global.css turns on the squircle via
+									// adapters.css turns on the squircle via
 									// `[class*="rounded-"]:not([class*="rounded-full"])`. That
 									// `:not` is a substring test on the whole class attribute,
 									// so the mobile `rounded-full` below disqualifies this

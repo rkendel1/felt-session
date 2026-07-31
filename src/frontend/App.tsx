@@ -3496,7 +3496,7 @@ function App() {
 						/>
 					</div>
 
-					<div className="workspace-shell flex min-w-0 flex-1 overflow-hidden rounded-panel bg-bg min-[721px]:m-2 min-[721px]:border min-[721px]:border-line">
+					<div className="workspace-shell flex min-w-0 flex-1 overflow-hidden rounded-panel bg-bg max-[720px]:contents min-[721px]:m-2 min-[721px]:border min-[721px]:border-line">
 						<main className="detail-pane relative flex min-h-0 min-w-0 flex-1 flex-col" ref={detailPaneRef}>
 						{/* WCO back/forward fallback: the primary cluster lives in the
 						    sidebar's top chrome row, which vanishes when the sidebar is
