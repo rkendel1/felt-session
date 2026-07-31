@@ -1,6 +1,11 @@
 /** Shared identifiers for the github PR agent. */
 
-import { configuredRepos, defaultRepo, type Repo } from "../../server/config";
+import {
+  configuredIntegration,
+  configuredRepos,
+  defaultRepo,
+  type Repo,
+} from "../../server/config";
 
 /**
  * The configured repo a webhook's `repository.full_name` belongs to, or null.
@@ -43,8 +48,15 @@ export const PR_MERGED_EVENT_KEY = "github:pr_merged";
 export const DOCS_SYNC_AUTOMATION_NAME = "docs-sync";
 /** Branch prefix for docs-sync's own PRs — skipped on merge so it can't loop. */
 export const DOCS_SYNC_BRANCH_PREFIX = "auto-docs-sync-";
-/** #proj-help-center — where docs-sync announces the PRs it opens. */
-export const DOCS_SYNC_SLACK_CHANNEL = "C09BAFFK8F8";
+/**
+ * Slack channel where docs-sync announces the PRs it opens
+ * (`integrations.github.docsSyncChannel`). Undefined when unconfigured — the
+ * announcement is an optional courtesy, so docs-sync still runs without it.
+ */
+export function docsSyncChannel(): string | undefined {
+  const configured = configuredIntegration("github").docsSyncChannel;
+  return typeof configured === "string" && configured.trim() ? configured.trim() : undefined;
+}
 
 /**
  * PR trigger labels. Canonical names are the generic os-* ones; the legacy
