@@ -71,7 +71,7 @@ export function WalkthroughCard({
 			)}
 		>
 			<div className="mb-2 flex items-baseline gap-2">
-				<span className="text-xs font-semibold text-dim">
+				<span className="text-label font-semibold text-dim">
 					Walkthrough
 				</span>
 				{chat && walkthrough.publishedAt && (
@@ -108,7 +108,7 @@ export function WalkthroughCard({
 			{(walkthrough.shots || []).map((shot, i) => (
 				<div className="mt-3" key={i}>
 					{shot.caption && (
-						<div className="mb-1 text-xs text-dim">{shot.caption}</div>
+						<div className="mb-1 text-label text-dim">{shot.caption}</div>
 					)}
 					<div className="flex gap-2">
 						{(["before", "after"] as const).map(

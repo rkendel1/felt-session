@@ -209,7 +209,7 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
         className={`max-[560px]:mb-5 max-[560px]:flex-col max-[560px]:items-start max-[560px]:gap-3.5 ${sel ? "mb-3.5 items-center" : ""}`}
       >
         <div>
-          <PageTitle className={sel ? "text-base" : undefined}>Automations</PageTitle>
+          <PageTitle className={sel ? "text-body" : undefined}>Automations</PageTitle>
           <PageDescription className={sel ? "hidden" : undefined}>
             Scheduled {AGENT_NAME} sessions — cron runs in UTC (server time).
           </PageDescription>
@@ -369,7 +369,7 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
                   >
                     <span className="absolute left-0.5 top-0.5 size-[13px] rounded-full bg-faint transition-[transform,background-color]" />
                   </button>
-                  <span className="text-dim text-[13px]">
+                  <span className="text-dim text-control-label">
                     {sel.enabled ? "Enabled" : "Disabled"}
                   </span>
                   {(sel.isRunning || sel.lastRunStatus === "running") && (
@@ -635,7 +635,7 @@ function TriggerGraph({ runs, compact }: { runs: AutomationRun[]; compact?: bool
         })}
       </svg>
       {!compact && (
-        <span className="pb-px text-meta leading-none text-faint">
+		<span className="pb-px text-meta leading-none text-faint">
           {total} run{total === 1 ? "" : "s"} · last {GRAPH_DAYS}d
         </span>
       )}
@@ -852,7 +852,7 @@ function TypeChooser({
           className="text-left bg-surface border border-line rounded-panel px-4 py-3.5 cursor-pointer hover:border-line-strong hover:bg-hover transition-colors"
           onClick={() => onPick(null, "classic")}
         >
-          <div className="text-fg text-[14px] font-medium mb-1">Classical automation</div>
+          <div className="text-fg text-body font-medium mb-1">Classical automation</div>
           <div className="text-dim text-supporting leading-snug">
             Trigger {AGENT_NAME} sessions based on schedules, internal events, and webhooks.
           </div>
@@ -861,7 +861,7 @@ function TypeChooser({
           className="text-left bg-surface border border-line rounded-panel px-4 py-3.5 cursor-pointer hover:border-line-strong hover:bg-hover transition-colors"
           onClick={() => onPick(null, "watch")}
         >
-          <div className="text-fg text-[14px] font-medium mb-1">Watch a channel</div>
+          <div className="text-fg text-body font-medium mb-1">Watch a channel</div>
           <div className="text-dim text-supporting leading-snug">
             {AGENT_NAME} triages every incoming message in a Slack channel, using the
             channel's memory as standing context.
@@ -905,8 +905,8 @@ function TypeChooser({
                 onClick={() => onPick(t, "classic")}
               >
                 <div className="flex items-baseline gap-2 mb-1">
-                  <span className="text-fg text-[13px] font-medium">{t.name}</span>
-                  <span className="ml-auto shrink-0 text-meta tracking-[-0.01em] text-faint">
+					<span className="text-control-label font-medium text-fg">{t.name}</span>
+					<span className="ml-auto shrink-0 text-meta tracking-[-0.01em] text-faint">
                     {CATEGORY_LABELS[t.category] || t.category}
                   </span>
                 </div>
@@ -972,7 +972,7 @@ function McpPicker({
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-baseline gap-2">
-        <span className="text-fg text-[13px] font-medium">MCPs</span>
+        <span className="text-fg text-control-label font-medium">MCPs</span>
         <span className="text-dim text-label">
           Select which connectors this automation's runs can use
         </span>
@@ -989,7 +989,7 @@ function McpPicker({
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search MCPs…"
-            className="flex-1 bg-transparent border-0 outline-none text-[13px] text-fg placeholder:text-faint"
+            className="flex-1 bg-transparent border-0 outline-none text-control-label text-fg placeholder:text-faint"
             style={{ border: "none", padding: 0, background: "transparent" }}
           />
           <span className="text-faint text-[11px] shrink-0">
@@ -1192,7 +1192,7 @@ function AutomationForm({
             placeholder="C0123456789 (channel id)"
             className="mono-input"
           />
-          <span className="mt-1 text-meta leading-snug text-faint">
+			<span className="mt-1 text-meta leading-snug text-faint">
             Invite @michael to the channel first — the bot only receives messages
             for channels it's a member of. One run per top-level message; thread
             replies don't re-trigger. Channel id is in the channel's “About” tab.
@@ -1201,7 +1201,7 @@ function AutomationForm({
       ) : (
         <div className="flex flex-col gap-1.5">
           <div>
-            <span className="text-fg text-[13px] font-medium">Triggers</span>
+            <span className="text-fg text-control-label font-medium">Triggers</span>
             <span className="text-dim text-label ml-2">
               Run the automation when any of these conditions are met
             </span>
@@ -1239,7 +1239,7 @@ function AutomationForm({
                 ))}
               </select>
             </label>
-            <div className="text-meta text-faint">
+			<div className="text-meta text-faint">
               Every automation also gets a secret webhook URL you can POST to —
               shown on its card after creation.
             </div>
@@ -1349,7 +1349,7 @@ function AutomationForm({
       {error && <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>}
 
       <div className="flex justify-end gap-2.5">
-        <Button size="sm" className="px-3 text-[13px]" onClick={onClose} disabled={saving}>
+        <Button size="sm" className="px-3 text-control-label" onClick={onClose} disabled={saving}>
           Cancel
         </Button>
         <Button

@@ -37,9 +37,8 @@ language instead of introducing a new local style for each feature.
 
 ## Styling
 
-- Use Tailwind utilities for new and touched UI. Migrate nearby legacy
-  `global.css` classes when it is practical, but do not perform unrelated
-  broad rewrites.
+- Use Tailwind utilities for component-owned presentation. Keep marker classes
+  only when JavaScript or a shared state selector consumes them.
 - Use the semantic tokens from `styles/tailwind.css`, such as `bg-panel`,
   `text-fg`, `text-dim`, and `border-line`. Never add raw color values or stock
   Tailwind palette colors to product UI.
@@ -47,7 +46,7 @@ language instead of introducing a new local style for each feature.
   primitives so callers can adjust layout without copying the component.
 - Paint interaction states with the hover washes — `hover:bg-hover` /
   `bg-pressed` in Tailwind, `var(--hover)` / `var(--hover-strong)` in
-  `global.css`. They are translucent ink, so one token reads at the same
+  `adapters.css`. They are translucent ink, so one token reads at the same
   strength on any surface. Do not use `--bg-hover` or `--bg-raised` as a hover:
   they are absolute surfaces, so they land as a heavy wash on `--bg` and a
   nearly invisible one on `--bg-panel`, and `--bg-raised` steps the wrong way in
@@ -61,9 +60,9 @@ language instead of introducing a new local style for each feature.
 - Match the surrounding surface before adding visual emphasis. Accent colors,
   raised surfaces, shadows, and animation should communicate meaning, not make
   a new feature louder than its neighbors.
-- Add rules to `global.css` only when they are truly global, theme-level, or
-  part of a legacy surface that cannot yet be migrated. Component styling
-  belongs with the component.
+- Add rules to `adapters.css` only for document/theme foundations,
+  generated-content or third-party adapters, native shell hooks, responsive
+  state coupling, and shared keyframes. Component styling belongs in JSX.
 
 ## Interaction and accessibility
 

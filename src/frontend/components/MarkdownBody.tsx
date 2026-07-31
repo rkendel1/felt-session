@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { effectiveTheme, onThemeChanged, type EffectiveTheme } from "../lib/theme";
 
 // Keep the stable `.markdown` hook for generated HTML while making the rendered
-// document own its presentation instead of depending on global.css.
+// document own its presentation instead of depending on adapter selectors.
 export const MARKDOWN_STYLES = [
 	"text-body leading-6 break-words",
 	"[&_p]:mb-1.5 [&_p]:mt-0",

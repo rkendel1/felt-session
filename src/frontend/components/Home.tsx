@@ -608,12 +608,12 @@ export function Home({ sessions, projects, onSelect, onNewSession, onOpenAnalyti
 
         {sections.length === 0 ? (
           <div className="px-2 py-16 text-center">
-            <div className="text-sm font-medium text-fg">
-              {query
-                ? "No matching worktrees"
-                : person === "all"
-                  ? "No pull request worktrees yet"
-                  : `Nothing open for ${personLabel(person)}`}
+			<div className="text-control-label font-medium text-fg">
+				{query
+					? "No matching worktrees"
+					: person === "all"
+						? "No pull request worktrees yet"
+						: `Nothing open for ${personLabel(person)}`}
             </div>
             <div className="mt-1 text-body text-faint">
               {query

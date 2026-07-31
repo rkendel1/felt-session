@@ -272,7 +272,7 @@ export function useFileMentions({ value, onChange, textareaRef, mentionFetch, sk
             role="option"
             aria-selected={i === activeIdx}
             className={cn(
-              "mention-item flex cursor-pointer items-baseline gap-2 overflow-hidden rounded-md px-[9px] py-1.5 text-[12.5px] leading-[1.3] whitespace-nowrap",
+              "mention-item flex cursor-pointer items-baseline gap-2 overflow-hidden rounded-md px-[9px] py-1.5 text-supporting leading-[1.3] whitespace-nowrap",
               i === activeIdx && "mention-item-active bg-pressed",
             )}
             onMouseDown={(e) => {
@@ -281,13 +281,13 @@ export function useFileMentions({ value, onChange, textareaRef, mentionFetch, sk
             }}
             onMouseEnter={() => setActiveIdx(i)}
           >
-            {isSession && <span className="mention-repo shrink-0 self-center rounded-sm bg-[color-mix(in_srgb,var(--accent)_14%,transparent)] px-[5px] py-px text-[10.5px] font-semibold text-accent">session</span>}
-            {isPerson && <span className="mention-repo shrink-0 self-center rounded-sm bg-[color-mix(in_srgb,var(--accent)_14%,transparent)] px-[5px] py-px text-[10.5px] font-semibold text-accent">person</span>}
-            {!isSession && !isSkill && !isPerson && item.repo && <span className="mention-repo shrink-0 self-center rounded-sm bg-[color-mix(in_srgb,var(--accent)_14%,transparent)] px-[5px] py-px text-[10.5px] font-semibold text-accent">{item.repo}</span>}
+            {isSession && <span className="mention-repo shrink-0 self-center rounded-sm bg-[color-mix(in_srgb,var(--accent)_14%,transparent)] px-[5px] py-px text-meta font-semibold text-accent">session</span>}
+            {isPerson && <span className="mention-repo shrink-0 self-center rounded-sm bg-[color-mix(in_srgb,var(--accent)_14%,transparent)] px-[5px] py-px text-meta font-semibold text-accent">person</span>}
+            {!isSession && !isSkill && !isPerson && item.repo && <span className="mention-repo shrink-0 self-center rounded-sm bg-[color-mix(in_srgb,var(--accent)_14%,transparent)] px-[5px] py-px text-meta font-semibold text-accent">{item.repo}</span>}
             <span className="mention-base shrink-0 font-medium text-fg">{isSkill ? `/${base}` : isDir ? `${base}/` : base}</span>
             {isSession || isSkill || isPerson
-              ? item.sub && <span className="mention-dir overflow-hidden text-[11.5px] text-ellipsis text-left text-faint [direction:rtl]">{item.sub}</span>
-              : dir && <span className="mention-dir overflow-hidden text-[11.5px] text-ellipsis text-left text-faint [direction:rtl]">{dir}</span>}
+              ? item.sub && <span className="mention-dir overflow-hidden text-meta text-ellipsis text-left text-faint [direction:rtl]">{item.sub}</span>
+              : dir && <span className="mention-dir overflow-hidden text-meta text-ellipsis text-left text-faint [direction:rtl]">{dir}</span>}
           </div>
         );
       })}

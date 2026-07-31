@@ -96,12 +96,12 @@ export function ComposerAgents({ runs, subagents, onOpenPanel }: Props) {
 
 	return (
 		<div
-			className="composer-agents relative -mb-3.5 ml-[18px] flex w-[calc(100%-36px)] flex-col gap-2.5 rounded-t-lg border border-b-0 border-line bg-panel px-3.5 pt-2.5 pb-[22px] text-sm font-medium text-fg"
+			className="composer-agents relative -mb-3.5 ml-[18px] flex w-[calc(100%-36px)] flex-col gap-2.5 rounded-t-lg border border-b-0 border-line bg-panel px-3.5 pt-2.5 pb-[22px] text-control-label font-medium text-fg"
 			data-open={open ? "" : undefined}
 		>
 			{open && (
 				<div className="composer-agents-detail flex flex-col gap-2.5">
-					<div className="composer-agents-name truncate text-xs font-semibold text-dim">
+					<div className="composer-agents-name truncate text-label font-semibold text-dim">
 						{single
 							? single.name
 							: runs.length > 0
@@ -121,7 +121,7 @@ export function ComposerAgents({ runs, subagents, onOpenPanel }: Props) {
 									)}
 								>
 									<span className={cn(
-										"composer-agents-step-mark inline-flex size-4 shrink-0 items-center justify-center rounded-full border border-line text-[10px] font-semibold",
+										"composer-agents-step-mark inline-flex size-4 shrink-0 items-center justify-center rounded-full border border-line text-meta font-semibold",
 										i === curIdx && "border-green text-green",
 										i < curIdx && "border-transparent bg-green-soft text-green",
 									)}>
@@ -133,7 +133,7 @@ export function ComposerAgents({ runs, subagents, onOpenPanel }: Props) {
 						</ol>
 					)}
 
-					<div className="composer-agents-tallies flex flex-wrap gap-x-3 gap-y-1 text-xs font-medium">
+					<div className="composer-agents-tallies flex flex-wrap gap-x-3 gap-y-1 text-label font-medium">
 						<span>
 							<i className="composer-agents-dot size-2 shrink-0 rounded-full bg-green motion-safe:animate-[pulse_1.4s_ease-in-out_infinite]" />
 							{runningCount} running
@@ -148,7 +148,7 @@ export function ComposerAgents({ runs, subagents, onOpenPanel }: Props) {
 					</div>
 
 					{running.length > 0 && (
-						<ul className="composer-agents-list m-0 flex max-h-[108px] list-none flex-col gap-[5px] overflow-y-auto p-0 text-xs font-medium">
+						<ul className="composer-agents-list m-0 flex max-h-[108px] list-none flex-col gap-[5px] overflow-y-auto p-0 text-label font-medium">
 							{running.slice(0, 4).map((a) => (
 								<li key={a.key} className="flex min-w-0 items-center gap-[7px]">
 									<i className="composer-agents-dot sm size-1.5 shrink-0 rounded-full bg-green motion-safe:animate-[pulse_1.4s_ease-in-out_infinite]" />
@@ -166,7 +166,7 @@ export function ComposerAgents({ runs, subagents, onOpenPanel }: Props) {
 
 					<button
 						type="button"
-						className="composer-agents-open inline-flex self-start items-center gap-0.5 rounded-full border border-line bg-hover py-[5px] pr-2.5 pl-3 text-xs font-semibold text-fg active:bg-pressed"
+						className="composer-agents-open inline-flex self-start items-center gap-0.5 rounded-full border border-line bg-hover py-[5px] pr-2.5 pl-3 text-label font-semibold text-fg active:bg-pressed"
 						onClick={onOpenPanel}
 					>
 						Open full panel

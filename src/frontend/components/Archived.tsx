@@ -219,7 +219,7 @@ export function Archived({ sessions, onSelect, onChanged }: Props) {
                 </span>
               </span>
               <span
-                className="inline-flex cursor-pointer rounded-sm border border-line-strong px-2.5 py-[3px] text-xs text-dim hover:border-faint hover:text-fg"
+                className="inline-flex cursor-pointer rounded-sm border border-line-strong px-2.5 py-[3px] text-label text-dim hover:border-faint hover:text-fg"
                 role="button"
                 onClick={(e) => handleUnarchive(e, s.id)}
               >

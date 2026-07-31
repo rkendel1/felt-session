@@ -36,7 +36,7 @@ export function ImageThumbs({ images, onRemove, disabled }: Props) {
           <button
             type="button"
             className={cn(
-              "composer-image-remove absolute -top-1.5 -right-1.5 flex size-[18px] items-center justify-center rounded-full border-0 bg-fg p-0 text-[13px] leading-none text-panel",
+              "composer-image-remove absolute -top-1.5 -right-1.5 flex size-[18px] items-center justify-center rounded-full border-0 bg-fg p-0 text-control-label leading-none text-panel",
               "disabled:cursor-default disabled:opacity-50",
             )}
             onClick={() => onRemove(i)}

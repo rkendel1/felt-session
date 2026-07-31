@@ -257,7 +257,7 @@ export function Reviews({
       <div className="flex h-full min-h-0 flex-col bg-surface">
         <div className="hidden shrink-0 items-center border-b border-line px-3 py-2 max-[720px]:flex">
           <button
-            className="inline-flex items-center gap-1.5 rounded-sm border-0 bg-transparent px-2 py-1.5 text-sm font-medium text-fg hover:bg-hover"
+            className="inline-flex items-center gap-1.5 rounded-sm border-0 bg-transparent px-2 py-1.5 text-control-label font-medium text-fg hover:bg-hover"
             onClick={() => onSelect("")}
           >
             <svg width="17" height="17" viewBox="0 0 16 16" fill="currentColor" aria-hidden>

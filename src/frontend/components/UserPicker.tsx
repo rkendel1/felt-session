@@ -8,7 +8,7 @@ const GATE_CARD =
   "user-gate-card w-[380px] max-w-[calc(100vw-32px)] rounded-[calc(14px*var(--rf))] border border-line bg-raised p-8 text-center [corner-shape:var(--cs)]";
 const GATE_TITLE = "m-0 mb-5 text-[17px] font-semibold";
 const GATE_BUTTON =
-  "user-gate-btn flex flex-col items-center gap-2 rounded-[calc(8px*var(--rf))] border border-line-strong bg-panel p-3 text-sm text-fg [corner-shape:var(--cs)] transition-[background,border-color] hover:border-accent hover:bg-accent-soft disabled:cursor-default disabled:opacity-50";
+  "user-gate-btn flex flex-col items-center gap-2 rounded-[calc(8px*var(--rf))] border border-line-strong bg-panel p-3 text-control-label text-fg [corner-shape:var(--cs)] transition-[background,border-color] hover:border-accent hover:bg-accent-soft disabled:cursor-default disabled:opacity-50";
 
 /**
  * Mutable compatibility view for older consumers. `usePeople()` owns the
@@ -272,7 +272,7 @@ function GithubSignIn({
         <h2 className={GATE_TITLE}>Sign in</h2>
         {!flow ? (
           <>
-            <p className="my-2.5 mb-4 text-[13px] text-dim">
+            <p className="my-2.5 mb-4 text-control-label text-dim">
               This workspace uses GitHub sign-in. Your sessions will act as your
               own GitHub account (PRs are authored by you).
             </p>
@@ -301,7 +301,7 @@ function GithubSignIn({
             )}
           </>
         ) : (
-          <p className="mt-2.5 mb-0 text-sm leading-[1.7]">
+          <p className="mt-2.5 mb-0 text-control-label leading-[1.7]">
             Enter code{" "}
             <strong className="font-mono tracking-[0.12em]">
               {flow.userCode}

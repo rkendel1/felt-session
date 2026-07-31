@@ -30,8 +30,8 @@ export function FileChips({ files, onRemove, disabled }: Props) {
             {extBadge(f.name)}
           </span>
           <span className="composer-file-meta flex min-w-0 flex-col gap-px">
-            <span className="composer-file-name truncate text-[12.5px] text-fg">{f.name}</span>
-            <span className="composer-file-sub text-[10.5px] text-faint">Attachment</span>
+            <span className="composer-file-name truncate text-supporting text-fg">{f.name}</span>
+            <span className="composer-file-sub text-meta text-faint">Attachment</span>
           </span>
           <button
             type="button"

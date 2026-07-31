@@ -71,7 +71,7 @@ export const TurnFooter = React.memo(function TurnFooter({
   return (
     <div className="mx-auto -mt-2.5 mb-[18px] flex w-full max-w-[var(--chat-col)] flex-wrap items-center gap-x-0.5 gap-y-1.5">
       {duration && (
-        <span className="mr-1.5 text-xs font-medium text-faint">{duration}</span>
+        <span className="mr-1.5 text-label font-medium text-faint">{duration}</span>
       )}
       <Tooltip label={copied ? "Copied" : "Copy message"}>
         <button type="button" onClick={doCopy} className={BTN}>
@@ -99,12 +99,12 @@ export const TurnFooter = React.memo(function TurnFooter({
           </Menu.Item>
           <Menu.Separator className="my-1" />
           {/* Touch has no hover, so the time also lives here — menus open on tap. */}
-          <div className="flex items-center gap-2 px-2.5 py-1.5 text-xs font-medium text-faint">
+          <div className="flex items-center gap-2 px-2.5 py-1.5 text-label font-medium text-faint">
             <IconClock size={20} />
             {fullTime(entry.timestamp)}
           </div>
           {entry.model && (
-            <div className="flex items-center gap-2 px-2.5 py-1.5 text-xs font-medium text-faint">
+            <div className="flex items-center gap-2 px-2.5 py-1.5 text-label font-medium text-faint">
               <IconSparkle size={20} />
               Written by {messageModelLabel(entry.model)}
             </div>
@@ -169,7 +169,7 @@ function FileChip({ file }: { file: TouchedFile }) {
         className="ml-1 flex h-6 min-w-0 cursor-pointer items-center gap-1.5 rounded-md bg-panel px-1.5"
       >
         <ExtBadge name={name} />
-        <span className="max-w-[180px] truncate text-xs font-medium text-dim">
+        <span className="max-w-[180px] truncate text-label font-medium text-dim">
           {name}
         </span>
         <LineStats additions={file.additions} deletions={file.deletions} />
@@ -188,7 +188,7 @@ function FileChip({ file }: { file: TouchedFile }) {
         </div>
         <div className="max-h-[min(360px,55vh)] overflow-y-auto p-1.5">
           {file.edits.length === 0 ? (
-            <div className="px-1.5 py-2 text-xs text-faint">
+            <div className="px-1.5 py-2 text-label text-faint">
               No captured changes for this file.
             </div>
           ) : (
@@ -245,7 +245,7 @@ function MoreChip({ files }: { files: TouchedFile[] }) {
         .join(", ") + (files.length > 12 ? ", …" : "")}
     >
       <span className="ml-1 flex h-6 items-center gap-1.5 rounded-md bg-panel px-1.5">
-        <span className="text-xs font-medium text-faint">
+        <span className="text-label font-medium text-faint">
           +{files.length} more
         </span>
         <LineStats additions={additions} deletions={deletions} />

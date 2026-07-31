@@ -624,7 +624,7 @@ export function PrPreview({
 									</div>
 									{!diffLoading && diffError && (
 										<button
-											className="mt-3 rounded-sm border border-line bg-panel px-3 py-1.5 text-xs text-fg hover:bg-hover"
+											className="mt-3 rounded-sm border border-line bg-panel px-3 py-1.5 text-label text-fg hover:bg-hover"
 											onClick={() => {
 												setDiffLoading(true);
 												setDiffError(null);

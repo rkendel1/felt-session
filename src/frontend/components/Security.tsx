@@ -122,7 +122,7 @@ export function Security({ onOpenSession }: Props) {
       </div>
 
       {error && (
-        <InlineAlert className="text-[13px]" onDismiss={() => setError(null)}>
+        <InlineAlert className="text-control-label" onDismiss={() => setError(null)}>
           {error}
         </InlineAlert>
       )}
@@ -206,7 +206,7 @@ export function Security({ onOpenSession }: Props) {
         <div className="flex flex-col gap-2.5">
           {recurring.length > 0 && (
             <div className="bg-panel border border-line rounded-panel px-3.5 py-3">
-              <div className="text-fg text-[13px] font-medium mb-1.5">Recurring</div>
+              <div className="text-fg text-control-label font-medium mb-1.5">Recurring</div>
               <div className="flex flex-col gap-1">
                 {recurring.map((r) => (
                   <div key={r.id} className="flex items-baseline gap-2 text-supporting text-dim min-w-0">
@@ -400,7 +400,7 @@ function NewScanModal({
       <div className="flex w-full max-w-[560px] my-auto flex-col gap-3.5 rounded-panel border border-line-strong bg-panel p-[18px] shadow-2xl [&_label]:flex [&_label]:flex-col [&_label]:gap-1.5 [&_label]:text-supporting [&_label]:font-medium [&_label]:text-dim [&_input]:rounded-md [&_input]:border [&_input]:border-line-strong [&_input]:bg-raised [&_input]:px-3 [&_input]:py-2 [&_input]:text-control-label [&_input]:text-fg [&_select]:rounded-md [&_select]:border [&_select]:border-line-strong [&_select]:bg-raised [&_select]:px-3 [&_select]:py-2 [&_select]:text-control-label [&_select]:text-fg [&_textarea]:resize-y [&_textarea]:rounded-md [&_textarea]:border [&_textarea]:border-line-strong [&_textarea]:bg-raised [&_textarea]:px-3 [&_textarea]:py-2 [&_textarea]:text-control-label [&_textarea]:text-fg">
         <div>
           <div className="text-body font-semibold">New scan</div>
-          <div className="text-dim text-[13px] mt-0.5">
+          <div className="text-dim text-control-label mt-0.5">
             Start a search for findings across your repositories.
           </div>
         </div>
@@ -450,7 +450,7 @@ function NewScanModal({
             ))}
           </select>
           {profiles.length === 0 && (
-            <span className="mt-1 text-meta text-faint">
+			<span className="mt-1 text-meta text-faint">
               No scan profiles yet — profiles customize how scans analyze your
               code. Create one under Security → Profiles.
             </span>
@@ -479,7 +479,7 @@ function NewScanModal({
             <option value="weekly">Weekly</option>
           </select>
           {!singleRepo && (
-            <span className="mt-1 text-meta text-faint">
+			<span className="mt-1 text-meta text-faint">
               Recurring and interactive scans support one repository at a time.
             </span>
           )}
@@ -506,7 +506,7 @@ function NewScanModal({
           </span>
         </label>
 
-        {error && <InlineAlert className="text-[13px]">{error}</InlineAlert>}
+        {error && <InlineAlert className="text-control-label">{error}</InlineAlert>}
 
         <div className="flex justify-end gap-2.5">
           <Button size="sm" onClick={onClose} disabled={starting}>
@@ -602,7 +602,7 @@ function ProfileModal({
           />
         </label>
 
-        {error && <InlineAlert className="text-[13px]">{error}</InlineAlert>}
+        {error && <InlineAlert className="text-control-label">{error}</InlineAlert>}
 
         <div className="flex justify-end gap-2.5">
           <Button size="sm" onClick={onClose} disabled={saving}>

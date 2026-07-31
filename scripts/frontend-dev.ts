@@ -191,11 +191,9 @@ async function tailwindCss(): Promise<Response> {
 }
 
 // Serve the SPA shell through a rewriter: fetch Bun's HTML-import output from
-// the internal /__shell route and add the Tailwind link (after the bundled
-// global.css so utilities keep winning source-order ties, as in prod), plus a
-// watcher that hot-swaps that link when the compiled output changes — Bun's
-// HMR covers the bundle (App.tsx, global.css) but knows nothing about our
-// injected stylesheet.
+// the internal /__shell route and add the compiled Tailwind link, plus a watcher
+// that hot-swaps that link when the compiled output changes. Bun's HMR covers
+// the JS bundle but knows nothing about our injected stylesheet.
 const TW_REFRESH = `<script>
 (() => {
 	let last = null;
@@ -226,7 +224,7 @@ async function shell(req: Request): Promise<Response> {
 
 const server = Bun.serve<Bridge>({
 	port: PORT,
-	// hmr: edits to App.tsx/global.css hot-apply without a manual Cmd+R
+	// hmr: edits to App.tsx hot-apply without a manual Cmd+R
 	// (React Fast Refresh through Bun's dev pipeline).
 	development: { hmr: true, console: true },
 	idleTimeout: 240,

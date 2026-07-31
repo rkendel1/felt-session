@@ -107,7 +107,7 @@ export function WorkflowAgentTranscript({ runId, agent, onBack }: Props) {
 					>
 						<path d="M7.5 2 3.5 6l4 4" />
 					</svg>
-					<span className="min-w-0 flex-1 truncate text-sm font-medium text-fg">
+					<span className="min-w-0 flex-1 truncate text-control-label font-medium text-fg">
 						{agent.label}
 					</span>
 					{agent.status === "running" && (
@@ -158,7 +158,7 @@ function Placeholder({
 	return (
 		<div
 			className={cn(
-				"px-1 py-3 text-xs leading-relaxed",
+				"px-1 py-3 text-label leading-relaxed",
 				tone === "error" ? "text-red" : "text-faint",
 			)}
 		>

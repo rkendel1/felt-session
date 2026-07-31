@@ -98,7 +98,7 @@ export function Actions({ onOpenSession, selectedId, onSelect }: Props) {
         className={sel ? "mb-3.5 items-center" : "max-[560px]:mb-5 max-[560px]:flex-col max-[560px]:items-start max-[560px]:gap-3.5"}
       >
         <div>
-          <PageTitle className={sel ? "text-base" : undefined}>Actions</PageTitle>
+          <PageTitle className={sel ? "text-body" : undefined}>Actions</PageTitle>
           <PageDescription className={sel ? "hidden" : undefined}>
             Run a registered repo script behind a form. Each run opens as a session you can fork.
           </PageDescription>
@@ -195,7 +195,7 @@ export function Actions({ onOpenSession, selectedId, onSelect }: Props) {
           </div>
           <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto px-5 pb-10 pt-[18px]">
             {sel.description && (
-              <div className="bg-surface border border-line rounded-panel px-3.5 py-3 text-[13px] leading-relaxed text-dim">
+              <div className="bg-surface border border-line rounded-panel px-3.5 py-3 text-control-label leading-relaxed text-dim">
                 {sel.description}
               </div>
             )}
@@ -630,7 +630,7 @@ function ActionForm({ onClose, onCreated }: { onClose: () => void; onCreated: ()
       <div className="flex justify-end gap-2.5">
         <Button
           size="sm"
-          className="min-h-7 border-line-strong bg-transparent px-3 text-[13px]"
+          className="min-h-7 border-line-strong bg-transparent px-3 text-control-label"
           onClick={onClose}
           disabled={saving}
         >

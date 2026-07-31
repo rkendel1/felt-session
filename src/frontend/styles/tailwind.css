@@ -1,24 +1,24 @@
 /* ─────────────────────────────────────────────────────────────
    Tailwind v4 entry (CSS-first config — there is no tailwind.config.js).
 
-   Compiled by the @tailwindcss/cli step inside buildFrontend() (backstage.ts),
-   NOT by Bun — do not import this file from App.tsx; Bun's bundler would ship
-   the raw directives without running the Tailwind compiler. The compiled sheet
-   is linked AFTER global.css, and utilities are imported *unlayered* below, so
-   a utility class wins a tie against legacy unlayered global.css rules by
-   source order. (Preflight is deliberately not imported: global.css was
-   written against browser defaults and a global reset would reskin the app.)
+   Compiled by the @tailwindcss/cli step inside buildFrontend(), not by Bun.
+   adapters.css contains the non-utility contracts that still need authored
+   CSS: theme/base rules, generated-content and third-party adapters, native
+   shell hooks, responsive state coupling, and keyframes. Component-owned
+   presentation lives in Tailwind utilities and is intentionally loaded after
+   those adapters so utilities win equal-specificity ties.
 
-   BACKSTAGE_DEV=1 (HTML-import dev mode) doesn't run this compile step and
-   gets no utilities — the prod path with in-process rebuilds is the dev loop.
+   Preflight remains disabled because the app explicitly owns its document and
+   form-control reset in adapters.css.
    ───────────────────────────────────────────────────────────── */
+@import "./adapters.css";
 @import "tailwindcss/theme.css" layer(theme);
 @import "tailwindcss/utilities.css" source(none);
 
 /* Only scan the frontend tree for class names (not agents/server/prompts). */
 @source "../";
 
-/* Design tokens: map the existing global.css variables (which already carry
+/* Design tokens: map the adapter variables (which already carry
    dark/light theming via html[data-theme]) into Tailwind's namespace, so
    `bg-panel text-dim border-line` and legacy CSS read the same values and
    re-theme together. `inline` makes utilities emit var(--bg) directly. */
@@ -83,17 +83,17 @@
 	--font-sans: var(--sans);
 	--font-mono: var(--mono);
 	--radius-panel: var(--radius);
-	/* The corner every button and chip in the chrome shares. global.css authors
+	/* The corner every button and chip in the chrome shares. adapters.css authors
 	   it as `calc(10px * var(--rf))` on .btn-viewer-pin / .btn-panel-toggle /
 	   .btn-viewer-newchat and friends; naming it here lets the Button primitive
 	   and any Tailwind-authored control land on the same corner instead of
 	   re-deriving it with an arbitrary value. Because it is built from --rf it
 	   tracks the squircle bump on its own (8.5px round → 13.5px squircle), and
-	   global.css gives every `rounded-*` class `corner-shape: squircle`, so it
+	   adapters.css gives every `rounded-*` class `corner-shape: squircle`, so it
 	   needs no entry in the @supports block below. */
 	--radius-control: calc(10px * var(--rf));
 
-	/* global.css sets html { font-size: 14px }, which silently shrinks every
+	/* adapters.css sets html { font-size: 14px }, which silently shrinks every
 	   rem-based utility to 87.5% of its px design value (p-3 → 10.5px). Anchor
 	   the scales this codebase designs in px so utilities mean what they say. */
 	--spacing: 4px;

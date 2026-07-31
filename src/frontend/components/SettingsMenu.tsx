@@ -440,7 +440,7 @@ export function SettingsMenu({
 				    connection state inside the menu. */}
 				{!footer && !top && !user && (
 					<>
-						<div className="flex items-center gap-2 px-2 py-0.5 text-xs text-dim">
+						<div className="flex items-center gap-2 px-2 py-0.5 text-label text-dim">
 							<span
 								className={cn(
 									"h-2 w-2 rounded-full",
@@ -456,7 +456,7 @@ export function SettingsMenu({
 
 				<Menu.Item
 					onClick={() => onOpenSettings?.()}
-					className="gap-2.5 rounded-lg px-2.5 py-2 text-sm"
+					className="gap-2.5 rounded-lg px-2.5 py-2 text-control-label"
 				>
 					<span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-active text-dim">
 						<IconGear size={20} />
@@ -466,7 +466,7 @@ export function SettingsMenu({
 				{githubAuth && !githubAuth.local && (
 					<Menu.Item
 						onClick={() => void signOut()}
-						className="gap-2.5 rounded-lg px-2.5 py-2 text-sm text-dim data-[highlighted]:text-fg"
+						className="gap-2.5 rounded-lg px-2.5 py-2 text-control-label text-dim data-[highlighted]:text-fg"
 					>
 						<span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-active text-faint">
 							<IconLogOut size={20} />

@@ -70,7 +70,7 @@ interface RepoOption {
 }
 
 // Light mode paints the Create split-button ink-on-paper instead of accent.
-// global.css scopes that override under `.palette-card`, which the shared Modal
+// adapters.css scopes that override under `.palette-card`, which the shared Modal
 // shell no longer carries, so the two buttons opt in explicitly.
 const LIGHT_CREATE =
   "[html[data-theme=light]_&]:bg-fg [html[data-theme=light]_&]:text-bg";

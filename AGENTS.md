@@ -132,7 +132,7 @@ it from descending into chaos:
   something looks wrong, inspect and fix forward; don't roll back the shared tree.
 - **`git add <specific files>`, not `git add -A`** — multiple sessions may have
   uncommitted edits in this tree; only commit your own. High-traffic files
-  (`global.css`, `opensession.ts`, `App.tsx`) are sweep magnets: even a specific
+  (`adapters.css`, `opensession.ts`, `App.tsx`) are sweep magnets: even a specific
   `git add` on one of them can pick up another session's uncommitted hunks
   (it's happened three times: 2c89f14, 5a372890, and Kent's title commit). For
   those files use `git add -p` to stage only your hunks, and check
@@ -153,23 +153,24 @@ it from descending into chaos:
 
 ## Frontend UI system (Base UI + Tailwind + Motion)
 
-New UI goes through this stack; legacy `global.css` classes are migrated
-opportunistically when touched (strangler pattern — never a big-bang rewrite):
+New UI goes through this stack. Component-owned presentation belongs in
+Tailwind utilities; `adapters.css` is reserved for non-utility contracts:
 
-- **Tokens**: `src/frontend/styles/tailwind.css` maps the existing `global.css`
+- **Tokens**: `src/frontend/styles/tailwind.css` maps the variables from
+  `adapters.css`
   variables (`--bg`, `--text-dim`, …) into Tailwind's namespace via
   `@theme inline` — use `bg-panel text-dim border-line text-fg bg-surface` etc.,
   never raw hex or stock Tailwind grays. Dark/light theming comes for free
   because the vars re-resolve under `html[data-theme]`. The spacing/radius/text
-  scales are px-anchored there (global.css sets `html { font-size: 14px }`,
+  scales are px-anchored there (`adapters.css` sets `html { font-size: 14px }`,
   which would otherwise shrink every rem-based utility to 87.5%) — so `p-3` is
   a true 12px and `text-xs` a true 12px. Bare `rounded` bypasses the radius
   scale; use `rounded-sm/md/lg` (4/6/8px).
 - **Compile**: Tailwind is compiled by an `@tailwindcss/cli` subprocess inside
-  `buildFrontend()` (opensession.ts) and linked *after* `global.css`; utilities
-  are imported unlayered so they win source-order ties against legacy rules.
-  Preflight is intentionally NOT imported (global.css assumes browser
-  defaults). Don't import tailwind.css from App.tsx — Bun can't compile it.
+  `buildFrontend()` (opensession.ts). `tailwind.css` imports `adapters.css`
+  first, then imports utilities unlayered so they win equal-specificity ties.
+  Preflight is intentionally NOT imported (`adapters.css` owns the document and
+  form-control reset). Don't import tailwind.css from App.tsx — Bun can't compile it.
 - **Primitives**: wrap Base UI (`@base-ui/react`) per component in
   `src/frontend/ui/` (see `ui/tooltip.tsx` for the pattern). Rules: always
   pass `className` through `cn()` (ui/cn.ts); keep Base UI's composable parts

@@ -450,13 +450,13 @@ export const MessageBubble = React.memo(function MessageBubble({
 						workerReportOpen ? "bg-panel" : "hover:bg-hover",
 					)}
 				>
-					<div className="flex items-center gap-2 px-2.5 py-1.5 text-xs font-medium text-dim">
+					<div className="flex items-center gap-2 px-2.5 py-1.5 text-label font-medium text-dim">
 						<Button
 							variant="ghost"
 							size="xs"
 							aria-expanded={workerReportOpen}
 							onClick={() => setWorkerReportOpen((open) => !open)}
-							className="min-h-0 min-w-0 flex-1 justify-start gap-1.5 whitespace-normal rounded-md border-0 px-1 py-0.5 text-left font-sans text-xs font-medium hover:bg-transparent"
+							className="min-h-0 min-w-0 flex-1 justify-start gap-1.5 whitespace-normal rounded-md border-0 px-1 py-0.5 text-left font-sans text-label font-medium hover:bg-transparent"
 						>
 							<span
 								className={cn(
@@ -533,13 +533,13 @@ export const MessageBubble = React.memo(function MessageBubble({
 						reviewHandoffOpen ? "bg-panel" : "hover:bg-hover",
 					)}
 				>
-					<div className="flex items-center gap-2 px-2.5 py-1.5 text-xs font-medium text-dim">
+					<div className="flex items-center gap-2 px-2.5 py-1.5 text-label font-medium text-dim">
 						<Button
 							variant="ghost"
 							size="xs"
 							aria-expanded={reviewHandoffOpen}
 							onClick={() => setReviewHandoffOpen((open) => !open)}
-							className="min-h-0 min-w-0 flex-1 justify-start gap-1.5 whitespace-normal rounded-md border-0 px-1 py-0.5 text-left font-sans text-xs font-medium hover:bg-transparent"
+							className="min-h-0 min-w-0 flex-1 justify-start gap-1.5 whitespace-normal rounded-md border-0 px-1 py-0.5 text-left font-sans text-label font-medium hover:bg-transparent"
 						>
 							<span
 								className={cn(

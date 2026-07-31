@@ -698,7 +698,7 @@ export function Composer({
           {hlActive && (
             <div
               ref={hlRef}
-              className="composer-textarea composer-hl pointer-events-none absolute inset-0 z-0 block w-full overflow-hidden text-sm leading-[1.55] whitespace-pre-wrap text-fg select-none [overflow-wrap:break-word] [&_.cmp-code]:rounded-sm [&_.cmp-code]:bg-white/10 [&_.cmp-code]:text-[#e8b3b9] [&_.cmp-fence]:rounded-sm [&_.cmp-fence]:bg-white/[0.06] [&_.cmp-fence]:text-[#dde1f0] [html[data-theme=light]_&_.cmp-code]:bg-black/[0.07] [html[data-theme=light]_&_.cmp-code]:text-[#953b39] [html[data-theme=light]_&_.cmp-fence]:bg-black/[0.05] [html[data-theme=light]_&_.cmp-fence]:text-[#1f2328]"
+              className="composer-textarea composer-hl pointer-events-none absolute inset-0 z-0 block w-full overflow-hidden text-control-label leading-[1.55] whitespace-pre-wrap text-fg select-none [overflow-wrap:break-word] [&_.cmp-code]:rounded-sm [&_.cmp-code]:bg-white/10 [&_.cmp-code]:text-[#e8b3b9] [&_.cmp-fence]:rounded-sm [&_.cmp-fence]:bg-white/[0.06] [&_.cmp-fence]:text-[#dde1f0] [html[data-theme=light]_&_.cmp-code]:bg-black/[0.07] [html[data-theme=light]_&_.cmp-code]:text-[#953b39] [html[data-theme=light]_&_.cmp-fence]:bg-black/[0.05] [html[data-theme=light]_&_.cmp-fence]:text-[#1f2328]"
               aria-hidden="true"
               dangerouslySetInnerHTML={{ __html: hlHtml }}
             />
@@ -706,7 +706,7 @@ export function Composer({
           <textarea
             ref={textareaRef}
             className={cn(
-              "composer-textarea block min-h-32 max-h-80 w-full resize-none border-0 bg-transparent py-0.5 pr-0 pb-1 text-sm leading-[1.55] text-fg outline-none placeholder:text-faint max-[720px]:!min-h-0 max-[720px]:!max-h-60 max-[720px]:text-[16px]",
+              "composer-textarea block min-h-32 max-h-80 w-full resize-none border-0 bg-transparent py-0.5 pr-0 pb-1 text-control-label leading-[1.55] text-fg outline-none placeholder:text-faint max-[720px]:!min-h-0 max-[720px]:!max-h-60 max-[720px]:text-[16px]",
               minimized && "max-[720px]:!min-h-0 max-[720px]:px-1 max-[720px]:py-0",
               hlActive && "has-hl relative z-[1] text-transparent caret-fg [overflow-wrap:break-word]",
             )}
@@ -790,13 +790,13 @@ export function Composer({
                 <div className="composer-menu absolute bottom-[calc(100%+6px)] left-0 z-40 min-w-[172px] rounded-lg border border-line-strong bg-panel p-1 shadow-[0_8px_28px_rgba(0,0,0,0.28)]">
                   <button
                     type="button"
-                    className="composer-menu-item flex w-full cursor-pointer items-center gap-[9px] rounded-md border-0 bg-transparent px-[9px] py-[7px] text-left text-[12.5px] text-fg hover:bg-[color-mix(in_srgb,var(--accent)_14%,transparent)]"
+                    className="composer-menu-item flex w-full cursor-pointer items-center gap-[9px] rounded-md border-0 bg-transparent px-[9px] py-[7px] text-left text-supporting text-fg hover:bg-[color-mix(in_srgb,var(--accent)_14%,transparent)]"
                     {...tapProps(() => {
                       setMenu(null);
                       fileInputRef.current?.click();
                     })}
                   >
-                    <span className="composer-menu-icon inline-flex w-5 items-center justify-center text-[13px] text-dim">
+                    <span className="composer-menu-icon inline-flex w-5 items-center justify-center text-control-label text-dim">
                       <IconPaperclip size={22} />
                     </span>
                     {onFilesChange ? "Attach files" : "Attach an image"}
@@ -804,13 +804,13 @@ export function Composer({
                   {mentionFetch && (
                     <button
                       type="button"
-                      className="composer-menu-item flex w-full cursor-pointer items-center gap-[9px] rounded-md border-0 bg-transparent px-[9px] py-[7px] text-left text-[12.5px] text-fg hover:bg-[color-mix(in_srgb,var(--accent)_14%,transparent)]"
+                      className="composer-menu-item flex w-full cursor-pointer items-center gap-[9px] rounded-md border-0 bg-transparent px-[9px] py-[7px] text-left text-supporting text-fg hover:bg-[color-mix(in_srgb,var(--accent)_14%,transparent)]"
                       {...tapProps(() => {
                         setMenu(null);
                         startMention();
                       })}
                     >
-                      <span className="composer-menu-icon inline-flex w-5 items-center justify-center text-[13px] text-dim">
+                      <span className="composer-menu-icon inline-flex w-5 items-center justify-center text-control-label text-dim">
                         <IconAtSign size={22} />
                       </span>
                       Reference a file
@@ -865,7 +865,7 @@ export function Composer({
                     aria-pressed={!!goal}
                   >
                     <IconCrosshair size={24} />
-                    {goal && <span className="composer-goal-label text-xs font-medium">Goal</span>}
+                    {goal && <span className="composer-goal-label text-label font-medium">Goal</span>}
                   </button>
                 </Tooltip>
                 <GoalModal
@@ -906,7 +906,7 @@ export function Composer({
                   >
                     <IconNote size={24} />
                     {noteMode && (
-                      <span className="composer-goal-label text-xs font-medium">Note</span>
+                      <span className="composer-goal-label text-label font-medium">Note</span>
                     )}
                   </button>
                 </Tooltip>
@@ -920,7 +920,7 @@ export function Composer({
           {/* Model + effort live together on the right edge (ChatGPT-style):
               one pill, effort levels up top, the model behind a submenu.
               Phones reorder it next to the + button via flex order (see the
-              "Lightweight phone inputs" block in global.css). */}
+              "Lightweight phone inputs" block in adapters.css). */}
           <AnimatePresence initial={false}>
             {!minimized && (
               <motion.div

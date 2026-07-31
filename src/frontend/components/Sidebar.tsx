@@ -212,7 +212,7 @@ const SWIPE_AXIS_LOCK_PX = 8;
 
 // Keep the semantic hooks below for sticky-state tracking, platform chrome and
 // test selectors. Their visual contract lives here so the sidebar no longer
-// relies on global.css for its own rows.
+// relies on adapters.css for its own rows.
 const SIDEBAR_ITEM_CLASS =
 	"sidebar-item relative mt-0.5 block w-full rounded-lg border-0 bg-transparent px-2 py-[9px] pl-2.5 text-left text-fg transition-colors hover:bg-hover max-[720px]:px-2.5";
 const SIDEBAR_WS_ROW_CLASS =
@@ -3738,7 +3738,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					return (
 						<div className="sidebar-status-group">
 							<button
-								className="sidebar-group-header flex w-full items-center gap-[9px] rounded-md px-[10px] py-1 text-[14px] font-medium text-dim transition-colors hover:bg-hover hover:text-fg"
+								className="sidebar-group-header flex w-full items-center gap-[9px] rounded-md px-[10px] py-1 text-body font-medium text-dim transition-colors hover:bg-hover hover:text-fg"
 								onClick={() => toggleGroup("hidden")}
 							>
 								<span className="inline-flex shrink-0 items-center text-faint">
@@ -4897,13 +4897,13 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						const rowClass = cn(
 							// The desktop look lives in these utilities and MUST stay
 							// desktop-only: utilities win cascade ties against the phone
-							// card CSS (global.css @media), so an unconditional w-full/
+							// card CSS (adapters.css @media), so an unconditional w-full/
 							// py-* here is exactly the "full-width Home card on mobile"
 							// bug. Phones render the Slack-home style 132px card strip
 							// purely from .sidebar-nav-item's media rules.
 							"sidebar-nav-item group flex text-left transition-colors max-[720px]:h-[84px] max-[720px]:w-[132px] max-[720px]:shrink-0 max-[720px]:flex-col max-[720px]:items-start max-[720px]:justify-between max-[720px]:gap-2.5 max-[720px]:rounded-[14px] max-[720px]:border max-[720px]:border-line max-[720px]:bg-panel max-[720px]:p-3 max-[720px]:text-control-label max-[720px]:font-semibold max-[720px]:leading-[1.25] max-[720px]:text-fg",
 							// `active` is what the phone card CSS keys its selected state
-							// off (.sidebar-nav-item.active in global.css's @media block);
+							// off (.sidebar-nav-item.active in adapters.css's @media block);
 							// the desktop selected look comes from the utilities below.
 							// Dropping it in the Tailwind migration left the phone cards
 							// with no "you are here".

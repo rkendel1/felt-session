@@ -25,7 +25,7 @@ const toDateInput = (d: Date) =>
   `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
 const menuItemClass =
-  "composer-menu-item flex w-full cursor-pointer items-center gap-[9px] rounded-md border-0 bg-transparent px-[9px] py-[7px] text-left text-[12.5px] text-fg hover:bg-[color-mix(in_srgb,var(--accent)_14%,transparent)] disabled:cursor-default disabled:opacity-45";
+  "composer-menu-item flex w-full cursor-pointer items-center gap-[9px] rounded-md border-0 bg-transparent px-[9px] py-[7px] text-left text-supporting text-fg hover:bg-[color-mix(in_srgb,var(--accent)_14%,transparent)] disabled:cursor-default disabled:opacity-45";
 
 /**
  * Composer "send later": schedules the *current composer draft* for this
@@ -199,7 +199,7 @@ export function SchedulePromptButton({
       >
         {variant === "menu-item" ? (
           <>
-            <span className="composer-menu-icon inline-flex w-5 items-center justify-center text-[13px] text-dim">
+            <span className="composer-menu-icon inline-flex w-5 items-center justify-center text-control-label text-dim">
               <IconClock size={22} />
             </span>
             <span>Schedule message</span>
@@ -208,7 +208,7 @@ export function SchedulePromptButton({
           <IconChevronDown size={20} />
         )}
         {pending.length > 0 && (
-          <span className="composer-schedule-badge pointer-events-none absolute -top-[5px] -right-[5px] h-[15px] min-w-[15px] rounded-full bg-yellow px-[3px] text-center text-[10px] leading-[15px] font-bold text-white shadow-[0_0_0_2px_var(--bg)]">{pending.length}</span>
+          <span className="composer-schedule-badge pointer-events-none absolute -top-[5px] -right-[5px] h-[15px] min-w-[15px] rounded-full bg-yellow px-[3px] text-center text-meta leading-[15px] font-bold text-white shadow-[0_0_0_2px_var(--bg)]">{pending.length}</span>
         )}
       </button>
 
@@ -217,7 +217,7 @@ export function SchedulePromptButton({
           {pending.length > 0 && (
             <div className="composer-schedule-pending mb-0.5 flex flex-col gap-px border-b border-line pb-1">
               {pending.map((p) => (
-                <div key={p.id} className="composer-schedule-perow flex min-w-0 items-baseline gap-2 px-[9px] py-[5px] text-xs">
+                <div key={p.id} className="composer-schedule-perow flex min-w-0 items-baseline gap-2 px-[9px] py-[5px] text-label">
                   <span
                     className="composer-schedule-pin shrink-0 font-semibold text-yellow"
                     title={new Date(p.at).toLocaleString()}
@@ -229,7 +229,7 @@ export function SchedulePromptButton({
                   </span>
                   <button
                     type="button"
-                    className="composer-schedule-pcancel ml-auto shrink-0 border-0 bg-transparent p-0 text-xs text-faint hover:text-red"
+                    className="composer-schedule-pcancel ml-auto shrink-0 border-0 bg-transparent p-0 text-label text-faint hover:text-red"
                     title="Cancel this scheduled message"
                     onClick={async () => {
                       try {
@@ -245,7 +245,7 @@ export function SchedulePromptButton({
             </div>
           )}
 
-          <div className="composer-schedule-head px-[9px] pt-1.5 pb-1 text-xs font-medium text-faint">Schedule message</div>
+          <div className="composer-schedule-head px-[9px] pt-1.5 pb-1 text-label font-medium text-faint">Schedule message</div>
           {quickOptions().map((o) => (
             <button
               key={o.at.toISOString()}
@@ -269,7 +269,7 @@ export function SchedulePromptButton({
             Custom time
           </button>
           {error && !customOpen && (
-            <div className="composer-schedule-err px-[9px] pt-1 pb-0.5 text-xs text-red">{error}</div>
+            <div className="composer-schedule-err px-[9px] pt-1 pb-0.5 text-label text-red">{error}</div>
           )}
         </div>
       )}
@@ -285,7 +285,7 @@ export function SchedulePromptButton({
             <div className="composer-schedule-modal-head flex items-start justify-between gap-3">
               <div>
                 <div className="composer-schedule-modal-title text-[17px] font-semibold text-fg">Schedule message</div>
-                <div className="composer-schedule-modal-tz mt-[3px] text-[12.5px] text-dim">Time zone: {tz}</div>
+                <div className="composer-schedule-modal-tz mt-[3px] text-supporting text-dim">Time zone: {tz}</div>
               </div>
               <button
                 type="button"
@@ -302,27 +302,27 @@ export function SchedulePromptButton({
                 value={date}
                 min={toDateInput(new Date())}
                 onChange={(e) => setDate(e.target.value)}
-                className="composer-schedule-input min-w-0 flex-1 rounded-md border border-line bg-surface px-3 py-[9px] text-sm font-medium text-fg outline-none focus:border-line-strong"
+                className="composer-schedule-input min-w-0 flex-1 rounded-md border border-line bg-surface px-3 py-[9px] text-control-label font-medium text-fg outline-none focus:border-line-strong"
               />
               <input
                 type="time"
                 value={time}
                 onChange={(e) => setTime(e.target.value)}
-                className="composer-schedule-input composer-schedule-input-time min-w-0 flex-[0_0_130px] rounded-md border border-line bg-surface px-3 py-[9px] text-sm font-medium text-fg outline-none focus:border-line-strong"
+                className="composer-schedule-input composer-schedule-input-time min-w-0 flex-[0_0_130px] rounded-md border border-line bg-surface px-3 py-[9px] text-control-label font-medium text-fg outline-none focus:border-line-strong"
               />
             </div>
-            {error && <div className="composer-schedule-err px-[9px] pt-1 pb-0.5 text-xs text-red">{error}</div>}
+            {error && <div className="composer-schedule-err px-[9px] pt-1 pb-0.5 text-label text-red">{error}</div>}
             <div className="composer-schedule-modal-actions mt-5 flex justify-end gap-2">
               <button
                 type="button"
-                className="composer-schedule-cancel rounded-md border border-line-strong bg-transparent px-4 py-[9px] text-sm font-semibold text-fg hover:bg-surface"
+                className="composer-schedule-cancel rounded-md border border-line-strong bg-transparent px-4 py-[9px] text-control-label font-semibold text-fg hover:bg-surface"
                 onClick={() => setCustomOpen(false)}
               >
                 Cancel
               </button>
               <button
                 type="button"
-                className="composer-schedule-submit rounded-md border-0 bg-accent px-4 py-[9px] text-sm font-semibold text-white transition-[filter] hover:not-disabled:brightness-110 disabled:cursor-default disabled:opacity-45"
+                className="composer-schedule-submit rounded-md border-0 bg-accent px-4 py-[9px] text-control-label font-semibold text-white transition-[filter] hover:not-disabled:brightness-110 disabled:cursor-default disabled:opacity-45"
                 onClick={scheduleCustom}
                 disabled={saving || !date || !time}
               >

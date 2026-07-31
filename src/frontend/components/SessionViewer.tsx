@@ -3910,7 +3910,7 @@ export function SessionViewer({
 							<Button
 								variant="danger"
 								size="sm"
-								className="min-h-0 px-3 py-[5px] text-[13px]"
+								className="min-h-0 px-3 py-[5px] text-control-label"
 								onClick={() => handleDelete(true)}
 								disabled={deleting}
 							>
@@ -3920,7 +3920,7 @@ export function SessionViewer({
 						<Button
 							variant="warning"
 							size="sm"
-							className="min-h-0 px-3 py-[5px] text-[13px]"
+							className="min-h-0 px-3 py-[5px] text-control-label"
 							onClick={() => handleDelete(false)}
 							disabled={deleting}
 						>
@@ -3929,7 +3929,7 @@ export function SessionViewer({
 						<Button
 							variant="ghost"
 							size="sm"
-							className="min-h-0 border-line-strong px-3 py-[5px] text-[13px] text-dim hover:bg-transparent hover:text-fg"
+							className="min-h-0 border-line-strong px-3 py-[5px] text-control-label text-dim hover:bg-transparent hover:text-fg"
 							onClick={() => setShowDeleteConfirm(false)}
 							disabled={deleting}
 						>
@@ -4042,7 +4042,7 @@ export function SessionViewer({
 						(session.mode === "scratch" ? (
 							<span className="flex min-w-0 items-center gap-1.5">
 								<span
-									className="flex min-w-0 items-center gap-1.5 text-[13px] font-medium text-dim"
+									className="flex min-w-0 items-center gap-1.5 text-control-label font-medium text-dim"
 									title="Scratch session — no repo"
 								>
 									<RepoTile
@@ -5071,7 +5071,7 @@ export function SessionViewer({
 
 							<div className="viewer-input relative z-[1] max-[720px]:-mt-[var(--chat-under)] max-[720px]:bg-[linear-gradient(to_bottom,transparent_0,var(--bg)_var(--chat-under))] max-[720px]:px-3 max-[720px]:pt-1 max-[720px]:pb-[max(10px,env(safe-area-inset-bottom,0px))]">
 								{noEngine ? (
-									<div className="mx-auto max-w-[var(--chat-col)] text-[13px] text-faint">
+									<div className="mx-auto max-w-[var(--chat-col)] text-control-label text-faint">
 										No engine session to resume
 									</div>
 								) : (

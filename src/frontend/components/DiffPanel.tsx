@@ -200,7 +200,7 @@ export function DiffPanel({ sessionId, isRunning, canSend, send, diff }: Props) 
           <Button
             variant="ghost"
             size="xs"
-            className="ml-auto min-h-0 px-1.5 py-0.5 text-sm text-faint hover:text-fg"
+            className="ml-auto min-h-0 px-1.5 py-0.5 text-control-label text-faint hover:text-fg"
             onClick={reload}
             aria-label="Refresh diff"
           >
@@ -269,11 +269,11 @@ function DiffEmptyState({ isRunning }: { isRunning: boolean }) {
         <path d="M13 18v5a4 4 0 0 0 4 4h5" />
       </svg>
       <div className="flex flex-col gap-1">
-        <div className="text-item-title font-medium text-dim">No file changes yet</div>
-        <div className="text-sm text-faint">Changes appear here.</div>
+		<div className="text-item-title font-medium text-dim">No file changes yet</div>
+		<div className="text-control-label text-faint">Changes appear here.</div>
       </div>
       {isRunning && (
-        <div className="mt-1 flex items-center gap-2 text-xs text-faint">
+        <div className="mt-1 flex items-center gap-2 text-label text-faint">
           <PixelSpinner className="pixel-spinner-slow text-faint" interval={4000} />
           <span>Pulling latest…</span>
         </div>

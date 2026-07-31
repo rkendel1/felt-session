@@ -154,10 +154,6 @@ import {
 import { copySessionTranscript } from "./lib/transcript-copy";
 import { effectiveTheme, setThemePref } from "./lib/theme";
 import type { UnifiedSession } from "./lib/types";
-// Legacy stylesheet remains only for cross-tree state selectors (`html.wco`,
-// `body.kb-open`, `body.chrome-collapsed`, and sidebar-owned chrome). This shell
-// keeps those hooks, but its visual layout is expressed by local utilities below.
-import "./styles/global.css";
 
 type Route =
 	| { view: "home" }

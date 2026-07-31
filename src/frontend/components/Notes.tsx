@@ -247,7 +247,7 @@ export function Notes({
                     <div className="flex items-center justify-between px-3.5 pb-1 pt-2.5 text-meta font-bold text-faint">
 						<span>Notes</span>
 						<button
-                            className="rounded-md border-0 bg-transparent px-1.5 py-0.5 text-base leading-none text-dim hover:bg-hover hover:text-fg"
+                            className="rounded-md border-0 bg-transparent px-1.5 py-0.5 text-body leading-none text-dim hover:bg-hover hover:text-fg"
 							title="New note"
 							onClick={() => setCreating((c) => !c)}
 						>
@@ -539,7 +539,7 @@ function NotePane({
 						title={`Also here: ${others.join(", ")}`}
 					>
 						{others.slice(0, 4).map((v, i) => (
-                            <span key={i} className="inline-flex size-[18px] items-center justify-center rounded-full bg-purple text-[10px] font-bold text-white">
+                            <span key={i} className="inline-flex size-[18px] items-center justify-center rounded-full bg-purple text-meta font-bold text-white">
 								{v.charAt(0).toUpperCase()}
 							</span>
 						))}
