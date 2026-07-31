@@ -100,6 +100,13 @@ type TabMember =
 	| { kind: "chat"; id: string; session: UnifiedSession }
 	| { kind: "view"; id: string; view: ViewTab };
 
+const TAB_CLASS =
+	"session-tab inline-flex max-w-[200px] shrink-0 items-center gap-1.5 rounded-md border border-transparent bg-panel px-2.5 py-1.5 text-supporting text-dim shadow-[0_1px_2px_rgba(0,0,0,0.12)] transition-[background,color] hover:bg-hover hover:text-fg min-[721px]:h-11 min-[721px]:rounded-none min-[721px]:border-0 min-[721px]:bg-transparent min-[721px]:shadow-[inset_0_-2px_0_transparent]";
+const ACTIVE_TAB_CLASS =
+	"session-tab-active bg-[color-mix(in_srgb,var(--bg-active)_94%,var(--text))] text-fg min-[721px]:bg-transparent min-[721px]:shadow-[inset_0_-3px_0_var(--accent)]";
+const TAB_CLOSE_CLASS =
+	"session-tab-close inline-flex size-4 shrink-0 items-center justify-center rounded-sm border-0 bg-transparent p-0 font-sans text-[15px] leading-none text-dim hover:bg-pressed hover:text-fg max-[720px]:size-[26px] max-[720px]:-my-0.5 max-[720px]:-mr-1 max-[720px]:opacity-100";
+
 const isApple = /Mac|iPhone|iPad|iPod/.test(navigator.platform);
 
 /** Right-aligned keyboard-shortcut hint on a menu row. */
@@ -362,7 +369,6 @@ export function SessionTabs({
 		else onCloseView(member.view.id);
 	}
 
-
 	function commitRename() {
 		if (editKey !== null) onRename(editKey, draft.trim());
 		setEditKey(null);
@@ -393,7 +399,7 @@ export function SessionTabs({
 	const newTabButton = (
 		<button
 			type="button"
-			className="session-tab session-tab-new"
+			className={`${TAB_CLASS} session-tab-new justify-center bg-transparent px-2 py-1.5 text-[15px] shadow-none hover:bg-hover min-[721px]:self-center min-[721px]:px-[5px] min-[721px]:py-[3px] min-[721px]:text-[22px]`}
 			aria-label="New chat in this workspace"
 			title="New chat. Shares this workspace's worktree (right-click for options)"
 			onClick={() => onNewChat("share")}
@@ -411,7 +417,7 @@ export function SessionTabs({
 	// the ⟲ restores it into the strip for good.
 	const historyMenu = showHistory && archived.length > 0 && (
 		<Menu.Root>
-			<Menu.Trigger className="session-tab session-tab-history" aria-label="Archived chats" title="Archived chats">
+			<Menu.Trigger className={`${TAB_CLASS} session-tab-history bg-transparent px-2.5 py-[7px] shadow-none hover:bg-hover min-[721px]:self-center`} aria-label="Archived chats" title="Archived chats">
 				<IconHistory size={ctrlIconSize} />
 			</Menu.Trigger>
 			<Menu.Popup align="end" sideOffset={4} className="min-w-[240px] max-w-[320px]">
@@ -438,13 +444,13 @@ export function SessionTabs({
 	);
 
 	return (
-		<div className="session-tabs" role="tablist">
-			<div className="session-tabs-scroll" ref={scrollRef}>
+		<div className="session-tabs flex min-w-0 shrink-0 items-center gap-[3px] bg-[linear-gradient(to_bottom,var(--topbar-bg),var(--bg))] px-2 py-1.5 min-[721px]:-mt-px min-[721px]:h-11 min-[721px]:items-stretch min-[721px]:bg-bg min-[721px]:p-0 min-[721px]:shadow-[inset_0_1px_0_var(--border),inset_0_-1px_0_var(--border)] max-[720px]:absolute max-[720px]:left-0 max-[720px]:right-0 max-[720px]:top-[var(--pane-header-h)] max-[720px]:z-[6] max-[720px]:border-b max-[720px]:border-line max-[720px]:bg-bg max-[720px]:shadow-[0_6px_12px_-8px_rgba(0,0,0,0.22)]" role="tablist">
+			<div className="session-tabs-scroll flex min-w-0 flex-1 items-center gap-[3px] overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden min-[721px]:flex-[0_1_auto] min-[721px]:items-stretch" ref={scrollRef}>
 				<Reorder.Group
 					as="div"
 					axis="x"
 					ref={groupRef}
-					className="session-tabs-chatgroup"
+					className="session-tabs-chatgroup inline-flex min-w-0 items-center gap-[3px] min-[721px]:self-stretch min-[721px]:items-stretch"
 					values={tabUnits.units.map((unit) => unit.key)}
 					onReorder={reorderUnits}
 				>
@@ -495,7 +501,7 @@ export function SessionTabs({
 										e.preventDefault();
 									}
 								}}
-								className={`session-tab-reorder ${dropSlot?.key === key ? "is-dragging" : ""}`}
+								className={`session-tab-reorder relative inline-flex shrink-0 items-center min-[721px]:self-stretch min-[721px]:items-stretch ${dropSlot?.key === key ? "is-dragging" : ""}`}
 							>
 								<ContextMenu.Root>
 									<ContextMenu.Trigger
@@ -503,7 +509,7 @@ export function SessionTabs({
 											<div
 												role="tab"
 												aria-selected={key === activeId}
-												className={`session-tab ${key === activeId ? "session-tab-active" : ""} ${
+											className={`${TAB_CLASS} ${key === activeId ? ACTIVE_TAB_CLASS : ""} ${
 													waiting ? "session-tab-waiting" : ""
 												} ${hex ? "session-tab-colored" : ""}`}
 												style={hex ? ({ "--tab-color": hex } as React.CSSProperties) : undefined}
@@ -519,7 +525,7 @@ export function SessionTabs({
 										)}
 										{editKey === key ? (
 											<input
-												className="session-tab-rename"
+												className="session-tab-rename max-w-[150px] rounded-xs border border-accent bg-bg px-[3px] py-0 text-inherit outline-none"
 												value={draft}
 												autoFocus
 												onChange={(e) => setDraft(e.target.value)}
@@ -534,7 +540,7 @@ export function SessionTabs({
 											/>
 										) : (
 											<span
-												className="session-tab-title"
+											className="session-tab-title max-w-[150px] truncate"
 												onDoubleClick={(e) => {
 													e.stopPropagation();
 													setDraft(session.title);
@@ -553,7 +559,7 @@ export function SessionTabs({
 										)}
 										<button
 											type="button"
-											className="session-tab-close"
+										className={TAB_CLOSE_CLASS}
 											aria-label="Close chat"
 											title="Close chat"
 											onClick={(e) => {
@@ -631,7 +637,7 @@ export function SessionTabs({
 						role="tab"
 						aria-selected={v.active}
 						aria-label={v.icon ? v.label : undefined}
-						className={`session-tab session-tab-view ${v.icon ? "session-tab-view-icon" : ""} ${v.active ? "session-tab-active" : ""}`}
+						className={`${TAB_CLASS} session-tab-view ${v.icon ? "session-tab-view-icon" : ""} ${v.active ? ACTIVE_TAB_CLASS : ""}`}
 						drag={!isPhone}
 						dragMomentum={false}
 						dragSnapToOrigin
@@ -658,7 +664,7 @@ export function SessionTabs({
 						)}
 						<button
 							type="button"
-							className="session-tab-close"
+							className={TAB_CLOSE_CLASS}
 							aria-label={`Close ${v.label}`}
 							title={`Close ${v.label}`}
 							onClick={(e) => {
@@ -678,17 +684,17 @@ export function SessionTabs({
 			{/* Desktop: the "+" sits OUTSIDE the scroll so it's pinned and always
 				    visible — never scrolled off when the tabs overflow a narrow pane. */}
 			{!isPhone && newTabButton}
-			{!isPhone && <div className="session-tabs-actions">{historyMenu}</div>}
+			{!isPhone && <div className="session-tabs-actions ml-auto flex shrink-0 items-center gap-[3px]">{historyMenu}</div>}
 
 			{newMenu && (
 				<div
-					className="tab-color-menu session-tab-new-menu"
+					className="tab-color-menu session-tab-new-menu fixed z-[1000] flex gap-2 rounded-xl border border-line-strong bg-panel px-2.5 py-[9px] shadow-[0_10px_30px_rgba(0,0,0,0.32)]"
 					style={{ left: newMenu.x, top: newMenu.y }}
 					onClick={(e) => e.stopPropagation()}
 				>
 					<button
 						type="button"
-						className="session-tab-new-menu-item"
+						className="session-tab-new-menu-item rounded-sm px-2 py-1 text-control-label text-dim hover:bg-hover hover:text-fg"
 						onClick={() => {
 							setNewMenu(null);
 							onNewChat("share");
@@ -698,7 +704,7 @@ export function SessionTabs({
 					</button>
 					<button
 						type="button"
-						className="session-tab-new-menu-item"
+						className="session-tab-new-menu-item rounded-sm px-2 py-1 text-control-label text-dim hover:bg-hover hover:text-fg"
 						onClick={() => {
 							setNewMenu(null);
 							onNewChat("stack");
@@ -708,7 +714,7 @@ export function SessionTabs({
 					</button>
 					<button
 						type="button"
-						className="session-tab-new-menu-item"
+						className="session-tab-new-menu-item rounded-sm px-2 py-1 text-control-label text-dim hover:bg-hover hover:text-fg"
 						onClick={() => {
 							setNewMenu(null);
 							onNewChat("ask");

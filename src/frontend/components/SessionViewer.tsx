@@ -1127,7 +1127,7 @@ export function SessionViewer({
 	}, [notes, session.id]);
 	const panelResizeHandle = (
 		<div
-			className="panel-resize"
+			className="panel-resize absolute -left-[3px] top-0 z-[6] h-full w-[7px] cursor-col-resize after:absolute after:left-[3px] after:top-0 after:h-full after:w-0.5 after:bg-transparent after:transition-colors hover:after:bg-line-strong max-[720px]:hidden"
 			onMouseDown={startPanelResize}
 			aria-hidden="true"
 		/>
@@ -2987,13 +2987,13 @@ export function SessionViewer({
 					<div className="composer-queue-image relative mt-px h-[34px] w-[46px] shrink-0">
 						<img className="block size-full rounded-md border border-line object-cover" src={firstImage} alt="" />
 						{extraImages > 0 && (
-							<span className="composer-queue-image-count absolute -right-1 -bottom-1 h-[18px] min-w-[18px] rounded-full border border-line bg-raised px-1 text-center text-[10px] leading-4 font-bold text-dim">+{extraImages}</span>
+							<span className="composer-queue-image-count absolute -right-1 -bottom-1 h-[18px] min-w-[18px] rounded-full border border-line bg-raised px-1 text-center text-meta leading-4 font-bold text-dim">+{extraImages}</span>
 						)}
 					</div>
 				)}
 				<div
 					className={cn(
-						"composer-queue-body min-w-0 flex-1 overflow-hidden text-[13px] leading-[1.45] text-ellipsis whitespace-nowrap text-fg",
+						"composer-queue-body min-w-0 flex-1 overflow-hidden text-control-label leading-[1.45] text-ellipsis whitespace-nowrap text-fg",
 						opts.human && "text-[color-mix(in_srgb,var(--text)_88%,#1f9e8a)]",
 						opts.github && "text-dim",
 						opts.sending && "text-dim",
@@ -3079,7 +3079,7 @@ export function SessionViewer({
 	const attachedQueue =
 		queueCount > 0 ? (
 			<div className="composer-queue relative -mb-3.5 mx-[18px] flex flex-col gap-2 rounded-t-lg border border-b-0 border-line bg-[color-mix(in_srgb,var(--bg-panel)_70%,var(--control-surface))] px-4 pt-2.5 pb-[26px]" aria-label="Queued and steered messages">
-				<div className="composer-queue-title text-xs font-semibold text-faint">{queueTitle}</div>
+				<div className="composer-queue-title text-label font-semibold text-faint">{queueTitle}</div>
 				{visibleSteered.map((s, i) => {
 					const hr = parseHumanReply(s.content);
 					return (
@@ -3089,7 +3089,7 @@ export function SessionViewer({
 						>
 							<div className="composer-queue-actions absolute -top-2 right-0 z-[1] inline-flex items-center gap-0.5">
 								<Tooltip label="Already delivered into the running turn — shown here until the turn finishes">
-									<span className="composer-queue-pill inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-transparent bg-accent-soft px-[13px] text-sm font-semibold text-accent">
+									<span className="composer-queue-pill inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-transparent bg-accent-soft px-[13px] text-control-label font-semibold text-accent">
 										<IconCrosshair size={20} />
 										Steered
 									</span>
@@ -3148,7 +3148,7 @@ export function SessionViewer({
 						>
 							<div className="composer-queue-actions absolute -top-2 right-0 z-[1] inline-flex items-center gap-0.5">
 								{isGitHub ? (
-									<span className="composer-queue-pill composer-queue-pill-github inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-line bg-raised px-[13px] text-sm font-semibold text-dim">
+									<span className="composer-queue-pill composer-queue-pill-github inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-line bg-raised px-[13px] text-control-label font-semibold text-dim">
 										<IconPullRequest size={20} />
 										FYI
 									</span>
@@ -3219,7 +3219,7 @@ export function SessionViewer({
 				{pendingQueue.map((p) => (
 					<div key={p.id} className="composer-queue-item composer-queue-sending relative min-h-[18.85px]">
 						<div className="composer-queue-actions absolute -top-2 right-0 z-[1] inline-flex items-center gap-0.5">
-							<span className="composer-queue-pill composer-queue-pill-sending inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-line bg-raised px-[13px] text-sm font-semibold text-faint">
+							<span className="composer-queue-pill composer-queue-pill-sending inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-line bg-raised px-[13px] text-control-label font-semibold text-faint">
 								{waitingForWorkspace ? "Queued" : "Queueing…"}
 							</span>
 						</div>
@@ -3735,7 +3735,7 @@ export function SessionViewer({
 					role="status"
 					aria-live="polite"
 				>
-					<div className="flex flex-col items-center gap-[14px] rounded-xl border border-line bg-panel px-8 py-[26px] shadow-[0_8px_30px_rgba(0,0,0,0.35)]">
+					<div className="flex flex-col items-center gap-3.5 rounded-xl border border-line bg-panel px-8 py-[26px] shadow-[0_8px_30px_rgba(0,0,0,0.35)]">
 						<div className="restart-spinner" />
 						<span className="session-delete-label">{deleteLabel}</span>
 					</div>
@@ -3978,7 +3978,7 @@ export function SessionViewer({
 								href={session.linearIssue.url}
 								target="_blank"
 								rel="noopener"
-								className="session-link session-link-linear"
+								className="session-link session-link-linear inline-flex items-center rounded-md border border-[rgba(94,106,210,0.5)] px-2.5 py-1 text-control-label font-semibold text-[#7b86e8] no-underline hover:bg-hover focus-ring"
 							>
 								{session.linearIssue.identifier}
 							</a>
@@ -3992,7 +3992,7 @@ export function SessionViewer({
 								href={plainUrl}
 								target="_blank"
 								rel="noopener"
-								className="session-link session-link-plain"
+								className="session-link session-link-plain inline-flex items-center rounded-md border border-[rgba(13,148,136,0.5)] px-2.5 py-1 text-control-label font-semibold text-[#5eead4] no-underline hover:bg-hover focus-ring"
 							>
 								Plain ↗
 							</a>
@@ -4006,7 +4006,7 @@ export function SessionViewer({
 								href={feedRef.url}
 								target="_blank"
 								rel="noopener"
-								className="session-link session-link-plain"
+								className="session-link session-link-plain inline-flex items-center rounded-md border border-[rgba(13,148,136,0.5)] px-2.5 py-1 text-control-label font-semibold text-[#5eead4] no-underline hover:bg-hover focus-ring"
 							>
 								{feedRefLabel} ↗
 							</a>
@@ -4015,22 +4015,22 @@ export function SessionViewer({
 				);
 				const header = (
 					<div
-						className={`viewer-header ${compactHeader ? "viewer-header-compact" : ""}`}
+						className={`viewer-header flex h-[var(--desktop-header-h)] min-w-0 shrink-0 items-center justify-between gap-3 border-b border-line bg-bg px-4 ${compactHeader ? "viewer-header-compact" : ""}`}
 						ref={headerRef}
 					>
-						<div className="viewer-title">
+						<div className="viewer-title flex min-w-0 items-center gap-2.5 font-medium">
 					{/* Automation runs skip the "ask" chip: the automation chip after
 					    the title already says where the chat came from, and ask/code is
 					    the automation's own setting rather than something about this
 					    run — two origin chips on one row just read as noise. */}
 					{isAsk && !session.automation ? (
-						<span className="source-chip source-ask">ask</span>
+						<span className="source-chip source-ask shrink-0 rounded-full bg-[rgba(210,153,34,0.18)] px-2 py-0.5 text-meta font-bold tracking-[-0.01em] text-yellow">ask</span>
 					) : (
 						// "backstage" is the default origin (web UI) — as a chip it's noise,
 						// and for backstage-repo sessions it read as the repo said twice.
 						// Only surface the unusual origins (slack/linear/cli).
 						session.source !== "backstage" && (
-							<span className={`source-chip source-${session.source}`}>
+							<span className={`source-chip source-${session.source} shrink-0 rounded-full px-2 py-0.5 text-meta font-bold tracking-[-0.01em] ${session.source === "slack" ? "bg-[rgba(74,21,75,0.55)] text-[#d9a8db]" : session.source === "linear" ? "bg-[rgba(94,106,210,0.25)] text-[#9da6ee]" : "bg-active text-dim"}`}>
 								{session.source}
 							</span>
 						)
@@ -4067,7 +4067,7 @@ export function SessionViewer({
 						))}
 					{renameDraft !== null ? (
 						<input
-							className="viewer-branch-rename"
+							className="viewer-branch-rename min-w-0 max-w-[280px] rounded-md border border-accent bg-bg px-1 py-px text-body text-inherit outline-none"
 							value={renameDraft}
 							autoFocus
 							onChange={(e) => setRenameDraft(e.target.value)}
@@ -4081,7 +4081,7 @@ export function SessionViewer({
 						/>
 					) : (
 						<span
-							className={`viewer-branch ${onRename ? "viewer-branch-editable" : ""}`}
+							className={`viewer-branch max-w-[420px] min-w-0 truncate select-text text-body ${onRename ? "viewer-branch-editable cursor-text rounded-md px-2 py-[5px] -my-[5px] -mx-2 hover:bg-hover" : ""}`}
 							title={
 								workspaceName
 									? `${session.title} — double-click to rename the workspace`
@@ -4157,7 +4157,7 @@ export function SessionViewer({
 					{session.archived && (
 						<button
 							type="button"
-							className="source-chip source-cli archived-chip"
+							className="source-chip source-cli archived-chip shrink-0 rounded-full bg-active px-2.5 py-[3px] text-meta font-bold text-dim hover:bg-hover hover:text-fg disabled:cursor-default disabled:opacity-60"
 							onClick={handleArchive}
 							disabled={archiving}
 							title="Click to unarchive"
@@ -4166,19 +4166,19 @@ export function SessionViewer({
 						</button>
 					)}
 				</div>
-				<div className="viewer-header-actions">
+					<div className="viewer-header-actions flex shrink-0 items-center gap-2">
 					{!isPhone && secondaryActions(false)}
 					{/* Everyone with the session open, Figma/Notion-style, right
 					    before Share. You're always in it (rightmost); others stack
 					    in front with their GitHub picture. */}
 					{!isPhone && viewers.length > 0 && (
-						<div className="presence" title={`Viewing: ${viewers.join(", ")}`}>
+						<div className="presence flex items-center" title={`Viewing: ${viewers.join(", ")}`}>
 							{dedupeViewers(viewers, me).map((v) => (
 								<UserAvatar
 									key={v.name}
 									name={v.name}
 									size={24}
-									className="presence-avatar"
+									className="presence-avatar -ml-2 shadow-[0_0_0_2px_var(--bg)] first:ml-0"
 								/>
 							))}
 						</div>
@@ -4190,7 +4190,7 @@ export function SessionViewer({
 					    and Delete live only in there. */}
 					{!compactHeader && !isPhone && shareAction(false)}
 					<Menu.Root open={overflowOpen} onOpenChange={setOverflowOpen}>
-						<div className="viewer-overflow">
+						<div className="viewer-overflow relative inline-flex">
 							<Menu.Trigger
 								// Rendered AS the Button primitive rather than restyled to
 								// look like one, so the box, radius, hover wash, transition
@@ -4314,19 +4314,19 @@ export function SessionViewer({
 					isPhone && infoPageOpen ? (
 						createPortal(
 							<div
-								className="session-info-page"
+								className="session-info-page fixed inset-0 z-[60] flex flex-col gap-0.5 overflow-y-auto bg-bg pb-[max(16px,env(safe-area-inset-bottom,0px))] max-[720px]:animate-[session-info-in_0.22s_cubic-bezier(0.32,0.72,0,1)]"
 								ref={infoPageRef}
 								role="dialog"
 								aria-modal="true"
 								aria-label="Workspace details"
 							>
 								<div
-									className={`session-info-topbar${
+									className={`session-info-topbar sticky top-0 z-[4] flex min-h-[calc(env(safe-area-inset-top,0px)+52px)] items-center border-b border-transparent bg-transparent px-2 pb-0 pt-[env(safe-area-inset-top,0px)] transition-[background-color,border-color] ${
 										infoPageScrolled ? " session-info-topbar-scrolled" : ""
 									}`}
 								>
 									<button
-										className="panel-back"
+										className="panel-back hit-target relative z-[1] inline-flex size-10 items-center justify-center rounded-full border border-line bg-panel p-0 text-accent shadow-[0_2px_12px_rgba(0,0,0,0.1)]"
 										onClick={() => setInfoPageOpen(false)}
 										aria-label="Back to chat"
 										autoFocus
@@ -4341,16 +4341,16 @@ export function SessionViewer({
 											/>
 										</svg>
 									</button>
-									<div className="session-info-topbar-title">
+									<div className="session-info-topbar-title absolute bottom-0 left-14 right-14 flex h-[52px] items-center justify-center truncate text-item-title font-semibold tracking-[-0.01em] text-fg opacity-0 transition-[opacity,transform]">
 										{workspaceName || session.title}
 									</div>
 								</div>
-								<div className="session-info-hero">
+								<div className="session-info-hero flex flex-col items-center gap-2 px-5 pb-5 pt-0.5 text-center">
 									<RepoTile name={session.repo || "repository"} size={40} />
-									<div className="session-info-name" ref={infoHeroNameRef}>
+									<div className="session-info-name max-w-full break-words text-section-title font-semibold leading-[1.2] tracking-[-0.02em] text-fg" ref={infoHeroNameRef}>
 										{workspaceName || session.title}
 									</div>
-									<div className="session-info-sub">
+									<div className="session-info-sub text-control-label font-medium text-dim">
 										{[
 											session.repo || "repository",
 											models.length > 0
@@ -4362,7 +4362,7 @@ export function SessionViewer({
 									</div>
 								</div>
 								{hasWorkspace && (
-									<div className="session-info-status">
+									<div className="session-info-status mx-3 mb-3 rounded-xl border border-line bg-panel p-2">
 										<PrStatusBar
 											sessionId={session.id}
 											repo={session.repo || undefined}
@@ -4390,8 +4390,8 @@ export function SessionViewer({
 										/>
 									</div>
 								)}
-								<div className="session-info-content">
-									<div className="session-info-list">
+								<div className="session-info-content min-h-[320px]">
+									<div className="session-info-list mx-3 flex flex-col gap-1 rounded-xl border border-line bg-panel p-1.5">
 										{hasWorkspace && (
 											<RepoBar
 												sessionId={session.id}
@@ -4411,7 +4411,7 @@ export function SessionViewer({
 											/>
 										)}
 									</div>
-									<div className="session-info-overview">
+									<div className="session-info-overview pt-2">
 										<WorkspaceInfo
 											sessionId={session.id}
 											workspaceId={session.projectId || null}
@@ -4481,7 +4481,7 @@ export function SessionViewer({
 										/>
 									</div>
 									{(workflowRuns.length > 0 || subagents.length > 0) && (
-										<div className="session-info-section">
+										<div className="session-info-section mt-2 border-t border-line p-3">
 											<WorkflowPanel
 												sessionId={session.id}
 												runs={workflowRuns}
@@ -4495,7 +4495,7 @@ export function SessionViewer({
 										</div>
 									)}
 									{sessionReports.length > 0 && (
-										<div className="session-info-section">
+										<div className="session-info-section mt-2 border-t border-line p-3">
 											<SessionReportsPanel
 												reports={sessionReports}
 												onOpenNewSession={onOpenNewSession}
@@ -4556,7 +4556,7 @@ export function SessionViewer({
 						{/* The engine-running status dot rides the metadata line on
 						    phones (it used to sit next to the title) so the name stays
 						    steady and the working state reads alongside model · cost. */}
-						{isRunningLive && <span className="working-dot" />}
+						{isRunningLive && <span className="working-dot size-[7px] shrink-0 animate-pulse rounded-full bg-green" />}
 						{/* Repo now leads the pill (portaled into headerRepoEl in front of
 						    the title), so the metadata line is just model · cost. */}
 						{models.length > 0 && (
@@ -4584,7 +4584,7 @@ export function SessionViewer({
 				)}
 
 			{(session.goal || session.loop || runErrorBanner) && (
-				<div className="session-banners">
+				<div className="session-banners flex flex-wrap gap-2 border-b border-line bg-raised px-4 py-[7px]">
 					{/* The last run died on a terminal failure (usage limits/credits
 					    exhausted, API errors) — say why the session stopped; the error
 					    itself was only ever a transient toast. Hidden while a retry
@@ -4593,7 +4593,7 @@ export function SessionViewer({
 					    clean run. */}
 					{runErrorBanner && (
 						<span
-							className="session-banner text-red"
+							className="session-banner inline-flex max-w-full items-center gap-1.5 overflow-hidden text-ellipsis whitespace-nowrap rounded-full border border-line bg-panel px-3 py-[3px] text-label text-red"
 							title={runErrorBanner.message}
 						>
 							⚠ Last run failed: {runErrorBanner.message.slice(0, 160)}
@@ -4624,7 +4624,7 @@ export function SessionViewer({
 			<div className="viewer-split flex min-h-0 flex-1">
 				<div className="viewer-chat flex min-h-0 min-w-0 flex-1 flex-col [--chat-under:16px]">
 					{showPreviewTab ? (
-						<div className="viewer-review-main">
+					<div className="viewer-review-main min-h-0 flex-1">
 							<PreviewPane
 								session={session}
 								status={previewStatus}
@@ -4642,9 +4642,9 @@ export function SessionViewer({
 							// logged-OUT one gets a blank frame (staging redirects to
 							// WorkOS AuthKit, which refuses framing), so the header keeps a
 							// first-party "Open" break-out to log in, then come back.
-							<div className="viewer-review-main">
+							<div className="viewer-review-main min-h-0 flex-1">
 								<div className="flex h-full flex-col">
-									<div className="flex items-center gap-2 border-b border-line bg-panel px-3 py-1.5 text-xs text-dim">
+									<div className="flex items-center gap-2 border-b border-line bg-panel px-3 py-1.5 text-label text-dim">
 										<IconGlobe size={14} />
 										<span className="truncate">
 											Preview environment
@@ -4688,14 +4688,14 @@ export function SessionViewer({
 							// Deploy hasn't opted into being framed (older preview, or the
 							// fusion CSP change hasn't reached it yet) — open it
 							// first-party in a new tab rather than show a blocked frame.
-							<div className="viewer-review-main">
+							<div className="viewer-review-main min-h-0 flex-1">
 								<div className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
 									<IconGlobe size={40} className="text-dim" />
 									<div className="flex flex-col items-center gap-1">
-										<div className="text-base font-medium text-fg">
+										<div className="text-item-title font-medium text-fg">
 											Preview environment
 										</div>
-										<div className="text-xs text-dim">
+										<div className="text-label text-dim">
 											{staging?.status === "Ready"
 												? "Test this PR on real infra"
 												: `Deploy is ${(staging?.status ?? "building").toLowerCase()}…`}
@@ -4705,7 +4705,7 @@ export function SessionViewer({
 										href={stagingUrl}
 										target="_blank"
 										rel="noopener"
-										className="inline-flex items-center gap-2 rounded-md border border-line bg-surface px-4 py-2 text-sm font-medium text-fg transition-colors hover:bg-panel"
+										className="inline-flex items-center gap-2 rounded-md border border-line bg-surface px-4 py-2 text-control-label font-medium text-fg transition-colors hover:bg-panel"
 									>
 										<IconGlobe size={16} />
 										Open staging
@@ -4716,12 +4716,12 @@ export function SessionViewer({
 										onClick={() =>
 											shareLink(stagingUrl, { toast: "Link copied" })
 										}
-										className="inline-flex items-center gap-1.5 text-xs text-dim transition-colors hover:text-fg"
+										className="inline-flex items-center gap-1.5 text-label text-dim transition-colors hover:text-fg"
 									>
 										<IconCopy size={14} />
 										Copy link
 									</button>
-									<div className="max-w-xs text-xs leading-relaxed text-dim">
+									<div className="max-w-xs text-label leading-relaxed text-dim">
 										Opens in a new tab — this deploy isn&apos;t set up to
 										embed here yet.
 									</div>
@@ -4733,7 +4733,7 @@ export function SessionViewer({
 						// the Info panel's Assets button opens). AssetsPanel is
 						// `h-full`, so the flex-column viewer-review-main gives it
 						// height exactly like the Review PrPanel.
-						<div className="viewer-review-main">
+						<div className="viewer-review-main min-h-0 flex-1">
 							<AssetsPanel
 								sessionId={session.id}
 								files={assetFiles}
@@ -4760,7 +4760,7 @@ export function SessionViewer({
 						// The workspace's Plain ticket thread, full-width — same
 						// ConversationPane the chat-less workspace route renders, so
 						// the chat stays mounted underneath exactly like Review.
-						<div className="viewer-review-main">
+						<div className="viewer-review-main min-h-0 flex-1">
 							<ConversationPane
 								threadId={conversationThreadId}
 								onOpenSession={() => {}}
@@ -4771,7 +4771,7 @@ export function SessionViewer({
 						// The workspace's feed panel — web embed (Tella) or a custom
 						// component (Slack channel Conversation) via the panel
 						// registry (docs/feeds-design.md).
-						<div className="viewer-review-main">
+						<div className="viewer-review-main min-h-0 flex-1">
 							{videoPanel.component === "slack-channel" ? (
 								<SlackChannelPane channelId={videoPanel.refId} />
 							) : (
@@ -4784,14 +4784,14 @@ export function SessionViewer({
 					) : showReview && hasWorkspace ? (
 						<div className="viewer-review-main">
 							{localRepoCapabilityLoading ? (
-								<div className="flex h-full items-center justify-center text-sm text-faint">
+								<div className="flex h-full items-center justify-center text-control-label text-faint">
 									Loading repository…
 								</div>
 							) : localRepoHasNoGitHubRemote ? (
 								<div className="flex h-full flex-col items-center justify-center gap-2 p-8 text-center">
 									<IconGlobe size={32} className="text-faint" />
-									<div className="text-sm font-medium text-fg">No GitHub remote</div>
-									<div className="max-w-xs text-xs leading-relaxed text-dim">
+									<div className="text-item-title font-medium text-fg">No GitHub remote</div>
+									<div className="max-w-xs text-label leading-relaxed text-dim">
 										This repository is not connected to GitHub, so pull request details are unavailable.
 									</div>
 								</div>
@@ -4822,9 +4822,9 @@ export function SessionViewer({
 						</div>
 					) : (
 					<>
-					<div className="viewer-messages-region">
+					<div className="viewer-messages-region relative min-h-0 flex-1">
 						<div
-							className="viewer-messages"
+							className="viewer-messages h-full min-h-0 overflow-y-auto px-4 pb-2 pt-[18px] max-[720px]:px-3 max-[720px]:pt-[calc(var(--pane-header-h)+var(--strip-clearance,0px)+8px)]"
 							ref={messagesRef}
 							onScroll={handleMessagesScroll}
 							onClick={handleMessagesClick}
@@ -5069,7 +5069,7 @@ export function SessionViewer({
 								)}
 							</div>
 
-							<div className="viewer-input">
+							<div className="viewer-input relative z-[1] max-[720px]:-mt-[var(--chat-under)] max-[720px]:bg-[linear-gradient(to_bottom,transparent_0,var(--bg)_var(--chat-under))] max-[720px]:px-3 max-[720px]:pt-1 max-[720px]:pb-[max(10px,env(safe-area-inset-bottom,0px))]">
 								{noEngine ? (
 									<div className="mx-auto max-w-[var(--chat-col)] text-[13px] text-faint">
 										No engine session to resume
@@ -5196,10 +5196,10 @@ export function SessionViewer({
 				const rightRegion = (
 					<>
 				{!isPhone && panelAvailable && panelOpen && (
-					<div className="panel-overlay" onClick={() => setPanelOpen(false)} />
+					<div className="panel-overlay hidden max-[920px]:fixed max-[920px]:inset-0 max-[920px]:z-20 max-[920px]:block max-[920px]:bg-black/20" onClick={() => setPanelOpen(false)} />
 				)}
 				{!isPhone && panelAvailable && panelOpen ? (
-					<div className="viewer-panel" style={panelStyle}>
+					<div className="viewer-panel relative flex min-h-0 w-[var(--panel-w,44%)] min-w-[320px] max-w-[max(480px,calc(100vw-620px))] shrink-0 flex-col border-l border-line bg-raised max-[920px]:fixed max-[920px]:inset-y-0 max-[920px]:right-0 max-[920px]:z-30 max-[920px]:w-[min(440px,92vw)] max-[920px]:max-w-none max-[720px]:inset-x-0 max-[720px]:top-[calc(env(safe-area-inset-top,0px)+10px)] max-[720px]:bottom-0 max-[720px]:w-auto max-[720px]:border max-[720px]:border-line max-[720px]:rounded-t-xl" style={panelStyle}>
 						{panelResizeHandle}
 						{/* Phones open this panel as a full-width bottom sheet, so it
 						    carries one clean header row: chevron-back to the chat on the
@@ -5263,9 +5263,9 @@ export function SessionViewer({
 								}
 							/>
 						)}
-						<div className="panel-tabs">
+						<div className="panel-tabs flex items-center gap-0.5 overflow-x-auto px-2.5 pb-2 pt-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
 							<button
-								className={`panel-tab ${panelTab === "info" ? "active" : ""}`}
+								className={`panel-tab inline-flex shrink-0 items-center gap-1.5 rounded-md border-0 bg-transparent px-3 py-[5px] text-control-label font-medium text-dim hover:bg-hover hover:text-fg ${panelTab === "info" ? "active bg-[color-mix(in_srgb,var(--bg-active)_28%,var(--bg-raised))] text-fg" : ""}`}
 								onClick={() => selectPanelTab("info")}
 							>
 								Info
@@ -5273,7 +5273,7 @@ export function SessionViewer({
 							{hasWorkspace && (
 								<>
 									<button
-										className={`panel-tab ${panelTab === "changes" ? "active" : ""}`}
+								className={`panel-tab inline-flex shrink-0 items-center gap-1.5 rounded-md border-0 bg-transparent px-3 py-[5px] text-control-label font-medium text-dim hover:bg-hover hover:text-fg ${panelTab === "changes" ? "active bg-[color-mix(in_srgb,var(--bg-active)_28%,var(--bg-raised))] text-fg" : ""}`}
 										onClick={() => selectPanelTab("changes")}
 									>
 										Changes
@@ -5284,7 +5284,7 @@ export function SessionViewer({
 										) : null}
 									</button>
 									<button
-										className={`panel-tab ${panelTab === "shell" ? "active" : ""}`}
+								className={`panel-tab inline-flex shrink-0 items-center gap-1.5 rounded-md border-0 bg-transparent px-3 py-[5px] text-control-label font-medium text-dim hover:bg-hover hover:text-fg ${panelTab === "shell" ? "active bg-[color-mix(in_srgb,var(--bg-active)_28%,var(--bg-raised))] text-fg" : ""}`}
 										onClick={() => selectPanelTab("shell")}
 										title="Interactive terminal tabs in this session's workspace (inside its sandbox when sandboxed)"
 									>
@@ -5300,7 +5300,7 @@ export function SessionViewer({
 								workflowRuns.length > 0 ||
 								subagents.length > 0) && (
 								<button
-									className={`panel-tab ${panelTab === "workflows" ? "active" : ""}`}
+									className={`panel-tab inline-flex shrink-0 items-center gap-1.5 rounded-md border-0 bg-transparent px-3 py-[5px] text-control-label font-medium text-dim hover:bg-hover hover:text-fg ${panelTab === "workflows" ? "active bg-[color-mix(in_srgb,var(--bg-active)_28%,var(--bg-raised))] text-fg" : ""}`}
 									onClick={() => selectPanelTab("workflows")}
 								>
 									Agents
@@ -5319,7 +5319,7 @@ export function SessionViewer({
 							    sidebar assets tab — see the Assets view-tab in App.tsx. */}
 							{sessionReports.length > 0 && (
 								<button
-									className={`panel-tab ${panelTab === "reports" ? "active" : ""}`}
+									className={`panel-tab inline-flex shrink-0 items-center gap-1.5 rounded-md border-0 bg-transparent px-3 py-[5px] text-control-label font-medium text-dim hover:bg-hover hover:text-fg ${panelTab === "reports" ? "active bg-[color-mix(in_srgb,var(--bg-active)_28%,var(--bg-raised))] text-fg" : ""}`}
 									onClick={() => selectPanelTab("reports")}
 								>
 									Reports
@@ -5327,7 +5327,7 @@ export function SessionViewer({
 								</button>
 							)}
 						</div>
-						<div className="panel-body">
+						<div className="panel-body min-h-0 flex-1 overflow-y-auto">
 							{/* Plain-only sessions (no code workspace) show just the timeline. */}
 							{panelTab === "info" ? (
 								<div className="px-1">
@@ -5446,12 +5446,12 @@ export function SessionViewer({
 // the slow git work — see create_session in backstage.ts).
 function WorkspaceWaiting({ detail }: { detail: string }) {
 	return (
-		<div className="flex h-full min-h-[240px] flex-col items-center justify-center gap-1 px-6 text-center">
+			<div className="flex h-full min-h-[240px] flex-col items-center justify-center gap-1 px-6 text-center">
 			<PixelSpinner className="mb-2 text-dim" />
-			<div className="text-[14px] font-semibold text-fg">
+			<div className="text-body font-semibold text-fg">
 				Waiting for workspace
 			</div>
-			<div className="max-w-[340px] text-[13px] font-medium leading-relaxed text-dim">
+			<div className="max-w-[340px] text-control-label font-medium leading-relaxed text-dim">
 				{detail}
 			</div>
 		</div>
@@ -5466,7 +5466,7 @@ function ConversationLoading() {
 			aria-live="polite"
 		>
 			<PixelSpinner className="text-dim" />
-			<div className="text-[13px] font-medium text-dim">Loading conversation</div>
+			<div className="text-control-label font-medium text-dim">Loading conversation</div>
 		</div>
 	);
 }

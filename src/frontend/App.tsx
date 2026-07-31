@@ -154,6 +154,9 @@ import {
 import { copySessionTranscript } from "./lib/transcript-copy";
 import { effectiveTheme, setThemePref } from "./lib/theme";
 import type { UnifiedSession } from "./lib/types";
+// Legacy stylesheet remains only for cross-tree state selectors (`html.wco`,
+// `body.kb-open`, `body.chrome-collapsed`, and sidebar-owned chrome). This shell
+// keeps those hooks, but its visual layout is expressed by local utilities below.
 import "./styles/global.css";
 
 type Route =
@@ -3069,7 +3072,7 @@ function App() {
 					</Modal.Footer>
 				</Modal.Content>
 			</Modal.Root>
-			<div className="app">
+			<div className="app relative flex h-full min-h-0 flex-col overflow-hidden bg-bg text-body text-fg">
 				{/* Mobile-only top bar. On the sidebar-root page it shows the brand;
 				    on a pushed page (a session or other view) the brand is replaced by
 				    a Back chevron that pops back to the root, iOS-style. On desktop the
@@ -3078,16 +3081,16 @@ function App() {
 				    suppress this one there to avoid a duplicate back bar. */}
 				{route.view !== "catchup" && (
 				<header
-					className={`app-header${mobileDetail ? " app-header-detail" : ""}${
+					className={`app-header relative z-20 hidden min-h-[calc(env(safe-area-inset-top,0px)+52px)] shrink-0 items-center justify-between px-3 pb-0 pt-[max(env(safe-area-inset-top,0px),8px)] max-[720px]:flex max-[390px]:px-2 ${mobileDetail ? " app-header-detail" : ""}${
 						route.view === "home" || route.view === "session"
 							? " app-header-overlay"
 							: ""
 					}`}
 				>
-					<div className="app-header-left">
+					<div className="app-header-left flex min-w-0 items-center gap-2">
 						{mobileDetail ? (
 							<button
-								className="mobile-back"
+								className="mobile-back hit-target inline-flex size-10 items-center justify-center rounded-full border border-line bg-panel p-0 text-accent shadow-[0_2px_12px_rgba(0,0,0,0.1)] active:opacity-35"
 								onClick={goBack}
 								aria-label="Back to sidebar"
 							>
@@ -3116,7 +3119,7 @@ function App() {
 					    title. Desktop hides the whole bar. */}
 					{mobileDetail && (
 						<span
-							className={`app-header-title ${
+							className={`app-header-title absolute left-[56px] right-[56px] bottom-0 flex h-[52px] min-w-0 items-center justify-center gap-1.5 truncate text-item-title font-semibold tracking-[-0.01em] text-fg ${
 								route.view === "session" && currentSession
 									? "session-settings-trigger app-header-title-tappable"
 									: ""
@@ -3137,11 +3140,11 @@ function App() {
 							    metadata below it in a stacked column. The whole pill is one
 							    tap target that opens the session's deeper info page. */}
 							{route.view === "session" && currentSession && (
-								<span className="app-header-repo" ref={setHeaderRepoEl} />
+								<span className="app-header-repo inline-flex shrink-0 items-center" ref={setHeaderRepoEl} />
 							)}
-							<span className="app-header-title-col">
-								<span className="app-header-title-row">
-									<span className="app-header-title-text">
+							<span className="app-header-title-col flex min-w-0 flex-col items-center">
+								<span className="app-header-title-row flex min-w-0 items-center gap-1.5">
+									<span className="app-header-title-text max-w-full truncate">
 										{route.view === "session"
 											? (activeProjectId
 												? projects.find((p) => p.id === activeProjectId)?.name
@@ -3153,18 +3156,18 @@ function App() {
 								</span>
 								{route.view === "session" && currentSession && (
 									// Filled by SessionViewer's portal (compact model selector).
-									<span className="app-header-model" ref={setHeaderModelEl} />
+									<span className="app-header-model min-w-0 text-meta text-dim" ref={setHeaderModelEl} />
 								)}
 							</span>
 						</span>
 					)}
-					<div className="app-header-actions" ref={setHeaderActionsEl}>
+					<div className="app-header-actions ml-auto flex min-w-0 items-center gap-2" ref={setHeaderActionsEl}>
 						{/* On the root page the actions slot is otherwise empty (session
 						    actions only portal in on pushed pages) — it carries Search,
 						    which lives in the top bar on phones instead of the sidebar. */}
 						{!mobileDetail && (
 							<button
-								className="mobile-search-btn"
+								className="mobile-search-btn hit-target inline-flex size-10 items-center justify-center rounded-full border border-line bg-panel p-0 text-accent shadow-[0_2px_12px_rgba(0,0,0,0.1)] active:opacity-35"
 								onClick={() => setSearchOpen(true)}
 								aria-label="Open command menu"
 							>
@@ -3228,7 +3231,7 @@ function App() {
 				    full page and replaces it. */}
 				{(!settingsActive || isPhone) && (
 				<div
-					className={`app-body ${mobileDetail ? "mobile-detail" : "mobile-root"}${
+					className={`app-body flex min-h-0 flex-1 ${mobileDetail ? "mobile-detail" : "mobile-root"}${
 						sidebarCollapsed ? " sidebar-collapsed" : ""
 					}`}
 				>
@@ -3497,8 +3500,8 @@ function App() {
 						/>
 					</div>
 
-					<div className="workspace-shell">
-						<main className="detail-pane" ref={detailPaneRef}>
+					<div className="workspace-shell flex min-w-0 flex-1 overflow-hidden rounded-panel bg-bg min-[721px]:m-2 min-[721px]:border min-[721px]:border-line">
+						<main className="detail-pane relative flex min-h-0 min-w-0 flex-1 flex-col" ref={detailPaneRef}>
 						{/* WCO back/forward fallback: the primary cluster lives in the
 						    sidebar's top chrome row, which vanishes when the sidebar is
 						    collapsed — this floating copy shows only then (CSS-gated). */}
@@ -3508,7 +3511,7 @@ function App() {
 						    sidebar can always be brought back. */}
 						<Tooltip label="Show sidebar" side="right" shortcut={["⌘", "B"]}>
 							<button
-								className="sidebar-reopen"
+								className="sidebar-reopen hidden items-center justify-center rounded-md border border-line bg-panel p-1.5 text-dim shadow-control hover:bg-hover hover:text-fg min-[721px]:[.sidebar-collapsed_&]:inline-flex"
 								onClick={toggleSidebarCollapsed}
 								aria-label="Show sidebar"
 							>
@@ -3518,15 +3521,15 @@ function App() {
 						{/* Top bar: session name + actions (portaled in by SessionViewer)
 						    on session routes, a plain title otherwise. Sits above the tab
 						    strip so the session identity reads first, tabs below it. */}
-						<div className="detail-topbar" ref={setTopbarEl}>
+						<div className="detail-topbar flex min-w-0 shrink-0 flex-col empty:hidden" ref={setTopbarEl}>
 							{route.view !== "session" && topbarTitle && (
-								<span className="detail-topbar-title">{topbarTitle}</span>
+								<span className="detail-topbar-title flex h-[var(--desktop-header-h)] items-center border-b border-line bg-surface px-4 text-body font-semibold text-fg">{topbarTitle}</span>
 							)}
 						</div>
 						{!activeTabSplit && renderTabBar(null)}
 						{splitDropSide && (
 							<div
-								className={`tab-split-drop-preview tab-split-drop-preview-${splitDropSide}`}
+								className={`tab-split-drop-preview tab-split-drop-preview-${splitDropSide} pointer-events-none absolute bottom-2 z-20 w-[calc(50%-12px)] rounded-md border-2 border-accent bg-[color-mix(in_srgb,var(--accent)_18%,transparent)] shadow-[inset_0_0_0_1px_color-mix(in_srgb,white_16%,transparent)] ${splitDropSide === "left" ? "left-2" : "right-2"}`}
 								aria-hidden="true"
 							/>
 						)}
@@ -3553,7 +3556,7 @@ function App() {
 									onOpenSession={(id) => navigate({ view: "session", id })}
 								/>
 							) : (
-								<div className="panel-placeholder">
+								<div className="panel-placeholder px-4 py-12 text-center text-control-label text-faint">
 									{projectsLoaded ? "Workspace not found." : "Loading workspace…"}
 								</div>
 							)
@@ -3723,14 +3726,14 @@ function App() {
 									)
 								)
 							) : (
-								<div className="detail-empty">
-									<div className="detail-empty-inner">
+								<div className="detail-empty flex flex-1 items-center justify-center">
+									<div className="detail-empty-inner text-center">
 										{(() => {
 											const isLoading =
 												loading || route.id === pendingSessionId;
 											return (
 												<>
-													<div className="detail-empty-title">
+													<div className="detail-empty-title text-section-title font-semibold text-fg">
 														{!isLoading
 															? "Session not found"
 															: route.id === pendingSessionId
@@ -3739,7 +3742,7 @@ function App() {
 																	: "Starting a new chat…"
 																: "Loading session…"}
 													</div>
-													<div className="detail-empty-sub">
+													<div className="detail-empty-sub mt-1.5 text-control-label text-dim">
 														{isLoading ? "" : "It may have been deleted."}
 													</div>
 												</>
@@ -3763,7 +3766,7 @@ function App() {
 						{/* Full-height right column inside the same rounded workspace shell as
 						    the detail pane. The active session's workspace/sub-agent panel
 						    portals in here. */}
-						<div className="right-panel-slot" ref={setRightPanelEl} />
+						<div className="right-panel-slot contents" ref={setRightPanelEl} />
 					</div>
 				</div>
 				)}
