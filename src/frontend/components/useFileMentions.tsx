@@ -1,6 +1,7 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { FileMention } from "../lib/api";
+import { cn } from "../ui/cn";
 
 /**
  * Find the active "@"-mention being typed at the caret. Returns the index of
@@ -251,7 +252,11 @@ export function useFileMentions({ value, onChange, textareaRef, mentionFetch, sk
   }
 
   const popup = open && pos ? createPortal(
-    <div className="mention-popup" role="listbox" style={pos}>
+    <div
+      className="mention-popup fixed z-[10500] max-h-60 overflow-y-auto rounded-lg border border-line bg-control p-1 shadow-[0_8px_28px_rgba(0,0,0,0.28)]"
+      role="listbox"
+      style={pos}
+    >
       {suggestions.map((item, i) => {
         const isSession = item.kind === "session";
         const isSkill = item.kind === "skill";
@@ -266,20 +271,23 @@ export function useFileMentions({ value, onChange, textareaRef, mentionFetch, sk
             key={`${item.insert}-${i}`}
             role="option"
             aria-selected={i === activeIdx}
-            className={`mention-item ${i === activeIdx ? "mention-item-active" : ""}`}
+            className={cn(
+              "mention-item flex cursor-pointer items-baseline gap-2 overflow-hidden rounded-md px-[9px] py-1.5 text-[12.5px] leading-[1.3] whitespace-nowrap",
+              i === activeIdx && "mention-item-active bg-pressed",
+            )}
             onMouseDown={(e) => {
               e.preventDefault();
               applySuggestion(item);
             }}
             onMouseEnter={() => setActiveIdx(i)}
           >
-            {isSession && <span className="mention-repo">session</span>}
-            {isPerson && <span className="mention-repo">person</span>}
-            {!isSession && !isSkill && !isPerson && item.repo && <span className="mention-repo">{item.repo}</span>}
-            <span className="mention-base">{isSkill ? `/${base}` : isDir ? `${base}/` : base}</span>
+            {isSession && <span className="mention-repo shrink-0 self-center rounded-sm bg-[color-mix(in_srgb,var(--accent)_14%,transparent)] px-[5px] py-px text-[10.5px] font-semibold text-accent">session</span>}
+            {isPerson && <span className="mention-repo shrink-0 self-center rounded-sm bg-[color-mix(in_srgb,var(--accent)_14%,transparent)] px-[5px] py-px text-[10.5px] font-semibold text-accent">person</span>}
+            {!isSession && !isSkill && !isPerson && item.repo && <span className="mention-repo shrink-0 self-center rounded-sm bg-[color-mix(in_srgb,var(--accent)_14%,transparent)] px-[5px] py-px text-[10.5px] font-semibold text-accent">{item.repo}</span>}
+            <span className="mention-base shrink-0 font-medium text-fg">{isSkill ? `/${base}` : isDir ? `${base}/` : base}</span>
             {isSession || isSkill || isPerson
-              ? item.sub && <span className="mention-dir">{item.sub}</span>
-              : dir && <span className="mention-dir">{dir}</span>}
+              ? item.sub && <span className="mention-dir overflow-hidden text-[11.5px] text-ellipsis text-left text-faint [direction:rtl]">{item.sub}</span>
+              : dir && <span className="mention-dir overflow-hidden text-[11.5px] text-ellipsis text-left text-faint [direction:rtl]">{dir}</span>}
           </div>
         );
       })}

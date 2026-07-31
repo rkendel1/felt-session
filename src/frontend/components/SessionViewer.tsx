@@ -2963,7 +2963,11 @@ export function SessionViewer({
 
 	function renderQueueContent(
 		item: QueueReceipt,
-		opts: { human?: ReturnType<typeof parseHumanReply>; github?: boolean },
+		opts: {
+			human?: ReturnType<typeof parseHumanReply>;
+			github?: boolean;
+			sending?: boolean;
+		},
 	) {
 		const firstImage = item.images?.[0];
 		const extraImages = Math.max(0, (item.images?.length ?? 0) - 1);
@@ -2978,24 +2982,31 @@ export function SessionViewer({
 			? opts.human.body
 			: (worker?.body ?? workflow?.body ?? sessionNotice?.body ?? item.content);
 		return (
-			<div className="composer-queue-content">
+			<div className="composer-queue-content flex min-w-0 items-start gap-2 pr-28">
 				{firstImage && (
-					<div className="composer-queue-image">
-						<img src={firstImage} alt="" />
+					<div className="composer-queue-image relative mt-px h-[34px] w-[46px] shrink-0">
+						<img className="block size-full rounded-md border border-line object-cover" src={firstImage} alt="" />
 						{extraImages > 0 && (
-							<span className="composer-queue-image-count">+{extraImages}</span>
+							<span className="composer-queue-image-count absolute -right-1 -bottom-1 h-[18px] min-w-[18px] rounded-full border border-line bg-raised px-1 text-center text-[10px] leading-4 font-bold text-dim">+{extraImages}</span>
 						)}
 					</div>
 				)}
-				<div className="composer-queue-body">
-					{opts.human && (
-						<span className="composer-queue-from">💬 {opts.human.name}</span>
+				<div
+					className={cn(
+						"composer-queue-body min-w-0 flex-1 overflow-hidden text-[13px] leading-[1.45] text-ellipsis whitespace-nowrap text-fg",
+						opts.human && "text-[color-mix(in_srgb,var(--text)_88%,#1f9e8a)]",
+						opts.github && "text-dim",
+						opts.sending && "text-dim",
 					)}
-					{opts.github && <span className="composer-queue-from">GitHub</span>}
-					{worker && <span className="composer-queue-from">🤖 Worker report</span>}
-					{workflow && <span className="composer-queue-from">⚙️ Workflow</span>}
+				>
+					{opts.human && (
+						<span className="composer-queue-from mr-1.5 font-semibold text-faint">💬 {opts.human.name}</span>
+					)}
+					{opts.github && <span className="composer-queue-from mr-1.5 font-semibold text-faint">GitHub</span>}
+					{worker && <span className="composer-queue-from mr-1.5 font-semibold text-faint">🤖 Worker report</span>}
+					{workflow && <span className="composer-queue-from mr-1.5 font-semibold text-faint">⚙️ Workflow</span>}
 					{sessionNotice && (
-						<span className="composer-queue-from">System message</span>
+						<span className="composer-queue-from mr-1.5 font-semibold text-faint">System message</span>
 					)}
 					{body}
 				</div>
@@ -3067,18 +3078,18 @@ export function SessionViewer({
 				: `${queuedOnlyCount} queued · ${visibleSteered.length} steered`;
 	const attachedQueue =
 		queueCount > 0 ? (
-			<div className="composer-queue" aria-label="Queued and steered messages">
-				<div className="composer-queue-title">{queueTitle}</div>
+			<div className="composer-queue relative -mb-3.5 mx-[18px] flex flex-col gap-2 rounded-t-lg border border-b-0 border-line bg-[color-mix(in_srgb,var(--bg-panel)_70%,var(--control-surface))] px-4 pt-2.5 pb-[26px]" aria-label="Queued and steered messages">
+				<div className="composer-queue-title text-xs font-semibold text-faint">{queueTitle}</div>
 				{visibleSteered.map((s, i) => {
 					const hr = parseHumanReply(s.content);
 					return (
 						<div
 							key={`steered-${i}`}
-							className={`composer-queue-item composer-queue-steered ${hr ? "is-human" : ""}`}
+							className={cn("composer-queue-item composer-queue-steered relative min-h-[18.85px]", hr && "is-human")}
 						>
-							<div className="composer-queue-actions">
+							<div className="composer-queue-actions absolute -top-2 right-0 z-[1] inline-flex items-center gap-0.5">
 								<Tooltip label="Already delivered into the running turn — shown here until the turn finishes">
-									<span className="composer-queue-pill">
+									<span className="composer-queue-pill inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-transparent bg-accent-soft px-[13px] text-sm font-semibold text-accent">
 										<IconCrosshair size={20} />
 										Steered
 									</span>
@@ -3087,7 +3098,7 @@ export function SessionViewer({
 									<Tooltip label="Dismiss — the run keeps going; this message won't be re-sent">
 										<button
 											type="button"
-											className="composer-queue-action danger"
+											className="composer-queue-action danger inline-flex size-[34px] items-center justify-center rounded-md border border-transparent bg-transparent text-dim hover:not-disabled:border-red hover:not-disabled:bg-red-soft hover:not-disabled:text-red disabled:cursor-default disabled:opacity-35"
 											onClick={() =>
 												send({
 													type: "delete_queued_prompt",
@@ -3111,7 +3122,7 @@ export function SessionViewer({
 					axis="y"
 					values={queued}
 					onReorder={handleQueueReorder}
-					className="composer-queue-list"
+					className="composer-queue-list flex flex-col gap-2"
 				>
 				{queued.map((q, i) => {
 					const hr = parseHumanReply(q.content);
@@ -3133,11 +3144,11 @@ export function SessionViewer({
 							}}
 							onDragEnd={commitQueueReorder}
 							whileDrag={{ scale: 1.01, zIndex: 2 }}
-							className={`composer-queue-item ${canReorder ? "is-draggable" : ""} ${hr ? "is-human" : ""} ${isGitHub ? "is-github" : ""}`}
+							className={cn("composer-queue-item relative min-h-[18.85px]", canReorder && "is-draggable cursor-grab touch-none active:cursor-grabbing", hr && "is-human", isGitHub && "is-github")}
 						>
-							<div className="composer-queue-actions">
+							<div className="composer-queue-actions absolute -top-2 right-0 z-[1] inline-flex items-center gap-0.5">
 								{isGitHub ? (
-									<span className="composer-queue-pill composer-queue-pill-github">
+									<span className="composer-queue-pill composer-queue-pill-github inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-line bg-raised px-[13px] text-sm font-semibold text-dim">
 										<IconPullRequest size={20} />
 										FYI
 									</span>
@@ -3146,7 +3157,7 @@ export function SessionViewer({
 										<Tooltip label="Edit — puts the message back into the composer">
 											<button
 												type="button"
-												className="composer-queue-action"
+											className="composer-queue-action inline-flex size-[34px] items-center justify-center rounded-md border border-transparent bg-transparent text-dim hover:not-disabled:border-line hover:not-disabled:bg-hover hover:not-disabled:text-fg disabled:cursor-default disabled:opacity-35"
 												onClick={() => editQueuedInComposer(q, i)}
 											>
 												<IconPencil size={24} />
@@ -3157,7 +3168,7 @@ export function SessionViewer({
 								<Tooltip label="Delete queued message">
 									<button
 										type="button"
-										className="composer-queue-action danger"
+										className="composer-queue-action danger inline-flex size-[34px] items-center justify-center rounded-md border border-transparent bg-transparent text-dim hover:not-disabled:border-red hover:not-disabled:bg-red-soft hover:not-disabled:text-red disabled:cursor-default disabled:opacity-35"
 										onClick={() =>
 											send({
 												type: "delete_queued_prompt",
@@ -3180,7 +3191,7 @@ export function SessionViewer({
 									>
 										<button
 											type="button"
-											className="composer-queue-action composer-queue-steer"
+											className="composer-queue-action composer-queue-steer inline-flex size-[34px] items-center justify-center rounded-md border border-transparent bg-transparent text-accent hover:not-disabled:border-transparent hover:not-disabled:bg-accent-soft disabled:cursor-default disabled:opacity-35"
 											aria-label="Steer into the running turn"
 											disabled={!canSteer}
 											onClick={() =>
@@ -3206,13 +3217,13 @@ export function SessionViewer({
 				{/* Just-sent while busy: already visually in the queue, awaiting the
 				    server's echo (which swaps in the real item with actions). */}
 				{pendingQueue.map((p) => (
-					<div key={p.id} className="composer-queue-item composer-queue-sending">
-						<div className="composer-queue-actions">
-							<span className="composer-queue-pill composer-queue-pill-sending">
+					<div key={p.id} className="composer-queue-item composer-queue-sending relative min-h-[18.85px]">
+						<div className="composer-queue-actions absolute -top-2 right-0 z-[1] inline-flex items-center gap-0.5">
+							<span className="composer-queue-pill composer-queue-pill-sending inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-line bg-raised px-[13px] text-sm font-semibold text-faint">
 								{waitingForWorkspace ? "Queued" : "Queueing…"}
 							</span>
 						</div>
-						{renderQueueContent(p, {})}
+						{renderQueueContent(p, { sending: true })}
 					</div>
 				))}
 			</div>

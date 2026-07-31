@@ -34,6 +34,7 @@ import { composerMorph, composerChipMotion } from "../ui/motion";
 import { ModelEffortSelect, shortModelLabel } from "./ModelEffortSelect";
 import { UsageMeter } from "./UsageMeter";
 import type { SessionUsage } from "../lib/types";
+import { cn } from "../ui/cn";
 
 interface Props {
   /**
@@ -649,7 +650,7 @@ export function Composer({
   const effectiveModel = model || defaultModel;
 
   return (
-    <div className="composer-wrap">
+    <div className="composer-wrap mx-auto w-full max-w-[calc(var(--chat-col)+40px)]">
       {/* Queued/steered messages fold out from behind the composer box —
           a sibling flap tucked under its top edge, not a box-in-box. */}
       {attached}
@@ -664,18 +665,12 @@ export function Composer({
         initial={false}
         animate={{ borderRadius: minimized ? 999 : 28 }}
         transition={composerMorph}
-        className={`composer ${disabled ? "composer-disabled" : ""} ${minimized ? "composer-min" : ""} ${noteMode ? "composer-note" : ""}`}
-        style={
-          noteMode
-            ? {
-                borderColor: "color-mix(in srgb, var(--yellow) 45%, transparent)",
-                backgroundColor:
-                  "color-mix(in srgb, var(--yellow) 10%, var(--control-surface))",
-                backgroundImage:
-                  "linear-gradient(to bottom, transparent 15%, color-mix(in srgb, var(--yellow) 10%, var(--control-surface)) 72%), repeating-linear-gradient(45deg, color-mix(in srgb, var(--yellow) 6%, transparent) 0, color-mix(in srgb, var(--yellow) 6%, transparent) 12px, transparent 12px, transparent 24px)",
-              }
-            : undefined
-        }
+        className={cn(
+          "composer relative border border-line bg-control px-3.5 pt-3.5 pb-2.5 shadow-[var(--composer-shadow)] transition-[border-color,box-shadow] duration-150 max-[720px]:!rounded-xl max-[720px]:px-3 max-[720px]:pt-2.5 max-[720px]:pb-[9px]",
+          disabled && "composer-disabled opacity-60",
+          minimized && "composer-min max-[720px]:mx-1.5 max-[720px]:flex max-[720px]:items-center max-[720px]:gap-1 max-[720px]:!p-1",
+          noteMode && "composer-note border-[color-mix(in_srgb,var(--yellow)_45%,transparent)] bg-[color-mix(in_srgb,var(--yellow)_10%,var(--control-surface))] [background-image:linear-gradient(to_bottom,transparent_15%,color-mix(in_srgb,var(--yellow)_10%,var(--control-surface))_72%),repeating-linear-gradient(45deg,color-mix(in_srgb,var(--yellow)_6%,transparent)_0,color-mix(in_srgb,var(--yellow)_6%,transparent)_12px,transparent_12px,transparent_24px)]",
+        )}
         onDrop={handleDrop}
         onDragOver={(e) => canAttach && e.preventDefault()}
       >
@@ -696,21 +691,25 @@ export function Composer({
         <motion.div
           layout="position"
           transition={composerMorph}
-          className="composer-input-wrap"
+          className={cn("composer-input-wrap relative", minimized && "max-[720px]:order-2 max-[720px]:min-w-0 max-[720px]:flex-1")}
           ref={mentions.inputWrapRef}
         >
           {mentions.popup}
           {hlActive && (
             <div
               ref={hlRef}
-              className="composer-textarea composer-hl"
+              className="composer-textarea composer-hl pointer-events-none absolute inset-0 z-0 block w-full overflow-hidden text-sm leading-[1.55] whitespace-pre-wrap text-fg select-none [overflow-wrap:break-word] [&_.cmp-code]:rounded-sm [&_.cmp-code]:bg-white/10 [&_.cmp-code]:text-[#e8b3b9] [&_.cmp-fence]:rounded-sm [&_.cmp-fence]:bg-white/[0.06] [&_.cmp-fence]:text-[#dde1f0] [html[data-theme=light]_&_.cmp-code]:bg-black/[0.07] [html[data-theme=light]_&_.cmp-code]:text-[#953b39] [html[data-theme=light]_&_.cmp-fence]:bg-black/[0.05] [html[data-theme=light]_&_.cmp-fence]:text-[#1f2328]"
               aria-hidden="true"
               dangerouslySetInnerHTML={{ __html: hlHtml }}
             />
           )}
           <textarea
             ref={textareaRef}
-            className={`composer-textarea ${hlActive ? "has-hl" : ""}`}
+            className={cn(
+              "composer-textarea block min-h-32 max-h-80 w-full resize-none border-0 bg-transparent py-0.5 pr-0 pb-1 text-sm leading-[1.55] text-fg outline-none placeholder:text-faint max-[720px]:!min-h-0 max-[720px]:!max-h-60 max-[720px]:text-[16px]",
+              minimized && "max-[720px]:!min-h-0 max-[720px]:px-1 max-[720px]:py-0",
+              hlActive && "has-hl relative z-[1] text-transparent caret-fg [overflow-wrap:break-word]",
+            )}
             // In the resting pill the full prompt would clip, so show a short
             // "Ask <model>" (ChatGPT-style) that fits the single row; the
             // descriptive placeholder returns once it expands.
@@ -750,7 +749,7 @@ export function Composer({
           />
         </motion.div>
         <div
-          className="composer-toolbar"
+          className={cn("composer-toolbar mt-2.5 flex items-center gap-2 [&>*]:shrink-0 max-[720px]:mt-1.5 max-[720px]:gap-1.5", minimized && "max-[720px]:contents")}
           ref={toolbarRef}
           // Phones: a toolbar tap must not blur the textarea — the blur would
           // collapse the empty composer mid-tap (unmounting the model pill and
@@ -768,7 +767,7 @@ export function Composer({
             <motion.div
               layout="position"
               transition={composerMorph}
-              className="composer-pop-wrap"
+              className={cn("composer-pop-wrap relative inline-flex", minimized && "max-[720px]:order-1")}
               style={
                 !minimized && (onSetGoal || onNoteModeChange)
                   ? { marginRight: -8 }
@@ -778,7 +777,7 @@ export function Composer({
               <Tooltip label="Add files or a file reference">
                 <button
                   type="button"
-                  className="palette-icon-btn composer-add-btn"
+                  className={cn("palette-icon-btn composer-add-btn", minimized && "max-[720px]:rounded-full")}
                   {...tapProps(() => setMenu(menu === "add" ? null : "add"))}
                   disabled={disabled}
                   aria-label="Add"
@@ -788,16 +787,16 @@ export function Composer({
                 </button>
               </Tooltip>
               {menu === "add" && (
-                <div className="composer-menu">
+                <div className="composer-menu absolute bottom-[calc(100%+6px)] left-0 z-40 min-w-[172px] rounded-lg border border-line-strong bg-panel p-1 shadow-[0_8px_28px_rgba(0,0,0,0.28)]">
                   <button
                     type="button"
-                    className="composer-menu-item"
+                    className="composer-menu-item flex w-full cursor-pointer items-center gap-[9px] rounded-md border-0 bg-transparent px-[9px] py-[7px] text-left text-[12.5px] text-fg hover:bg-[color-mix(in_srgb,var(--accent)_14%,transparent)]"
                     {...tapProps(() => {
                       setMenu(null);
                       fileInputRef.current?.click();
                     })}
                   >
-                    <span className="composer-menu-icon">
+                    <span className="composer-menu-icon inline-flex w-5 items-center justify-center text-[13px] text-dim">
                       <IconPaperclip size={22} />
                     </span>
                     {onFilesChange ? "Attach files" : "Attach an image"}
@@ -805,13 +804,13 @@ export function Composer({
                   {mentionFetch && (
                     <button
                       type="button"
-                      className="composer-menu-item"
+                      className="composer-menu-item flex w-full cursor-pointer items-center gap-[9px] rounded-md border-0 bg-transparent px-[9px] py-[7px] text-left text-[12.5px] text-fg hover:bg-[color-mix(in_srgb,var(--accent)_14%,transparent)]"
                       {...tapProps(() => {
                         setMenu(null);
                         startMention();
                       })}
                     >
-                      <span className="composer-menu-icon">
+                      <span className="composer-menu-icon inline-flex w-5 items-center justify-center text-[13px] text-dim">
                         <IconAtSign size={22} />
                       </span>
                       Reference a file
@@ -854,19 +853,19 @@ export function Composer({
                 key="goal"
                 layout="position"
                 {...composerChipMotion}
-                className="composer-pop-wrap"
+                className="composer-pop-wrap relative inline-flex max-[720px]:hidden"
                 style={onNoteModeChange ? { marginRight: -8 } : undefined}
               >
                 <Tooltip label={goal ? `Goal: ${goal}` : "Pin a goal for this session"}>
                   <button
                     type="button"
-                    className={`palette-icon-btn composer-goal-btn ${goal ? "is-on" : ""}`}
+                    className={cn("palette-icon-btn composer-goal-btn", goal && "is-on w-auto gap-[5px] px-[9px] text-accent")}
                     {...tapProps(() => setMenu(menu === "goal" ? null : "goal"))}
                     disabled={disabled}
                     aria-pressed={!!goal}
                   >
                     <IconCrosshair size={24} />
-                    {goal && <span className="composer-goal-label">Goal</span>}
+                    {goal && <span className="composer-goal-label text-xs font-medium">Goal</span>}
                   </button>
                 </Tooltip>
                 <GoalModal
@@ -889,7 +888,7 @@ export function Composer({
                 key="note"
                 layout="position"
                 {...composerChipMotion}
-                className="composer-pop-wrap"
+                className="composer-pop-wrap relative inline-flex"
               >
                 <Tooltip
                   label={
@@ -900,24 +899,14 @@ export function Composer({
                 >
                   <button
                     type="button"
-                    className="palette-icon-btn composer-note-btn"
-                    style={
-                      noteMode
-                        ? {
-                            width: "auto",
-                            gap: 6,
-                            padding: "0 9px",
-                            color: "var(--yellow)",
-                          }
-                        : undefined
-                    }
+                    className={cn("palette-icon-btn composer-note-btn", noteMode && "w-auto gap-1.5 px-[9px] text-yellow")}
                     {...tapProps(() => onNoteModeChange(!noteMode))}
                     disabled={disabled}
                     aria-pressed={!!noteMode}
                   >
                     <IconNote size={24} />
                     {noteMode && (
-                      <span className="composer-goal-label">Note</span>
+                      <span className="composer-goal-label text-xs font-medium">Note</span>
                     )}
                   </button>
                 </Tooltip>
@@ -926,7 +915,7 @@ export function Composer({
           </AnimatePresence>
 
           {leftExtra}
-          <div className="composer-spacer" />
+          <div className={cn("composer-spacer flex-1", minimized && "max-[720px]:hidden")} />
 
           {/* Model + effort live together on the right edge (ChatGPT-style):
               one pill, effort levels up top, the model behind a submenu.
@@ -938,7 +927,7 @@ export function Composer({
                 key="model-effort"
                 layout="position"
                 {...composerChipMotion}
-                className="palette-select-motion"
+                className="palette-select-motion min-w-0 shrink max-[720px]:order-[-1]"
               >
                 <ModelEffortSelect
                   className="palette-pill"
@@ -971,14 +960,14 @@ export function Composer({
                 key="usage"
                 layout="position"
                 {...composerChipMotion}
-                className="composer-pop-wrap"
+                className="composer-pop-wrap relative inline-flex"
               >
                 <UsageMeter usage={usage} />
               </motion.div>
             )}
           </AnimatePresence>
 
-          <motion.div layout="position" transition={composerMorph} className="composer-voice-wrap">
+            <motion.div layout="position" transition={composerMorph} className={cn("composer-voice-wrap inline-flex items-center", minimized && "max-[720px]:order-3")}>
             <VoiceInput onText={insertDictation} disabled={disabled} />
           </motion.div>
 
@@ -986,7 +975,10 @@ export function Composer({
             <Tooltip label="Stop — interrupts the current turn; the session stays ready">
               <button
                 type="button"
-                className="composer-send composer-stop"
+                className={cn(
+                  "composer-send composer-stop inline-flex size-8 shrink-0 items-center justify-center rounded-full border-0 bg-red text-[15px] leading-none font-semibold text-white transition-[filter,transform] duration-150 hover:not-disabled:scale-105 hover:not-disabled:brightness-110 disabled:cursor-default disabled:opacity-35 max-[720px]:size-10",
+                  minimized && "max-[720px]:order-4",
+                )}
                 {...tapProps(() => onStop())}
                 disabled={disabled}
                 aria-label="Stop current turn"
@@ -1003,7 +995,7 @@ export function Composer({
             <motion.div
               layout="position"
               transition={composerMorph}
-              className="composer-send-split"
+              className={cn("composer-send-split relative inline-flex shrink-0 items-stretch", minimized && "max-[720px]:order-5")}
             >
               <Tooltip
                 label={
@@ -1026,13 +1018,11 @@ export function Composer({
                 }
               >
                 <button
-                  className={`composer-send ${
-                    steerSend
-                      ? "composer-send-interrupt"
-                      : busy && !noteMode
-                        ? "composer-send-queue-main"
-                        : ""
-                  }`}
+                  className={cn(
+                    "composer-send inline-flex size-8 shrink-0 items-center justify-center rounded-full border-0 bg-accent text-[15px] leading-none font-semibold text-white transition-[filter,transform] duration-150 hover:not-disabled:scale-105 hover:not-disabled:brightness-110 disabled:cursor-default disabled:opacity-35 max-[720px]:size-10",
+                    steerSend && "composer-send-interrupt border border-red bg-red-soft text-red",
+                    busy && !noteMode && "composer-send-queue-main border-2 border-accent bg-raised text-accent",
+                  )}
                   {...tapProps(() =>
                     fireSend(onSend, steerSend ? { steer: true } : undefined),
                   )}
@@ -1109,7 +1099,7 @@ export function Composer({
           </div>
         )}
       </motion.div>
-      {hint && <div className="composer-hint">{hint}</div>}
+      {hint && <div className="composer-hint mt-[7px] text-center text-[11px] text-faint max-[720px]:hidden">{hint}</div>}
     </div>
   );
 }
