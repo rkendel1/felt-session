@@ -114,7 +114,7 @@ export function WorkflowAgentTranscript({ runId, agent, onBack }: Props) {
 						<span className="size-1.5 shrink-0 animate-pulse rounded-full bg-green" />
 					)}
 				</button>
-				<div className="mt-0.5 pl-[18px] text-[11px] text-faint tabular-nums">
+				<div className="mt-0.5 pl-[18px] text-meta text-faint tabular-nums">
 					{[
 						`agent ${agent.seq}`,
 						agent.status,

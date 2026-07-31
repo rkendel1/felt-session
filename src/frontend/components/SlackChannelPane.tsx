@@ -92,7 +92,7 @@ function ReactionPills({ reactions }: { reactions?: MessageReaction[] }) {
 					{r.url ? (
 						<img src={r.url} alt={r.name} className="h-[14px] w-[14px]" />
 					) : (
-						<span className="text-[13px]">{r.emoji || `:${r.name}:`}</span>
+						<span className="text-control-label">{r.emoji || `:${r.name}:`}</span>
 					)}
 					<span className="font-medium">{r.count}</span>
 				</span>

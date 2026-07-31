@@ -4,6 +4,7 @@ import { renderMarkdown } from "../lib/markdown";
 import { relativeTime } from "../lib/api";
 import { cn } from "../ui/cn";
 import { openLightbox, type LightboxItem } from "./MediaLightbox";
+import { MARKDOWN_STYLES } from "./MarkdownBody";
 
 /** Stream server-side media (staged under the uploads dir) through the
  *  existing scoped media route — same URL shape MessageBubble uses. */
@@ -74,7 +75,7 @@ export function WalkthroughCard({
 					Walkthrough
 				</span>
 				{chat && walkthrough.publishedAt && (
-					<span className="text-[11px] text-faint">
+					<span className="text-meta text-faint">
 						{relativeTime(walkthrough.publishedAt)}
 					</span>
 				)}
@@ -92,7 +93,7 @@ export function WalkthroughCard({
 						title={walkthrough.videoTitle || "Demo video"}
 					/>
 					{chat && walkthrough.videoTitle ? (
-						<div className="mb-2 mt-1 text-[11px] text-faint">
+						<div className="mb-2 mt-1 text-meta text-faint">
 							{walkthrough.videoTitle}
 						</div>
 					) : (
@@ -101,7 +102,7 @@ export function WalkthroughCard({
 				</>
 			)}
 			<div
-				className="markdown text-[13px]"
+				className={`markdown ${MARKDOWN_STYLES} text-control-label`}
 				dangerouslySetInnerHTML={{ __html: summaryHtml }}
 			/>
 			{(walkthrough.shots || []).map((shot, i) => (
@@ -114,7 +115,7 @@ export function WalkthroughCard({
 							(side) =>
 								shot[side] && (
 									<figure className="m-0 min-w-0 flex-1" key={side}>
-										<figcaption className="mb-1 text-[11px] font-medium text-dim">
+										<figcaption className="mb-1 text-meta font-medium text-dim">
 											{side === "before" ? "Before" : "After"}
 										</figcaption>
 										<img

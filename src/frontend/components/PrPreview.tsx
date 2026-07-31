@@ -367,9 +367,9 @@ export function PrPreview({
 		: "";
 
 	return (
-		<div className="flex flex-col h-full min-h-0">
-			<div className="flex-1 min-h-0 overflow-y-auto">
-				<div className="w-full max-w-[860px] mx-auto px-5 py-6">
+		<div className="flex h-full min-h-0 flex-col">
+			<div className="min-h-0 flex-1 overflow-y-auto">
+				<div className="mx-auto w-full max-w-[860px] px-5 py-6">
 					{loading ? (
 						<div className="panel-placeholder">Loading PR…</div>
 					) : loadError && !pr ? (
@@ -393,10 +393,10 @@ export function PrPreview({
 							merged or closed.
 						</div>
 					) : (
-						<div className="pr-panel-info">
-							<div className="pr-head">
-								<span className={`pr-pill ${stateClass}`}>{stateLabel}</span>
-								<a className="pr-number" href={pr.url} target="_blank" rel="noopener">
+						<div className="pr-panel-info flex min-w-0 flex-col gap-3">
+							<div className="pr-head flex items-center gap-2">
+								<span className={`pr-pill rounded-full px-2.5 py-[3px] text-meta font-bold tracking-[-0.01em] ${stateClass === "pr-pill-open" ? "bg-green-soft text-green" : stateClass === "pr-pill-merged" ? "bg-purple/15 text-purple" : stateClass === "pr-pill-closed" ? "bg-red-soft text-red" : "bg-active text-dim"}`}>{stateLabel}</span>
+								<a className="pr-number text-control-label text-dim no-underline hover:text-accent" href={pr.url} target="_blank" rel="noopener">
 									#{pr.number}
 								</a>
 								<span className="text-faint text-label">
@@ -406,7 +406,7 @@ export function PrPreview({
 									<Button
 										variant={confirmClose ? "danger" : "default"}
 										size="sm"
-										className="min-h-[30px] px-2.5 text-[13px] font-[650] leading-none"
+										className="min-h-[30px] px-2.5 text-control-label font-[650] leading-none"
 										icon={!closing && !confirmClose ? <IconX size={16} /> : undefined}
 										disabled={closing}
 										onClick={handleClose}
@@ -418,12 +418,12 @@ export function PrPreview({
 							</div>
 							{closeError && <div className="pr-bar-error mt-2">{closeError}</div>}
 
-							<a className="pr-title" href={pr.url} target="_blank" rel="noopener">
+							<a className="pr-title text-item-title font-semibold leading-[1.28] text-fg no-underline hover:text-accent" href={pr.url} target="_blank" rel="noopener">
 								{pr.title}
 							</a>
 
-							<div className="pr-meta">
-								<span className="pr-branch">
+							<div className="pr-meta flex flex-wrap items-center gap-x-3.5 gap-y-1.5 text-supporting text-dim">
+								<span className="pr-branch rounded-sm border border-line bg-panel px-2 py-0.5 font-mono text-meta">
 									{pr.headRefName} → {pr.baseRefName}
 								</span>
 								<span>
@@ -641,7 +641,7 @@ export function PrPreview({
 				</div>
 			</div>
 
-			<div className="w-full max-w-[860px] mx-auto px-5 pb-5 shrink-0">
+			<div className="mx-auto w-full max-w-[860px] shrink-0 px-5 pb-5">
 				<Composer
 					value={prompt}
 					onChange={setPrompt}

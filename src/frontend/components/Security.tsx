@@ -85,7 +85,7 @@ export function Security({ onOpenSession }: Props) {
   }
 
   return (
-    <div className="automations">
+    <div className="mx-auto min-h-0 w-full max-w-[860px] flex-1 overflow-y-auto px-6 pb-[60px] pt-7 max-[560px]:px-4 max-[560px]:pb-12 max-[560px]:pt-5">
       <PageHeader>
         <div>
           <PageTitle>Security</PageTitle>
@@ -154,26 +154,26 @@ export function Security({ onOpenSession }: Props) {
       {loading ? (
         <div className="loading">Loading…</div>
       ) : tab === "profiles" ? (
-        <div className="automation-list">
+        <div className="flex flex-col gap-2.5">
           <div>
             <Button size="sm" onClick={() => setEditProfile("new")}>
               + Create a profile
             </Button>
           </div>
           {profiles.length === 0 ? (
-            <div className="automations-empty">
+            <div className="px-4 py-12 text-center text-dim">
               <p>No scan profiles yet</p>
-              <p className="automations-empty-sub">
+              <p className="text-control-label text-faint">
                 Profiles customize how scans analyze your code — threat model
                 focus, known false positives, severity bar.
               </p>
             </div>
           ) : (
             profiles.map((p) => (
-              <div key={p.id} className="automation-card">
-                <div className="automation-top">
-                  <span className="automation-name">{p.name}</span>
-                  <div className="automation-actions">
+              <div key={p.id} className="rounded-panel border border-line bg-panel px-4 py-3.5">
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <span className="truncate text-body font-semibold">{p.name}</span>
+                  <div className="ml-auto flex shrink-0 gap-1.5">
                     <Button size="sm" onClick={() => setEditProfile(p)}>
                       Edit
                     </Button>
@@ -194,16 +194,16 @@ export function Security({ onOpenSession }: Props) {
                     </Button>
                   </div>
                 </div>
-                <div className="automation-prompt">{p.prompt}</div>
-                <div className="automation-meta">
-                  <span className="automation-by">by {p.createdBy}</span>
+                <div className="my-2 line-clamp-2 text-control-label leading-relaxed text-dim">{p.prompt}</div>
+                <div className="flex flex-wrap items-center gap-x-3.5 gap-y-1.5 text-label text-faint">
+                  <span className="ml-auto">by {p.createdBy}</span>
                 </div>
               </div>
             ))
           )}
         </div>
       ) : (
-        <div className="automation-list">
+        <div className="flex flex-col gap-2.5">
           {recurring.length > 0 && (
             <div className="bg-panel border border-line rounded-panel px-3.5 py-3">
               <div className="text-fg text-[13px] font-medium mb-1.5">Recurring</div>
@@ -229,18 +229,18 @@ export function Security({ onOpenSession }: Props) {
           )}
 
           {scans.length === 0 ? (
-            <div className="automations-empty">
+            <div className="px-4 py-12 text-center text-dim">
               <p>No scans yet</p>
-              <p className="automations-empty-sub">
+              <p className="text-control-label text-faint">
                 Start a scan to search for findings across your repositories.
               </p>
             </div>
           ) : (
             scans.map((s) => (
-              <div key={s.id} className="automation-card">
-                <div className="automation-top">
+              <div key={s.id} className="rounded-panel border border-line bg-panel px-4 py-3.5">
+                <div className="flex min-w-0 items-center gap-2.5">
                   <StatusPill status={s.status} />
-                  <span className="automation-name">
+                  <span className="truncate text-body font-semibold">
                     {s.interactive ? "Interactive scan" : "Scan"} —{" "}
                     {s.repos.join(", ")}
                   </span>
@@ -249,7 +249,7 @@ export function Security({ onOpenSession }: Props) {
                       {s.profileName}
                     </span>
                   )}
-                  <div className="automation-actions">
+                  <div className="ml-auto flex shrink-0 gap-1.5">
                     <Button
                       size="sm"
                       variant="danger"
@@ -261,7 +261,7 @@ export function Security({ onOpenSession }: Props) {
                 </div>
 
                 {s.instructions && (
-                  <div className="automation-prompt">{s.instructions}</div>
+                  <div className="my-2 line-clamp-2 text-control-label leading-relaxed text-dim">{s.instructions}</div>
                 )}
 
                 <div className="mt-1.5 flex flex-col gap-1">
@@ -299,10 +299,10 @@ export function Security({ onOpenSession }: Props) {
                   ))}
                 </div>
 
-                <div className="automation-meta">
+                <div className="flex flex-wrap items-center gap-x-3.5 gap-y-1.5 text-label text-faint">
                   <span>started {relativeTime(s.createdAt)}</span>
                   {s.finishedAt && <span>finished {relativeTime(s.finishedAt)}</span>}
-                  <span className="automation-by">by {s.createdBy}</span>
+                  <span className="ml-auto">by {s.createdBy}</span>
                 </div>
               </div>
             ))
@@ -397,9 +397,9 @@ function NewScanModal({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="automation-form w-full max-w-[560px] my-auto shadow-2xl">
+      <div className="flex w-full max-w-[560px] my-auto flex-col gap-3.5 rounded-panel border border-line-strong bg-panel p-[18px] shadow-2xl [&_label]:flex [&_label]:flex-col [&_label]:gap-1.5 [&_label]:text-supporting [&_label]:font-medium [&_label]:text-dim [&_input]:rounded-md [&_input]:border [&_input]:border-line-strong [&_input]:bg-raised [&_input]:px-3 [&_input]:py-2 [&_input]:text-control-label [&_input]:text-fg [&_select]:rounded-md [&_select]:border [&_select]:border-line-strong [&_select]:bg-raised [&_select]:px-3 [&_select]:py-2 [&_select]:text-control-label [&_select]:text-fg [&_textarea]:resize-y [&_textarea]:rounded-md [&_textarea]:border [&_textarea]:border-line-strong [&_textarea]:bg-raised [&_textarea]:px-3 [&_textarea]:py-2 [&_textarea]:text-control-label [&_textarea]:text-fg">
         <div>
-          <div className="automation-form-title">New scan</div>
+          <div className="text-body font-semibold">New scan</div>
           <div className="text-dim text-[13px] mt-0.5">
             Start a search for findings across your repositories.
           </div>
@@ -508,7 +508,7 @@ function NewScanModal({
 
         {error && <InlineAlert className="text-[13px]">{error}</InlineAlert>}
 
-        <div className="automation-form-actions">
+        <div className="flex justify-end gap-2.5">
           <Button size="sm" onClick={onClose} disabled={starting}>
             Cancel
           </Button>
@@ -576,8 +576,8 @@ function ProfileModal({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="automation-form w-full max-w-[560px] my-auto shadow-2xl">
-        <div className="automation-form-title">
+      <div className="flex w-full max-w-[560px] my-auto flex-col gap-3.5 rounded-panel border border-line-strong bg-panel p-[18px] shadow-2xl [&_label]:flex [&_label]:flex-col [&_label]:gap-1.5 [&_label]:text-supporting [&_label]:font-medium [&_label]:text-dim [&_input]:rounded-md [&_input]:border [&_input]:border-line-strong [&_input]:bg-raised [&_input]:px-3 [&_input]:py-2 [&_input]:text-control-label [&_input]:text-fg [&_textarea]:resize-y [&_textarea]:rounded-md [&_textarea]:border [&_textarea]:border-line-strong [&_textarea]:bg-raised [&_textarea]:px-3 [&_textarea]:py-2 [&_textarea]:text-control-label [&_textarea]:text-fg">
+        <div className="text-body font-semibold">
           {initial ? `Edit "${initial.name}"` : "New scan profile"}
         </div>
 
@@ -604,7 +604,7 @@ function ProfileModal({
 
         {error && <InlineAlert className="text-[13px]">{error}</InlineAlert>}
 
-        <div className="automation-form-actions">
+        <div className="flex justify-end gap-2.5">
           <Button size="sm" onClick={onClose} disabled={saving}>
             Cancel
           </Button>

@@ -141,11 +141,11 @@ function LabelChip({
 
 function ReviewBadge({ decision }: { decision: string }) {
 	if (decision === "APPROVED")
-		return <span className="text-xs font-semibold text-green">Approved</span>;
+		return <span className="text-label font-semibold text-green">Approved</span>;
 	if (decision === "CHANGES_REQUESTED")
-		return <span className="text-xs font-semibold text-red">Changes requested</span>;
+		return <span className="text-label font-semibold text-red">Changes requested</span>;
 	if (decision === "REVIEW_REQUIRED")
-		return <span className="text-xs font-semibold text-yellow">Review required</span>;
+		return <span className="text-label font-semibold text-yellow">Review required</span>;
 	return null;
 }
 
@@ -455,7 +455,7 @@ export function PrTinder({ onExit }: Props) {
 						/>
 					</svg>
 				</button>
-				<div className="text-sm font-semibold text-fg">
+				<div className="text-control-label font-semibold text-fg">
 					{deck === null
 						? "PR Tinder"
 						: done
@@ -489,7 +489,7 @@ export function PrTinder({ onExit }: Props) {
 					<div className="max-w-sm text-sm text-dim">{error}</div>
 				</div>
 			) : deck === null ? (
-				<div className="flex flex-1 items-center justify-center text-sm text-faint">
+				<div className="flex flex-1 items-center justify-center text-control-label text-faint">
 					Dealing open PRs…
 				</div>
 			) : done ? (
@@ -757,7 +757,7 @@ function SwipeCard({
 					/* .pr-body-md clamps itself to 360px + inner scroll for the PR
 					   panel — undo that here: the card shows the whole description. */
 					<div
-						className="pr-body-md markdown max-h-none overflow-visible p-0 text-[13px]"
+						className="pr-body-md markdown max-h-none overflow-visible p-0 text-control-label"
 						dangerouslySetInnerHTML={{ __html: bodyHtml }}
 					/>
 				) : (

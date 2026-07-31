@@ -145,17 +145,17 @@ export function SpinOffMenu({ session, entries, send, connected }: Props) {
         <Menu.Popup className="w-80 overflow-hidden p-0">
           {isAsk && (
             <Menu.Item closeOnClick={false} onClick={() => pick("build")} className={itemCls}>
-              <span className="text-[13px] font-semibold text-fg">Build this</span>
-              <span className="text-meta leading-[1.4] text-faint">Start a coding session with this conversation as context</span>
+				<span className="text-control-label font-semibold text-fg">Build this</span>
+				<span className="text-meta leading-snug text-faint">Start a coding session with this conversation as context</span>
             </Menu.Item>
           )}
           <Menu.Item closeOnClick={false} onClick={() => pick("learnings")} className={itemCls}>
-            <span className="text-[13px] font-semibold text-fg">Capture learnings → docs PR</span>
-            <span className="text-meta leading-[1.4] text-faint">{AGENT_NAME} adds what was learned here to {session.repo || "the repository"} docs</span>
+			<span className="text-control-label font-semibold text-fg">Capture learnings → docs PR</span>
+			<span className="text-meta leading-snug text-faint">{AGENT_NAME} adds what was learned here to {session.repo || "the repository"} docs</span>
           </Menu.Item>
           <Menu.Item closeOnClick={false} onClick={() => pick("analyze")} className={itemCls}>
-            <span className="text-[13px] font-semibold text-fg">Analyze session</span>
-            <span className="text-meta leading-[1.4] text-faint">What went well, what didn't, and a better prompt</span>
+			<span className="text-control-label font-semibold text-fg">Analyze session</span>
+			<span className="text-meta leading-snug text-faint">What went well, what didn't, and a better prompt</span>
           </Menu.Item>
         </Menu.Popup>
       </Menu.SubmenuRoot>
@@ -211,7 +211,7 @@ export function SpinOffMenu({ session, entries, send, connected }: Props) {
 
           <Modal.Footer>
             {starting && (
-              <span className="text-meta text-faint">
+				<span className="text-meta text-faint">
                 Starting the session. We'll take you there automatically.
               </span>
             )}

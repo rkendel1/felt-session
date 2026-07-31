@@ -121,7 +121,7 @@ export const TurnFooter = React.memo(function TurnFooter({
           rather than mounted on hover (see .turn-footer-time), so its space is
           always reserved and revealing it never shifts the buttons out from
           under the cursor. */}
-      <span className="turn-footer-time ml-auto pl-3 text-xs font-medium text-faint">
+      <span className="turn-footer-time ml-auto hidden select-none whitespace-nowrap pl-3 text-meta font-medium text-faint [@media(hover:hover)]:block [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:transition-opacity [&::selection]:bg-black/1">
         {fullTime(entry.timestamp)}
       </span>
     </div>
@@ -146,7 +146,7 @@ function turnFooterPropsEqual(prev: Props, next: Props): boolean {
 }
 
 const BTN =
-  "flex size-7 flex-shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-faint hover:bg-hover hover:text-dim";
+  "flex size-7 flex-shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-faint transition-colors hover:bg-hover hover:text-dim focus-ring";
 
 /** Friendly name for a per-message model id: opencode ids take their model
  * part, raw API ids drop the date suffix — "opencode/anthropic/claude-sonnet-5"
@@ -181,7 +181,7 @@ function FileChip({ file }: { file: TouchedFile }) {
       >
         <div className="flex items-center gap-2 border-b border-line px-2.5 py-2">
           <ExtBadge name={name} />
-          <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-dim">
+          <span className="min-w-0 flex-1 truncate font-mono text-meta text-dim">
             {tidyPath(file.path)}
           </span>
           <LineStats additions={file.additions} deletions={file.deletions} />
@@ -264,12 +264,12 @@ export function LineStats({
   className?: string;
 }) {
   return (
-    <span
-      className={cn(
-        "flex flex-shrink-0 items-center gap-1 text-[11px] font-medium",
-        className
-      )}
-    >
+		<span
+			className={cn(
+				"flex flex-shrink-0 items-center gap-1 text-meta font-medium",
+				className
+			)}
+		>
       <span className="text-green">+{additions}</span>
       <span className="text-red">-{deletions}</span>
     </span>

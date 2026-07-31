@@ -74,8 +74,8 @@ function UserRow({
 		<>
 			<UserAvatar name={name} size={30} className="shrink-0" />
 			<span className="flex min-w-0 flex-1 flex-col gap-0.5 text-left leading-tight">
-				<span className="truncate text-[13px] font-semibold text-fg">{name}</span>
-				<span className="flex items-center gap-1.5 text-[11px] font-medium text-faint">
+				<span className="truncate text-control-label font-semibold text-fg">{name}</span>
+				<span className="flex items-center gap-1.5 text-meta font-medium text-faint">
 					<span
 						className={cn(
 							"h-1.5 w-1.5 shrink-0 rounded-full",
@@ -128,10 +128,10 @@ function SettingsSheet({
 			) : variant === "brand" ? (
 				<button
 					aria-label="Account menu"
-					className="app-logo-button"
+					className="app-logo-button inline-flex h-[42px] w-[42px] items-center justify-center rounded-control border-0 bg-transparent p-0 text-inherit active:bg-hover"
 					onClick={() => setOpen(true)}
 				>
-					<img className="app-logo-image" src="/mac-app-icon.png" alt="" />
+					<img className="app-logo-image block h-8 w-8" src="/mac-app-icon.png" alt="" />
 				</button>
 			) : (
 				<button
@@ -174,7 +174,7 @@ function SettingsSheet({
 								</div>
 							) : (
 								<>
-									<div className="mb-2 px-1 text-[13px] font-semibold text-faint">
+									<div className="mb-2 px-1 text-control-label font-semibold text-faint">
 										Acting as
 									</div>
 									<div className="overflow-hidden rounded-xl border border-line bg-panel">
@@ -218,7 +218,7 @@ function SettingsSheet({
 								</button>
 							</div>
 
-							<div className="mt-4 flex items-center gap-2 px-2 text-[13px] font-medium text-dim">
+							<div className="mt-4 flex items-center gap-2 px-2 text-control-label font-medium text-dim">
 								<span
 									className={cn(
 										"h-2 w-2 rounded-full",
@@ -356,10 +356,10 @@ export function SettingsMenu({
 					<div className="flex items-center gap-3 rounded-lg px-2.5 py-2">
 						<Avatar name={currentUser} size={30} />
 						<span className="flex min-w-0 flex-1 flex-col gap-0.5 leading-tight">
-							<span className="text-[11px] font-medium text-faint">
+							<span className="text-meta font-medium text-faint">
 								Signed in with GitHub
 							</span>
-							<span className="truncate text-[14px] font-semibold text-fg">
+							<span className="truncate text-body font-semibold text-fg">
 								{currentUser}
 								{githubAuth.login && (
 									<span className="ml-1.5 font-normal text-dim">
