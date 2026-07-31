@@ -107,7 +107,8 @@ const ALLOWED_USER_ID = process.env.ALLOWED_SLACK_USER_ID;
 
 function pinSlackSession(sessionId: string, slackUserId: string): void {
   const user = slackIdToFirstName(slackUserId);
-  if (!user || getUiPrefs(user)["pin-new-sessions"] === "off") return;
+  // Opt-in, matching the web UI's "Pin new sessions" default.
+  if (!user || getUiPrefs(user)["pin-new-sessions"] !== "on") return;
   pinForUser(user, sessionId);
 }
 

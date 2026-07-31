@@ -1093,10 +1093,15 @@ function ReviewerChip({
 }) {
 	const currentUser = useCurrentUser();
 	const [req, setReq] = useState(reviewRequest ?? null);
+	// Why the last pick/sign-off was rejected. Without this the chip just snaps
+	// back to its old state, which reads as the button doing nothing at all —
+	// the server's reason (an expired GitHub connection, say) is worth showing.
+	const [error, setError] = useState<string | null>(null);
 	// Follow the polled session as it refreshes (another viewer may re-assign or
 	// sign off). Track accepted's timestamp too so the sign-off lands live.
 	useEffect(() => {
 		setReq(reviewRequest ?? null);
+		setError(null);
 	}, [reviewRequest?.to, reviewRequest?.at, reviewRequest?.accepted?.at]);
 
 	// The chat that owns an existing request; a brand-new one anchors to the open chat.
@@ -1119,10 +1124,12 @@ function ReviewerChip({
 			? { to: name, by: me, at: new Date().toISOString() }
 			: null;
 		setReq(next);
+		setError(null);
 		onReviewChange?.(owner, next);
-		setSessionReviewerApi(owner, name, me).catch(() => {
+		setSessionReviewerApi(owner, name, me).catch((e: any) => {
 			setReq(prev);
 			onReviewChange?.(owner, prev);
+			setError(e?.message || "Failed to set reviewer");
 		});
 	}
 
@@ -1135,118 +1142,123 @@ function ReviewerChip({
 			accepted: value ? { by: me, at: new Date().toISOString() } : undefined,
 		};
 		setReq(next);
+		setError(null);
 		onReviewChange?.(owner, next);
-		acceptReviewApi(owner, value, me).catch(() => {
+		acceptReviewApi(owner, value, me).catch((e: any) => {
 			setReq(prev);
 			onReviewChange?.(owner, prev);
+			setError(e?.message || "Failed to update review");
 		});
 	}
 
 	return (
-		<Menu.Root>
-			<Menu.Trigger
-				className={cn(
-					"mt-1.5 inline-flex w-fit min-w-0 items-center gap-1 rounded-[calc(10px*var(--rf))] border border-line bg-control py-1 pl-2 pr-2.5 text-left text-supporting font-[550] whitespace-nowrap text-dim shadow-control outline-none transition-[color,background-color,border-color,scale] hover:border-line-strong hover:text-fg active:scale-[0.96] data-[popup-open]:border-line-strong data-[popup-open]:bg-hover",
-					needsMyReview
-						? "border-red/30 bg-red-soft text-red hover:border-red/50 hover:text-red"
-						: accepted
-							? "text-green"
-							: req || pendingOthers.length > 0
-								? "text-yellow"
-								: "",
-				)}
-				title={
-					needsMyReview
-						? req
-							? `Review requested by ${req.by}`
-							: "Your review was requested on GitHub"
-						: accepted
-							? `Reviewed by ${accepted.by}`
-							: req
+		<div className="mt-1.5 grid w-fit min-w-0 gap-1">
+			<Menu.Root>
+				<Menu.Trigger
+					className={cn(
+						"inline-flex w-fit min-w-0 items-center gap-1 rounded-[calc(10px*var(--rf))] border border-line bg-control py-1 pl-2 pr-2.5 text-left text-supporting font-[550] whitespace-nowrap text-dim shadow-control outline-none transition-[color,background-color,border-color,scale] hover:border-line-strong hover:text-fg active:scale-[0.96] data-[popup-open]:border-line-strong data-[popup-open]:bg-hover",
+						needsMyReview
+							? "border-red/30 bg-red-soft text-red hover:border-red/50 hover:text-red"
+							: accepted
+								? "text-green"
+								: req || pendingOthers.length > 0
+									? "text-yellow"
+									: "",
+					)}
+					title={
+						needsMyReview
+							? req
 								? `Review requested by ${req.by}`
-								: pendingOthers.length > 0
-									? "Requested on GitHub"
-									: "Ask a teammate to review this session"
-				}
-			>
-				{needsMyReview ? (
-					<span className={cn(ACTION_ICON_CLASS, "text-red opacity-80")}>
-						<IconBell size={20} />
-					</span>
-				) : accepted ? (
-					<UserAvatar name={accepted.by} size={20}>
-						<span className="absolute -bottom-px -right-px grid size-4 place-items-center rounded-full border border-panel bg-green text-white shadow-[0_0_0_1px_var(--bg-panel)] [&_svg]:size-3">
-							<IconCheck size={12} />
+								: "Your review was requested on GitHub"
+							: accepted
+								? `Reviewed by ${accepted.by}`
+								: req
+									? `Review requested by ${req.by}`
+									: pendingOthers.length > 0
+										? "Requested on GitHub"
+										: "Ask a teammate to review this session"
+					}
+				>
+					{needsMyReview ? (
+						<span className={cn(ACTION_ICON_CLASS, "text-red opacity-80")}>
+							<IconBell size={20} />
 						</span>
-					</UserAvatar>
-				) : req ? (
-					<UserAvatar name={req.to} size={20} />
-				) : pendingOthers.length > 0 ? (
-					<UserAvatar name={displayPerson(pendingOthers[0]!)} size={20} />
-				) : (
-					<span className={ACTION_ICON_CLASS}>
-						<IconBell size={20} />
-					</span>
-				)}
-				<span className="min-w-0 truncate">
-					{needsMyReview
-						? "Needs your review"
-						: accepted
-							? `Reviewed by ${accepted.by}`
-							: req
-								? `Review: ${req.to}`
-								: pendingOthers.length > 0
-									? `Review: ${pendingOthers.map(displayPerson).join(", ")}`
-									: "Request review"}
-				</span>
-				{/* Inherit the chip's own tone at low strength — a fixed grey caret
-				    reads as a dead spot next to a red/green/yellow label. */}
-				<IconChevronDown size={14} className="shrink-0 opacity-55" />
-			</Menu.Trigger>
-			<Menu.Popup align="start" sideOffset={6} className="min-w-[200px]">
-				{needsMyReview && onReviewPr && (
-					<>
-						<Menu.Item onClick={onReviewPr}>
-							<IconPullRequest size={20} className="text-dim" />
-							<span className="min-w-0 flex-1 truncate">Review PR</span>
-						</Menu.Item>
-						<Menu.Separator />
-					</>
-				)}
-				{req &&
-					(accepted ? (
-						<Menu.Item
-							onClick={() =>
-								acceptedFromPr && req ? pick(req.to) : accept(false)
-							}
-						>
-							<IconBell size={20} className="text-dim" />
-							<span className="min-w-0 flex-1 truncate">Reopen review</span>
-						</Menu.Item>
+					) : accepted ? (
+						<UserAvatar name={accepted.by} size={20}>
+							<span className="absolute -bottom-px -right-px grid size-4 place-items-center rounded-full border border-panel bg-green text-white shadow-[0_0_0_1px_var(--bg-panel)] [&_svg]:size-3">
+								<IconCheck size={12} />
+							</span>
+						</UserAvatar>
+					) : req ? (
+						<UserAvatar name={req.to} size={20} />
+					) : pendingOthers.length > 0 ? (
+						<UserAvatar name={displayPerson(pendingOthers[0]!)} size={20} />
 					) : (
-						<Menu.Item onClick={() => accept(true)}>
-							<IconCheck size={20} className="text-dim" />
-							<span className="min-w-0 flex-1 truncate">Mark as reviewed</span>
+						<span className={ACTION_ICON_CLASS}>
+							<IconBell size={20} />
+						</span>
+					)}
+					<span className="min-w-0 truncate">
+						{needsMyReview
+							? "Needs your review"
+							: accepted
+								? `Reviewed by ${accepted.by}`
+								: req
+									? `Review: ${req.to}`
+									: pendingOthers.length > 0
+										? `Review: ${pendingOthers.map(displayPerson).join(", ")}`
+										: "Request review"}
+					</span>
+					{/* Inherit the chip's own tone at low strength — a fixed grey caret
+					    reads as a dead spot next to a red/green/yellow label. */}
+					<IconChevronDown size={14} className="shrink-0 opacity-55" />
+				</Menu.Trigger>
+				<Menu.Popup align="start" sideOffset={6} className="min-w-[200px]">
+					{needsMyReview && onReviewPr && (
+						<>
+							<Menu.Item onClick={onReviewPr}>
+								<IconPullRequest size={20} className="text-dim" />
+								<span className="min-w-0 flex-1 truncate">Review PR</span>
+							</Menu.Item>
+							<Menu.Separator />
+						</>
+					)}
+					{req &&
+						(accepted ? (
+							<Menu.Item
+								onClick={() =>
+									acceptedFromPr && req ? pick(req.to) : accept(false)
+								}
+							>
+								<IconBell size={20} className="text-dim" />
+								<span className="min-w-0 flex-1 truncate">Reopen review</span>
+							</Menu.Item>
+						) : (
+							<Menu.Item onClick={() => accept(true)}>
+								<IconCheck size={20} className="text-dim" />
+								<span className="min-w-0 flex-1 truncate">Mark as reviewed</span>
+							</Menu.Item>
+						))}
+					{req && <Menu.Separator />}
+					{TEAM.map((name) => (
+						<Menu.Item key={name} onClick={() => pick(name)}>
+							<UserAvatar name={name} size={22} />
+							<span className="min-w-0 flex-1 truncate">{name}</span>
+							{req?.to === name && <IconCheck size={20} className="text-dim" />}
 						</Menu.Item>
 					))}
-				{req && <Menu.Separator />}
-				{TEAM.map((name) => (
-					<Menu.Item key={name} onClick={() => pick(name)}>
-						<UserAvatar name={name} size={22} />
-						<span className="min-w-0 flex-1 truncate">{name}</span>
-						{req?.to === name && <IconCheck size={20} className="text-dim" />}
-					</Menu.Item>
-				))}
-				{req && (
-					<>
-						<Menu.Separator />
-						<Menu.Item className="text-dim" onClick={() => pick(null)}>
-							Clear review request
-						</Menu.Item>
-					</>
-				)}
-			</Menu.Popup>
-		</Menu.Root>
+					{req && (
+						<>
+							<Menu.Separator />
+							<Menu.Item className="text-dim" onClick={() => pick(null)}>
+								Clear review request
+							</Menu.Item>
+						</>
+					)}
+				</Menu.Popup>
+			</Menu.Root>
+			{error && <p className="text-supporting text-red">{error}</p>}
+		</div>
 	);
 }
 

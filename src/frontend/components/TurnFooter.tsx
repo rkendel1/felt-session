@@ -166,9 +166,9 @@ function FileChip({ file }: { file: TouchedFile }) {
         openOnHover
         delay={250}
         closeDelay={100}
-        className="ml-1 flex h-6 min-w-0 cursor-pointer items-center gap-1.5 rounded-md bg-panel px-1.5"
+        className="ml-1 flex h-6 min-w-0 cursor-pointer items-center gap-1.5 overflow-hidden rounded-md bg-panel pr-1.5"
       >
-        <ExtBadge name={name} />
+        <ExtBadge name={name} flush />
         <span className="max-w-[180px] truncate text-label font-medium text-dim">
           {name}
         </span>
@@ -276,18 +276,30 @@ export function LineStats({
   );
 }
 
-/** Compact colored file-type badge (linguist-ish hues, muted for white text). */
-function ExtBadge({ name }: { name: string }) {
+/**
+ * Compact colored file-type badge (linguist-ish hues, muted for white text).
+ * `flush` fills its container edge to edge instead of floating inside it — the
+ * file chip clips it to its own rounded corners, so the colour becomes the
+ * chip's leading edge rather than a square with padding around it.
+ */
+function ExtBadge({ name, flush }: { name: string; flush?: boolean }) {
   const dot = name.lastIndexOf(".");
   const ext = dot > 0 && dot < name.length - 1 ? name.slice(dot + 1).toLowerCase() : "";
   const color = EXT_COLORS[ext] || "#6e7681";
-  const label = (ext || "?").slice(0, 3).toUpperCase();
+  const Glyph = EXT_GLYPHS[ext];
   return (
     <span
-      className="flex h-5 min-w-5 flex-shrink-0 items-center justify-center rounded-[4px] px-0.5 text-meta font-bold leading-none text-white"
+      className={cn(
+        "flex flex-shrink-0 items-center justify-center text-meta font-bold leading-none text-white",
+        flush ? "min-w-6 self-stretch px-1" : "h-5 min-w-5 rounded-[4px] px-0.5"
+      )}
       style={{ background: color }}
     >
-      {EXT_GLYPHS[ext] ?? label}
+      {Glyph ? (
+        <Glyph size={flush ? 10 : 8} />
+      ) : (
+        (ext || "?").slice(0, 3).toUpperCase()
+      )}
     </span>
   );
 }
@@ -298,14 +310,14 @@ function ExtBadge({ name }: { name: string }) {
  * logo's own square (the badge already draws that part). Filled with
  * `currentColor` so it picks up the badge's white.
  *
- * Drawn at 8px because that's the measured cap height of the letter badges it
- * sits beside (11px/700 -apple-system in a 20px box), and the mark is solid ink
- * edge to edge where a letter pair has side bearings — matching the box rather
- * than the ink made it read a quarter taller than every neighbour.
+ * Sized against the letters it sits beside rather than the badge box: they set
+ * about 40% of the badge's height in ink (an 8px cap in the 20px popup badge),
+ * and a bar-and-dot carries less mass than a letter pair, so it's drawn a touch
+ * over that — 10px in the chip's 24px block, 8px in the 20px popup one.
  */
-function ReScriptMark() {
+function ReScriptMark({ size }: { size: number }) {
   return (
-    <svg width="8" height="8" viewBox="64.9 60.6 134.6 134.6" fill="currentColor" aria-hidden="true">
+    <svg width={size} height={size} viewBox="64.9 60.6 134.6 134.6" fill="currentColor" aria-hidden="true">
       <path d="M65.318 87.582c0-9.422 0-14.135 1.84-17.74a16.802 16.802 0 0 1 7.355-7.364c3.6-1.831 8.313-1.831 17.74-1.831h23.564v109.398c0 7.842 0 11.765-1.282 14.854a16.823 16.823 0 0 1-9.11 9.108c-3.091 1.282-7.014 1.282-14.853 1.282-7.842 0-11.765 0-14.854-1.282a16.817 16.817 0 0 1-9.11-9.108c-1.282-3.091-1.282-7.014-1.282-14.854l-.008-82.463Z" />
       <circle cx="169.41" cy="91.333" r="29.683" />
     </svg>
@@ -319,9 +331,9 @@ function ReScriptMark() {
  * ReScript codebases, so a turn footer full of edits read as a row of red
  * word-blocks.
  */
-const EXT_GLYPHS: Record<string, React.ReactNode> = {
-  res: <ReScriptMark />,
-  resi: <ReScriptMark />,
+const EXT_GLYPHS: Record<string, (p: { size: number }) => React.ReactNode> = {
+  res: ReScriptMark,
+  resi: ReScriptMark,
 };
 
 const EXT_COLORS: Record<string, string> = {

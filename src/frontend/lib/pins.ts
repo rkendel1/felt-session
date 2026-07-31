@@ -83,8 +83,10 @@ export function pin(id: string): string[] {
 	return next;
 }
 
-// "Pin new" preferences. localStorage is the synchronous cache; ui-prefs is
-// the source of truth so Slack and other devices can honor the same setting.
+// "Pin new" preferences. Both are opt-in — auto-pinning fills the tab strip
+// with rows nobody asked for, so a pin should be a deliberate act. localStorage
+// is the synchronous cache; ui-prefs is the source of truth so Slack and other
+// devices can honor the same setting.
 const PIN_NEW_KEY = "opensession-pin-new-sessions";
 const PIN_NEW_EVENT = "opensession-pin-new-changed";
 const PIN_NEW_PREF_KEY = "pin-new-sessions";
@@ -93,13 +95,13 @@ let pinPrefsWriteStamp = 0;
 let pinPrefsLoadedFor: string | null = null;
 
 export function getPinNewSessions(): boolean {
-	return localStorage.getItem(PIN_NEW_KEY) !== "off";
+	return localStorage.getItem(PIN_NEW_KEY) === "on";
 }
 
 export function setPinNewSessions(on: boolean): void {
 	pinPrefsWriteStamp++;
-	if (on) localStorage.removeItem(PIN_NEW_KEY);
-	else localStorage.setItem(PIN_NEW_KEY, "off");
+	if (on) localStorage.setItem(PIN_NEW_KEY, "on");
+	else localStorage.removeItem(PIN_NEW_KEY);
 	window.dispatchEvent(new Event(PIN_NEW_EVENT));
 	void saveUiPrefsApi(getCurrentUser(), {
 		[PIN_NEW_PREF_KEY]: on ? "on" : "off",
@@ -148,12 +150,12 @@ async function hydratePinPrefs(user: string) {
 	if (sessionPref === "on" || sessionPref === "off") {
 		const on = sessionPref === "on";
 		if (on !== getPinNewSessions()) {
-			if (on) localStorage.removeItem(PIN_NEW_KEY);
-			else localStorage.setItem(PIN_NEW_KEY, "off");
+			if (on) localStorage.setItem(PIN_NEW_KEY, "on");
+			else localStorage.removeItem(PIN_NEW_KEY);
 			window.dispatchEvent(new Event(PIN_NEW_EVENT));
 		}
-	} else if (!getPinNewSessions()) {
-		void saveUiPrefsApi(user, { [PIN_NEW_PREF_KEY]: "off" }).catch(() => {});
+	} else if (getPinNewSessions()) {
+		void saveUiPrefsApi(user, { [PIN_NEW_PREF_KEY]: "on" }).catch(() => {});
 	}
 
 	const workspacePref = prefs[PIN_NEW_WS_PREF_KEY];
