@@ -1,4 +1,5 @@
 import React from "react";
+import { cn } from "../ui/cn";
 
 // Deterministic swatch palette shared by the sidebar's person dots and the
 // per-repo tiles. The (lowercased) key hashes to a stable color, so each
@@ -70,13 +71,17 @@ export function RepoTile({
 	if (failedFor !== name) {
 		return (
 			<span
-				className={`repo-tile repo-tile--img${name === "backstage" ? " repo-tile--app-icon" : ""}`}
+				className={cn(
+					"repo-tile repo-tile--img inline-flex size-[18px] shrink-0 items-center justify-center overflow-hidden rounded-[5px] text-label font-bold text-white",
+					name === "backstage" && "repo-tile--app-icon [&_img]:scale-80",
+				)}
 				style={style}
 			>
 				<img
 					src={`/repo-icon/${encodeURIComponent(name)}.png`}
 					alt=""
 					loading="lazy"
+					className="size-full rounded-[inherit] object-cover"
 					onError={() => setFailedFor(name)}
 				/>
 			</span>
@@ -85,7 +90,10 @@ export function RepoTile({
 	style.background = repoColor(name);
 	const letter = REPO_DISPLAY[name]?.letter ?? (name[0] || "?").toUpperCase();
 	return (
-		<span className="repo-tile" style={style}>
+		<span
+			className="repo-tile inline-flex size-[18px] shrink-0 items-center justify-center rounded-[5px] text-label font-bold text-white"
+			style={style}
+		>
 			{letter}
 		</span>
 	);
