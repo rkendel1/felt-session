@@ -386,8 +386,16 @@ describe("tmux keys", () => {
 	test("two open tabs show a tab strip, and alt+← switches", async () => {
 		const app = await mount({
 			sessions: [
-				fakeSession({ id: "bks-1", title: "first one" }),
-				fakeSession({ id: "bks-2", title: "second one" }),
+				fakeSession({
+					id: "bks-1",
+					title: "first one",
+					lastActivity: "2026-01-02T00:00:00.000Z",
+				}),
+				fakeSession({
+					id: "bks-2",
+					title: "second one",
+					lastActivity: "2026-01-01T00:00:00.000Z",
+				}),
 			],
 		});
 		active = app;
