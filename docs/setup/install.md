@@ -165,10 +165,10 @@ what the code actually reads, by feature:
 
 **Feature flags** — `ENABLE_SLACK_AGENT`, `ENABLE_LINEAR_AGENT`,
 `ENABLE_PLAIN_AGENT`, `ENABLE_GITHUB_AGENT`, `ENABLE_STRIPE_AGENT`,
-`ENABLE_GRAFANA_POLLER`. All **default ON**; only the literal string `false`
-disables (not `0`). Set the ones you don't use to `false` — see
-[integrations-misc.md](integrations-misc.md#boot-guards) for why relying on
-a missing token isn't enough.
+`ENABLE_GRAFANA_POLLER`. All **default OFF**; only the literal string `true`
+enables (not `1`). The env flag wins when set, otherwise
+`integrations.<id>.enabled` decides — see
+[integrations-misc.md](integrations-misc.md#boot-guards).
 
 Not for operators: `BKS_RPC_*` / `BKS_RUN_WS_*` / `BKS_MCP_SERVER` (set by
 OpenSession for its own runner-host/MCP-proxy subprocesses),
@@ -321,7 +321,7 @@ runs a second `Bun.serve` on `127.0.0.1:${WEBHOOK_PORT}` (default 3848).
 Agents register their own routes on it (`/slack/events`, `/slack/actions`,
 `/github/webhook`, `/webhook` (Linear), `/plain/webhook`, `/stripe/webhook`,
 `/oauth/*`, `/worktree/*`). It's loopback-only: you need a TLS-terminating
-reverse proxy with a public hostname in front (Tella uses Caddy on
-`michael.tella.dev`) for Slack/GitHub/Linear/Plain/Stripe to reach it. All
+reverse proxy on a public hostname in front of it (Caddy works well) for
+Slack/GitHub/Linear/Plain/Stripe to reach it. All
 signature checks are HMAC-SHA256 and fail-closed — a missing secret rejects
 everything rather than letting it through.

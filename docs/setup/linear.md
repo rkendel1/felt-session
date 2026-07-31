@@ -31,11 +31,11 @@ your TLS proxy):
   in `~/.linear-agent-tokens.json` (written atomically, auto-refreshed 5
   minutes before expiry)
 
-**Requires code edit today:** the OAuth `redirect_uri` is hardcoded to
-`https://michael.tella.dev/oauth/callback` in `src/agents/linear/oauth.ts`
-(two occurrences: authorize + token exchange). On any other host you must
-edit that string (and register the same URI on your Linear OAuth app) —
-[portability-audit §1e](../portability-audit.md).
+The OAuth `redirect_uri` is derived, not hardcoded: it is
+`integrations.linear.oauthRedirectUrl` if you set it, otherwise
+`<server.publicBaseUrl>/oauth/callback`. Register whichever one applies on your
+Linear OAuth app — they must match exactly, including the scheme and any
+trailing path.
 
 The stored OAuth token is also overlaid onto the `linear` MCP server config
 at run time (`withDynamicCredentials` in `src/server/connections.ts`), so
@@ -63,7 +63,5 @@ Everything else is acked and ignored. There are no hardcoded team or bot user
 IDs — team ids are fetched per issue. Session state is persisted to disk so
 in-flight Linear sessions survive restarts.
 
-Note the default worktree paths target Tella's repo (e.g.
-`~/worktrees/<repo>-<branch>` in
-`src/agents/linear/session.ts` / `handlers.ts`) — repo retargeting is part of
-the portability workstream ([portability-audit §1b](../portability-audit.md)).
+Worktrees are cut at `<paths.worktreesDir>/<repo>-<branch>` against whichever
+repo the session resolves to, so nothing here is repo-specific.

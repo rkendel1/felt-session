@@ -6,10 +6,10 @@
  * service. Safe to re-run: existing files are backed up to `.bak-<n>` and an
  * existing config needs explicit confirmation.
  *
- * The load-bearing part is the env file. Integration flags default ON and
- * only the literal string "false" disables them, so an unconfigured fresh
- * install starts every agent loop against no credentials. Onboarding writes an
- * explicit disable for each integration the operator did not turn on.
+ * The load-bearing part is the env file. Integration flags default OFF and
+ * only the literal string "true" enables them, so anything unrecognised means
+ * off. Onboarding writes an explicit value for every integration rather than
+ * leaning on that, so the file says what is running instead of implying it.
  */
 
 import { chmodSync, copyFileSync, existsSync, mkdirSync } from "fs";

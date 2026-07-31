@@ -102,19 +102,18 @@ admin `remember`/`list_memory`/`forget` tools:
 - private channel → isolated `channel-<id>.json` + read-only workspace view
 - DM → isolated `user-<id>.json` + read-only workspace view
 
-## Hardcoded channel IDs (portability caveat)
+## Channel IDs
 
-The Slack agent itself contains no hardcoded channel/user IDs, but
-neighboring code does — using those features against your own workspace
-requires code edits today ([portability-audit §1d, §2d](../portability-audit.md)):
+No channel or user id is compiled in. Everything that posts to Slack resolves
+its destination from config, and an unset channel means that particular
+message is skipped rather than misdelivered:
 
-- `src/server/jsonl-parser.ts` — a channel-id→name map and
-  `SLACK_WORKSPACE = "tella-team"` (session labeling)
-- `src/agents/github/constants.ts` — docs-sync notification channel
-- `src/agents/plain/top-issues*.ts`, `src/agents/loops/cron-jobs.ts`,
-  `monitor.ts`, `stale-prs.ts` — rollup/report channels and a user id
-- `src/agents/grafana-poller/index.ts` — failure-card channel defaults
-  (env-overridable — see [integrations-misc.md](integrations-misc.md#grafana-poller))
+| Setting | Used for |
+| --- | --- |
+| `integrations.slack.workspaceId` | building `app.slack.com` deep links in session labels |
+| `integrations.slack.channelNames` | channel-id→name map for rendering transcripts |
+| `integrations.github.docsSyncChannel` | where docs-sync announces its PRs |
+| `SLACK_EXPORT_FAILURE_CHANNEL` / `SLACK_UPLOAD_FAILURE_CHANNEL` | Grafana-poller failure cards ([integrations-misc.md](integrations-misc.md#grafana-poller)) |
 
 Identity mapping (Slack id → person, for attribution and per-user MCP
 gating) is **not** hardcoded anymore: it derives from `identity.team` /

@@ -220,13 +220,13 @@ same sidebar. Add a web-session bearer token to `~/os1/config.json`:
 ```json
 {
   "cloud": {
-    "upstream": "https://os.tella.dev",
+    "upstream": "https://your.opensession.host",
     "token": "your-web-session-token"
   }
 }
 ```
 
-`upstream` is optional and defaults to `https://os.tella.dev`. The environment
+`upstream` is optional and defaults to `server.publicBaseUrl`. The environment
 variables `OPENSESSION_CLOUD_UPSTREAM` and `OPENSESSION_CLOUD_TOKEN` override
 the file. The token is the same web-session bearer used by
 `scripts/frontend-dev.ts`; it stays in the local server and is never sent to

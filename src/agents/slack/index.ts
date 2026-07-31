@@ -81,9 +81,9 @@ const SLACK_SIGNING_SECRET = process.env.SLACK_SIGNING_SECRET || "";
 const GITHUB_WEBHOOK_SECRET = process.env.GITHUB_WEBHOOK_SECRET || "";
 
 /**
- * Shared-secret gate for the /worktree/* hooks. Caddy proxies all of the
- * public michael.tella.dev origin to this port, so these routes are reachable
- * from the open internet — without this check anyone could create Slack
+ * Shared-secret gate for the /worktree/* hooks. A reverse proxy fronts this
+ * port with a public origin, so these routes are reachable from the open
+ * internet — without this check anyone could create Slack
  * channels or archive worktree channels. Callers (the `wt` CLI) send
  * `x-worktree-secret` matching WORKTREE_HOOK_SECRET. Fail closed: no secret
  * configured means every request is rejected.

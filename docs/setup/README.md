@@ -116,4 +116,3 @@ when adding anything that touches this.
 | [../worktrees.md](../worktrees.md) | how sessions map to git worktrees, and where the disk goes |
 | [../clients.md](../clients.md) | web UI, PWA, Electron shell, Swift app, Chrome extension |
 | [../extending.md](../extending.md) | MCP servers, recipes, integrations, providers, skills |
-| [../portability-audit.md](../portability-audit.md) | what's still hardcoded (Tella-specific) |

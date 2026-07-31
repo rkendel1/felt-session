@@ -1,8 +1,8 @@
 /**
  * PR image attachments — stage local screenshots into durable uploads storage
- * and serve them from unguessable public URLs on michael.tella.dev (the
- * webhook server's public origin), so GitHub's camo proxy can fetch them and
- * they render inline in PR/issue markdown everywhere — private repos included.
+ * and serve them from unguessable public URLs on the webhook server's public
+ * origin, so GitHub's camo proxy can fetch them and they render inline in
+ * PR/issue markdown everywhere — private repos included.
  *
  * Why this mechanism (empirical, 2026-07-26, probes on tellahq/backstage):
  * - GitHub's own attachment CDN (what the web UI uses — POST
@@ -15,16 +15,16 @@
  *   tellahq/backstage#78 (the click-through link works, the inline img 404s).
  * - raw.githubusercontent.com / release-asset URLs fail the same way or
  *   worse (raw.githubusercontent never sees github.com cookies at all).
- * - os.tella.dev media URLs get camo-rewritten but camo can't reach the
+ * - Tailnet-hosted media URLs get camo-rewritten but camo can't reach the
  *   tailnet — always broken (that's why the walkthrough mirror links media
  *   instead of inlining it).
  * - An image on a PUBLIC host renders everywhere: GitHub rewrites it to
  *   camo.githubusercontent.com, camo fetches it server-side and serves it
  *   from GitHub's CDN to anyone who can read the PR.
  *
- * Privacy model: third-party public hosts are banned for our screenshots
- * (PII rule), but michael.tella.dev is our own infra — the same public origin
- * that already receives Slack/Plain/GitHub webhooks. URLs carry a 128-bit
+ * Privacy model: third-party public hosts are banned for screenshots (PII
+ * rule), but the webhook origin is your own infra — the same one that already
+ * receives Slack/Plain/GitHub webhooks. URLs carry a 128-bit
  * random token (capability URL, like an unlisted share link); there is no
  * listing endpoint. Anyone with the URL (including GitHub's camo cache) can
  * fetch the image, so don't attach anything that must stay repo-member-only.

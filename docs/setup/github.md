@@ -106,10 +106,9 @@ run for the **default repo only**.
 - Auto-review on every PR push is **off by default**: the github agent seeds
   a "review" automation disabled (label-only mode). Enable it in the
   Automations UI. Not an env var.
-- The docs-sync automation is seeded **enabled** and fires on merge. Its
-  Slack notification channel is hardcoded (`DOCS_SYNC_SLACK_CHANNEL =
-  "C09BAFFK8F8"` in `src/agents/github/constants.ts`) — changing it requires
-  a code edit today; see [portability-audit §1d](../portability-audit.md).
+- The docs-sync automation is seeded **enabled** and fires on merge. Set
+  `integrations.github.docsSyncChannel` to have it announce its PRs in a Slack
+  channel; leave it unset and it still runs, just silently.
 - Mention replies are always on while the agent is loaded.
 - Disable the whole agent with `ENABLE_GITHUB_AGENT=false` (default is ON;
   only the literal string `false` disables — see
@@ -117,7 +116,7 @@ run for the **default repo only**.
 
 Prompts and `pr-info.ts` defaults are config-driven (they interpolate the
 default repo's `ghRepo`, or the PR's own repo when threaded) — no code edits
-needed to point the PR agent at your repos (portability-audit §1c: done).
+needed to point the PR agent at your repos.
 
 ## Per-user GitHub auth (PRs as the session owner)
 
@@ -164,12 +163,14 @@ What turns on (`src/server/github-auth.ts`, `web-auth.ts`, `routes/auth.ts`):
   connections (per-teammate status, disconnect) in the Connections UI.
 - `GET /api/health` stays un-gated (deploy polls / restart detection).
 
-## Deploy pipeline (Tella-specific, replaceable)
+## Deploy script
 
-How Tella ships this repo to its box — documented as a pattern, not a
-requirement. `.github/workflows/deploy.yml` (currently `workflow_dispatch`
-only) authenticates to AWS with OIDC and calls `ssm:SendCommand` to run
-`deploy/deploy.sh` on the EC2 instance — no inbound SSH. The script:
+`deploy/deploy.sh` updates a running box in place. There is no deploy workflow
+in this repo — run it however you like: over SSH, from a CI job, or by hand on
+the box. Tella drives it with `ssm:SendCommand` so nothing needs inbound SSH,
+which is a pattern worth copying but not a requirement.
+
+The script:
 
 1. `git fetch` + `merge --ff-only` (never `reset --hard` — the checkout is
    live and shared; divergence aborts loudly),
@@ -180,8 +181,7 @@ only) authenticates to AWS with OIDC and calls `ssm:SendCommand` to run
    `/opensession/api/health`, then `systemctl restart opensession` and a
    post-restart health gate.
 
-The AWS account ID, region, and instance ID are hardcoded in the workflow
-([portability-audit §1g](../portability-audit.md)). Self-hosters replace the
-workflow with anything that runs `deploy/deploy.sh` (or its equivalent) on
-the box; the drain-aware contract (ff-only pull → conditional install → idle
-wait → graceful restart) is the part worth keeping.
+The drain-aware contract — ff-only pull → conditional install → idle wait →
+graceful restart — is the part worth keeping whatever invokes it. `ff-only`
+matters most: the checkout on the box is live and shared, so a divergence
+aborts loudly rather than discarding work.

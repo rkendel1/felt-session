@@ -71,9 +71,9 @@ The image reproduces the host's absolute paths exactly: the runner bundle at
 worktree bind-mounted at its **identical host path**. That parity is what
 lets diff/status/push/preview/@-mentions and Claude session resume work
 unchanged (resume state is keyed by cwd). If your host's `$HOME` or checkout
-path differs, **rebuild the image with matching paths** — see the audit note
-in `docs/portability-audit.md` §6: this is the one place `/home/ubuntu`
-coupling is intrinsic, not lazy.
+path differs, **rebuild the image with matching paths**. This is the one place
+the `/home/ubuntu` coupling is intrinsic rather than lazy: the parity is the
+mechanism, not a default nobody got round to extracting.
 
 ## Images, warm pools and snapshots
 
@@ -375,8 +375,8 @@ same routes for the tailnet path (docker-ws) — the ingress is additive.
 The listener binds `127.0.0.1:3860` by default: something must terminate
 TLS in front of it and forward ONLY those paths. Two permanent options:
 
-1. **Public IP + DNS + Caddy path routes** (what michael.tella.dev does —
-   needs :443 open in the security group and an A record):
+1. **Public IP + DNS + Caddy path routes** (needs :443 open in the security
+   group and an A record):
 
    ```caddyfile
    your.domain {
@@ -512,7 +512,7 @@ backlog item). Idle-stop is native (`autoStopInterval`).
   the launchRun round-trip + steer/cancel + mid-run WS drop/redial — went
   27/27 green 2026-07-09 against hosted Daytona (Tier 3) dialing back over
   the public ingress (`SBX_CONF_LISTEN_PORT=3860
-  SBX_CONF_PUBLIC_BASE=wss://michael.tella.dev`).
+  SBX_CONF_PUBLIC_BASE=wss://your.domain`).
 
 ### E2B (implemented, NOT yet certified)
 

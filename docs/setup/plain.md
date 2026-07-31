@@ -86,9 +86,6 @@ English regardless of the customer's language, with the customer's language
 noted so the team can translate before sending. Keep the same rule in any
 automation prompts you store in `~/.opensession-automations/`.
 
-**Tella-specific copy caveat:** the triage/router prompts describe Tella
-("a screen recording app") in code (`src/agents/plain/prompts.ts`,
-`ticket-router.ts`) — repointing them at your product is a code edit today
-([portability-audit §2f](../portability-audit.md); `persona.company` /
-`persona.product` in `~/.opensession/config.json` are parsed but not yet
-wired).
+The triage/router prompts describe your product from `persona.company`,
+`persona.product` and `persona.name` in `~/.opensession/config.json` — set
+those and the prompts follow.

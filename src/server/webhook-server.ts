@@ -1,6 +1,7 @@
 /**
  * Second Bun.serve() instance for webhook routes (port 3848).
- * Proxied by Caddy on michael.tella.dev.
+ * Bound to loopback; a TLS-terminating reverse proxy on a public hostname puts
+ * it where providers can reach it.
  * Agents register their routes via the AgentModule interface.
  */
 import type { AgentModule } from "../agents/types";

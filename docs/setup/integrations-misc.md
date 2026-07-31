@@ -6,23 +6,21 @@ All agent loops are gated in `loadAgents()` (opensession.ts, ~line 8810). The
 pattern is opt-**out**: `if (process.env.ENABLE_X_AGENT !== "false")`. That
 means:
 
-- Every agent is **ON by default**. Only the literal string `false` disables
-  it — `ENABLE_SLACK_AGENT=0` does *not* turn Slack off.
+- Every agent is **OFF by default**. An integration loads only when you enable
+  it, so a fresh install runs nothing you did not ask for.
 - Flags: `ENABLE_SLACK_AGENT`, `ENABLE_LINEAR_AGENT`, `ENABLE_PLAIN_AGENT`,
   `ENABLE_GITHUB_AGENT`, `ENABLE_GRAFANA_POLLER`, `ENABLE_STRIPE_AGENT`.
-- Only Stripe is additionally credential-gated: it loads only when
-  `STRIPE_WEBHOOK_SECRET` is also set. The others load without their tokens
-  and degrade with warnings (Slack calls fail, webhook verification rejects
-  everything, the Grafana poller no-ops) — and some **seed Tella-specific
-  automations on startup regardless** (Plain triage/top-issues, GitHub
-  docs-sync). If you don't use an integration, set its flag to `false`
-  explicitly rather than relying on a missing token. This default-ON gating
-  is flagged for a fail-closed rework in
-  [portability-audit §2e](../portability-audit.md).
+- **Only the literal string `true` enables.** `ENABLE_SLACK_AGENT=1` does *not*
+  turn Slack on. The asymmetry is deliberate — anything unrecognised means off.
+- The env flag wins when set; otherwise `integrations.<id>.enabled` in
+  `config.json` decides. Onboarding writes explicit values rather than relying
+  on either default.
 
-What "off but loaded" costs you in practice: log noise, health warnings, and
-seeded automations you didn't ask for — not crashes. Missing webhook secrets
-are fail-closed (401), so nothing untrusted gets in.
+Enabling an integration without its credentials is the one state to avoid: it
+loads and degrades with warnings (Slack calls fail, webhook verification
+rejects everything, the Grafana poller no-ops) rather than refusing. That costs
+log noise and health warnings, not crashes. Missing webhook secrets are
+fail-closed (401), so nothing untrusted gets in.
 
 ## Stripe
 
@@ -74,11 +72,9 @@ investigation automations with a Slack control card per fresh failure.
 | `SLACK_UPLOAD_FAILURE_CHANNEL` | `C0AKPJ65BQA` | same, upload failures (Tella default) |
 
 Dedup state lives in `~/.opensession-grafana-poll/<automationId>/` (default
-window 7 days). **Tella-specific:** the two seeded investigators query
-Tella's Loki labels (`service_name="temporal-rust-worker"`, `story_id`,
-`streaming_upload_id`) — pointing the poller at your own failure signatures
-means editing `src/agents/grafana-poller/index.ts` today
-([portability-audit §2d](../portability-audit.md)).
+window 7 days). The LogQL the poller runs is `lokiQuery` on each poll config,
+so pointing it at your own failure signatures is configuration, not a code
+edit. `$LOOKBACK` in the query is substituted with the poll window.
 
 ## Sentry and Tinybird
 
@@ -91,11 +87,12 @@ them and nothing breaks; runs just don't get those tools.
 
 `src/server/push.ts`. Zero configuration: VAPID keys are generated on first
 use and stored in `~/.opensession-push/vapid.json`; per-user subscriptions in
-`~/.opensession-push/subscriptions.json` (dead ones pruned on send). One
-Tella-ism: the VAPID contact is hardcoded `mailto:michael@tella.dev`
-([portability-audit §2a](../portability-audit.md)). Push requires the UI to
-be served over HTTPS (e.g. Tailscale `ts.net` certs); on iOS it needs the
-PWA installed.
+`~/.opensession-push/subscriptions.json` (dead ones pruned on send). The VAPID
+contact comes from `integrations.push.vapidSubject` and defaults to
+`mailto:admin@example.com` — push works regardless, but set it to a real
+address so a push service can reach you about your own subscriptions. Push
+requires the UI to be served over HTTPS (e.g. Tailscale
+`ts.net` certs); on iOS it needs the PWA installed.
 
 ## Voice / transcription
 
