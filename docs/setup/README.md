@@ -53,11 +53,13 @@ UI and API at `/opensession/`.
 - `git`, and the [`gh` CLI](https://cli.github.com) for PR operations.
 - The `claude` CLI (Claude Code) — the Claude engine shells out to it
   (`OPENSESSION_CLAUDE_BIN`, default `/home/ubuntu/.local/bin/claude`).
+- **Tailscale** — the recommended way to expose the UI at all. The installer
+  installs it by default (`--no-tailscale` opts out); joining a network is a
+  separate step that needs your account.
 - Optional: **Docker** (sandboxed sessions —
   [self-hosting-sandboxes](../self-hosting-sandboxes.md)), **Caddy** (TLS for
-  live previews), **Tailscale** (the recommended way to expose the UI at all),
-  `opencode` binary (OpenCode engine), `whisper.cpp`/Groq/OpenAI key (voice
-  dictation).
+  live previews), `opencode` binary (OpenCode engine), `whisper.cpp`/Groq/OpenAI
+  key (voice dictation).
 
 ## Trust model (read this)
 

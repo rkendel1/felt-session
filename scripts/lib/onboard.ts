@@ -32,6 +32,23 @@ function backup(path: string): string | undefined {
   return dest;
 }
 
+/**
+ * This box's tailnet address, if it is on one.
+ *
+ * Worth asking Tailscale rather than inferring from the interface list: it is
+ * the only thing that knows whether the daemon is actually up and logged in,
+ * and a stale 100.x address on a logged-out box is a bind that never works.
+ */
+function tailnetIp(): string | undefined {
+  try {
+    const proc = Bun.spawnSync(["tailscale", "ip", "-4"]);
+    if (proc.exitCode !== 0) return undefined;
+    return proc.stdout.toString().trim().split("\n")[0]?.trim() || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** "OpenSession" -> "OS". Falls back to the first two characters. */
 function deriveMark(name: string): string {
   const caps = name.replace(/[^A-Z]/g, "");
@@ -60,7 +77,14 @@ function collect(): Answers {
   );
 
   const productName = ask("Product name", "OpenSession");
-  const host = ask("Bind address (a Tailscale IP shares it with your team)", "127.0.0.1");
+
+  // Defaulting to the tailnet address when there is one is the whole point of
+  // installing Tailscale up front: the alternative default, 127.0.0.1, works
+  // until someone else needs to reach it and then gets "fixed" with 0.0.0.0.
+  const tailnet = tailnetIp();
+  const host = tailnet
+    ? ask(`Bind address (${tailnet} is this box's tailnet address)`, tailnet)
+    : ask("Bind address (a Tailscale IP shares it with your team)", "127.0.0.1");
   const port = Number(ask("Port", "3850")) || 3850;
   const publicBaseUrl = ask(
     "Public base URL",

@@ -17,8 +17,12 @@
 #   --no-modify-path      NO_MODIFY_PATH=1     do not touch shell profiles
 #   --no-onboard          NO_ONBOARD=1         install only, skip the wizard
 #   --no-engine           NO_ENGINE=1          do not install the OpenCode engine
+#   --no-tailscale        NO_TAILSCALE=1       do not install Tailscale
 #   --yes                 NO_PROMPT=1          accept defaults, never prompt
 #   --uninstall                                remove the install
+#
+# Tailscale is installed but not joined to a network — joining needs your
+# account. Set TS_AUTHKEY to have the installer do that part too.
 #
 set -euo pipefail
 
@@ -30,6 +34,7 @@ CHANNEL="${OPENSESSION_CHANNEL:-}"
 NO_MODIFY_PATH="${NO_MODIFY_PATH:-0}"
 NO_ONBOARD="${NO_ONBOARD:-0}"
 NO_ENGINE="${NO_ENGINE:-0}"
+NO_TAILSCALE="${NO_TAILSCALE:-0}"
 NO_PROMPT="${NO_PROMPT:-0}"
 DO_UNINSTALL=0
 OS="$(uname -s)"
@@ -42,9 +47,12 @@ while [ $# -gt 0 ]; do
     --no-modify-path) NO_MODIFY_PATH=1; shift ;;
     --no-onboard) NO_ONBOARD=1; shift ;;
     --no-engine) NO_ENGINE=1; shift ;;
+    --no-tailscale) NO_TAILSCALE=1; shift ;;
     --yes|-y) NO_PROMPT=1; shift ;;
     --uninstall) DO_UNINSTALL=1; shift ;;
-    -h|--help) sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    # Print the header comment, stopping at the first line that is not one, so
+    # this does not need re-pointing every time the header grows.
+    -h|--help) awk 'NR>1 && /^#/ {sub(/^# ?/, ""); print; next} NR>1 {exit}' "$0"; exit 0 ;;
     *) echo "unknown flag: $1" >&2; exit 1 ;;
   esac
 done
@@ -91,6 +99,11 @@ if [ "$DO_UNINSTALL" = "1" ]; then
   muted "  $OPENSESSION_HOME/config.json   your configuration"
   muted "  $HOME/.opensession.env          your secrets"
   muted "  $HOME/.opensession-chats        your sessions"
+  # Tailscale is a system daemon that may now be carrying your SSH access.
+  # Removing it as a side effect of uninstalling OpenSession would be hostile.
+  if command -v tailscale >/dev/null 2>&1; then
+    muted "  tailscale                       still installed ('sudo tailscale down' to leave)"
+  fi
   exit 0
 fi
 
@@ -313,6 +326,62 @@ else
     muted "install it later: curl -fsSL https://opencode.ai/install | bash"
   fi
   rm -f "$engine_log"
+fi
+
+# ── network ─────────────────────────────────────────────────────────────────
+#
+# OpenSession has no authentication and trusts everyone who can reach the
+# address it binds to, so a private network is not a nice-to-have — it is the
+# access control. Installing Tailscale here means `opensession onboard` can
+# offer the tailnet address as the bind default, instead of the usual outcome:
+# 127.0.0.1, discovering later that nobody else can reach it, and reaching for
+# HOST=0.0.0.0.
+#
+# Installing the client is not joining a network. `tailscale up` needs your
+# account, and under `curl | bash` there is often no terminal to authenticate
+# from — so joining happens only with an auth key, or later by hand.
+
+step "Network"
+tailnet_ip() { command -v tailscale >/dev/null 2>&1 && tailscale ip -4 2>/dev/null | head -1; }
+
+if [ "$NO_TAILSCALE" = "1" ]; then
+  muted "skipped (--no-tailscale)"
+elif [ -n "$(tailnet_ip)" ]; then
+  good "tailscale $(tailnet_ip)"
+else
+  if ! command -v tailscale >/dev/null 2>&1; then
+    if [ "$OS" = "Darwin" ]; then
+      muted "install Tailscale from https://tailscale.com/download/mac"
+    elif ! sudo -n true 2>/dev/null; then
+      muted "skipped (needs sudo) — curl -fsSL https://tailscale.com/install.sh | sh"
+    else
+      muted "installing Tailscale ..."
+      ts_log="$(mktemp)"
+      if curl -fsSL https://tailscale.com/install.sh | sudo -n sh >"$ts_log" 2>&1; then
+        good "tailscale $(tailscale version 2>/dev/null | head -1 || echo installed)"
+      else
+        warn "could not install Tailscale automatically:"
+        sed 's/^/    /' "$ts_log" | tail -10
+        muted "install it later: curl -fsSL https://tailscale.com/install.sh | sh"
+      fi
+      rm -f "$ts_log"
+    fi
+  fi
+
+  if command -v tailscale >/dev/null 2>&1 && [ -z "$(tailnet_ip)" ]; then
+    if [ -n "${TS_AUTHKEY:-}" ]; then
+      muted "joining the tailnet ..."
+      if sudo -n tailscale up --authkey="$TS_AUTHKEY" >/dev/null 2>&1; then
+        good "joined as $(tailnet_ip)"
+      else
+        warn "tailscale up failed — check TS_AUTHKEY has not expired"
+      fi
+    else
+      muted "not joined to a network yet. To finish:"
+      muted "  sudo tailscale up"
+      muted "then re-run 'opensession onboard --force' to bind to the tailnet IP"
+    fi
+  fi
 fi
 
 # ── shim ────────────────────────────────────────────────────────────────────

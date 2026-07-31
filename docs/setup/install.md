@@ -15,14 +15,37 @@ curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh
 ```
 
 This installs missing prerequisites, clones the source to
-`~/.opensession/src`, installs dependencies and the engine, puts an
+`~/.opensession/src`, installs dependencies, the engine and Tailscale, puts an
 `opensession` command on your `PATH`, and runs the onboarding wizard. It is
 safe to re-run: an existing install is fast-forwarded, and existing config is
 backed up rather than overwritten.
 
 Useful flags — `--dir <path>` to install elsewhere, `--channel <ref>` to track
-a branch or tag, `--no-engine` to skip OpenCode, `--yes` to accept defaults,
-`--uninstall` to remove it. `--help` lists them all.
+a branch or tag, `--no-engine` to skip OpenCode, `--no-tailscale` to skip
+Tailscale, `--yes` to accept defaults, `--uninstall` to remove it. `--help`
+lists them all.
+
+### Why Tailscale is installed by default
+
+There is no authentication (see the
+[trust model](README.md#trust-model-read-this)) — the bind address *is* the
+access control. Installing the client up front means onboarding can offer your
+tailnet address as the bind default, rather than the usual path: accept
+`127.0.0.1`, discover later that a teammate cannot reach it, and reach for
+`HOST=0.0.0.0`.
+
+**Installing the client is not joining a network.** Nothing is exposed and no
+account is touched; `tailscale up` is a separate, explicit step. To do that
+part automatically too, set an [auth
+key](https://tailscale.com/kb/1085/auth-keys):
+
+```sh
+TS_AUTHKEY=tskey-auth-... curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh | bash
+```
+
+Otherwise the installer prints the `sudo tailscale up` command and carries on.
+Run it whenever you like, then `opensession onboard --force` to pick up the
+address. Full walkthrough: [networking.md](networking.md).
 
 ### Doing it by hand
 

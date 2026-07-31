@@ -30,25 +30,50 @@ small team.
 
 ### 1. Install it on the box
 
+**The OpenSession installer already did this** unless you passed
+`--no-tailscale`. Check with `tailscale ip -4`; if it prints a `100.x` address
+you are already on a tailnet and can skip to step 3.
+
+To install it by hand:
+
 ```sh
 curl -fsSL https://tailscale.com/install.sh | sh
+```
+
+### 2. Join your network
+
+```sh
 sudo tailscale up
 ```
 
 It prints a URL — open it and authenticate. On a headless box, use
 `sudo tailscale up --ssh` if you also want Tailscale SSH.
 
-### 2. Find the tailnet address
+This is the step the installer cannot do for you, because it needs your
+account. It *can* if you give it an
+[auth key](https://tailscale.com/kb/1085/auth-keys) as `TS_AUTHKEY` — see
+[install.md](install.md#why-tailscale-is-installed-by-default).
+
+### 3. Find the tailnet address
 
 ```sh
 tailscale ip -4        # e.g. 100.64.12.34
 ```
 
-### 3. Bind OpenSession to it
+### 4. Bind OpenSession to it
+
+If you joined the tailnet *before* onboarding, this is already done — the
+wizard offers the tailnet address as the bind default. Otherwise:
+
+```sh
+opensession onboard --force
+```
+
+Or set it directly — `HOST` in `~/.opensession.env`, or `server.host` in
+`~/.opensession/config.json`:
 
 ```sh
 opensession stop
-# set HOST in ~/.opensession.env, or server.host in ~/.opensession/config.json
 sed -i "s/^HOST=.*/HOST=$(tailscale ip -4)/" ~/.opensession.env
 opensession start
 ```
@@ -58,7 +83,7 @@ Then reach it from any device on the tailnet at `http://<tailnet-ip>:3850`.
 Set `OPENSESSION_UI_BASE` to the same address, or links posted into Slack,
 Linear and notes will point somewhere unreachable.
 
-### 4. Install Tailscale on the devices you want to use
+### 5. Install Tailscale on the devices you want to use
 
 Phone, laptop, whatever. They must be on the same tailnet. That is the whole
 access-control story — adding a device to the tailnet grants access, removing
