@@ -314,20 +314,55 @@ address and you get a new one on boot. Anything pinned to the old address —
 your `~/.ssh/config`, a DNS record, `OPENSESSION_UI_BASE`, a webhook URL you
 registered with GitHub or Linear — is now pointing at nothing.
 
-Two ways to not care about this, both worth doing before you need them:
-
-- **Tailscale.** The tailnet IP is a property of the machine, not the lease, so
-  it survives stop/start. See [networking.md](networking.md).
-- **An Elastic IP**, if you need a stable *public* address for webhooks.
-  Allocate once and associate it; it then persists across stop/start.
-
-Re-fetch the address after any start:
+If you have not pinned the address, re-fetch it after every start:
 
 ```bash
 IP=$(aws ec2 describe-instances --instance-ids "$ID" \
   --query 'Reservations[0].Instances[0].PublicIpAddress' --output text)
 echo "ip=$IP"
 ```
+
+### A stable address
+
+Two different problems, two different answers — and they are not alternatives,
+most setups want both.
+
+**For reaching the UI: Tailscale.** The tailnet address is a property of the
+machine, not of the lease, so it survives stop/start for free and is not public
+in the first place. If the UI is all you need to reach, you do not need an
+Elastic IP at all. See [networking.md](networking.md).
+
+**For inbound webhooks: an Elastic IP.** GitHub, Linear, Plain, Slack and
+Stripe deliver *to* you, from the public internet, at a URL you registered with
+them once. A changed IP silently breaks every one of those registrations, and
+the symptom is not an error — it is automations that quietly stop firing.
+
+```bash
+ALLOC=$(aws ec2 allocate-address --domain vpc --query AllocationId --output text)
+aws ec2 associate-address --instance-id "$ID" --allocation-id "$ALLOC"
+
+IP=$(aws ec2 describe-addresses --allocation-ids "$ALLOC" \
+  --query 'Addresses[0].PublicIp' --output text)
+echo "eip=$IP  allocation=$ALLOC"
+```
+
+Note `$ALLOC` — you need it to release the address later, and it is far easier
+to save now than to hunt for at teardown.
+
+The address changes **once**, at association, and then never again. Point your
+DNS record at it after this, not before.
+
+Three things worth knowing:
+
+- **It is not free, and has not been since 2024.** Every public IPv4 address
+  costs about $0.005/hour (~$3.60/month) whether or not it is attached. The old
+  rule — free while associated, charged while idle — no longer applies.
+- **Allocated is billed, associated or not.** An Elastic IP you allocated for a
+  box you have since terminated keeps charging until you release it.
+- **Release it at teardown**, or it outlives the instance on your bill.
+
+Only allocate one if something actually needs to reach you from the public
+internet. For a Tailscale-only install, skip it.
 
 ## Updating
 
@@ -348,10 +383,16 @@ tells you rather than rewriting your work.
 aws ec2 terminate-instances --instance-ids "$ID"
 aws ec2 wait instance-terminated --instance-ids "$ID"
 aws ec2 delete-security-group --group-id "$SG"
+aws ec2 release-address --allocation-id "$ALLOC"
 ```
 
 The `wait` matters: the security group cannot be deleted while anything is
 still attached to it, and a terminating instance counts.
+
+Skip the last line if you never allocated an Elastic IP — and do not skip it if
+you did. A released instance stops costing money immediately; an Elastic IP you
+forgot to release keeps billing indefinitely, which is the classic way to
+discover you left something running months later.
 
 The root volume is `DeleteOnTermination`, so nothing is left behind. To remove
 an install without destroying the box:
