@@ -357,7 +357,9 @@ else
     else
       muted "installing Tailscale ..."
       ts_log="$(mktemp)"
-      if curl -fsSL https://tailscale.com/install.sh | sudo -n sh >"$ts_log" 2>&1; then
+      # Redirect the whole pipeline, not the sudo: the log belongs to us, and
+      # a redirect on `sudo` is applied by this shell anyway (shellcheck SC2024).
+      if { curl -fsSL https://tailscale.com/install.sh | sudo -n sh; } >"$ts_log" 2>&1; then
         good "tailscale $(tailscale version 2>/dev/null | head -1 || echo installed)"
       else
         warn "could not install Tailscale automatically:"
