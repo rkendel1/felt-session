@@ -1275,8 +1275,21 @@ export function maybeQueueAutoContinue(opts: {
 	session?: UnifiedSession | null;
 }): boolean {
 	const { sessionId, assistantText, toolUseCount, endedWithError, runFailure } = opts;
+	// When a turn that plainly announced a next step is NOT nudged, record why:
+	// 2026-08-03 bks-019fc75f ended on "Now let me correlate…" with no nudge and
+	// no trace of which condition vetoed it, which made the miss undebuggable.
+	const suppressed = (reason: string): false => {
+		if (announcesNextAction(assistantText))
+			audit({
+				msg: "auto_continue_suppressed",
+				bks_session_id: sessionId,
+				reason,
+				tail: assistantText.trim().slice(-200),
+			});
+		return false;
+	};
 	const session = opts.session ?? findSession(sessionId);
-	if (!session) return false;
+	if (!session) return suppressed("session_not_found");
 	const queuedBehind = (promptQueues.get(sessionId) || []).filter(
 		(m) => m.user !== AUTO_CONTINUE_USER,
 	).length;
@@ -1289,16 +1302,13 @@ export function maybeQueueAutoContinue(opts: {
 	const endedOnFabricatedTranscript = looksLikeFabricatedToolTranscript(
 		assistantText.slice(-2000),
 	);
-	if (
-		endedWithError ||
-		runFailure ||
-		session.source !== "backstage" ||
-		session.automation ||
-		stoppedSessions.has(sessionId) ||
-		autoContinueNudged.has(sessionId) ||
-		!(announcesNextAction(assistantText) || endedOnFabricatedTranscript)
-	)
-		return false;
+	if (endedWithError) return suppressed("ended_with_error");
+	if (runFailure) return suppressed("run_failure");
+	if (session.source !== "backstage") return suppressed(`source_${session.source}`);
+	if (session.automation) return suppressed("automation_session");
+	if (stoppedSessions.has(sessionId)) return suppressed("user_stop");
+	if (autoContinueNudged.has(sessionId)) return suppressed("already_nudged");
+	if (!(announcesNextAction(assistantText) || endedOnFabricatedTranscript)) return false;
 	autoContinueNudged.add(sessionId);
 	audit({
 		msg: "auto_continue_nudge",

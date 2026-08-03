@@ -1,5 +1,8 @@
+diff --git a/node_modules/@rynfar/meridian/.bun-tag-30ff0bd920d93449 b/.bun-tag-30ff0bd920d93449
+new file mode 100644
+index 0000000000000000000000000000000000000000..e69de29bb2d1d6434b8b29ae775ad8c2e48c5391
 diff --git a/dist/cli-7df5eg5d.js b/dist/cli-7df5eg5d.js
-index ca4a412a41d803ca72f6fea0f143dadd88cced50..6c2acb7e99f1a7654deddc49f4f07e4e9349134a 100644
+index ca4a412a41d803ca72f6fea0f143dadd88cced50..8f02fc11c9c5d8f7701ba73396480083fe49eede 100644
 --- a/dist/cli-7df5eg5d.js
 +++ b/dist/cli-7df5eg5d.js
 @@ -17890,11 +17890,11 @@ function buildQueryOptions(ctx, abortController) {
@@ -16,3 +19,21 @@ index ca4a412a41d803ca72f6fea0f143dadd88cced50..6c2acb7e99f1a7654deddc49f4f07e4e
            mcpServers: { [PASSTHROUGH_MCP_NAME]: passthroughMcp.server }
          } : {}
        } : {
+@@ -19478,7 +19478,16 @@ function createProxyServer(config = {}) {
+           const toolSetKey = computeToolSetKey(requestTools);
+           const cachedMcp = profileSessionId ? sessionMcpCache.get(profileSessionId) : undefined;
+           if (cachedMcp && cachedMcp.key === toolSetKey) {
+-            passthroughMcp = cachedMcp.mcp;
++            // Same tool set, but NEVER reuse the cached McpServer instance: one
++            // instance can only serve one SDK query's transport, and a finished
++            // query's async teardown races the next query's connect on the shared
++            // instance. When connect loses, the SDK deletes the transport and every
++            // later mcp_message fails "SDK MCP server not found: oc" -- the CLI
++            // then strips all passthrough tools mid-session (cold prompt rewrite,
++            // model announces-and-stops or returns empty). 252 hits in mcp-logs-oc
++            // since 2026-07-16. The stable toolSetKey still preserves the prompt
++            // cache: identical tools serialize to an identical prefix.
++            passthroughMcp = createPassthroughMcpServer(requestTools, pipelineCtx.coreToolNames ? [...pipelineCtx.coreToolNames] : undefined);
+           } else {
+             passthroughMcp = createPassthroughMcpServer(requestTools, pipelineCtx.coreToolNames ? [...pipelineCtx.coreToolNames] : undefined);
+             if (profileSessionId) {

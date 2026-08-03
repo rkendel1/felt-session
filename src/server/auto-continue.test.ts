@@ -42,6 +42,23 @@ describe("announcesNextAction", () => {
 		).toBe(true);
 	});
 
+	test("matches noun-phrase step announcements (observed bks-019fc72d tail)", () => {
+		expect(
+			announcesNextAction(
+				"The MCP tools dropped; continuing with native tools. Next: where the render path turns `audio_source: Enhanced` into an actual file, and whether it silently falls back.",
+			),
+		).toBe(true);
+		expect(announcesNextAction("Then: the fallback readiness check in segment.rs.")).toBe(true);
+		expect(announcesNextAction("Next step: wire the frontend half of the flag.")).toBe(true);
+	});
+
+	test("does not match non-step colon tails", () => {
+		expect(
+			announcesNextAction("Summary: the cache key never included the audio source."),
+		).toBe(false);
+		expect(announcesNextAction("Result: all four tests pass.")).toBe(false);
+	});
+
 	test("matches bare gerund announcements (observed bks-019f54f8 tail)", () => {
 		expect(
 			announcesNextAction("Fetching the review comments on #4791."),

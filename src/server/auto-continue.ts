@@ -88,6 +88,11 @@ export function announcesNextAction(text: string): boolean {
 		)
 	)
 		return true;
+	// Noun-phrase step announcements ("Next: where the render path turns X
+	// into Y.", "Then: the fallback check.") — 2026-08-03 bks-019fc72d ended
+	// its turn on one after a mid-turn tool loss and parked; no first-person
+	// verb and no gerund, so every pattern above misses the shape.
+	if (/^(?:next(?:\s+step|\s+up)?|then|after that)\s*:\s+\S/i.test(last)) return true;
 	// Bare gerund announcements ("Fetching the review comments on #4791.",
 	// "Now running the tests.") — seen 2026-07-12 in bks-019f54f8, where the
 	// first-person patterns above missed and the session parked. The verb must

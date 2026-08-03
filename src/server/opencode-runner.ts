@@ -2472,6 +2472,49 @@ async function meridianLineageForStep(
 }
 
 /**
+ * Did the Claude CLI just fail to (re)connect Meridian's in-process "oc" MCP
+ * server? At that moment the CLI strips every mcp__oc__* tool from the session
+ * (cold prompt rewrite; the model then announces-and-stops or returns empty)
+ * and leaves a one-line jsonl under ~/.cache/claude-cli-nodejs/<cwd-slug>/
+ * mcp-logs-oc/. A hit inside the window turns a generic context_rebuild into a
+ * diagnosed tool-drop (2026-08-03: bks-019fc72d/-72e/-75f all died on this;
+ * root cause patched in patches/@rynfar%2Fmeridian, this is the tripwire in
+ * case it resurfaces). Matches on the SDK session id when lineage produced
+ * one; otherwise any fresh error in the window is attributed.
+ */
+function recentOcMcpDropError(sdkSessionId: string | undefined, windowMs = 180_000): string | undefined {
+  const root = `${HOME}/.cache/claude-cli-nodejs`;
+  let cwdSlugs: string[];
+  try {
+    cwdSlugs = readdirSync(root);
+  } catch {
+    return undefined;
+  }
+  for (const slug of cwdSlugs) {
+    const logDir = `${root}/${slug}/mcp-logs-oc`;
+    let names: string[];
+    try {
+      names = readdirSync(logDir);
+    } catch {
+      continue;
+    }
+    for (const name of names) {
+      try {
+        const path = `${logDir}/${name}`;
+        if (Date.now() - statSync(path).mtimeMs > windowMs) continue;
+        const lines = readFileSync(path, "utf-8").trim().split("\n");
+        const entry = JSON.parse(lines[lines.length - 1] || "{}");
+        if (sdkSessionId && entry.sessionId && entry.sessionId !== sdkSessionId) continue;
+        if (typeof entry.error === "string" && entry.error) return entry.error;
+      } catch {
+        // Unreadable/partial log line — skip; this is best-effort diagnosis.
+      }
+    }
+  }
+  return undefined;
+}
+
+/**
  * Per-attempt watcher for silent context rebuilds under the engine (see
  * isContextRebuildStep). Fed every `message.updated`; fires at most once per
  * completed step, and never on an attempt's first step (no warm predecessor →
@@ -2506,6 +2549,15 @@ function makeContextRebuildWatcher(opts: {
     opts.onDetected(notice);
     // The verdict costs a loopback round-trip, so it rides after the notice.
     void meridianLineageForStep(current.cacheCreationTokens).then((lineage) => {
+      // Third rebuild cause besides compaction and replay: the CLI lost the
+      // "oc" SDK MCP server and stripped every tool (also lineage
+      // "continuation" — lineage alone can't tell the shapes apart).
+      const mcpDropError = recentOcMcpDropError(lineage?.sdkSessionId);
+      if (mcpDropError)
+        opts.onDetected(
+          "The rebuild coincides with the engine losing its tool bridge " +
+            `(${mcpDropError}) — the model was left without tools for the rest of the turn.`,
+        );
       opts.turnEvent({
         direction: "out",
         kind: "context_rebuild",
@@ -2519,6 +2571,7 @@ function makeContextRebuildWatcher(opts: {
         sdk_session_id: lineage?.sdkSessionId,
         engine_message_count: lineage?.messageCount,
         tool_count: lineage?.toolCount,
+        ...(mcpDropError ? { mcp_drop_error: mcpDropError.slice(0, 300) } : {}),
       });
     });
   };
