@@ -91,6 +91,15 @@ export interface HumanAsk {
   state: HumanAskState;
   /** Set once delivered: the DM channel and the question message's ts (thread root). */
   slack?: { channel: string; rootTs: string };
+  /**
+   * Domain hook: a server-side module owns this ask's meaning (e.g. the
+   * keychain's approve/decline). When set, the registered handler for `kind`
+   * runs at resolution — whichever channel answered — and may replace the
+   * text delivered to the session (a grant token instead of the raw button
+   * label). Persisted with the ask, so a restart between question and answer
+   * still resolves through the domain (handlers re-register at module load).
+   */
+  domain?: { kind: string; ref: string };
   answer?: string;
   answeredBy?: string;
   createdAt: string;
@@ -231,6 +240,48 @@ export interface CreateAskInput {
   options?: string[];
   mode: "block" | "async";
   deliver: DeliverWhen;
+  domain?: { kind: string; ref: string };
+}
+
+// ---------------------------------------------------------------------------
+// Domain handlers
+// ---------------------------------------------------------------------------
+
+/**
+ * A domain handler runs inside resolveAsk when a domain-tagged ask is
+ * answered, and may return replacement text for what the session receives
+ * (both the block resolver's return value and the async steer) — e.g. the
+ * keychain swaps "Approve once" for grant instructions. Returning null keeps
+ * the raw answer. A throwing handler must not eat the answer: the raw text
+ * still goes through.
+ *
+ * Registry lives on globalThis so hot reloads keep it; owning modules
+ * re-register at module load, so the newest code answers.
+ */
+export type AskDomainHandler = (ask: HumanAsk, answer: string) => string | null;
+
+const domainHandlers: Map<string, AskDomainHandler> = ((globalThis as any).__humanAskDomainHandlers ??=
+  new Map());
+
+export function registerAskDomainHandler(kind: string, handler: AskDomainHandler): void {
+  domainHandlers.set(kind, handler);
+}
+
+function applyDomainHandler(a: HumanAsk, answer: string): string {
+  if (!a.domain) return answer;
+  const handler = domainHandlers.get(a.domain.kind);
+  if (!handler) {
+    console.error(
+      `[human-asks] ask ${a.id} carries domain "${a.domain.kind}" but no handler is registered — delivering the raw answer`
+    );
+    return answer;
+  }
+  try {
+    return handler(a, answer) ?? answer;
+  } catch (e) {
+    console.error(`[human-asks] domain handler ${a.domain.kind} failed for ${a.id}:`, e);
+    return answer;
+  }
 }
 
 /**
@@ -352,6 +403,7 @@ export function registerAsk(input: CreateAskInput): HumanAsk {
     mode: input.mode,
     deliver: input.deliver,
     uiFirst: shouldAskInUiFirst(input) || undefined,
+    domain: input.domain,
     state: "scheduled",
     createdAt: new Date().toISOString(),
   };
@@ -543,9 +595,15 @@ function resolveAsk(
     answer_len: answer.length,
   });
 
+  // A domain-tagged ask (keychain approvals, …) resolves through its owning
+  // module FIRST — server-side effects (minting a grant) happen exactly once
+  // here, whichever channel answered, and the session receives the domain's
+  // text (grant instructions) rather than the raw button label.
+  const delivered = applyDomainHandler(a, answer);
+
   const resolver = resolvers.get(a.id);
   if (resolver) {
-    resolver(answer); // live block — the awaiting tool call returns the answer
+    resolver(delivered); // live block — the awaiting tool call returns the answer
     return;
   }
   // Async (or a block whose wait already timed out / lost its process): steer
@@ -559,7 +617,7 @@ function resolveAsk(
   // and a structured header the web UI keys on to render this as a distinct
   // "human reply" bubble rather than one of the session driver's own messages.
   const who = via === "ui" ? answeredBy || a.person.name : a.person.name;
-  const msg = `💬 **${who}** answered${via === "ui" ? "" : " (via Slack)"} — "${shortQ(a)}":\n\n${answer}`;
+  const msg = `💬 **${who}** answered${via === "ui" ? "" : " (via Slack)"} — "${shortQ(a)}":\n\n${delivered}`;
   void ctrl
     .deliverToSession(a.sessionId, msg, who)
     .catch((e) => console.error(`[human-asks] deliver answer to ${a.sessionId} failed:`, e));

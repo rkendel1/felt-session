@@ -2007,6 +2007,78 @@ export async function setPapercutsRepoEnabled(
 	});
 }
 
+// ── Keychain (Settings → Keychain: per-person credentials + grants) ──
+
+export interface KeychainCredentialDto {
+	id: string;
+	owner: string;
+	service: string;
+	description?: string;
+	host: string;
+	injection?: { header?: string; scheme?: string };
+	allowedMethods?: string[];
+	allowedPathPrefixes?: string[];
+	createdAt: string;
+	updatedAt: string;
+}
+
+export interface KeychainGrantDto {
+	id: string;
+	credentialId: string;
+	owner: string;
+	sessionId: string;
+	requestedBy: string;
+	purpose: string;
+	mode: "once" | "standing";
+	status: "active" | "used" | "revoked" | "expired";
+	createdAt: string;
+	expiresAt: string;
+}
+
+export interface KeychainAskDto {
+	id: string;
+	credentialId: string;
+	owner: string;
+	sessionId: string;
+	requestedBy: string;
+	purpose: string;
+	requestedMode: "once" | "standing";
+	status: "pending" | "approved" | "declined" | "expired";
+	createdAt: string;
+}
+
+export async function fetchKeychain(): Promise<{
+	credentials: KeychainCredentialDto[];
+	grants: KeychainGrantDto[];
+	asks: KeychainAskDto[];
+}> {
+	return request("/keychain", { label: "Failed to fetch the keychain" });
+}
+
+export async function addKeychainCredential(input: {
+	service: string;
+	host: string;
+	secret: string;
+	description?: string;
+	injection?: { header?: string; scheme?: string };
+	allowedMethods?: string[];
+	allowedPathPrefixes?: string[];
+}): Promise<{ credential: KeychainCredentialDto }> {
+	return request("/keychain/credentials", { method: "POST", body: input });
+}
+
+export async function deleteKeychainCredential(id: string): Promise<{ ok: true }> {
+	return request(`/keychain/credentials/${encodeURIComponent(id)}`, {
+		method: "DELETE",
+	});
+}
+
+export async function revokeKeychainGrant(id: string): Promise<{ ok: true }> {
+	return request(`/keychain/grants/${encodeURIComponent(id)}`, {
+		method: "DELETE",
+	});
+}
+
 // ── Personal system prompt (Settings → Personal prompt) ──
 
 export async function fetchPersonalPrompt(

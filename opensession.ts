@@ -77,6 +77,7 @@ import "./src/server/goal-runner"; // goals ticker
 import "./src/server/session-index"; // session search index sweeper
 import "./src/server/session-control-wiring"; // opensession-sessions MCP + Slack-link bridge
 import "./src/server/preview-pool"; // warm dev-server pool sweeper
+import "./src/server/keychain"; // registers the keychain human-ask domain handler
 import { websocketHandlers } from "./src/server/ws-handlers";
 import {
 	routeHandlers,
@@ -326,12 +327,22 @@ const server: import("bun").Server<WSClientData> = hotServe({
 					(path === "/backstage/api/nodes/register" ||
 						path === "/backstage/api/nodes/heartbeat") &&
 					req.method === "POST";
+				// The keychain broker's caller is an agent subprocess on
+				// loopback with no browser session. Its own credential is the
+				// grant id in the path: unguessable, scoped to one credential
+				// and one session's approved purpose, method/path-limited,
+				// expiring, revocable and audited per call (src/server/
+				// keychain.ts). Same reasoning as the node routes above.
+				const openKeychainBroker = path.startsWith(
+					"/backstage/api/keychain/broker/",
+				);
 				if (
 					!authUser &&
 					!openHealth &&
 					!keypadBearer &&
 					!openOs1Update &&
 					!openNodeAuth &&
+					!openKeychainBroker &&
 					((path.startsWith("/backstage/api/") &&
 						!path.startsWith("/backstage/api/auth/")) ||
 						path === "/backstage/ws")

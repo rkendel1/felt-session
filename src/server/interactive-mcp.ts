@@ -17,6 +17,7 @@ import { createSessionsMcpServer } from "../agents/slack/sessions-tools";
 import { createNodesMcpServer } from "../agents/slack/nodes-tools";
 import { createAdminMcpServer } from "../agents/slack/admin-tools";
 import { createHumansMcpServer } from "../agents/slack/humans-tools";
+import { createKeychainMcpServer } from "../agents/slack/keychain-tools";
 import { createAskUserMcpServer } from "../agents/slack/ask-tools";
 import { createReposMcpServer } from "../agents/slack/repos-tools";
 import { createPreviewMcpServer } from "../agents/slack/preview-tools";
@@ -114,6 +115,15 @@ export function interactiveMcpServers(
 						sessionId,
 						createdBy,
 						isAdmin: true,
+					}),
+					// Borrow a teammate's credential for a stated purpose, with
+					// their approval, through the broker (src/server/keychain.ts).
+					// Interactive-only for the same reason as its sibling above:
+					// an ask is a DM carrying a model-authored purpose string, and
+					// untrusted ticket text must never be able to compose one.
+					"opensession-keychain": createKeychainMcpServer({
+						sessionId,
+						user: createdBy,
 					}),
 					// Cross-repo: attach secondary repos as isolated worktrees.
 					"opensession-repos": createReposMcpServer({
