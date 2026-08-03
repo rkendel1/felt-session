@@ -30,6 +30,7 @@ import { handleLocalReposRoutes } from "./local-repos";
 import { handleAutomationsRoutes } from "./automations";
 import { handleHumanAsksRoutes } from "./human-asks";
 import { handleKeychainRoutes } from "./keychain";
+import { handleDeployRoutes } from "./deploys";
 import { handleChatRoutes } from "./chat";
 import { handlePeopleRoutes } from "./people";
 import { handlePrefsRoutes } from "./prefs";
@@ -84,6 +85,7 @@ export const routeHandlers: RouteHandler[] = [
 	handleAutomationsRoutes,
 	handleHumanAsksRoutes,
 	handleKeychainRoutes,
+	handleDeployRoutes,
 	handleChatRoutes,
 	handlePeopleRoutes,
 	handlePrefsRoutes,

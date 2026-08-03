@@ -345,7 +345,13 @@ const server: import("bun").Server<WSClientData> = hotServe({
 					!openKeychainBroker &&
 					((path.startsWith("/backstage/api/") &&
 						!path.startsWith("/backstage/api/auth/")) ||
-						path === "/backstage/ws")
+						path === "/backstage/ws" ||
+						// Agent-published apps (src/server/deploys.ts). Explicitly
+						// listed because /d/ is a page-ish path, and page loads are
+						// otherwise left open so the sign-in screen can render — a
+						// published app must get OpenSession's audience, not a
+						// wider one.
+						/^\/(?:backstage\/)?d\//.test(path))
 				) {
 					return Response.json({ error: "Sign in required" }, { status: 401 });
 				}
@@ -513,6 +519,16 @@ if (!g.__backstageBooted) {
 		} catch (e) {
 			console.error("[seeds] Failed to seed instance actions/automations:", e);
 		}
+	}
+
+	// Published internal apps (src/server/deploys.ts) are supervised child
+	// processes, so a restart of this server takes them with it — bring back
+	// everything that wasn't deliberately stopped.
+	try {
+		const { relaunchDeploys } = await import("./src/server/deploys");
+		relaunchDeploys();
+	} catch (e) {
+		console.error("[deploys] relaunch on boot failed:", e);
 	}
 
 	// Cron-scheduled automations + internal event bus (agents → automations)

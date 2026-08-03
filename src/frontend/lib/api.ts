@@ -2079,6 +2079,58 @@ export async function revokeKeychainGrant(id: string): Promise<{ ok: true }> {
 	});
 }
 
+// ── Deploys (Settings → Deploys: agent-published internal apps) ──
+
+export interface DeployVersionDto {
+	version: number;
+	createdAt: string;
+	createdBy: string;
+	sessionId?: string;
+	entrypoint: string;
+}
+
+export interface DeployDto {
+	id: string;
+	name: string;
+	owner: string;
+	sessionId?: string;
+	description?: string;
+	port: number;
+	currentVersion: number;
+	versions: DeployVersionDto[];
+	state: "running" | "stopped" | "crashed";
+	lastError?: string;
+	createdAt: string;
+	updatedAt: string;
+}
+
+export async function fetchDeploys(): Promise<{ deploys: DeployDto[] }> {
+	return request("/deploys", { label: "Failed to fetch deploys" });
+}
+
+export async function setDeployRunning(
+	name: string,
+	running: boolean,
+): Promise<{ deploy: DeployDto }> {
+	return request(`/deploys/${encodeURIComponent(name)}/${running ? "start" : "stop"}`, {
+		method: "POST",
+	});
+}
+
+export async function rollbackDeployTo(
+	name: string,
+	version: number,
+): Promise<{ deploy: DeployDto }> {
+	return request(`/deploys/${encodeURIComponent(name)}/rollback`, {
+		method: "POST",
+		body: { version },
+	});
+}
+
+export async function deleteDeployApp(name: string): Promise<{ ok: true }> {
+	return request(`/deploys/${encodeURIComponent(name)}`, { method: "DELETE" });
+}
+
 // ── Personal system prompt (Settings → Personal prompt) ──
 
 export async function fetchPersonalPrompt(

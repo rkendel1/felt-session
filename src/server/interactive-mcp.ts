@@ -18,6 +18,7 @@ import { createNodesMcpServer } from "../agents/slack/nodes-tools";
 import { createAdminMcpServer } from "../agents/slack/admin-tools";
 import { createHumansMcpServer } from "../agents/slack/humans-tools";
 import { createKeychainMcpServer } from "../agents/slack/keychain-tools";
+import { createPublishMcpServer } from "../agents/slack/publish-tools";
 import { createAskUserMcpServer } from "../agents/slack/ask-tools";
 import { createReposMcpServer } from "../agents/slack/repos-tools";
 import { createPreviewMcpServer } from "../agents/slack/preview-tools";
@@ -124,6 +125,15 @@ export function interactiveMcpServers(
 					"opensession-keychain": createKeychainMcpServer({
 						sessionId,
 						user: createdBy,
+					}),
+					// Publish a directory as a durable internal web app that
+					// outlives this session (src/server/deploys.ts). Interactive
+					// only: a deploy is arbitrary code that keeps running, so
+					// untrusted automation text must never reach it.
+					"opensession-publish": createPublishMcpServer({
+						sessionId,
+						user: createdBy,
+						worktreeDir: () => findSession(sessionId)?.worktreeDir || undefined,
 					}),
 					// Cross-repo: attach secondary repos as isolated worktrees.
 					"opensession-repos": createReposMcpServer({

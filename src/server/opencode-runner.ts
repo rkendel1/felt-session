@@ -517,6 +517,7 @@ export const SHARED_INPROCESS_SERVERS = [
   "opensession-goals",
   "opensession-humans",
   "opensession-keychain",
+  "opensession-publish",
   "opensession-repos",
   "opensession-memory",
   "opensession-preview",
