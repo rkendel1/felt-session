@@ -1647,6 +1647,17 @@ export function buildOpencodeInstructions(input: {
         "commit screenshots to the PR branch."
     );
   }
+  if (inproc["opensession-turn"]) {
+    parts.push(
+      "## Ending without reporting anything\nThis run is unattended: nobody is watching it " +
+        "finish. If you looked and there was genuinely nothing worth reporting, end by calling " +
+        "opensession-turn's `finish_silently` with a one-phrase reason instead of posting a " +
+        '"nothing to report" note. That call is the only thing that distinguishes a clean quiet ' +
+        "ending from a run that stopped early — a run that ends quietly without it is logged as a " +
+        "papercut for a human to check. You do not need it if you already posted a note, sent a " +
+        "message, published a report, or asked a teammate: that counts as reporting."
+    );
+  }
   if (inproc["opensession-report"]) {
     parts.push(
       "## Publish your report\nThis run can publish an HTML report with durable assets " +

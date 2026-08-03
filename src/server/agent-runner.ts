@@ -42,6 +42,14 @@ import {
 import { buildEngineSwitchHandoffNote } from "./fork-handoff";
 import { personaName } from "./config";
 import { wrapContext } from "./prompt-context";
+import {
+  beginTurn,
+  endTurn,
+  isCheckedKind,
+  isReachTool,
+  recordEffect,
+  turnKeyFor,
+} from "./turn-outcome";
 import { readEngineTranscriptAsync } from "./sessions";
 import type { GitIdentity } from "./shared/user-mappings";
 import type { TranscriptEntry } from "./types";
@@ -194,7 +202,40 @@ function runOnModel(opts: RunAgentOpts, model: string | undefined): AsyncGenerat
   return runOpencode(opts, mapped);
 }
 
+/**
+ * Watch a run's event stream for whether it ever reached anybody, and settle
+ * the verdict when it ends (src/server/turn-outcome.ts). Only unattended kinds
+ * carry a ledger; for everything else this is two branch predictions per run.
+ */
 export async function* runAgent(opts: RunAgentOpts): AsyncGenerator<StreamEvent> {
+  const key = isCheckedKind(opts.journal?.kind)
+    ? turnKeyFor({ bksSessionId: opts.journal?.bksSessionId })
+    : undefined;
+  if (!key) {
+    yield* runAgentInner(opts);
+    return;
+  }
+  beginTurn({
+    key,
+    kind: opts.journal?.kind || "unknown",
+    sessionId: opts.journal?.bksSessionId,
+  });
+  try {
+    for await (const event of runAgentInner(opts)) {
+      if (event.type === "tool_use" && isReachTool(event.toolName)) {
+        recordEffect(key, event.toolName!);
+      }
+      yield event;
+    }
+  } finally {
+    // `finally`, not after the loop: a consumer that breaks out early (a
+    // cancel, a steer) still closes the ledger, so a later run reusing the
+    // same session id starts clean instead of inheriting stale effects.
+    endTurn(key, { model: opts.model, by: opts.user });
+  }
+}
+
+async function* runAgentInner(opts: RunAgentOpts): AsyncGenerator<StreamEvent> {
   const requestedModel = resolveModel(opts.model || getDefaultModel());
   const wantsBestCodex = requestedModel?.id === BEST_AVAILABLE_CODEX_MODEL;
   const primaryModel = resolveConcreteModel(opts.model);

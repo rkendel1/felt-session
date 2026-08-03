@@ -23,6 +23,7 @@ import { linkThreadInIndex, createSlackPostScanner } from "./slack-links";
 import { createPapercutsMcpServer } from "../agents/slack/papercuts-tools";
 import { createReportMcpServer } from "../agents/slack/report-tools";
 import { createWorkflowsMcpServer } from "../agents/slack/workflow-tools";
+import { createTurnMcpServer } from "../agents/slack/turn-tools";
 import { papercutsEnabledForRepo } from "./papercuts";
 import { registerSessionMcpServers, unregisterSessionMcpServers } from "./run-rpc";
 import { createSessionsMcpServer } from "../agents/slack/sessions-tools";
@@ -1051,6 +1052,11 @@ export async function runAutomation(
       ...(papercutsMcp || {}),
       ...(workflowsMcp || {}),
       ...(selfMcp || {}),
+      // Held to the same bar as opensession-papercuts: append-only, reads
+      // nothing, controls nothing. It only lets an unattended run say "I
+      // looked and there was nothing to report" instead of ending on silence
+      // that reads exactly like an early stop (src/server/turn-outcome.ts).
+      "opensession-turn": createTurnMcpServer({ turnKey: bksId }),
     };
     registerSessionMcpServers(bksId, inProcessMcp);
 
