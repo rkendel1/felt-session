@@ -1,0 +1,26 @@
+{
+  "id": "ops-channel-noise",
+  "description": "A Michael-style ops conversation: deploy chatter, transient failures, and bot noise around two genuinely durable facts (a standing convention and an ownership change).",
+  "turns": [
+    {
+      "input": "deploy of the webapp is stuck again, CI says the og-image step timed out. can you retry it?",
+      "reply": "Retried the deploy — the og-image step passed on the second run and the deploy went green."
+    },
+    {
+      "input": "ugh, third time this week. FYI going forward: whenever a deploy fails on the og-image step, just retry once before pinging anyone. only escalate if the retry also fails.",
+      "reply": "Got it — og-image deploy failures get one silent retry first; I'll only escalate when the retry also fails."
+    },
+    {
+      "input": "also heads up, Grant is taking over the billing service from me starting next sprint, so route billing questions to him.",
+      "reply": "Noted — Grant owns billing from next sprint; I'll route billing questions to him."
+    },
+    {
+      "input": "the deploy from earlier is fine now right?",
+      "reply": "Yes — it went green after the retry, no further failures since."
+    },
+    {
+      "input": "cool. and ignore the sentry-bot spam in this channel, those alerts are all from the staging env.",
+      "reply": "Will do — treating sentry-bot posts in this channel as staging noise, not something to act on."
+    }
+  ]
+}
