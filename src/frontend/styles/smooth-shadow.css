@@ -55,15 +55,15 @@
 :root {
 	/*
 	 * The ring is an outer layer, so it paints on the page behind the surface.
-	 * OpenSession's floating primitives used `--border-strong` for their edge:
-	 * white 18.5% over the dark page (#1c1c1c) mathematically lands on #464646,
-	 * but the shadow layers above it darken the captured top edge by one level;
-	 * 19% compensates so the rendered stack still lands on #464646. Black 18.4%
-	 * over the light page (#fff) renders #d0d0d0 exactly. Those are the dark and
-	 * light border colors this ring replaces. Upstream's 18% is tuned for a
-	 * pure-black dark page; Tella's 14% is tuned for its lighter night palette.
+	 * The ring should read as the near edge of the shadow, not preserve the old
+	 * `--border-strong` outline. Dark stays palette-aware: white 10.1% over the
+	 * dark page (#1c1c1c) renders the regular #333 line. Light follows the demo's
+	 * deliberately quieter treatment: black 5% over white renders #f2f2f2, a
+	 * touch lighter than `--border`, so it dissolves into the shadow instead of
+	 * reading as an outline. Upstream's 18% dark default is tuned for pure-black
+	 * pages and reads too strongly on OpenSession's lifted charcoal background.
 	 */
-	--smooth-ring-color: rgba(255, 255, 255, 0.19);
+	--smooth-ring-color: rgba(255, 255, 255, 0.101);
 
 	/*
 	 * Follows the project's Tailwind ring width. `theme()` inlines at build time;
@@ -74,7 +74,7 @@
 }
 
 html[data-theme="light"] {
-	--smooth-ring-color: rgba(0, 0, 0, 0.184);
+	--smooth-ring-color: rgba(0, 0, 0, 0.05);
 }
 
 @utility smooth-shadow {
