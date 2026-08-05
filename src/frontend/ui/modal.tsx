@@ -87,8 +87,7 @@ function Content({
 							// (the dictation HUD); `overflow-hidden` keeps the rows'
 							// dividers inside the rounded shell.
 							"relative flex flex-col overflow-hidden outline-none",
-							"rounded-[calc(20px*var(--rf))] border border-line-strong bg-panel",
-							"shadow-[0_24px_70px_rgba(0,0,0,0.45)]",
+							"rounded-[calc(20px*var(--rf))] bg-panel smooth-shadow-ring-lg",
 							// Drops in from just above its resting place, the way a
 							// palette summoned by a keystroke should.
 							"origin-top transition-[transform,opacity] duration-[130ms] ease-out",
@@ -102,8 +101,8 @@ function Content({
 							"max-h-[85dvh] overflow-y-auto overscroll-contain outline-none",
 							// Match Tella's restrained Dialog2 shell: lifted surface, soft edge,
 							// and enough radius to read as a modal without becoming a card.
-							"rounded-2xl border border-line bg-raised",
-							"p-6 shadow-[0_18px_50px_rgba(0,0,0,0.20),0_2px_8px_rgba(0,0,0,0.08)]",
+							"rounded-2xl bg-raised smooth-shadow-ring-lg",
+							"p-6",
 							"flex flex-col gap-4",
 							"origin-center transition-[transform,opacity] duration-150 ease-out",
 							"data-[starting-style]:scale-[0.96] data-[starting-style]:opacity-0",

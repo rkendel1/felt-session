@@ -18,10 +18,10 @@ import { Popover } from "../ui/popover";
  * their data lives, but they render into this same shell.
  */
 
-/** The card's own chrome — width, padding, radius, shadow. Everything else
+/** The card's own chrome — width, padding, radius. Everything else
  *  (portal, positioning, collision flip, arrow, dwell) is ui/popover's. */
 const ROW_CARD_CLASS =
-	"w-[min(300px,calc(100vw-24px))] rounded-[calc(12px*var(--rf))] px-[13px] pt-[11px] pb-3 shadow-[0_8px_30px_rgba(0,0,0,0.45)]";
+	"w-[min(300px,calc(100vw-24px))] rounded-[calc(12px*var(--rf))] px-[13px] pt-[11px] pb-3";
 
 /**
  * The one popup every sidebar row's hover card is drawn in: to the row's
