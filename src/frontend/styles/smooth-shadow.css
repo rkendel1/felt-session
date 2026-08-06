@@ -1,33 +1,14 @@
 /*
- * Smooth shadows: stacked, multi-layer box-shadows plus a hairline-ring variant.
+ * Smooth shadows: stacked elevation plus a hairline ring in one box-shadow.
  *
- * Vendored from shadow-plugin (MIT), https://github.com/flornkm/shadow-plugin
- * at 58886af, trimmed to what this app uses:
- *   - dropped the `@theme` block (the utilities inline their layer lists, so the
- *     `--smooth-shadow-*` tokens it defined were never read)
- *   - replaced upstream's `light-dark()` ring rule with OpenSession's
- *     `html[data-theme="light"]` theme selector
- *   - retuned both ring alphas to OpenSession's palette (see below)
- *   - dropped the `smooth-ring-{color}` utility. Nothing needs a per-surface ring
- *     color yet, and its `--value()`/`--modifier()` syntax makes CSS formatters
- *     that do not understand Tailwind functional utilities fail. To tint one
- *     ring, set `[--smooth-ring-color:var(--accent)]` directly.
+ * Based on shadow-plugin (MIT), https://github.com/flornkm/shadow-plugin at
+ * 58886af. The upstream package ships a full xs-2xl scale. OpenSession only
+ * needs two floating-surface tiers, so this keeps and retunes those instead of
+ * exposing a larger scale whose unused values do not match the app's depth.
  *
- * Two families, and the difference matters:
- *   - `smooth-shadow-*`      a shadow on its own, for surfaces that sit in the page.
- *   - `smooth-shadow-ring-*` the same stack with a 1px hairline as its final layer,
- *                            for surfaces that float above it: menus, dialogs,
- *                            selects, popovers. The hairline is part of the shadow,
- *                            so the edge dissolves into it instead of reading as a
- *                            separate outline. Do not add a border or ring on top.
- *
- * These set `box-shadow` directly rather than going through Tailwind's
- * `--tw-shadow`/`--tw-ring-shadow` pipeline, so they do not compose with
- * `shadow-*`/`ring-*`: whichever comes last in source order wins. Never put a
- * smooth utility and a native shadow/ring utility on the same element.
- *
- * Shadow color follows Tailwind's `shadow-{color}`; the ring is colored separately
- * by the `--smooth-ring-color` custom property, at any scope.
+ * `md` is for menus and popovers. `lg` is for palettes, dialogs, and large
+ * preview cards. The 1px hairline is the final shadow layer, so do not add a
+ * border, ring, or native `shadow-*` utility to the same element.
  *
  * MIT License
  *
@@ -54,214 +35,40 @@
 
 :root {
 	/*
-	 * The ring is an outer layer, so it paints on the page behind the surface.
-	 * The ring should read as the near edge of the shadow, not preserve the old
-	 * `--border-strong` outline. Dark stays palette-aware: white 10.1% over the
-	 * dark page (#1c1c1c) renders the regular #333 line. Light follows the demo's
-	 * deliberately quieter treatment: black 5% over white renders #f2f2f2, a
-	 * touch lighter than `--border`, so it dissolves into the shadow instead of
-	 * reading as an outline. Upstream's 18% dark default is tuned for pure-black
-	 * pages and reads too strongly on OpenSession's lifted charcoal background.
+	 * Upstream uses translucent black/white. That works on a plain page, but an
+	 * outer ring composites against a modal scrim and becomes a different edge.
+	 * Resolve the same quiet 12% contrast against the app background up front so
+	 * menus and dialogs keep one consistent hairline on every backdrop.
 	 */
-	--smooth-ring-color: rgba(255, 255, 255, 0.101);
-
-	/*
-	 * Follows the project's Tailwind ring width. `theme()` inlines at build time;
-	 * the fallback is required because this project does not set a default ring
-	 * width token. The runtime variable remains overridable per subtree.
-	 */
+	--smooth-ring-color: color-mix(in srgb, var(--text) 12%, var(--bg));
 	--smooth-ring-width: theme(--default-ring-width, 1px);
-}
-
-html[data-theme="light"] {
-	--smooth-ring-color: rgba(0, 0, 0, 0.05);
-}
-
-@utility smooth-shadow {
-	--smooth-shadow-color: var(--tw-shadow-color, black);
-	box-shadow:
-		0 17.54px 23.39px 0
-		color-mix(in srgb, var(--smooth-shadow-color) 4%, transparent),
-		0 9.4px 12.5px 0
-		color-mix(in srgb, var(--smooth-shadow-color) 3%, transparent),
-		0 5.25px 7px 0
-		color-mix(in srgb, var(--smooth-shadow-color) 2%, transparent),
-		0 2.79px 3.72px -2px
-		color-mix(in srgb, var(--smooth-shadow-color) 1%, transparent),
-		0 1.16px 1.5px 0
-		color-mix(in srgb, var(--smooth-shadow-color) 1%, transparent);
-}
-
-@utility smooth-shadow-xs {
-	--smooth-shadow-color: var(--tw-shadow-color, black);
-	box-shadow: 0 0 4px 0
-		color-mix(in srgb, var(--smooth-shadow-color) 4%, transparent);
-}
-
-@utility smooth-shadow-sm {
-	--smooth-shadow-color: var(--tw-shadow-color, black);
-	box-shadow:
-		0 18px 47px 0 color-mix(in srgb, var(--smooth-shadow-color) 3%, transparent),
-		0 7.5px 19px 0
-		color-mix(in srgb, var(--smooth-shadow-color) 2%, transparent),
-		0 4px 10.5px 0
-		color-mix(in srgb, var(--smooth-shadow-color) 2%, transparent),
-		0 2.3px 5.8px 0
-		color-mix(in srgb, var(--smooth-shadow-color) 1%, transparent),
-		0 1.2px 3.1px 0
-		color-mix(in srgb, var(--smooth-shadow-color) 1%, transparent),
-		0 0.5px 1.3px 0
-		color-mix(in srgb, var(--smooth-shadow-color) 1%, transparent);
-}
-
-@utility smooth-shadow-md {
-	--smooth-shadow-color: var(--tw-shadow-color, black);
-	box-shadow:
-		0 17.54px 23.39px 0
-		color-mix(in srgb, var(--smooth-shadow-color) 4%, transparent),
-		0 9.4px 12.5px 0
-		color-mix(in srgb, var(--smooth-shadow-color) 3%, transparent),
-		0 5.25px 7px 0
-		color-mix(in srgb, var(--smooth-shadow-color) 2%, transparent),
-		0 2.79px 3.72px -2px
-		color-mix(in srgb, var(--smooth-shadow-color) 1%, transparent),
-		0 1.16px 1.5px 0
-		color-mix(in srgb, var(--smooth-shadow-color) 1%, transparent);
-}
-
-@utility smooth-shadow-lg {
-	--smooth-shadow-color: var(--tw-shadow-color, black);
-	box-shadow:
-		0 25px 50px 0 color-mix(in srgb, var(--smooth-shadow-color) 5%, transparent),
-		0 12px 24px 0 color-mix(in srgb, var(--smooth-shadow-color) 4%, transparent),
-		0 6px 12px 0 color-mix(in srgb, var(--smooth-shadow-color) 3%, transparent),
-		0 3px 6px 0 color-mix(in srgb, var(--smooth-shadow-color) 2%, transparent),
-		0 1.5px 3px 0 color-mix(in srgb, var(--smooth-shadow-color) 2%, transparent);
-}
-
-@utility smooth-shadow-xl {
-	--smooth-shadow-color: var(--tw-shadow-color, black);
-	box-shadow:
-		0 40px 80px 0 color-mix(in srgb, var(--smooth-shadow-color) 6%, transparent),
-		0 20px 40px 0 color-mix(in srgb, var(--smooth-shadow-color) 5%, transparent),
-		0 10px 20px 0 color-mix(in srgb, var(--smooth-shadow-color) 4%, transparent),
-		0 5px 10px 0 color-mix(in srgb, var(--smooth-shadow-color) 3%, transparent),
-		0 2px 4px 0 color-mix(in srgb, var(--smooth-shadow-color) 2%, transparent);
-}
-
-@utility smooth-shadow-2xl {
-	--smooth-shadow-color: var(--tw-shadow-color, black);
-	box-shadow:
-		0 60px 120px 0
-		color-mix(in srgb, var(--smooth-shadow-color) 7%, transparent),
-		0 30px 60px 0 color-mix(in srgb, var(--smooth-shadow-color) 6%, transparent),
-		0 15px 30px 0 color-mix(in srgb, var(--smooth-shadow-color) 5%, transparent),
-		0 7.5px 15px 0
-		color-mix(in srgb, var(--smooth-shadow-color) 4%, transparent),
-		0 3px 6px 0 color-mix(in srgb, var(--smooth-shadow-color) 3%, transparent);
-}
-
-@utility smooth-shadow-none {
-	box-shadow: none;
-}
-
-@utility smooth-shadow-ring {
-	--smooth-shadow-color: var(--tw-shadow-color, black);
-	box-shadow:
-		0 17.54px 23.39px 0
-		color-mix(in srgb, var(--smooth-shadow-color) 4%, transparent),
-		0 9.4px 12.5px 0
-		color-mix(in srgb, var(--smooth-shadow-color) 3%, transparent),
-		0 5.25px 7px 0
-		color-mix(in srgb, var(--smooth-shadow-color) 2%, transparent),
-		0 2.79px 3.72px -2px
-		color-mix(in srgb, var(--smooth-shadow-color) 1%, transparent),
-		0 1.16px 1.5px 0
-		color-mix(in srgb, var(--smooth-shadow-color) 1%, transparent),
-		0 0 0 var(--smooth-ring-width, 1px) var(--smooth-ring-color);
-}
-
-@utility smooth-shadow-ring-xs {
-	--smooth-shadow-color: var(--tw-shadow-color, black);
-	box-shadow:
-		0 0 4px 0 color-mix(in srgb, var(--smooth-shadow-color) 4%, transparent),
-		0 0 0 var(--smooth-ring-width, 1px) var(--smooth-ring-color);
-}
-
-@utility smooth-shadow-ring-sm {
-	--smooth-shadow-color: var(--tw-shadow-color, black);
-	box-shadow:
-		0 18px 47px 0 color-mix(in srgb, var(--smooth-shadow-color) 3%, transparent),
-		0 7.5px 19px 0
-		color-mix(in srgb, var(--smooth-shadow-color) 2%, transparent),
-		0 4px 10.5px 0
-		color-mix(in srgb, var(--smooth-shadow-color) 2%, transparent),
-		0 2.3px 5.8px 0
-		color-mix(in srgb, var(--smooth-shadow-color) 1%, transparent),
-		0 1.2px 3.1px 0
-		color-mix(in srgb, var(--smooth-shadow-color) 1%, transparent),
-		0 0.5px 1.3px 0
-		color-mix(in srgb, var(--smooth-shadow-color) 1%, transparent),
-		0 0 0 var(--smooth-ring-width, 1px) var(--smooth-ring-color);
 }
 
 @utility smooth-shadow-ring-md {
 	--smooth-shadow-color: var(--tw-shadow-color, black);
 	box-shadow:
-		0 17.54px 23.39px 0
-		color-mix(in srgb, var(--smooth-shadow-color) 4%, transparent),
-		0 9.4px 12.5px 0
-		color-mix(in srgb, var(--smooth-shadow-color) 3%, transparent),
-		0 5.25px 7px 0
-		color-mix(in srgb, var(--smooth-shadow-color) 2%, transparent),
-		0 2.79px 3.72px -2px
-		color-mix(in srgb, var(--smooth-shadow-color) 1%, transparent),
-		0 1.16px 1.5px 0
-		color-mix(in srgb, var(--smooth-shadow-color) 1%, transparent),
+		0 1px 2px 0
+		color-mix(in srgb, var(--smooth-shadow-color) 8%, transparent),
+		0 4px 10px 0
+		color-mix(in srgb, var(--smooth-shadow-color) 10%, transparent),
+		0 10px 30px 0
+		color-mix(in srgb, var(--smooth-shadow-color) 26%, transparent),
 		0 0 0 var(--smooth-ring-width, 1px) var(--smooth-ring-color);
 }
 
 @utility smooth-shadow-ring-lg {
 	--smooth-shadow-color: var(--tw-shadow-color, black);
 	box-shadow:
-		0 25px 50px 0 color-mix(in srgb, var(--smooth-shadow-color) 5%, transparent),
-		0 12px 24px 0 color-mix(in srgb, var(--smooth-shadow-color) 4%, transparent),
-		0 6px 12px 0 color-mix(in srgb, var(--smooth-shadow-color) 3%, transparent),
-		0 3px 6px 0 color-mix(in srgb, var(--smooth-shadow-color) 2%, transparent),
-		0 1.5px 3px 0 color-mix(in srgb, var(--smooth-shadow-color) 2%, transparent),
+		0 2px 8px 0
+		color-mix(in srgb, var(--smooth-shadow-color) 10%, transparent),
+		0 12px 30px 0
+		color-mix(in srgb, var(--smooth-shadow-color) 14%, transparent),
+		0 24px 70px 0
+		color-mix(in srgb, var(--smooth-shadow-color) 34%, transparent),
 		0 0 0 var(--smooth-ring-width, 1px) var(--smooth-ring-color);
 }
 
-@utility smooth-shadow-ring-xl {
-	--smooth-shadow-color: var(--tw-shadow-color, black);
-	box-shadow:
-		0 40px 80px 0 color-mix(in srgb, var(--smooth-shadow-color) 6%, transparent),
-		0 20px 40px 0 color-mix(in srgb, var(--smooth-shadow-color) 5%, transparent),
-		0 10px 20px 0 color-mix(in srgb, var(--smooth-shadow-color) 4%, transparent),
-		0 5px 10px 0 color-mix(in srgb, var(--smooth-shadow-color) 3%, transparent),
-		0 2px 4px 0 color-mix(in srgb, var(--smooth-shadow-color) 2%, transparent),
-		0 0 0 var(--smooth-ring-width, 1px) var(--smooth-ring-color);
-}
-
-@utility smooth-shadow-ring-2xl {
-	--smooth-shadow-color: var(--tw-shadow-color, black);
-	box-shadow:
-		0 60px 120px 0
-		color-mix(in srgb, var(--smooth-shadow-color) 7%, transparent),
-		0 30px 60px 0 color-mix(in srgb, var(--smooth-shadow-color) 6%, transparent),
-		0 15px 30px 0 color-mix(in srgb, var(--smooth-shadow-color) 5%, transparent),
-		0 7.5px 15px 0
-		color-mix(in srgb, var(--smooth-shadow-color) 4%, transparent),
-		0 3px 6px 0 color-mix(in srgb, var(--smooth-shadow-color) 3%, transparent),
-		0 0 0 var(--smooth-ring-width, 1px) var(--smooth-ring-color);
-}
-
-/*
- * Forced colors removes box-shadows. The ring is these panels' only edge now,
- * so restore one with an outline that follows the radius. This rule is plain
- * and unlayered on purpose: a rule nested in `@utility` loses at equal
- * specificity to the `outline-none` utilities carried by popup surfaces.
- */
+/* Forced colors removes box-shadows, so restore the floating surface's edge. */
 @media (forced-colors: active) {
 	[class*="smooth-shadow-ring"] {
 		outline: var(--smooth-ring-width, 1px) solid CanvasText;

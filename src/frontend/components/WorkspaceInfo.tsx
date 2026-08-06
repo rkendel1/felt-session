@@ -356,6 +356,7 @@ function CommentCard({
 				side="left"
 				align="start"
 				sideOffset={10}
+				elevation="lg"
 				className="flex max-h-[min(560px,70vh,var(--available-height))] w-[min(440px,calc(100vw-24px))] cursor-pointer gap-[9px] overflow-hidden bg-panel px-3 py-[11px]"
 			>
 				<div className="contents" onClick={() => onOpenTab?.("pr")}>
@@ -463,6 +464,7 @@ function FileRow({
 					side="left"
 					align="start"
 					sideOffset={10}
+					elevation="lg"
 					className="flex max-h-[min(720px,82vh,var(--available-height))] w-[min(720px,calc(100vw-24px))] cursor-pointer flex-col overflow-hidden bg-panel px-3 py-2.5"
 				>
 					<div

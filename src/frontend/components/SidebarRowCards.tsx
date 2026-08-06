@@ -41,6 +41,7 @@ export function RowCardPopup({
 			side="right"
 			align="start"
 			arrow
+			elevation="lg"
 			anchor={anchor}
 			className={ROW_CARD_CLASS}
 		>

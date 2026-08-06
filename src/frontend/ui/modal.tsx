@@ -101,7 +101,7 @@ function Content({
 							"max-h-[85dvh] overflow-y-auto overscroll-contain outline-none",
 							// Match Tella's restrained Dialog2 shell: lifted surface, soft edge,
 							// and enough radius to read as a modal without becoming a card.
-							"rounded-2xl bg-raised smooth-shadow-ring-lg",
+							"rounded-2xl bg-raised smooth-shadow-ring-md",
 							"p-6",
 							"flex flex-col gap-4",
 							"origin-center transition-[transform,opacity] duration-150 ease-out",
