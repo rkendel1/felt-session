@@ -3,7 +3,7 @@
  *
  * `getSandboxProvider()` resolves the provider for a run: an explicit spec
  * wins, otherwise the config file (~/.opensession-sandbox.json) decides, and the
- * kill-switch file (<chats-dir>/disable-sandboxes) forces "local".
+ * kill-switch file (<sessions-dir>/disable-sandboxes) forces "local".
  * Only the local provider exists today — docker (Phase 1) and daytona/e2b
  * (Phase 3) throw until their adapters land, so a premature config flip fails
  * loudly at run start instead of silently running unsandboxed.

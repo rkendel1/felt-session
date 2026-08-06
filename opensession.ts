@@ -24,7 +24,7 @@ import { FRONTEND_SRC, IS_DEV, SPA_HEADERS, frontend, scheduleFrontendRebuild, s
 import { configuredIntegration } from "./src/server/config";
 import { initHumanAsks } from "./src/server/human-asks";
 import { interactiveMcpServers } from "./src/server/interactive-mcp";
-import { homeDir, OPENSESSION_CHATS_DIR } from "./src/server/paths";
+import { homeDir, OPENSESSION_SESSIONS_DIR } from "./src/server/paths";
 import { startPlainArchiveSweep } from "./src/server/plain-archive";
 import {
 	isLocalProfile,
@@ -90,11 +90,11 @@ import {
 const PORT = parseInt(process.env.PORT || "3850");
 const HOST = process.env.HOST || "127.0.0.1";
 const HOME = homeDir();
-const SESSIONS_DIR = OPENSESSION_CHATS_DIR;
+const SESSIONS_DIR = OPENSESSION_SESSIONS_DIR;
 
 // A dev instance (OPENSESSION_DEV=1, src/server/dev-mode.ts) sharing the live
 // state is the fleet-outage class bug: the run-rpc unix socket lives under the
-// chats dir, and a second instance would unlink and steal it from the
+// sessions dir, and a second instance would unlink and steal it from the
 // production process (2026-07-16/17). Refuse to boot without isolation.
 // Module-import side effects above run BEFORE this check, so run-rpc.ts
 // carries the same fail-closed guard around the socket bind itself.
@@ -604,7 +604,7 @@ if (!g.__opensessionBooted) {
 	// Poll per-account Claude usage (drives account picking + the Connections UI)
 	startUsagePoller();
 
-	// DM owners/Michiel when pool credentials expire or break (account-health.ts)
+	// DM account owners when pool credentials expire or break (account-health.ts)
 	startAccountHealthMonitor();
 
 	// Reclaim rust target/ build caches from idle worktrees we keep (disk-gc.ts)

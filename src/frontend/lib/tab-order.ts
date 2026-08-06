@@ -1,4 +1,4 @@
-// Per-workspace order of the session tab strip (the "main bar" chat tabs).
+// Per-workspace order of the session tab strip (the "main bar" session tabs).
 //
 // Unlike pins (a curated, cross-device set stored server-side), a strip's
 // left-to-right arrangement is a per-device working-set preference: high churn
@@ -36,11 +36,11 @@ export function getTabOrder(workspaceId: string): string[] {
 }
 
 /**
- * Order `ids` (a workspace's live chat ids, in their natural createdAt order)
+ * Order `ids` (a workspace's live session ids, in their natural createdAt order)
  * by the saved arrangement: saved ids first in saved order, then any id not in
- * the saved list appended in natural order — so a freshly-created chat lands at
+ * the saved list appended in natural order — so a freshly-created session lands at
  * the end and an unknown/restored one is never dropped. A stale saved id (a
- * closed chat) simply matches nothing. Pure read; persists nothing.
+ * closed session) simply matches nothing. Pure read; persists nothing.
  */
 export function applyTabOrder(workspaceId: string, ids: string[]): string[] {
 	const saved = read()[workspaceId];

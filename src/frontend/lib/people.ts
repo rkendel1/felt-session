@@ -70,7 +70,7 @@ export function ensurePeople(): Promise<void> {
  * People rows for the composer's @-mention popup. Only offered once a query
  * is typed (a bare "@" stays the familiar file browser); name matches list
  * before file results. Inserting yields `@Name`, which the server's mention
- * scan (chat.ts mentionedUsers) turns into a push for prompts and notes.
+ * scan (people.ts mentionedUsers) turns into a push when the prompt is sent.
  */
 export function peopleMentionMatches(query: string): FileMention[] {
 	const q = query.trim().toLowerCase();

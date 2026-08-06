@@ -247,8 +247,8 @@ export function ndjsonReader(
 }
 
 /** Root of all run-host dirs: one subdir per host with spec/meta/journal/sock/log. */
-export function runHostsDir(chatsDir: string): string {
-  return `${chatsDir}/run-hosts`;
+export function runHostsDir(sessionsDir: string): string {
+  return `${sessionsDir}/run-hosts`;
 }
 
 export const HOST_SOCK_NAME = "host.sock";
@@ -259,6 +259,6 @@ export const HOST_LOG_NAME = "host.log";
 
 /** The server-side RPC socket the mcp-proxy talks to. Stable path (the
  *  literal filename is historical — a wire constant, not branding). */
-export function rpcSocketPath(chatsDir: string): string {
-  return `${chatsDir}/opensession-rpc.sock`;
+export function rpcSocketPath(sessionsDir: string): string {
+  return `${sessionsDir}/opensession-rpc.sock`;
 }

@@ -5,7 +5,7 @@ import { cn } from "../ui/cn";
 
 /**
  * Compact live cost + context readout that rides inside the composer toolbar
- * (right of the model pill on desktop, in the mobile chat bar otherwise). Shows
+ * (right of the model pill on desktop, in the mobile session bar otherwise). Shows
  * the running API-equivalent USD spend for the conversation and a ring gauge of
  * how full the model's context window is; hover (or tap on touch) for a
  * per-token breakdown. Cost comes directly from the engine's completed

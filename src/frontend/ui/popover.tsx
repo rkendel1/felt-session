@@ -132,7 +132,7 @@ function Popup({
 						<BasePopover.Arrow
 							className={cn(
 								"size-[10px] rotate-45 [border-color:var(--smooth-ring-color)] bg-panel",
-								"data-[side=right]:left-[-6px] data-[side=right]:border-b data-[side=right]:border-l",
+								"data-[side=right]:left-[-5px] data-[side=right]:border-b data-[side=right]:border-l",
 								"data-[side=left]:right-[-6px] data-[side=left]:border-t data-[side=left]:border-r",
 								"data-[side=top]:bottom-[-6px] data-[side=top]:border-r data-[side=top]:border-b",
 								"data-[side=bottom]:top-[-6px] data-[side=bottom]:border-t data-[side=bottom]:border-l",

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { recordChatPerf } from "../lib/chat-performance";
+import { recordSessionPerf } from "../lib/session-performance";
 
 // Scroll engineering for the transcript. The guiding rule: never move the reader
 // against their intent. The reader's own scroll position is the source of truth
@@ -32,7 +32,7 @@ const TOP_GAP = 20;
 const COARSE_POINTER =
   typeof window !== "undefined" && !!window.matchMedia?.("(pointer: coarse)").matches;
 
-export interface ChatScroll {
+export interface SessionScroll {
   /** Attach to the scrollable transcript container. */
   containerRef: React.RefObject<HTMLDivElement | null>;
   /** Attach to a zero-content div rendered as the last child of the container. */
@@ -96,7 +96,7 @@ function latestMessageVisible(container: HTMLElement): boolean {
   return latestRect.bottom > containerRect.top && latestRect.top < containerRect.bottom;
 }
 
-export function useChatScroll(initialFollowing = true): ChatScroll {
+export function useSessionScroll(initialFollowing = true): SessionScroll {
   const containerRef = useRef<HTMLDivElement>(null);
   const spacerRef = useRef<HTMLDivElement>(null);
   // followingRef is the live value read inside handlers; `following` mirrors it for
@@ -329,7 +329,7 @@ export function useChatScroll(initialFollowing = true): ChatScroll {
         scrollPerf.frames++;
         const elapsed = performance.now() - scrollPerf.startedAt;
         if (elapsed >= 500) {
-          recordChatPerf("scroll_fps", (scrollPerf.frames * 1_000) / elapsed);
+          recordSessionPerf("scroll_fps", (scrollPerf.frames * 1_000) / elapsed);
           scrollPerf.startedAt = performance.now();
           scrollPerf.frames = 0;
         }

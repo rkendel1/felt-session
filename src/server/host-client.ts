@@ -20,7 +20,7 @@
  *    resume its engine session, and falls back to an in-process runAgent when
  *    spawning is impossible (or the kill-switch file is present).
  *
- * Kill switch: `touch ~/.opensession-chats/disable-run-hosts` — checked per run,
+ * Kill switch: `touch ~/.opensession-sessions/disable-run-hosts` — checked per run,
  * no restart needed; new runs go back in-process (old hosts finish normally).
  */
 
@@ -36,7 +36,7 @@ import type { ActiveRunRecord } from "./run-journal";
 import { shouldPersistModelSwitch, type ImageInput } from "./run-events";
 import type { GitIdentity } from "./shared/user-mappings";
 import { providerFor } from "./models";
-import { homeDir, OPENSESSION_CHATS_DIR } from "./paths";
+import { homeDir, OPENSESSION_SESSIONS_DIR } from "./paths";
 import { statePath, } from "./paths";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import {
@@ -64,8 +64,8 @@ import {
   type ClientToHostMsg,
 } from "../runner-host/protocol";
 
-const HOSTS_DIR = runHostsDir(OPENSESSION_CHATS_DIR);
-const DISABLE_FILE = `${OPENSESSION_CHATS_DIR}/disable-run-hosts`;
+const HOSTS_DIR = runHostsDir(OPENSESSION_SESSIONS_DIR);
+const DISABLE_FILE = `${OPENSESSION_SESSIONS_DIR}/disable-run-hosts`;
 const ENV_FILE = statePath(".opensession.env");
 
 export function runHostsEnabled(): boolean {

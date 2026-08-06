@@ -1,18 +1,25 @@
 /**
- * Workspaces — containers that group chats. A chat carries a `workspaceId`
- * pointing here; every chat belongs to exactly one workspace. Unlike the old
- * "project" folder, a workspace can *optionally own a worktree* (repo + branch +
- * worktreeDir, plus attached repos): new chats created in the workspace inherit
- * that worktree by default (share mode), or branch a new stacked worktree off it.
+ * Workspaces — containers that group sessions. A session carries a `workspaceId`
+ * pointing here; every session belongs to exactly one workspace.
+ *
+ * NOT a project. A *project* is the level above: a source of work with its own
+ * sidebar band — a registered git repo (worktree.ts REPOS) or a feed (feeds.ts,
+ * e.g. Plain). A project holds many workspaces; repo-less scratch workspaces sit
+ * outside those project bands. A workspace holds many sessions.
+ * The full model is in CONCEPTS.md.
+ *
+ * A workspace can *optionally own a worktree* (repo + branch + worktreeDir,
+ * plus attached repos): new sessions created in the workspace inherit that
+ * worktree by default (share mode), or branch a new stacked worktree off it.
  * A workspace with no `worktreeDir` is "ask-style" / not yet materialized.
  *
- * The chat still stores its own branch/worktreeDir (the source of truth for the
+ * The session still stores its own branch/worktreeDir (the source of truth for the
  * runner cwd); the workspace's worktree fields are the template a new share-mode
- * chat copies, and the flag for "does this workspace own a worktree yet".
+ * session copies, and the flag for "does this workspace own a worktree yet".
  *
- * One JSON file per workspace at `~/.opensession-workspaces/<id>.json` (dual-read
- * fallback to the pre-rename/legacy dirs until the data migrations run).
- * Mirrors the flat-file pattern in pins.ts / models.ts. Team-internal, no auth.
+ * One JSON file per workspace at `~/.opensession-workspaces/<id>.json`, ids
+ * `ws-<uuid>`. Mirrors the flat-file pattern in pins.ts / models.ts.
+ * Team-internal, no auth.
  */
 
 import { homeDir } from "./paths";
@@ -28,26 +35,12 @@ import { randomUUID } from "crypto";
 import type { AttachedRepo, ExternalRef } from "./types";
 import { stateDir } from "./paths";
 
-const HOME = homeDir();
-const WORKSPACES_DIR_LEGACY = `${HOME}/.opensession-projects`;
-/**
- * Dual-read chain: `~/.opensession-workspaces` (primary) → `~/.opensession-workspaces`
- * (pre-rename) → legacy `~/.opensession-projects` — until the one-time migrations
- * rename them. Resolving once at module load keeps reads and writes on the same
- * dir (no split-brain) whether or not a migration has run. Keeps the `prj-` id
- * prefix opaque — see scripts/migrate-workspaces.ts.
- */
-const WORKSPACES_DIR = (() => {
-  const resolved = stateDir("workspaces");
-  return existsSync(resolved) || !existsSync(WORKSPACES_DIR_LEGACY)
-    ? resolved
-    : WORKSPACES_DIR_LEGACY;
-})();
+const WORKSPACES_DIR = stateDir("workspaces");
 
 export interface Workspace {
   id: string;
   name: string;
-  /** Default repo for new chats created in this workspace (repo id). */
+  /** Default repo for new sessions created in this workspace (repo id). */
   repo?: string;
   /** Optional swatch key for the sidebar dot (see tab-colors). */
   color?: string;
@@ -68,16 +61,16 @@ export interface Workspace {
   externalRefs?: ExternalRef[];
   /**
    * The workspace's default branch. Present when the workspace owns a worktree
-   * (share-mode chats inherit it; stacked chats branch off it) or for PR-backed
-   * workspaces (the head branch the member chats share).
+   * (share-mode sessions inherit it; stacked sessions branch off it) or for PR-backed
+   * workspaces (the head branch the member sessions share).
    */
   branch?: string;
   /**
-   * The shared worktree new share-mode chats inherit. Absent = the workspace does
+   * The shared worktree new share-mode sessions inherit. Absent = the workspace does
    * not own a worktree yet (ask-style / unmaterialized).
    */
   worktreeDir?: string;
-  /** Secondary repos attached at the workspace level; new chats copy these. */
+  /** Secondary repos attached at the workspace level; new sessions copy these. */
   attachedRepos?: AttachedRepo[];
 }
 
@@ -135,7 +128,7 @@ export function createWorkspace(input: {
   branch?: string;
   worktreeDir?: string;
   attachedRepos?: AttachedRepo[];
-  /** Reuse a caller-supplied id (e.g. migration wrapping an orphan chat). */
+  /** Reuse a caller-supplied id (e.g. migration wrapping an orphan session). */
   id?: string;
   createdAt?: string;
 }): Workspace {
@@ -168,7 +161,7 @@ export function createWorkspace(input: {
  * create paths minted a second workspace over an already-owned worktree), the
  * oldest wins — it's the one the user thinks of as "the" workspace. Callers
  * must not pass a repo's main checkout: those are legitimately shared by many
- * workspaces (every opensession chat, every ask chat), so "ownership" is
+ * workspaces (every opensession session, every ask session), so "ownership" is
  * meaningless there.
  */
 export function findWorkspaceByWorktree(worktreeDir: string): Workspace | null {
@@ -188,7 +181,7 @@ export function findWorkspaceByKey(key: string): Workspace | null {
 
 /**
  * Idempotently resolve the workspace for a stable key, creating it on first use.
- * Used to auto-group related chats (e.g. every autofix/review/simplify chat for
+ * Used to auto-group related sessions (e.g. every autofix/review/simplify session for
  * one PR) under a single workspace.
  */
 export function findOrCreateWorkspaceByKey(
@@ -277,10 +270,10 @@ export function updateWorkspace(
 
 /**
  * Re-point a workspace at a different worktree — the repo-switch case, where the
- * workspace was minted around a checkout its only chat has since left. Unlike
+ * workspace was minted around a checkout its only session has since left. Unlike
  * updateWorkspace, an omitted branch/worktreeDir CLEARS the field rather than
- * leaving it: switching into a shared-checkout repo leaves no per-chat worktree
- * for a sibling chat to inherit, and a stale one would send it to the abandoned
+ * leaving it: switching into a shared-checkout repo leaves no per-session worktree
+ * for a sibling session to inherit, and a stale one would send it to the abandoned
  * checkout. Identity (key, prNumber, ticket/feed refs) is untouched.
  */
 export function restampWorkspaceWorktree(
@@ -301,8 +294,8 @@ export function restampWorkspaceWorktree(
 }
 
 /**
- * Delete a workspace. Every chat belongs to exactly one workspace, so the caller
- * is responsible for re-homing member chats first (never orphan them). This only
+ * Delete a workspace. Every session belongs to exactly one workspace, so the caller
+ * is responsible for re-homing member sessions first (never orphan them). This only
  * removes the workspace metadata file.
  */
 export function deleteWorkspace(id: string): boolean {
@@ -311,7 +304,7 @@ export function deleteWorkspace(id: string): boolean {
   if (!existsSync(f)) return false;
   try {
     rmSync(f);
-    // A deleted workspace's scratch dir (scratch-mode chats — see
+    // A deleted workspace's scratch dir (scratch-mode sessions — see
     // worktree.ts ensureScratchDir) goes with it; safeId() already rules
     // out anything path-escaping.
     try {

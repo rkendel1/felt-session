@@ -5,11 +5,11 @@
  */
 import { readFileSync, existsSync } from "fs";
 import { writeJsonAtomic } from "./shared/atomic-write";
-import { OPENSESSION_CHATS_DIR } from "./paths";
+import { OPENSESSION_SESSIONS_DIR } from "./paths";
 import { unpinEverywhere } from "./pins";
 import type { UnifiedSession } from "./types";
 
-const REGISTRY_PATH = `${OPENSESSION_CHATS_DIR}/archive-registry.json`;
+const REGISTRY_PATH = `${OPENSESSION_SESSIONS_DIR}/archive-registry.json`;
 
 /** Why a session ended up archived — drives the "Auto-archived" filter. */
 export type ArchiveReason = "manual" | "idle" | "auto";
@@ -54,7 +54,7 @@ export function isArchivedId(id: string): boolean {
 /**
  * Drop every pin made stale by archiving `justArchived`: the sessions' own ids
  * and alias ids, plus each `workspace:<id>` pin whose workspace now has no live
- * chat left. Pass the full current session list so the "last live chat" test
+ * session left. Pass the full current session list so the "last live session" test
  * can see siblings — call this AFTER the archive registry is written so the
  * just-archived sessions read back as archived. Centralizes what the manual,
  * idle-sweep, and Plain-ticket archive paths all need; `setArchived` still handles the
@@ -67,15 +67,15 @@ export function unpinArchivedSessions(
   if (!justArchived.length) return;
   const dead = (s: UnifiedSession) => s.archived || isArchivedId(s.id);
   const keys: string[] = [];
-  const projectIds = new Set<string>();
+  const workspaceIds = new Set<string>();
   for (const s of justArchived) {
     keys.push(s.id, ...(s.aliasIds || []));
-    if (s.projectId) projectIds.add(s.projectId);
+    if (s.workspaceId) workspaceIds.add(s.workspaceId);
   }
-  // A workspace pin is stale only once none of its chats are live anymore —
-  // else archiving one chat would yank a still-active workspace off Pinned.
-  for (const pid of projectIds) {
-    if (!allSessions.some((s) => s.projectId === pid && !dead(s)))
+  // A workspace pin is stale only once none of its sessions are live anymore —
+  // else archiving one session would yank a still-active workspace off Pinned.
+  for (const pid of workspaceIds) {
+    if (!allSessions.some((s) => s.workspaceId === pid && !dead(s)))
       keys.push(`workspace:${pid}`);
   }
   unpinEverywhere(keys);
@@ -123,7 +123,7 @@ export function archiveOlderThan(sessions: UnifiedSession[], days: number): numb
   if (archived > 0) {
     save(registry);
     // Registry is written, so isArchivedId now reflects this batch — drop the
-    // stale session/alias pins and any workspace pin whose last chat just went.
+    // stale session/alias pins and any workspace pin whose last session just went.
     unpinArchivedSessions(justArchived, sessions);
   }
   return archived;

@@ -1,8 +1,6 @@
 import { BASE_PATH } from "./base";
 import type {
 	UnifiedSession,
-	ChatMessage,
-	ChatImage,
 	PlainThread,
 	PlainWorkspaceUser,
 	PlainLabelType,
@@ -12,7 +10,7 @@ import type {
 	FeedItem,
 	ReportGroup,
 	ReportMeta,
-	Project,
+	Workspace,
 	AnalyticsSummary,
 	OsReview,
 } from "./types";
@@ -428,19 +426,19 @@ export interface WorkspaceMediaItem {
 	kind: "image" | "video";
 	src: string;
 	sessionId: string;
-	chatTitle?: string;
+	sessionTitle?: string;
 	at: string;
 }
 
 export interface WorkspaceOverview {
 	prompt: { content: string; sessionId: string; at: string } | null;
-	/** Latest assistant text across the workspace's chats. Optional because a
+	/** Latest assistant text across the workspace's sessions. Optional because a
 	 *  server that hasn't restarted onto the new overview code omits the key. */
 	lastMessage?: { content: string; sessionId: string; at: string } | null;
 	media: WorkspaceMediaItem[];
 }
 
-/** Opening prompt + all media across a workspace's chats (the floating
+/** Opening prompt + all media across a workspace's sessions (the floating
  * preview panel in the session viewer). */
 export async function fetchWorkspaceOverview(
 	wsId: string,
@@ -612,32 +610,32 @@ export async function registerRepoApi(input: {
 	});
 }
 
-// ── Projects (folders that group chats) ──
+// ── Workspaces (containers that group sessions) ──
 
-export async function fetchProjects(): Promise<Project[]> {
+export async function fetchWorkspaces(): Promise<Workspace[]> {
 	try {
-		const data = await request<{ projects?: Project[] }>("/projects");
-		return data?.projects ?? [];
+		const data = await request<{ workspaces?: Workspace[] }>("/workspaces");
+		return data?.workspaces ?? [];
 	} catch (e) {
-		console.warn("fetchProjects failed:", e);
+		console.warn("fetchWorkspaces failed:", e);
 		return [];
 	}
 }
 
-export async function createProjectApi(input: {
+export async function createWorkspaceApi(input: {
 	name: string;
 	repo?: string;
 	color?: string;
 	user: string;
-}): Promise<Project> {
-	const body = await request<{ project: Project }>("/projects", {
+}): Promise<Workspace> {
+	const body = await request<{ workspace: Workspace }>("/workspaces", {
 		method: "POST",
 		body: input,
 	});
-	return body.project;
+	return body.workspace;
 }
 
-export async function updateProjectApi(
+export async function updateWorkspaceApi(
 	id: string,
 	patch: {
 		name?: string;
@@ -646,47 +644,47 @@ export async function updateProjectApi(
 		color?: string | null;
 		order?: number;
 	},
-): Promise<Project> {
-	const body = await request<{ project: Project }>(
-		`/projects/${encodeURIComponent(id)}`,
+): Promise<Workspace> {
+	const body = await request<{ workspace: Workspace }>(
+		`/workspaces/${encodeURIComponent(id)}`,
 		{ method: "PATCH", body: patch },
 	);
-	return body.project;
+	return body.workspace;
 }
 
-export async function deleteProjectApi(id: string): Promise<void> {
-	await request<void>(`/projects/${encodeURIComponent(id)}`, {
+export async function deleteWorkspaceApi(id: string): Promise<void> {
+	await request<void>(`/workspaces/${encodeURIComponent(id)}`, {
 		method: "DELETE",
-		label: "Failed to delete project",
+		label: "Failed to delete workspace",
 	});
 }
 
 /**
- * Start a new sibling chat in the source chat's workspace. Returns the new
- * chat's id plus its full session object (so the caller can render it
+ * Start a new sibling session in the source session's workspace. Returns the new
+ * session's id plus its full session object (so the caller can render it
  * immediately, without waiting for the next sessions poll); it has no run yet —
  * its first prompt starts fresh. `mode` picks the worktree relationship: share
  * the workspace worktree (default), stack a new worktree branched off it, or
  * ask (no worktree).
  */
-export async function newChatApi(
+export async function newSessionApi(
 	sourceId: string,
 	user: string,
 	mode?: "share" | "stack" | "ask",
 ): Promise<{ id: string; session: UnifiedSession | null }> {
 	const body = await request<{ id: string; session?: UnifiedSession }>(
-		`/sessions/${encodeURIComponent(sourceId)}/new-chat`,
+		`/sessions/${encodeURIComponent(sourceId)}/new-session`,
 		{ method: "POST", body: { user, ...(mode ? { mode } : {}) } },
 	);
 	return { id: body.id, session: body.session || null };
 }
 
 /**
- * Promote an ask chat to code: create a worktree and attach it (also
+ * Promote an ask session to code: create a worktree and attach it (also
  * materializes the workspace's worktree if it doesn't own one yet). Returns the
  * new branch + worktree dir.
  */
-export async function promoteChatApi(
+export async function promoteSessionApi(
 	sessionId: string,
 	opts?: { branch?: string; repo?: string },
 ): Promise<{ branch: string; worktreeDir: string }> {
@@ -696,14 +694,14 @@ export async function promoteChatApi(
 	);
 }
 
-/** Move a chat into a project (or `null` to make it standalone). */
-export async function setSessionProjectApi(
+/** Move a session into a workspace (or `null` to make it standalone). */
+export async function setSessionWorkspaceApi(
 	sessionId: string,
-	projectId: string | null,
+	workspaceId: string | null,
 ): Promise<void> {
-	await request<void>(`/sessions/${encodeURIComponent(sessionId)}/project`, {
+	await request<void>(`/sessions/${encodeURIComponent(sessionId)}/workspace`, {
 		method: "POST",
-		body: { projectId },
+		body: { workspaceId },
 	});
 }
 
@@ -833,7 +831,7 @@ export async function fetchPlainThreadById(
 
 /**
  * Send a human-written message into a Plain thread: a customer-facing reply
- * (email/chat via Plain) or an internal note for the team.
+ * (email/session via Plain) or an internal note for the team.
  */
 export async function sendPlainReplyApi(
 	threadId: string,
@@ -996,95 +994,6 @@ export async function startPlainTriageApi(threadId: string): Promise<string> {
 		{ method: "POST", label: "Failed to start triage" },
 	);
 	return body.sessionId;
-}
-
-// ── Native team chat (Watercooler + per-session Chat tabs — not Slack) ──
-
-export async function fetchChatMessagesApi(
-	channel: string,
-): Promise<ChatMessage[]> {
-	const body = await request<{ messages?: ChatMessage[] }>(
-		`/chat/messages?channel=${encodeURIComponent(channel)}`,
-		{ label: "Failed to fetch chat" },
-	);
-	return Array.isArray(body?.messages) ? body.messages : [];
-}
-
-export async function postChatMessageApi(
-	channel: string,
-	text: string,
-	user: string,
-	images?: ChatImage[],
-	opts?: {
-		/** Post into this message's thread (Slack-style thread reply). */
-		threadId?: string;
-		/** Quote this message above the new one (Slack-style "reply"). */
-		replyTo?: import("./types").ChatReplyTo;
-	},
-): Promise<ChatMessage> {
-	const body = await request<{ message: ChatMessage }>("/chat/messages", {
-		method: "POST",
-		body: {
-			channel,
-			text,
-			user,
-			images: images ?? [],
-			...(opts?.threadId ? { threadId: opts.threadId } : {}),
-			...(opts?.replyTo ? { replyTo: opts.replyTo } : {}),
-		},
-		label: "Failed to send",
-	});
-	return body.message;
-}
-
-/** Toggle the caller's emoji reaction on a message; resolves to the updated
- *  message (the server also broadcasts it to every client). */
-export async function toggleChatReactionApi(
-	channel: string,
-	messageId: string,
-	emoji: string,
-	user: string,
-): Promise<ChatMessage> {
-	const body = await request<{ message: ChatMessage }>("/chat/react", {
-		method: "POST",
-		body: { channel, messageId, emoji, user },
-		label: "Failed to react",
-	});
-	return body.message;
-}
-
-/** Stream an image to permanent chat storage; resolves to its {id,name,mime} ref. */
-export async function uploadChatImageApi(file: File): Promise<ChatImage> {
-	const res = await fetch(`${BASE}/chat/upload`, {
-		method: "POST",
-		headers: {
-			"x-file-name": encodeURIComponent(file.name),
-			"content-type": file.type || "application/octet-stream",
-		},
-		body: file,
-	});
-	const body = await res.json().catch(() => ({}));
-	if (!res.ok || !body?.ok || !body?.id)
-		throw new Error(body?.error || `Upload failed (${res.status})`);
-	return { id: body.id, name: body.name || file.name, mime: body.mime };
-}
-
-/** URL that serves a stored chat image's bytes. */
-export function chatImageUrl(id: string): string {
-	return `${BASE}/chat/image/${id}`;
-}
-
-/** Latest note per session channel (sidebar unread-note dots). */
-export async function fetchSessionNoteActivityApi(): Promise<
-	Record<string, { lastTs: number; lastUser: string }>
-> {
-	const body = await request<{
-		channels?: Array<{ sessionId: string; lastTs: number; lastUser: string }>;
-	}>("/chat/session-activity", { label: "Failed to fetch note activity" });
-	const out: Record<string, { lastTs: number; lastUser: string }> = {};
-	for (const c of body?.channels || [])
-		out[c.sessionId] = { lastTs: c.lastTs, lastUser: c.lastUser };
-	return out;
 }
 
 export async function fetchWorktrees(repo?: string) {
@@ -1463,7 +1372,7 @@ export async function mergePrApi(
 }
 
 /**
- * Register this chat's PR and the one it was stacked on as a GitHub stack.
+ * Register this session's PR and the one it was stacked on as a GitHub stack.
  * Both PRs must already exist; the server refuses rather than opening one.
  */
 export async function linkPrStackApi(sessionId: string) {
@@ -1540,10 +1449,10 @@ export async function triggerPrActionApi(
 		url?: string;
 		bksId?: string;
 		error?: string;
-		/** Auto-fix opens a live chat in the workspace instead of a headless PR run —
+		/** Auto-fix opens a live session in the workspace instead of a headless PR run —
 		    the caller navigates into bksId rather than showing a "posted on the PR" note. */
-		openChat?: boolean;
-		/** The just-created chat (auto-fix only), already persisted server-side, so
+		openSession?: boolean;
+		/** The just-created session (auto-fix only), already persisted server-side, so
 		    the caller can open it without waiting for the next sessions poll. */
 		session?: UnifiedSession | null;
 	}>(`/sessions/${encodeURIComponent(sessionId)}/pr-action`, {
@@ -2213,6 +2122,29 @@ export async function savePersonalPrompt(
 	});
 }
 
+// ── Instance identity (Settings → General: agent + product name) ──
+
+export interface InstanceIdentityDto {
+	personaName: string;
+	productName: string;
+	productMark: string;
+	configPath: string;
+}
+
+export async function fetchInstanceIdentity(): Promise<InstanceIdentityDto> {
+	return request("/settings/identity", {
+		label: "Failed to fetch instance identity",
+	});
+}
+
+/** Empty string resets a field to its built-in default. */
+export async function saveInstanceIdentity(patch: {
+	personaName?: string;
+	productName?: string;
+}): Promise<InstanceIdentityDto> {
+	return request("/settings/identity", { method: "PUT", body: patch });
+}
+
 // ── Memory (Settings → Memory: repo/user/team/channel stores) ──
 
 export interface MemoryEntryDto {
@@ -2718,7 +2650,7 @@ export async function searchNotesApi(q: string): Promise<NoteSearchHit[]> {
 	return body?.hits ?? [];
 }
 
-/** One note's meta + current markdown text (preview / discuss-with-Michael). */
+/** One note's meta + current markdown text (preview / discuss). */
 export async function fetchNote(
 	id: string,
 ): Promise<NoteMeta & { text: string }> {

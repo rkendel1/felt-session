@@ -102,11 +102,11 @@ export function resolveSessionRepoContext(
 }
 
 /**
- * Branch discipline for interactive code sessions in isolated worktrees. Chats
+ * Branch discipline for interactive code sessions in isolated worktrees. Sessions
  * in one workspace share a single worktree + branch, so each agent must treat
  * that branch as THE branch — sibling commits included. Without this, each
- * sibling chat decided the extra commits on the shared branch weren't its own
- * and cherry-picked onto a fresh branch, producing one PR per chat instead of
+ * sibling session decided the extra commits on the shared branch weren't its own
+ * and cherry-picked onto a fresh branch, producing one PR per session instead of
  * one per workspace (tella-fusion PRs #4529–#4531).
  */
 export function buildBranchNote(session: {
@@ -126,7 +126,7 @@ export function buildBranchNote(session: {
 		return undefined;
 	return [
 		"## Branch discipline (shared worktree)",
-		`You are working in \`${session.worktreeDir}\` on branch \`${session.branch}\`. Other chats in this workspace share this exact worktree and branch — commits you don't recognize are their work, not noise.`,
+		`You are working in \`${session.worktreeDir}\` on branch \`${session.branch}\`. Other sessions in this workspace share this exact worktree and branch — commits you don't recognize are their work, not noise.`,
 		`Stay on \`${session.branch}\`: never create or switch branches, and never rebase away, reset, or cherry-pick around sibling commits. Commit your changes on this branch and push with \`git push origin ${session.branch}\`.`,
 		`This workspace keeps ONE pull request: if an open PR for \`${session.branch}\` already exists, pushing updates it — do not open another. Only run \`gh pr create\` when the branch has no open PR. Never merge.`,
 		"Only deviate from this (separate branch or separate PR) when the user explicitly asks for it.",
@@ -134,8 +134,8 @@ export function buildBranchNote(session: {
 }
 
 /**
- * System-prompt note for a chat whose worktree was branched off ANOTHER chat's
- * branch rather than the trunk (the "stacked worktree" chat mode). Its diff is
+ * System-prompt note for a session whose worktree was branched off ANOTHER session's
+ * branch rather than the trunk (the "stacked worktree" session mode). Its diff is
  * only reviewable against that branch, so its PR must target it — and GitHub's
  * stacked PRs (public preview, 2026-07-30) then give the pair a real stack:
  * each layer reviewed on its own diff, lower layers rebased automatically as
@@ -150,7 +150,7 @@ export function buildStackNote(session: {
 	if (!base || session.mode !== "code" || !session.branch) return undefined;
 	return [
 		"## Stacked branch",
-		`This branch was cut from \`${base}\` (another chat's branch), not from the trunk — its commits sit ON TOP of that work, and a diff against the trunk would show both.`,
+		`This branch was cut from \`${base}\` (another session's branch), not from the trunk — its commits sit ON TOP of that work, and a diff against the trunk would show both.`,
 		`Open your PR against that branch: \`gh pr create --base ${base}\`. Never retarget it at the default branch, and never merge \`${base}\` into this branch to "catch up" — it moves under you as its own PR updates.`,
 		`Once both PRs exist, register them as a GitHub stack so each is reviewed on its own diff and the bases rebase themselves as layers merge: \`gh stack link <base-PR-url> <your-PR-url>\` (bottom first, run from this worktree). If that reports \`unknown command "stack"\`, don't retry or try to install it — just say so; the PR's base is what matters, and the Stack card in the PR tab links it in one click.`,
 		"Never merge either PR — the human merges the stack.",
@@ -177,7 +177,10 @@ export function buildReposNote(session: UnifiedSession): string | undefined {
 	const lines = [
 		"## Repos in this session",
 		"This session spans multiple repos. Each is an isolated git worktree — `cd` into the right one to read or edit its files, and commit/push/open PRs in each repo independently (don't edit another repo's shared main checkout).",
-		`- **${primaryRepo}** (primary): ${session.worktreeDir}${session.branch ? ` — branch \`${session.branch}\`` : ""}`,
+		// Canonicalized for the note only — the stored worktreeDir stays literal
+		// (see canonicalPath) — so a session that predates a checkout rename
+		// points the agent at the path that exists today.
+		`- **${primaryRepo}** (primary): ${canonicalPath(session.worktreeDir!)}${session.branch ? ` — branch \`${session.branch}\`` : ""}`,
 	];
 	for (const r of attached)
 		lines.push(`- **${r.repo}**: ${r.dir} — branch \`${r.branch}\``);
@@ -211,7 +214,7 @@ export function buildPlanFirstNote(session: {
 	if (!session.planFirst || session.mode === "ask") return undefined;
 	return [
 		"## Plan first (design gate)",
-		"This session has the plan-first gate ON. Before creating, editing, or committing ANY file, post a short program-design doc as a normal chat message:",
+		"This session has the plan-first gate ON. Before creating, editing, or committing ANY file, post a short program-design doc as a normal message:",
 		"- **Scope** — one paragraph: what's being built, and what's explicitly out of scope.",
 		"- **File-tree diff** — files to add/change/delete, one line each.",
 		"- **Key signatures** — the new/changed types and function signatures that matter.",
@@ -331,10 +334,10 @@ export function resolvePrTarget(
 
 /**
  * The workspace that already owns this worktree, or null. Adopt-don't-duplicate:
- * every create path that's about to wrap a chat in a fresh workspace checks here
+ * every create path that's about to wrap a session in a fresh workspace checks here
  * first, so landing on an already-owned worktree joins the existing workspace
  * instead of minting a second one over it. Repo main checkouts never match —
- * they're shared by every native/ask chat, so ownership is meaningless there.
+ * they're shared by every native/ask session, so ownership is meaningless there.
  */
 export function workspaceOwningWorktree(
 	worktreeDir: string | null | undefined,
@@ -446,20 +449,20 @@ export async function switchPrimaryRepo(
 		branch,
 		attachedRepos,
 	});
-	// The chat's workspace was minted around the repo we're leaving, and its repo
+	// The session's workspace was minted around the repo we're leaving, and its repo
 	// is what the sidebar bands the row under (wsRowRepo) while its branch +
-	// worktreeDir are the template a sibling chat inherits. Left stamped, the row
-	// files under the abandoned repo — the chat's own header showing the new one —
-	// and a new chat in the workspace starts in a worktree the work has left.
-	// Re-stamp only when this chat is the workspace's sole member and the
+	// worktreeDir are the template a sibling session inherits. Left stamped, the row
+	// files under the abandoned repo — the session's own header showing the new one —
+	// and a new session in the workspace starts in a worktree the work has left.
+	// Re-stamp only when this session is the workspace's sole member and the
 	// workspace still points at the worktree being left: with siblings still
 	// there, or on a PR/ticket workspace that deliberately names another repo,
 	// the stamp isn't ours to move.
-	const workspaceId = session.projectId;
+	const workspaceId = session.workspaceId;
 	if (workspaceId) {
 		const ws = getWorkspace(workspaceId);
 		const soleMember = !getCachedSessions().some(
-			(s) => s.projectId === workspaceId && s.id !== sessionId,
+			(s) => s.workspaceId === workspaceId && s.id !== sessionId,
 		);
 		if (
 			ws &&
@@ -469,7 +472,7 @@ export async function switchPrimaryRepo(
 		)
 			restampWorkspaceWorktree(workspaceId, {
 				repo: target.id,
-				// A shared-checkout repo has no per-chat worktree, so the template
+				// A shared-checkout repo has no per-session worktree, so the template
 				// clears instead of pointing siblings at the live main checkout.
 				...(sharedCheckoutForNewSessions(target) ? {} : { branch, worktreeDir: wtPath }),
 			});

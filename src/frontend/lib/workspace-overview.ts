@@ -15,16 +15,16 @@ import {
 } from "./api";
 import type { TranscriptEntry } from "./types";
 
-export interface OverviewChatRef {
+export interface OverviewSessionRef {
 	id: string;
 	title: string;
 	createdAt: string;
-	/** When known, picks the freshest chat for the lastMessage fallback. */
+	/** When known, picks the freshest session for the lastMessage fallback. */
 	lastActivity?: string;
 }
 
 // Session-lifetime cache; a background refetch replaces entries. Keyed by
-// workspace id (or the chat set for workspace-less rows).
+// workspace id (or the session set for workspace-less rows).
 export const overviewCache = new Map<
 	string,
 	{ data: WorkspaceOverview; at: number }
@@ -48,32 +48,32 @@ function lastAssistant(entries: TranscriptEntry[]): TranscriptEntry | undefined 
 /** Same shape the server endpoint returns, built from raw transcripts (the
  * pre-restart fallback — data URLs render directly). */
 export async function buildClientOverview(
-	chats: OverviewChatRef[],
+	sessions: OverviewSessionRef[],
 ): Promise<WorkspaceOverview> {
 	const transcripts = await Promise.all(
-		chats.map((c) =>
+		sessions.map((c) =>
 			fetchTranscript(c.id).catch(() => null as TranscriptEntry[] | null),
 		),
 	);
 	let prompt: WorkspaceOverview["prompt"] = null;
 	let lastMessage: WorkspaceOverview["lastMessage"] = null;
 	const media: WorkspaceMediaItem[] = [];
-	chats.forEach((chat, i) => {
+	sessions.forEach((session, i) => {
 		const entries = transcripts[i];
 		if (!entries) return;
 		if (!prompt) {
 			const first = firstPrompt(entries);
 			if (first)
-				prompt = { content: first.content, sessionId: chat.id, at: first.timestamp };
+				prompt = { content: first.content, sessionId: session.id, at: first.timestamp };
 		}
 		const last = lastAssistant(entries);
 		if (last && (!lastMessage || last.timestamp > lastMessage.at))
-			lastMessage = { content: last.content, sessionId: chat.id, at: last.timestamp };
+			lastMessage = { content: last.content, sessionId: session.id, at: last.timestamp };
 		for (const e of entries) {
 			for (const src of e.images || [])
-				media.push({ kind: "image", src, sessionId: chat.id, chatTitle: chat.title, at: e.timestamp });
+				media.push({ kind: "image", src, sessionId: session.id, sessionTitle: session.title, at: e.timestamp });
 			for (const src of e.videos || [])
-				media.push({ kind: "video", src, sessionId: chat.id, chatTitle: chat.title, at: e.timestamp });
+				media.push({ kind: "video", src, sessionId: session.id, sessionTitle: session.title, at: e.timestamp });
 		}
 	});
 	media.sort((a, b) => (b.at || "").localeCompare(a.at || ""));
@@ -85,12 +85,12 @@ export async function buildClientOverview(
  * assembly otherwise) and cache it under cacheKey. Two staleness fallbacks:
  * a 404 means the server predates the route entirely; a response without the
  * lastMessage key means it predates the description — fill it from the
- * freshest chat's transcript so the hover card still shows one.
+ * freshest session's transcript so the hover card still shows one.
  */
 export async function loadOverview(
 	cacheKey: string,
 	workspaceId: string | null,
-	chats: OverviewChatRef[],
+	sessions: OverviewSessionRef[],
 ): Promise<WorkspaceOverview> {
 	let ov: WorkspaceOverview;
 	if (workspaceId) {
@@ -98,15 +98,15 @@ export async function loadOverview(
 			ov = await fetchWorkspaceOverview(workspaceId);
 		} catch (e) {
 			if (e instanceof ApiError && e.status === 404)
-				ov = await buildClientOverview(chats);
+				ov = await buildClientOverview(sessions);
 			else throw e;
 		}
-		if (ov.lastMessage === undefined && chats.length > 0) {
-			const newest = [...chats].sort((a, b) =>
+		if (ov.lastMessage === undefined && sessions.length > 0) {
+			const newest = [...sessions].sort((a, b) =>
 				(a.lastActivity || a.createdAt).localeCompare(
 					b.lastActivity || b.createdAt,
 				),
-			)[chats.length - 1];
+			)[sessions.length - 1];
 			try {
 				const entries: TranscriptEntry[] = await fetchTranscript(newest.id);
 				const last = lastAssistant(entries);
@@ -118,7 +118,7 @@ export async function loadOverview(
 			}
 		}
 	} else {
-		ov = await buildClientOverview(chats);
+		ov = await buildClientOverview(sessions);
 	}
 	overviewCache.set(cacheKey, { data: ov, at: Date.now() });
 	return ov;

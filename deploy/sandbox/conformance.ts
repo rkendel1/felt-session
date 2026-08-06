@@ -28,7 +28,7 @@
  * Everything is sbxtest-prefixed; the run journal, sandbox config, chat-store
  * dir AND repo-registry config are redirected to a scratch dir BEFORE any
  * src/server import, so nothing here touches the live server's config,
- * active-runs.json, or ~/.opensession-chats (state files, sandbox-runs, and the
+ * active-runs.json, or ~/.opensession-sessions (state files, sandbox-runs, and the
  * disable-* kill switches all resolve under the scratch dir). API keys are
  * read from the live config file but only ever written into the scratch
  * config — never logged.
@@ -37,9 +37,9 @@
 const SCRATCH = `${process.env.HOME || homedir()}/.sandbox-conformance-scratch`;
 process.env.OPENSESSION_RUN_JOURNAL = `${SCRATCH}/active-runs.json`;
 process.env.OPENSESSION_SANDBOX_CONFIG = `${SCRATCH}/sandbox-config.json`;
-// Provider state files + sandbox-runs dirs land under OPENSESSION_CHATS_DIR —
+// Provider state files + sandbox-runs dirs land under OPENSESSION_SESSIONS_DIR —
 // point it at the scratch dir so sbxtest state never lands in the live store.
-process.env.OPENSESSION_CHATS_DIR = `${SCRATCH}/chats`;
+process.env.OPENSESSION_SESSIONS_DIR = `${SCRATCH}/sessions`;
 // The repo registry is config-driven (REPOS is a read-only Proxy over
 // configuredRepos() — worktree.ts/config.ts): scratch repos are registered
 // through a scratch ~/.opensession/config.json written below, same pattern as
@@ -53,7 +53,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync } from "fs";
 const { getSandboxProvider } = await import("../../src/server/sandbox/index");
 const runWs = await import("../../src/server/run-ws");
 const { hostRunBusy } = await import("../../src/server/host-registry");
-const { OPENSESSION_CHATS_DIR } = await import("../../src/server/paths");
+const { OPENSESSION_SESSIONS_DIR } = await import("../../src/server/paths");
 const { statePath } = await import("../../src/server/paths");
 // The orphan-snapshot sweep (docker.ts, piggybacked on the idle sweep) reads
 // session/state files through the — now scratch-redirected — chats dir, so it
@@ -705,8 +705,8 @@ async function runEntry(entry: Entry): Promise<void> {
       ok("destroy() removed the sandbox", gone === "gone", String(gone));
       ok(
         "provider state file removed",
-        !existsSync(`${OPENSESSION_CHATS_DIR}/sandboxes/${entry.providerId}-${sandbox.id}.json`) &&
-          !existsSync(`${OPENSESSION_CHATS_DIR}/sandboxes/${sandbox.id}.json`),
+        !existsSync(`${OPENSESSION_SESSIONS_DIR}/sandboxes/${entry.providerId}-${sandbox.id}.json`) &&
+          !existsSync(`${OPENSESSION_SESSIONS_DIR}/sandboxes/${sandbox.id}.json`),
       );
     }
   }
@@ -933,10 +933,10 @@ try {
     const c = containerNameFor(`sbxtest-conf-${e.name}-${RUN_TS}`);
     await sh(["docker", "rm", "-f", c]);
     await sh(["docker", "volume", "rm", "-f", `${c}-claude`, `${c}-codex`, `${c}-ws`]);
-    rmSync(`${OPENSESSION_CHATS_DIR}/sandboxes/${c}.json`, { force: true });
+    rmSync(`${OPENSESSION_SESSIONS_DIR}/sandboxes/${c}.json`, { force: true });
   }
   for (const e of entries) {
-    rmSync(`${OPENSESSION_CHATS_DIR}/sandbox-runs/sbxtest-conf-${e.name}-${RUN_TS}`, {
+    rmSync(`${OPENSESSION_SESSIONS_DIR}/sandbox-runs/sbxtest-conf-${e.name}-${RUN_TS}`, {
       recursive: true,
       force: true,
     });

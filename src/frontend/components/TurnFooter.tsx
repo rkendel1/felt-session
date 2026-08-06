@@ -70,7 +70,7 @@ export const TurnFooter = React.memo(function TurnFooter({
   const rest = files.slice(MAX_CHIPS);
 
   return (
-    <div className="mx-auto -mt-2.5 mb-[18px] flex w-full max-w-[var(--chat-col)] flex-wrap items-center gap-x-0.5 gap-y-1.5">
+    <div className="mx-auto -mt-2.5 mb-[18px] flex w-full max-w-[var(--session-col)] flex-wrap items-center gap-x-0.5 gap-y-1.5">
       {duration && (
         <span className={cn("mr-1.5 text-faint", FOOTER_TEXT)}>{duration}</span>
       )}

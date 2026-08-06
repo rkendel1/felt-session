@@ -15,7 +15,13 @@ import {
 } from "../ui/settings";
 import { toast } from "../ui/toast";
 import { IconPlus, IconRepo } from "./icons";
-import { setupRequest, type BrowseRepo, type SetupStatus } from "./setup-shared";
+import {
+	StateChip,
+	repoLifecycleState,
+	setupRequest,
+	type BrowseRepo,
+	type SetupStatus,
+} from "./setup-shared";
 
 // Settings → Setup → Repositories: the registered repos sessions work in,
 // plus an add flow. With a GitHub credential (a connected account or the bot
@@ -55,24 +61,35 @@ export function ReposSection({
 						in. Add one above.
 					</EmptyState>
 				) : (
-					repos.map((r) => (
-						<SettingRow key={r.id}>
-							<span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-active text-dim">
-								<IconRepo size={16} />
-							</span>
-							<SettingRowText>
-								<SettingRowTitle>{r.label}</SettingRowTitle>
-								<SettingRowDescription className="truncate font-mono text-meta">
-									{r.path}
-								</SettingRowDescription>
-							</SettingRowText>
-						</SettingRow>
-					))
+					repos.map((r) => {
+						const lifecycle = repoLifecycleState(r);
+						return (
+							<SettingRow key={r.id}>
+								<span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-active text-dim">
+									<IconRepo size={16} />
+								</span>
+								<SettingRowText>
+									<SettingRowTitle>{r.label}</SettingRowTitle>
+									<SettingRowDescription className="truncate font-mono text-meta">
+										{r.path}
+									</SettingRowDescription>
+									<SettingRowDescription>
+										{lifecycle.description}
+									</SettingRowDescription>
+								</SettingRowText>
+								<StateChip tone={lifecycle.tone} label={lifecycle.label} />
+							</SettingRow>
+						);
+					})
 				)}
 			</SettingCard>
 			<SettingsHint>
 				Registering clones the repo onto the server; sessions then branch into
 				isolated worktrees of it. New repos are usable right away — no restart.
+				A repo that commits <code>.opensession/setup.sh</code> and{" "}
+				<code>.opensession/start.sh</code> provisions its own worktrees and
+				boots its dev server, so previews work and agents can check their UI
+				changes in a real browser — see docs/repo-lifecycle.md.
 			</SettingsHint>
 		</>
 	);

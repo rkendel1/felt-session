@@ -117,8 +117,8 @@ async function runWorkTurn(
   cwd: string = DEFAULT_REPO_DIR,
   resumeSessionId?: string,
   // Money-moving Stripe tools (refunds/cancellations) are denied unless this is
-  // the approved "@michael go ahead" execution path. Closes the gap where any
-  // @michael note ran with every tool — including Stripe writes — allowed.
+  // the approved "@<bot> go ahead" execution path. Closes the gap where any
+  // mention note ran with every tool — including Stripe writes — allowed.
   allowMoneyTools: boolean = false
 ): Promise<{ result: string; sessionId: string }> {
   console.log(`[plain] Running agent in ${cwd}${resumeSessionId ? ` (resuming ${resumeSessionId})` : ""}${allowMoneyTools ? " [money tools UNLOCKED]" : ""}`);
@@ -230,7 +230,7 @@ async function handleAgentMention(
 
   const threadContext = formatThreadContext(thread, true);
 
-  // Refund/cancellation approval: a teammate approving a refund Michael proposed
+  // Refund/cancellation approval: a teammate approving a refund the agent proposed
   // earlier in this thread. Fail-closed classifier; only this path unlocks the
   // Stripe money tools, and only to execute the EXACT proposed action.
   const refundVerdict = await classifyRefundApproval(request, threadContext);
@@ -244,7 +244,7 @@ async function handleAgentMention(
         /*allowMoneyTools*/ true
       );
       // If it produced a customer draft, route it through the existing
-      // "@michael yes - to send" confirmation; otherwise post its note as-is.
+      // "@<bot> yes - to send" confirmation; otherwise post its note as-is.
       const draftMatch = result.match(/DRAFT REPLY:\s*([\s\S]*?)(?:$|(?=\n##|\n---))/i);
       if (draftMatch) {
         const draft = cleanDraftText(draftMatch[1]);
@@ -617,7 +617,7 @@ export async function handleWebhook(payload: PlainWebhookPayload): Promise<Respo
     if (n > 0) console.log(`[plain] Archived ${n} session(s) for done thread ${thread.id}`);
   }
 
-  // Handle note_created for @michael mentions
+  // Handle note_created for bot mentions
   if (eventType === "thread.note_created" && payload.payload.note) {
     const note = payload.payload.note;
     const noteText = note.text || note.markdown || "";

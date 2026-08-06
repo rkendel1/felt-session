@@ -1,6 +1,6 @@
 // Workspace snoozes, stored server-side per user (keyed on the UserPicker
 // name) like pins, so they follow you across devices. A snooze is an overlay
-// on a sidebar row key (`workspace:<id>` or a solo chat id): while its `until`
+// on a sidebar row key (`workspace:<id>` or a solo session id): while its `until`
 // is in the future the row parks in the Snoozed section; once lapsed the entry
 // is ignored (the row falls back to its derived lane) and the Sidebar prunes
 // it, marking the row unread so the wake is visible. The public API stays

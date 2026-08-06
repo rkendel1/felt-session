@@ -52,7 +52,7 @@ command -v bun >/dev/null 2>&1 || {
 	exit 1
 }
 
-# All instance state (chats, config, automations, sandbox config, run-rpc
+# All instance state (sessions, config, automations, sandbox config, run-rpc
 # socket, …) lives here — never in the operator's ~/.opensession-* stores.
 STATE_DIR="$PWD/.dev-state"
 mkdir -p "$STATE_DIR"
@@ -64,7 +64,7 @@ mkdir -p "$STATE_DIR"
 #       the dev boot gate skips both binds when they are unset.
 #   -u OPENSESSION_PROFILE
 #       a stray local-profile setting must not repoint state to ~/os1.
-#   -u OPENSESSION_CHATS_DIR / _CONFIG / _RUN_JOURNAL (+ BACKSTAGE_ aliases)
+#   -u OPENSESSION_SESSIONS_DIR / _CONFIG / _RUN_JOURNAL
 #       per-store overrides would defeat OPENSESSION_STATE_DIR isolation.
 #   PORT/HOST
 #       listen where the preview flow told us, loopback only (Caddy dials
@@ -89,7 +89,7 @@ mkdir -p "$STATE_DIR"
 #       refresh tokens) must see empty dev copies, never the live stores.
 #   OPENSESSION_OPENCODE_DB / _DB_MAP / _BKS_MAP / _TRANSCRIPTS_DIR
 #       the opencode transcript stores default to literal ${HOME}/.opensession-
-#       chats/opencode/* paths that follow NEITHER the chats-dir env NOR the
+#       sessions/opencode/* paths that follow NEITHER the sessions-dir env NOR the
 #       state dir (opencode-transcript.ts) — the demo replayer writes through
 #       recordBksSessionFor, so without these a preview instance would scribble
 #       map entries into the live store.
@@ -101,9 +101,9 @@ exec env \
 	-u WEBHOOK_PORT \
 	-u OPENSESSION_MCP_HTTP_PORT \
 	-u OPENSESSION_PROFILE \
-	-u OPENSESSION_CHATS_DIR -u BACKSTAGE_CHATS_DIR \
-	-u OPENSESSION_CONFIG -u BACKSTAGE_CONFIG \
-	-u OPENSESSION_RUN_JOURNAL -u BACKSTAGE_RUN_JOURNAL \
+	-u OPENSESSION_SESSIONS_DIR \
+	-u OPENSESSION_CONFIG \
+	-u OPENSESSION_RUN_JOURNAL \
 	PORT="$WEBAPP_PORT" \
 	HOST=127.0.0.1 \
 	OPENSESSION_DEV=1 \

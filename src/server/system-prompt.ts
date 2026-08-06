@@ -4,7 +4,7 @@
 // /api/system-prompt) without the two ever drifting apart.
 //
 // The agent's display name comes from config (persona.name, default
-// "Michael"); the `opensession-*` MCP server ids referenced in the text are
+// "Assistant"); the `opensession-*` MCP server ids referenced in the text are
 // protocol identifiers and stay literal regardless of the persona name.
 
 import { defaultRepo, personaName, productName } from "./config";

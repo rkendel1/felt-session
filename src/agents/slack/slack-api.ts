@@ -531,7 +531,7 @@ export async function resolveSlackUser(
 
 /**
  * Read recent messages from a channel (chronological). Includes human messages
- * and bot posts (our own "post as you" + Michael replies); skips join/leave/topic
+ * and bot posts (our own "post as you" + bot replies); skips join/leave/topic
  * system subtypes. Needs `channels:history` + the bot in the channel.
  */
 export async function fetchChannelHistory(
@@ -549,7 +549,7 @@ export async function fetchChannelHistory(
     if (m.type !== "message") continue;
     if (m.subtype && m.subtype !== "bot_message") continue;
     if (!m.text) continue;
-    // A bot post (our "post as you" override or a Michael reply) carries bot_id
+    // A bot post (our "post as you" override or an agent reply) carries bot_id
     // and the bot's own user id — so check bot-ness first and use the override
     // username, otherwise a real human message resolves via the user id.
     if (m.bot_id || m.subtype === "bot_message") {

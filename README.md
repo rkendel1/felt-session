@@ -15,10 +15,11 @@ sandboxes — Docker locally, with pluggable adapters for other providers.
 curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh | bash
 ```
 
-Installs Bun, the OpenCode engine, and the Tailscale client if you do not
-have them, clones the source to `~/.opensession/src`, puts an `opensession`
-command on your `PATH`, and walks you through configuration. Takes under a
-minute on a fresh box.
+Installs Bun, the OpenCode engine, the `claude` and `codex` CLIs, and the
+Tailscale client if you do not have them, clones the source to
+`~/.opensession/src`, puts an `opensession` command on your `PATH`, and walks
+you through configuration. Budget 5-15 minutes on a fresh box — mostly
+unattended download and dependency install.
 
 ```sh
 opensession start      # run it
@@ -59,26 +60,33 @@ for me. Go step by step and ask me one question at a time before acting.
 2. Install:
    curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh | bash
    Ask first whether I want Tailscale (--no-tailscale to skip).
-3. Run `opensession onboard` and walk me through it: which git repos I want
-   agent sessions on, my company/product name, what to call the agent, and
-   which integrations to enable (Slack, GitHub, Linear, Plain, Stripe —
-   all optional, all can wait).
+3. Run `opensession onboard` and walk me through it: a product name, the bind
+   address and port, which git repo I want agent sessions on, and which
+   integrations to enable (Slack, GitHub, Linear, Plain, Stripe — all
+   optional, all can wait).
 4. Model accounts: help me add a Claude subscription token (`claude
-   setup-token` on a Max login) and/or a ChatGPT-plan Codex login.
+   setup-token` on a Max login) and/or a ChatGPT-plan Codex login. The
+   installer put both CLIs on this box already.
 5. Networking: keep it on 127.0.0.1 unless I pick Tailscale or an SSH
    tunnel. Never expose it publicly — there is no built-in auth.
 6. Finish: `opensession start`, then `opensession doctor` until clean, and
    give me the URL to open.
+7. Verify it really works: open the UI, create a session on my repo with a
+   real prompt, and confirm the agent completes a turn. If the turn errors,
+   fix that before telling me you are done — that is where installs fail.
 
 Details are in docs/setup/ in the repo — read them when unsure.
 ```
 
 Then read the real setup guide — secrets, accounts, integrations, systemd:
 
+- **[CONCEPTS.md](CONCEPTS.md)** — the core model: projects, workspaces, chats,
+  automations, goals and how they fit together
 - **[docs/setup/](docs/setup/README.md)** — overview, requirements, trust model
 - [docs/setup/install.md](docs/setup/install.md) — bare box → running service
 - [docs/setup/ec2.md](docs/setup/ec2.md) — provisioning a clean EC2 box
-- **[docs/local-profile.md](docs/local-profile.md)** — minimal single-user setup on macOS
+- [docs/local-profile.md](docs/local-profile.md) — single-user macOS companion
+  to a hosted instance (it signs in against one, so it is not a first install)
 - [docs/setup/networking.md](docs/setup/networking.md) — Tailscale, a custom
   domain, and verifying you are not public
 - [CLIENTS.md](CLIENTS.md) — web UI, PWA, desktop shell, native app,
@@ -87,8 +95,14 @@ Then read the real setup guide — secrets, accounts, integrations, systemd:
   execution node (`opensession connect`)
 - [docs/worktrees.md](docs/worktrees.md) — how sessions map to git worktrees,
   and where the disk goes
+- [docs/repo-lifecycle.md](docs/repo-lifecycle.md) — the `.opensession/`
+  scripts a repo commits so sessions provision and boot it themselves (and
+  agents can test their changes in a real browser)
 - [docs/extending.md](docs/extending.md) — adding tools, recipes, integrations
   and providers
+- [docs/security-model.md](docs/security-model.md) — least-privilege
+  automations, per-user MCP/GitHub scoping, and the self-management tool
+  boundaries
 - [docs/self-hosting-sandboxes.md](docs/self-hosting-sandboxes.md) — isolated
   Docker/Daytona/E2B/Box/Modal/AWS Lambda MicroVM execution for sessions
 
@@ -130,7 +144,7 @@ repos, your Slack, your name on the agent. No fork needed for that.
 Forking is welcome — recommended, even — when you want to change what it *is*,
 not just whose it is: strip the integrations you'll never use, rebrand the
 client apps to your own bundle ids, hard-code opinions we left configurable.
-It's Apache-2.0, so you owe nothing but the license notice. And if your change
+It's MIT, so you owe nothing but the license notice. And if your change
 would help everyone, propose it upstream — see below.
 
 ## Contributing
@@ -143,7 +157,6 @@ handle the implementation. Report vulnerabilities privately — see
 
 ## License
 
-[Apache License 2.0](LICENSE). Use it, fork it, run it commercially, build on
-it — the only obligations are keeping the notice and not using the project's
-trademarks to imply endorsement. Contributions are accepted under the same
-license.
+[MIT License](LICENSE). Use it, fork it, run it commercially, build on
+it — the only obligation is keeping the copyright and permission notice.
+Contributions are accepted under the same license.

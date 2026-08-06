@@ -21,7 +21,7 @@
  *    past any port already held by a DIFFERENT key — sandbox-vs-sandbox
  *    collisions are impossible because the allocator never hands out a port
  *    twice.
- *  - Allocations persist in <chats-dir>/sandbox-preview-ports.json so
+ *  - Allocations persist in <sessions-dir>/sandbox-preview-ports.json so
  *    the preview URL is stable across opensession restarts and container
  *    recreations; they're released by DockerProvider.destroy().
  *
@@ -30,7 +30,7 @@
  */
 
 import { existsSync, readFileSync } from "fs";
-import { OPENSESSION_CHATS_DIR } from "../paths";
+import { OPENSESSION_SESSIONS_DIR } from "../paths";
 import { writeJsonAtomic } from "../shared/atomic-write";
 
 export const SANDBOX_HTTPS_BASE = 20000;
@@ -39,9 +39,9 @@ export const SANDBOX_HTTPS_RANGE = 8000;
 /** `<sandboxId>:<containerPort>` → allocated https port. */
 type AllocationMap = Record<string, number>;
 
-// OPENSESSION_CHATS_DIR is a live binding (test seam) — resolve per call.
+// OPENSESSION_SESSIONS_DIR is a live binding (test seam) — resolve per call.
 function allocationsPath(): string {
-  return `${OPENSESSION_CHATS_DIR}/sandbox-preview-ports.json`;
+  return `${OPENSESSION_SESSIONS_DIR}/sandbox-preview-ports.json`;
 }
 
 function readAllocations(): AllocationMap {

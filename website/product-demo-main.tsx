@@ -11,9 +11,9 @@ const sessions: UnifiedSession[] = [
 		id: activeSessionId,
 		claudeSessionId: "demo-presence",
 		source: "opensession",
-		branch: "michael/workspace-presence",
+		branch: "ada/workspace-presence",
 		worktreeDir: "/workspace/opensession",
-		startedBy: "Michiel",
+		startedBy: "Alex",
 		title: "Add multiplayer workspace presence",
 		lastActivity: now,
 		createdAt: "2026-08-04T10:18:00.000Z",
@@ -21,7 +21,7 @@ const sessions: UnifiedSession[] = [
 		transcriptPath: "/demo/transcript.jsonl",
 		mode: "code",
 		repo: "opensession",
-		projectId: "project-presence",
+		workspaceId: "project-presence",
 		model: "openai/gpt-5.6-sol",
 		effort: "high",
 		usage: {
@@ -40,9 +40,9 @@ const sessions: UnifiedSession[] = [
 		id: "bks-demo-checkout",
 		claudeSessionId: "demo-checkout",
 		source: "opensession",
-		branch: "michael/checkout-recovery",
+		branch: "ada/checkout-recovery",
 		worktreeDir: "/workspace/checkout",
-		startedBy: "Michiel",
+		startedBy: "Alex",
 		title: "Review checkout recovery",
 		lastActivity: "2026-08-04T11:44:00.000Z",
 		createdAt: "2026-08-04T09:20:00.000Z",
@@ -51,14 +51,14 @@ const sessions: UnifiedSession[] = [
 		transcriptPath: "/demo/checkout.jsonl",
 		mode: "code",
 		repo: "opensession",
-		projectId: "project-checkout",
+		workspaceId: "project-checkout",
 		model: "anthropic/claude-opus-5",
 	},
 	{
 		id: "bks-demo-mobile",
 		claudeSessionId: "demo-mobile",
 		source: "opensession",
-		branch: "michael/mobile-navigation",
+		branch: "ada/mobile-navigation",
 		worktreeDir: "/workspace/mobile",
 		startedBy: "Kent",
 		title: "Improve mobile navigation",
@@ -68,7 +68,7 @@ const sessions: UnifiedSession[] = [
 		transcriptPath: "/demo/mobile.jsonl",
 		mode: "code",
 		repo: "opensession",
-		projectId: "project-mobile",
+		workspaceId: "project-mobile",
 		model: "anthropic/claude-sonnet-5",
 		waitingForInput: true,
 	},
@@ -76,7 +76,7 @@ const sessions: UnifiedSession[] = [
 		id: "bks-demo-shortcuts",
 		claudeSessionId: "demo-shortcuts",
 		source: "opensession",
-		branch: "michael/keyboard-shortcuts",
+		branch: "ada/keyboard-shortcuts",
 		worktreeDir: "/workspace/shortcuts",
 		startedBy: "Jaap",
 		title: "Ship keyboard shortcuts",
@@ -86,7 +86,7 @@ const sessions: UnifiedSession[] = [
 		transcriptPath: "/demo/shortcuts.jsonl",
 		mode: "code",
 		repo: "opensession",
-		projectId: "project-shortcuts",
+		workspaceId: "project-shortcuts",
 		model: "openai/gpt-5.6-terra",
 		prUrl: "https://github.com/tellahq/opensession/pull/1842",
 		prState: "OPEN",
@@ -99,9 +99,9 @@ const sessions: UnifiedSession[] = [
 		id: "bks-demo-search",
 		claudeSessionId: "demo-search",
 		source: "opensession",
-		branch: "michael/faster-session-search",
+		branch: "ada/faster-session-search",
 		worktreeDir: "/workspace/search",
-		startedBy: "Michiel",
+		startedBy: "Alex",
 		title: "Make session search instant",
 		lastActivity: "2026-08-04T10:31:00.000Z",
 		createdAt: "2026-08-04T06:54:00.000Z",
@@ -109,16 +109,16 @@ const sessions: UnifiedSession[] = [
 		transcriptPath: "/demo/search.jsonl",
 		mode: "code",
 		repo: "opensession",
-		projectId: "project-search",
+		workspaceId: "project-search",
 		model: "anthropic/claude-opus-5",
 	},
 	{
 		id: "bks-demo-release",
 		claudeSessionId: "demo-release",
 		source: "opensession",
-		branch: "michael/release-notes",
+		branch: "ada/release-notes",
 		worktreeDir: "/workspace/release",
-		startedBy: "Michiel",
+		startedBy: "Alex",
 		title: "Draft the weekly release notes",
 		lastActivity: "2026-08-04T09:42:00.000Z",
 		createdAt: "2026-08-04T06:10:00.000Z",
@@ -126,7 +126,7 @@ const sessions: UnifiedSession[] = [
 		transcriptPath: "/demo/release.jsonl",
 		mode: "ask",
 		repo: "opensession",
-		projectId: "project-release",
+		workspaceId: "project-release",
 		model: "openai/gpt-5.6-sol",
 	},
 ];
@@ -215,10 +215,10 @@ for (const session of sessions.slice(1)) {
 }
 
 const projects = sessions.map((session, index) => ({
-	id: session.projectId!,
+	id: session.workspaceId!,
 	name: session.title.replace(/^(Add|Review|Improve|Ship) /, ""),
 	repo: "opensession",
-	createdBy: session.startedBy || "Michiel",
+	createdBy: session.startedBy || "Alex",
 	createdAt: session.createdAt,
 	order: index,
 }));
@@ -234,11 +234,11 @@ const responseFor = (url: URL, method: string): Response => {
 	const path = url.pathname.replace(/^\/(opensession|backstage)/, "");
 	if (path === "/api/sessions") return json(sessions, { headers: { ETag: '"demo-v1"' } });
 	if (path === "/api/auth/status")
-		return json({ required: false, authenticated: true, local: true, name: "Michiel Westerbeek" });
+		return json({ required: false, authenticated: true, local: true, name: "Alex Rivera" });
 	if (path === "/api/people")
 		return json({
 			people: [
-				{ name: "Michiel", fullName: "Michiel Westerbeek", github: "happylinks" },
+				{ name: "Alex", fullName: "Alex Rivera", github: "happylinks" },
 				{ name: "Kent", fullName: "Kent de Bruin", github: "kentdebruin" },
 				{ name: "Jaap", fullName: "Jaap Frolich", github: "jfrolich" },
 				{ name: "Grant", fullName: "Grant Shaddick", github: "9ranty" },
@@ -281,8 +281,6 @@ const responseFor = (url: URL, method: string): Response => {
 		});
 	if (path === "/api/open-prs") return json({ prs: [] });
 	if (path === "/api/feeds") return json({ feeds: [] });
-	if (path === "/api/chat/session-activity") return json({ channels: [] });
-	if (path === "/api/chat/messages") return json({ messages: [] });
 	if (path === "/api/todos") return json({ todos: [] });
 	if (path === "/api/pins") return json({ pins: [activeSessionId] });
 	if (path === "/api/ui-prefs") return json({ prefs: {} });
@@ -404,7 +402,7 @@ class DemoWebSocket extends EventTarget {
 			};
 			this.emit({ type: "transcript_append", sessionId: message.sessionId, entries: [userEntry] });
 			this.emit({ type: "session_status", sessionId: message.sessionId, isRunning: true }, 60);
-			this.emit({ type: "stream_start", sessionId: message.sessionId, by: "Michiel" }, 120);
+			this.emit({ type: "stream_start", sessionId: message.sessionId, by: "Alex" }, 120);
 			this.emit({ type: "stream_text", sessionId: message.sessionId, text: assistantEntry.content }, 260);
 			this.emit({ type: "transcript_append", sessionId: message.sessionId, entries: [assistantEntry] }, 900);
 			this.emit({ type: "stream_done", sessionId: message.sessionId }, 920);
@@ -446,13 +444,13 @@ Object.assign(window, {
 	__OPENSESSION_INSTANCE__: {
 		productName: "Open Session",
 		productMark: "OS",
-		personaName: "Michael",
+		personaName: "Ada",
 		defaultRepoId: "opensession",
 	},
 });
-localStorage.setItem("opensession-user", "Michiel");
+localStorage.setItem("opensession-user", "Alex");
 localStorage.setItem("opensession-last-session", activeSessionId);
-localStorage.setItem("opensession-panel-open", "true");
+localStorage.setItem("opensession-panel-open", "false");
 localStorage.setItem("opensession-panel-tab", "workflows");
 localStorage.setItem("opensession-sidebar-collapsed", "0");
 localStorage.setItem(
@@ -506,32 +504,6 @@ createRoot(document.getElementById("root")!).render(<ProductDemoApp />);
 
 const featureSessions = [activeSessionId, activeSessionId, "bks-demo-shortcuts"];
 
-function syncFeaturePanel(feature: number, attempt = 0) {
-	const desiredTab = feature === 0 ? "Agents" : feature === 2 ? "Info" : null;
-	const panel = document.querySelector(".viewer-panel");
-	const toggle = document.querySelector<HTMLButtonElement>(
-		'button[aria-label="Toggle side panel"]',
-	);
-
-	if (desiredTab === null && panel) {
-		toggle?.click();
-		return;
-	}
-	if (desiredTab && !panel) {
-		toggle?.click();
-	} else if (desiredTab) {
-		const tab = Array.from(
-			document.querySelectorAll<HTMLButtonElement>(".panel-tab"),
-		).find((button) => button.textContent?.trim().startsWith(desiredTab));
-		if (tab && !tab.classList.contains("active")) tab.click();
-		if (tab) return;
-	}
-
-	if (attempt < 12) {
-		window.setTimeout(() => syncFeaturePanel(feature, attempt + 1), 80);
-	}
-}
-
 window.addEventListener("message", (event) => {
 	if (event.origin !== window.location.origin || event.source !== window.parent) return;
 	if (event.data?.type !== "opensession-demo-feature") return;
@@ -546,5 +518,4 @@ window.addEventListener("message", (event) => {
 		`/session/${encodeURIComponent(sessionId)}`,
 	);
 	window.dispatchEvent(new PopStateEvent("popstate", { state: { d: 1 } }));
-	window.setTimeout(() => syncFeaturePanel(feature), 40);
 });

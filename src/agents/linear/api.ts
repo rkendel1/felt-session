@@ -99,7 +99,7 @@ export interface PlanStep {
 }
 
 /**
- * Update session metadata: external links (e.g. the Michael web UI) and the
+ * Update session metadata: external links (e.g. the web UI) and the
  * plan panel. Fire-and-forget friendly — failures only log.
  */
 export async function updateAgentSession(

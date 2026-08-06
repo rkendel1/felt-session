@@ -6,23 +6,23 @@ import SwiftUI
 /// Every pane reuses the same native settings views as iOS — only the
 /// container is Mac-specific.
 struct MacSettingsView: View {
+    /// Declared in sidebar order. Labels are sentence case, matching the web
+    /// nav and the panes' own navigation titles.
     enum Pane: String, CaseIterable, Identifiable {
-        case general
         case connection
-        case notifications
-        case composer
-        case appearance
         case personalPrompt
+        case composer
+        case notifications
+        case appearance
+        case general
+        case models
+        case connections
+        case memory
         case automations
         case goals
         case actions
         case security
-        case accounts
-        case modelProviders
-        case connections
-        case memory
-        case warmDependencies
-        case previewPool
+        case prewarming
         case papercuts
         case auditLog
 
@@ -30,52 +30,48 @@ struct MacSettingsView: View {
 
         var title: String {
             switch self {
-            case .general: "General"
             case .connection: "Connection"
-            case .notifications: "Notifications"
+            case .personalPrompt: "Personal prompt"
             case .composer: "Composer"
+            case .notifications: "Notifications"
             case .appearance: "Appearance"
-            case .personalPrompt: "Personal Prompt"
+            case .general: "General"
+            case .models: "Models"
+            case .connections: "Connections"
+            case .memory: "Memory"
             case .automations: "Automations"
             case .goals: "Goals"
             case .actions: "Actions"
             case .security: "Security"
-            case .accounts: "Accounts"
-            case .modelProviders: "Model Providers"
-            case .connections: "Connections"
-            case .memory: "Memory"
-            case .warmDependencies: "Warm Dependencies"
-            case .previewPool: "Preview Pool"
+            case .prewarming: "Prewarming"
             case .papercuts: "Papercuts"
-            case .auditLog: "Audit Log"
+            case .auditLog: "Audit log"
             }
         }
 
         var icon: String {
             switch self {
-            case .general: "gearshape"
             case .connection: "server.rack"
-            case .notifications: "bell.badge"
-            case .composer: "keyboard"
-            case .appearance: "circle.lefthalf.filled"
             case .personalPrompt: "text.bubble"
+            case .composer: "keyboard"
+            case .notifications: "bell.badge"
+            case .appearance: "circle.lefthalf.filled"
+            case .general: "gearshape"
+            case .models: "square.grid.2x2"
+            case .connections: "point.3.connected.trianglepath.dotted"
+            case .memory: "brain"
             case .automations: "clock.arrow.circlepath"
             case .goals: "target"
             case .actions: "bolt"
             case .security: "checkmark.shield"
-            case .accounts: "person.text.rectangle"
-            case .modelProviders: "square.grid.2x2"
-            case .connections: "point.3.connected.trianglepath.dotted"
-            case .memory: "brain"
-            case .warmDependencies: "flame"
-            case .previewPool: "rectangle.stack"
+            case .prewarming: "flame"
             case .papercuts: "bandage"
             case .auditLog: "list.bullet.rectangle"
             }
         }
     }
 
-    @State private var selection: Pane? = .general
+    @State private var selection: Pane? = .personalPrompt
     @State private var authenticationMessage: String?
     @State private var config = ServerConfig.shared
     @AppStorage("os1.appearance") private var appearance = "system"
@@ -83,19 +79,22 @@ struct MacSettingsView: View {
     var body: some View {
         NavigationSplitView {
             List(selection: $selection) {
-                Section("OS1") {
-                    paneRow(.general)
+                // Groups mirror the web nav (src/frontend/components/Settings.tsx):
+                // this app's own connection, then what one person owns, then
+                // what the whole instance does. "Connection" has no web
+                // counterpart — the browser is already on the server it talks to.
+                Section("This app") {
                     paneRow(.connection)
                 }
                 Section("Personal") {
-                    paneRow(.notifications)
-                    paneRow(.composer)
-                    paneRow(.appearance)
                     paneRow(.personalPrompt)
+                    paneRow(.composer)
+                    paneRow(.notifications)
+                    paneRow(.appearance)
                 }
                 Section("Workspace") {
-                    paneRow(.accounts)
-                    paneRow(.modelProviders)
+                    paneRow(.general)
+                    paneRow(.models)
                     paneRow(.connections)
                     paneRow(.memory)
                 }
@@ -105,9 +104,10 @@ struct MacSettingsView: View {
                     paneRow(.actions)
                     paneRow(.security)
                 }
-                Section("Advanced") {
-                    paneRow(.warmDependencies)
-                    paneRow(.previewPool)
+                Section("Infrastructure") {
+                    paneRow(.prewarming)
+                }
+                Section("Activity") {
                     paneRow(.papercuts)
                     paneRow(.auditLog)
                 }
@@ -144,23 +144,21 @@ struct MacSettingsView: View {
 
     @ViewBuilder
     private var paneView: some View {
-        switch selection ?? .general {
-        case .general: WorkspaceGeneralSettingsView()
+        switch selection ?? .personalPrompt {
         case .connection: MacConnectionSettingsView(authenticationMessage: authenticationMessage)
-        case .notifications: NotificationsSettingsView()
-        case .composer: ComposerSettingsView()
-        case .appearance: AppearanceSettingsView()
         case .personalPrompt: PersonalPromptSettingsView()
+        case .composer: ComposerSettingsView()
+        case .notifications: NotificationsSettingsView()
+        case .appearance: AppearanceSettingsView()
+        case .general: WorkspaceGeneralSettingsView()
+        case .models: ModelsSettingsView()
+        case .connections: ConnectionsSettingsView()
+        case .memory: MemorySettingsView()
         case .automations: AutomationSettingsView()
         case .goals: GoalSettingsView()
         case .actions: ActionSettingsView()
         case .security: SecuritySettingsView()
-        case .accounts: AccountsSettingsView()
-        case .modelProviders: ModelProvidersSettingsView()
-        case .connections: ConnectionsSettingsView()
-        case .memory: MemorySettingsView()
-        case .warmDependencies: WarmDepsSettingsView()
-        case .previewPool: PreviewPoolSettingsView()
+        case .prewarming: PrewarmingSettingsView()
         case .papercuts: PapercutsSettingsView()
         case .auditLog: AuditLogSettingsView()
         }
@@ -372,7 +370,7 @@ struct MacConnectionSettingsView: View {
             _ = try await OS1API.sessions()
             checkResult = "Connected — auth OK."
         } catch {
-            checkResult = error.localizedDescription
+            checkResult = await Reachability.describe(error)
         }
     }
 }

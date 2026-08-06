@@ -4,7 +4,7 @@ import SwiftUI
 /// Native counterpart of mobile web's title-opened workspace info page.
 struct WorktreeInfoView: View {
     @Bindable var viewModel: SessionViewModel
-    let chats: [Session]
+    let sessions: [Session]
     let catalog: ModelCatalog?
 
     @Environment(\.dismiss) private var dismiss
@@ -89,11 +89,11 @@ struct WorktreeInfoView: View {
                 icon: "terminal"
             )
             InfoRow(
-                label: "Chats",
-                value: "\(chats.count)",
+                label: "Sessions",
+                value: "\(sessions.count)",
                 icon: "bubble.left.and.bubble.right"
             )
-            if let startedBy = oldestChat?.startedBy, !startedBy.isEmpty {
+            if let startedBy = oldestSession?.startedBy, !startedBy.isEmpty {
                 InfoRow(label: "Started by", value: startedBy, icon: "person")
             }
             ForEach(currentSession.attachedRepos ?? []) { repo in
@@ -333,8 +333,8 @@ struct WorktreeInfoView: View {
         viewModel.model.isEmpty ? (catalog?.defaultModel ?? "") : viewModel.model
     }
 
-    private var oldestChat: Session? {
-        chats.min { ($0.createdAt ?? "") < ($1.createdAt ?? "") }
+    private var oldestSession: Session? {
+        sessions.min { ($0.createdAt ?? "") < ($1.createdAt ?? "") }
     }
 
     private var repoLabel: String {
@@ -389,15 +389,15 @@ struct WorktreeInfoView: View {
     }
 
     private func loadOverview() async -> OS1API.WorkspaceOverview? {
-        if let id = currentSession.projectId, !id.isEmpty {
+        if let id = currentSession.workspaceId, !id.isEmpty {
             return try? await OS1API.workspaceOverview(workspaceId: id)
         }
 
         var transcripts: [(Session, [TranscriptEntry]?)] = []
-        for chat in chats {
+        for session in sessions {
             transcripts.append((
-                chat,
-                try? await OS1API.transcript(sessionId: chat.id)
+                session,
+                try? await OS1API.transcript(sessionId: session.id)
             ))
         }
         let ordered = transcripts.sorted {
@@ -405,7 +405,7 @@ struct WorktreeInfoView: View {
         }
         var prompt: OS1API.WorkspaceOverview.Message?
         var lastMessage: OS1API.WorkspaceOverview.Message?
-        for (chat, entries) in ordered {
+        for (session, entries) in ordered {
             guard let entries else { continue }
             if prompt == nil,
                let entry = entries.first(where: {
@@ -414,8 +414,8 @@ struct WorktreeInfoView: View {
                }) {
                 prompt = .init(
                     content: entry.text,
-                    sessionId: chat.id,
-                    at: entry.timestamp ?? chat.createdAt ?? ""
+                    sessionId: session.id,
+                    at: entry.timestamp ?? session.createdAt ?? ""
                 )
             }
             if let entry = entries.last(where: {
@@ -423,8 +423,8 @@ struct WorktreeInfoView: View {
             }) {
                 let candidate = OS1API.WorkspaceOverview.Message(
                     content: entry.text,
-                    sessionId: chat.id,
-                    at: entry.timestamp ?? chat.lastActivity ?? ""
+                    sessionId: session.id,
+                    at: entry.timestamp ?? session.lastActivity ?? ""
                 )
                 if lastMessage == nil || candidate.at > lastMessage!.at {
                     lastMessage = candidate
@@ -449,15 +449,15 @@ struct WorktreeInfoView: View {
     }
 
     /// The navigation value is a snapshot. Prefer the latest polled row so an
-    /// optimistic chat gains its worktree metadata without being reopened.
+    /// optimistic session gains its worktree metadata without being reopened.
     private var currentSession: Session {
-        chats.first(where: { $0.id == viewModel.session.id }) ?? viewModel.session
+        sessions.first(where: { $0.id == viewModel.session.id }) ?? viewModel.session
     }
 
     private var loadIdentity: String {
         [
             currentSession.id,
-            currentSession.projectId ?? "",
+            currentSession.workspaceId ?? "",
             currentSession.worktreeDir ?? "",
             currentSession.branch ?? "",
             String(currentSession.attachedRepos?.count ?? 0),
@@ -517,7 +517,7 @@ struct WorktreeInfoSheet: View {
             workspace.sessions.contains { $0.id == viewModel.session.id }
         } ?? fallbackWorkspace
 
-        WorktreeInfoView(viewModel: viewModel, chats: workspace.sessions, catalog: catalog)
+        WorktreeInfoView(viewModel: viewModel, sessions: workspace.sessions, catalog: catalog)
             .task {
                 viewModel.start()
                 catalog = try? await OS1API.models()

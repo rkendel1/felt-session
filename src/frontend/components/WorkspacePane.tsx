@@ -1,6 +1,6 @@
 import { AGENT_NAME } from "../lib/brand";
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import type { Project, UnifiedSession, WSServerMessage } from "../lib/types";
+import type { Workspace, UnifiedSession, WSServerMessage } from "../lib/types";
 import { fetchModels, type ModelOption } from "../lib/api";
 import { Composer } from "./Composer";
 import { ConversationPane } from "./ConversationPane";
@@ -15,17 +15,17 @@ import { loadDraft, saveDraft, clearDraft } from "../lib/drafts";
 import { getDefaultModelPref } from "../lib/default-model-pref";
 
 interface Props {
-	workspace: Project;
-	/** The workspace's live chats, strip order (empty for a chat-less workspace). */
-	chats: UnifiedSession[];
+	workspace: Workspace;
+	/** The workspace's live sessions, strip order (empty for a session-less workspace). */
+	workspaceSessions: UnifiedSession[];
 	/** All sessions — the Review pane matches the PR target against any of them. */
 	sessions: UnifiedSession[];
-	/** Foregrounded view tab; null = the workspace home (first-chat composer). */
+	/** Foregrounded view tab; null = the workspace home (first-session composer). */
 	tab: "review" | "conversation" | "video" | null;
 	connected: boolean;
 	send: (msg: any) => void;
 	addHandler: (handler: (msg: WSServerMessage) => void) => () => void;
-	/** `created` is the server's copy of a chat the info panel just made
+	/** `created` is the server's copy of a session the info panel just made
 	    (Auto-fix), so the app can open it without a loading placeholder. */
 	onOpenSession: (id: string, created?: UnifiedSession | null) => void;
 	/** Open another PR in the review panel (stack map layer links). */
@@ -33,18 +33,18 @@ interface Props {
 }
 
 /**
- * The chat-less workspace container: what a /workspace/<id> route renders when
- * no chat is selected. The tab strip above it (SessionTabs) carries the
- * workspace's chats + view tabs; this pane renders the foregrounded view tab's
+ * The session-less workspace container: what a /workspace/<id> route renders when
+ * no session is selected. The tab strip above it (SessionTabs) carries the
+ * workspace's sessions + view tabs; this pane renders the foregrounded view tab's
  * content — Review via the same PrPanel canvas the in-session tab uses (session
- * APIs when a chat carries the PR, repo+branch preview APIs otherwise) — or the
- * workspace home: a composer that starts the first chat. PR-backed workspaces
- * start that chat on the PR's head branch (fromPr); ticket workspaces inherit
+ * APIs when a session carries the PR, repo+branch preview APIs otherwise) — or the
+ * workspace home: a composer that starts the first session. PR-backed workspaces
+ * start that session on the PR's head branch (fromPr); ticket workspaces inherit
  * plainThreadId server-side from the workspace record.
  */
 export function WorkspacePane({
 	workspace,
-	chats,
+	workspaceSessions,
 	sessions,
 	tab,
 	connected,
@@ -160,8 +160,8 @@ export function WorkspacePane({
 	}
 
 	// The workspace's standing right sidebar: a workspace is a first-class
-	// surface, so it always shows one — even chat-less.
-	// Compact info: identity, linkage (repo/branch/PR/ticket), and its chats.
+	// surface, so it always shows one — even session-less.
+	// Compact info: identity, linkage (repo/branch/PR/ticket), and its sessions.
 	const infoPanel = !isPhone && (
 		<aside className="viewer-panel">
 			<div className="flex-1 min-h-0 overflow-y-auto p-4">
@@ -212,22 +212,22 @@ export function WorkspacePane({
 				</div>
 				<div className="mt-4">
 					<div className="text-meta font-semibold uppercase tracking-wide text-faint">
-						Chats
+						Sessions
 					</div>
-					{chats.length === 0 ? (
+					{workspaceSessions.length === 0 ? (
 						<div className="text-dim text-supporting mt-1.5">
 							None yet — the composer below starts the first one
 							{workspace.branch ? " on the PR's branch" : ""}.
 						</div>
 					) : (
 						<div className="flex flex-col mt-1.5">
-							{chats.map((c) => (
+							{workspaceSessions.map((c) => (
 								<button
 									key={c.id}
 									className="text-left text-[13px] text-dim hover:text-fg truncate py-1 cursor-pointer bg-transparent border-0 p-0"
 									onClick={() => onOpenSession(c.id)}
 								>
-									{c.title || "Untitled chat"}
+									{c.title || "Untitled session"}
 								</button>
 							))}
 						</div>
@@ -272,14 +272,14 @@ export function WorkspacePane({
 				<ConversationPane
 					threadId={workspace.plainThreadId}
 					onOpenSession={onOpenSession}
-					hideTriage={chats.length > 0}
+					hideTriage={workspaceSessions.length > 0}
 				/>
 			</div>,
 		);
 	}
 
 	// The feed web panel (Tella video embed, … — the feeds design) on the
-	// chat-less workspace route.
+	// session-less workspace route.
 	const webRef = (workspace.externalRefs || []).find((r) => refWebPanel(r));
 	const webPanel = webRef ? refWebPanel(webRef) : null;
 	if (tab === "video" && webPanel) {
@@ -297,8 +297,8 @@ export function WorkspacePane({
 		);
 	}
 
-	// Workspace home: normally only reachable chat-less (with chats, App lands
-	// in the first chat) — a composer that starts the workspace's first chat.
+	// Workspace home: normally only reachable session-less (with sessions, App lands
+	// in the first session) — a composer that starts the workspace's first session.
 	return withPanel(
 		<div className="workspace-view-main flex flex-col h-full min-h-0">
 			<div className="flex-1 min-h-0 overflow-y-auto">
@@ -312,9 +312,9 @@ export function WorkspacePane({
 							<span className="text-label">{workspace.branch}</span>
 						)}
 					</div>
-					{chats.length === 0 && (
+					{workspaceSessions.length === 0 && (
 						<div className="text-dim text-[13px] mt-5">
-							No chats in this workspace yet — start one below
+							No sessions in this workspace yet — start one below
 							{workspace.branch ? " on the PR's branch" : ""}.
 						</div>
 					)}
@@ -325,15 +325,15 @@ export function WorkspacePane({
 					value={prompt}
 					onChange={setPrompt}
 					onSend={handleStart}
-					placeholder={starting ? "Starting…" : "Start a chat in this workspace…"}
+					placeholder={starting ? "Starting…" : "Start a session in this workspace…"}
 					disabled={starting}
 					sendDisabled={starting || !connected || !prompt.trim()}
-					sendTitle="Start a chat in this workspace (Enter)"
+					sendTitle="Start a session in this workspace (Enter)"
 					models={models}
 					defaultModel={defaultModel}
 					model={model}
 					onModelChange={setModel}
-					modelTitle="Model for this chat"
+					modelTitle="Model for this session"
 				/>
 				{startError && <div className="ask-error">{startError}</div>}
 			</div>

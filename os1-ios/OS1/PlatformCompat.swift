@@ -96,6 +96,20 @@ extension View {
         #endif
     }
 
+    /// Cover the whole screen on iOS; macOS has no `fullScreenCover`, so the
+    /// nearest equivalent there is a sheet.
+    @ViewBuilder
+    func fullScreenCoverCompat<Content: View>(
+        isPresented: Binding<Bool>,
+        @ViewBuilder content: @escaping () -> Content
+    ) -> some View {
+        #if os(iOS)
+        fullScreenCover(isPresented: isPresented, content: content)
+        #else
+        sheet(isPresented: isPresented, content: content)
+        #endif
+    }
+
     /// OS1's split settings surface is resizable and minimizable. Tahoe's
     /// `Settings` scene still does not support window zoom/full-screen, so do
     /// not leave a dead grey traffic-light control in the titlebar.

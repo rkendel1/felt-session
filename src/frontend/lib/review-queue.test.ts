@@ -24,7 +24,7 @@ function pr(
 		isDraft: false,
 		reviewDecision: "",
 		author: "happylinks",
-		person: "michiel",
+		person: "alex",
 		createdAt: "2026-07-20T10:00:00Z",
 		updatedAt: "2026-07-20T12:00:00Z",
 		checks: checks(3),
@@ -41,7 +41,7 @@ function session(
 		claudeSessionId: null,
 		source: "opensession",
 		worktreeDir: "/tmp/worktree",
-		startedBy: "Michiel",
+		startedBy: "Alex",
 		title: patch.id,
 		lastActivity: "2026-07-20T12:00:00Z",
 		createdAt: "2026-07-20T10:00:00Z",
@@ -74,7 +74,7 @@ describe("reviewRowMatchesPersonFilter", () => {
 		expect(
 			reviewRowMatchesPersonFilter(
 				"louise",
-				[{ ...request, to: "Michiel" }],
+				[{ ...request, to: "Alex" }],
 				"me",
 				"Kent",
 			),
@@ -84,7 +84,7 @@ describe("reviewRowMatchesPersonFilter", () => {
 
 describe("prReviewCompletion", () => {
 	const request = {
-		to: "Michiel",
+		to: "Alex",
 		by: "Kent",
 		at: "2026-07-23T10:22:13Z",
 	};
@@ -96,17 +96,17 @@ describe("prReviewCompletion", () => {
 				session({
 					id: "reviewed",
 					branch: "please-fix",
-					prReviewedBy: ["michiel"],
+					prReviewedBy: ["alex"],
 					prReviewRequested: [],
 					prUpdatedAt: "2026-07-23T10:23:34Z",
 				}),
 			),
-		).toEqual({ by: "Michiel", at: "2026-07-23T10:23:34Z" });
+		).toEqual({ by: "Alex", at: "2026-07-23T10:23:34Z" });
 	});
 
 	test("does not reuse an old review or override a pending re-request", () => {
 		const reviewed = {
-			prReviewedBy: ["michiel"],
+			prReviewedBy: ["alex"],
 			prReviewRequested: [],
 		};
 		expect(
@@ -127,7 +127,7 @@ describe("prReviewCompletion", () => {
 					id: "rerequested",
 					branch: "rerequested",
 					...reviewed,
-					prReviewRequested: ["michiel"],
+					prReviewRequested: ["alex"],
 					prUpdatedAt: "2026-07-23T10:23:34Z",
 				}),
 			),
@@ -140,7 +140,7 @@ describe("buildReviewQueue", () => {
 		const [item] = buildReviewQueue(
 			[pr({ number: 1, branch: "mine" })],
 			[],
-			"Michiel",
+			"Alex",
 			"happylinks",
 		);
 		expect(item.source).toBe("mine");
@@ -151,7 +151,7 @@ describe("buildReviewQueue", () => {
 		const [item] = buildReviewQueue(
 			[pr({ number: 14, branch: "under-review", reviewActive: true })],
 			[],
-			"Michiel",
+			"Alex",
 			"happylinks",
 		);
 		expect(item.bucket).toBe("waiting");
@@ -167,7 +167,7 @@ describe("buildReviewQueue", () => {
 		const [item] = buildReviewQueue(
 			[auto],
 			[],
-			"Michiel",
+			"Alex",
 			"happylinks",
 		);
 		expect(item.source).toBe("automation");
@@ -184,8 +184,8 @@ describe("buildReviewQueue", () => {
 		});
 		const [item] = buildReviewQueue(
 			[botPr],
-			[session({ id: "human", branch: "human-session", startedBy: "Michiel" })],
-			"Michiel",
+			[session({ id: "human", branch: "human-session", startedBy: "Alex" })],
+			"Alex",
 			"happylinks",
 		);
 		expect(item.source).toBe("automation");
@@ -200,11 +200,11 @@ describe("buildReviewQueue", () => {
 					branch: "bot-request",
 					author: "tella-butler",
 					person: null,
-					reviewRequested: ["michiel"],
+					reviewRequested: ["alex"],
 				}),
 			],
 			[],
-			"Michiel",
+			"Alex",
 			"happylinks",
 		);
 		expect(item.source).toBe("requested");
@@ -219,11 +219,11 @@ describe("buildReviewQueue", () => {
 					branch: "teammate",
 					author: "jfrolich",
 					person: "jaap",
-					reviewRequested: ["michiel"],
+					reviewRequested: ["alex"],
 				}),
 			],
 			[],
-			"Michiel",
+			"Alex",
 			"happylinks",
 		);
 		expect(item.source).toBe("requested");
@@ -237,7 +237,7 @@ describe("buildReviewQueue", () => {
 				pr({ number: 5, branch: "conflict", mergeable: "CONFLICTING" }),
 			],
 			[],
-			"Michiel",
+			"Alex",
 			"happylinks",
 		);
 		expect(items.map((item) => item.bucket)).toEqual([
@@ -253,7 +253,7 @@ describe("buildReviewQueue", () => {
 				pr({ number: 7, branch: "unknown", checks: checks(0) }),
 			],
 			[],
-			"Michiel",
+			"Alex",
 			"happylinks",
 		);
 		expect(items.map((item) => item.bucket)).toEqual(["waiting", "ready"]);
@@ -273,13 +273,13 @@ describe("buildReviewQueue", () => {
 				}),
 				session({ id: "primary", branch: "target" }),
 			],
-			"Michiel",
+			"Alex",
 			"happylinks",
 		);
 		expect(item.sessionId).toBe("primary");
 	});
 
-	test("links a review chat parked on its derived -os-review branch", () => {
+	test("links a review session parked on its derived -os-review branch", () => {
 		const target = pr({ number: 15, branch: "add-timeline-range" });
 		const [item] = buildReviewQueue(
 			[target],
@@ -297,7 +297,7 @@ describe("buildReviewQueue", () => {
 					],
 				}),
 			],
-			"Michiel",
+			"Alex",
 			"happylinks",
 		);
 		expect(item.sessionId).toBe("bks-ghpr-15-review");
@@ -320,7 +320,7 @@ describe("buildReviewQueue", () => {
 					],
 				}),
 			],
-			"Michiel",
+			"Alex",
 			"happylinks",
 		);
 		expect(item.sessionId).toBeNull();
@@ -330,7 +330,7 @@ describe("buildReviewQueue", () => {
 		const [item] = buildReviewQueue(
 			[pr({ number: 11, branch: "archived" })],
 			[session({ id: "archived", branch: "archived", archived: true })],
-			"Michiel",
+			"Alex",
 			"happylinks",
 		);
 		expect(item.sessionId).toBeNull();

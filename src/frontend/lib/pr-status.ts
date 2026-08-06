@@ -5,7 +5,7 @@
  * green = open and healthy.
  *
  * Callers normalize their own row shape into `PrStatusInput` — the sidebar's
- * `WsPrStatusMark` still carries its own copy for chat-shaped input, since it
+ * `WsPrStatusMark` still carries its own copy for session-shaped input, since it
  * additionally paints "no PR" rows.
  */
 export interface PrStatusInput {

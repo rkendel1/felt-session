@@ -5,7 +5,7 @@ import { IconArrowDownRight } from "./icons";
 
 /**
  * Orchestrator/executor relationship chips for the session header. A session
- * spawned as a worker via michael-sessions `create_session` carries a
+ * spawned as a worker via opensession-sessions `create_session` carries a
  * `parentSessionId`; the reverse edge (a session's own workers) is derived by
  * the caller from the sessions list. This surfaces both so you can hop between
  * an orchestrator (e.g. a Fable session) and the executor workers it delegated

@@ -45,7 +45,7 @@ import { MarkdownBody } from "./MarkdownBody";
 import {
 	loadOverview,
 	overviewCache,
-	type OverviewChatRef,
+	type OverviewSessionRef,
 } from "../lib/workspace-overview";
 import { summarizeChecks } from "./PrStatusBar";
 import { openLightbox } from "./MediaLightbox";
@@ -67,7 +67,7 @@ import {
  * Workspace info block at the top of the right side panel (the "Info" tab): a
  * dense, at-a-glance catch-all - title + meta, workspace actions, local git
  * state, PR comments, changed files, and a compact filmstrip of every screenshot
- * / video from the workspace's chats. PR state and local git deltas share one
+ * / video from the workspace's sessions. PR state and local git deltas share one
  * compact Git status section; the transcript remains the opening-prompt source.
  *
  * Loading/caching for the overview lives in lib/workspace-overview (shared with
@@ -85,30 +85,30 @@ type ReviewRequestInfo = {
 };
 
 interface Props {
-	/** The open chat's session id — anchors the PR + Slack fetches. */
+	/** The open session's session id — anchors the PR + Slack fetches. */
 	sessionId: string;
-	/** The chat's workspace (projectId); null = workspace-less (fallback only). */
+	/** The session's workspace (workspaceId); null = workspace-less (fallback only). */
 	workspaceId: string | null;
 	workspaceName?: string;
-	/** Sibling chats, oldest first (the tab strip's list). */
-	chats: Array<OverviewChatRef & { startedBy?: string | null }>;
-	/** Primary repo the workspace's chats work in. */
+	/** Sibling sessions, oldest first (the tab strip's list). */
+	sessions: Array<OverviewSessionRef & { startedBy?: string | null }>;
+	/** Primary repo the workspace's sessions work in. */
 	repo?: string;
 	/** PR lane state, when the session has a PR — gates the PR fetch. */
 	prState?: string | null;
 	/** Bumped when a GitHub webhook reports activity for this workspace's PR. */
 	refreshTick?: number;
-	/** The open chat's sandbox opt-in — renders a provider/mode badge in the
+	/** The open session's sandbox opt-in — renders a provider/mode badge in the
 	    status row (from session fields only; no container polling). */
 	sandbox?: {
 		provider: string;
 		sandboxId?: string;
 		workspace?: "bind" | "volume";
 	};
-	/** Pending review request for this workspace — the open chat's, or a sibling
-	    chat's (the request is per-chat but the band groups by workspace). */
+	/** Pending review request for this workspace — the open session's, or a sibling
+	    session's (the request is per-session but the band groups by workspace). */
 	reviewRequest?: ReviewRequestInfo | null;
-	/** The chat that owns `reviewRequest` (may be a sibling, not the open one). */
+	/** The session that owns `reviewRequest` (may be a sibling, not the open one). */
 	reviewRequestSessionId?: string;
 	/** The request is complete because its reviewer submitted a GitHub review. */
 	reviewAcceptedFromPr?: boolean;
@@ -129,19 +129,19 @@ interface Props {
 	assets?: SessionAssetFile[];
 	/** Open the Assets view-tab focused on a specific asset (a list-row click). */
 	onOpenAsset?: (path: string) => void;
-	/** Prefill the composer (the per-comment "Add to chat" hover action). */
+	/** Prefill the composer (the per-comment "Add to session" hover action). */
 	onAddToInput?: (text: string) => void;
-	/** Navigate to a session — used by Auto-fix, which spins up a new chat in this
-	    workspace and jumps into it. `created` is the server's copy of a chat this
+	/** Navigate to a session — used by Auto-fix, which spins up a new session in this
+	    workspace and jumps into it. `created` is the server's copy of a session this
 	    panel just made, so the caller can open it without a loading placeholder. */
 	onOpenSession?: (id: string, created?: UnifiedSession | null) => void;
 	/** Prompt the session (the Status section's Commit action) — the WS `prompt`
 	    message. Absent in read-only mounts, where Commit is simply hidden. */
 	send?: (msg: any) => void;
-	/** Media items currently in the open chat's live entries — bumps refresh
+	/** Media items currently in the open session's live entries — bumps refresh
 	    the panel as new screenshots land during a run. */
 	liveMediaCount: number;
-	/** Images visible in the chat UI before the transcript-backed overview catches up. */
+	/** Images visible in the session UI before the transcript-backed overview catches up. */
 	liveMedia?: WorkspaceMediaItem[];
 }
 
@@ -292,7 +292,7 @@ function CommentAvatar({ author }: { author: string }) {
 /** One PR comment as a single dense row: avatar · one-line title · time. The
 		title is the flattened first slice of the body, ellipsised. Hovering floats
 		the full markdown comment in a popover on top (never shifting the list); a
-		hover "Add to chat" drops it into the composer; clicking opens the PR tab. */
+		hover "Add to session" drops it into the composer; clicking opens the PR tab. */
 function CommentCard({
 	comment,
 	pr,
@@ -319,9 +319,9 @@ function CommentCard({
 				e.stopPropagation();
 				onAddToInput(formatPrCommentPrompt(comment, pr));
 			}}
-			aria-label="Add this comment to the chat composer"
+			aria-label="Add this comment to the session composer"
 		>
-			Add to chat
+			Add to session
 		</button>
 	);
 	const avatar = <CommentAvatar author={comment.author} />;
@@ -716,7 +716,7 @@ const PR_AGENT_ACTIONS: Array<{
 	{
 		kind: "autofix",
 		label: "Auto-fix",
-		hint: "Opens a new chat in this workspace that fixes every finding + failing CI and pushes. Watch and steer it live.",
+		hint: "Opens a new session in this workspace that fixes every finding + failing CI and pushes. Watch and steer it live.",
 	},
 	{
 		kind: "simplify",
@@ -730,7 +730,7 @@ const PR_AGENT_ACTIONS: Array<{
 	},
 ];
 
-function MichaelReviewCard({
+function AgentReviewCard({
 	sessionId,
 	repo,
 	pr,
@@ -830,10 +830,10 @@ function MichaelReviewCard({
 			);
 			if (res.ok) {
 				if (action.kind === "review") setReviewQueued({ at: review?.at });
-				// Auto-fix opens a live chat in this workspace — jump straight into it
+				// Auto-fix opens a live session in this workspace — jump straight into it
 				// instead of leaving a "posted on the PR" note behind. The response
-				// carries the persisted chat, so it opens as a real tab right away.
-				if (res.openChat && res.bksId && onOpenSession) {
+				// carries the persisted session, so it opens as a real tab right away.
+				if (res.openSession && res.bksId && onOpenSession) {
 					onOpenSession(res.bksId, res.session ?? null);
 					return;
 				}
@@ -851,7 +851,7 @@ function MichaelReviewCard({
 	const moreActions = PR_AGENT_ACTIONS.slice(2);
 
 	return (
-		<div data-michael-score className={INFO_SECTION_CLASS}>
+		<div data-agent-score className={INFO_SECTION_CLASS}>
 			<div className="flex items-center gap-2 px-1">
 				<div className={INFO_LABEL_CLASS}>{AGENT_NAME} score</div>
 				<div className="ml-auto flex items-center gap-2">
@@ -1055,8 +1055,8 @@ function ReviewerChip({
 }: {
 	sessionId: string;
 	reviewRequest?: ReviewRequestInfo | null;
-	/** The chat that actually holds the request — a workspace's request may live
-	    on a sibling chat, not the open one. Clear/re-assign target this so the
+	/** The session that actually holds the request — a workspace's request may live
+	    on a sibling session, not the open one. Clear/re-assign target this so the
 	    chip stays consistent with the sidebar's workspace-level band; a brand-new
 	    request (none exists) targets the open `sessionId`. */
 	requestSessionId?: string;
@@ -1086,7 +1086,7 @@ function ReviewerChip({
 		setError(null);
 	}, [reviewRequest?.to, reviewRequest?.at, reviewRequest?.accepted?.at]);
 
-	// The chat that owns an existing request; a brand-new one anchors to the open chat.
+	// The session that owns an existing request; a brand-new one anchors to the open session.
 	const owner = (req && requestSessionId) || sessionId;
 	const accepted = req?.accepted ?? null;
 	// An ask pointed at YOU wins over every other state — from GitHub or from
@@ -1469,7 +1469,7 @@ export function WorkspaceInfo({
 	sessionId,
 	workspaceId,
 	workspaceName,
-	chats,
+	sessions,
 	repo,
 	prState,
 	refreshTick,
@@ -1490,8 +1490,8 @@ export function WorkspaceInfo({
 	assets = [],
 	onOpenAsset,
 }: Props) {
-	const chatsKey = chats.map((c) => c.id).join(",");
-	const cacheKey = workspaceId || `chats:${chatsKey}`;
+	const sessionsKey = sessions.map((c) => c.id).join(",");
+	const cacheKey = workspaceId || `sessions:${sessionsKey}`;
 	const [data, setData] = useState<WorkspaceOverview | null>(
 		() => overviewCache.get(cacheKey)?.data ?? null,
 	);
@@ -1504,10 +1504,10 @@ export function WorkspaceInfo({
 	// Local git state (ahead/behind, dirty tree) for the Git status section.
 	const [git, setGit] = useState<GitStatusInfo | null>(null);
 
-	// The chats array is re-created every App render — read it through a ref so
-	// the fetch effect keys on the stable chatsKey instead.
-	const chatsRef = useRef(chats);
-	chatsRef.current = chats;
+	// The sessions array is re-created every App render — read it through a ref so
+	// the fetch effect keys on the stable sessionsKey instead.
+	const sessionsRef = useRef(sessions);
+	sessionsRef.current = sessions;
 
 	useEffect(() => {
 		let alive = true;
@@ -1518,7 +1518,7 @@ export function WorkspaceInfo({
 		// debounces the liveMediaCount bumps during a streaming run).
 		const t = setTimeout(
 			() => {
-				loadOverview(cacheKey, workspaceId, chatsRef.current)
+				loadOverview(cacheKey, workspaceId, sessionsRef.current)
 					.then((ov) => {
 						if (alive) setData(ov);
 					})
@@ -1532,7 +1532,7 @@ export function WorkspaceInfo({
 			alive = false;
 			clearTimeout(t);
 		};
-	}, [cacheKey, chatsKey, workspaceId, liveMediaCount]);
+	}, [cacheKey, sessionsKey, workspaceId, liveMediaCount]);
 
 	// PR (for the status chips) — webhooks trigger refreshTick; the slow poll only
 	// recovers a missed delivery or a deployment with no matching webhook.
@@ -1583,7 +1583,7 @@ export function WorkspaceInfo({
 
 	// Local git status (ahead/behind, uncommitted) for the Git status section — same
 	// slow poll, refetched as live media bumps (a proxy for run activity) so the
-	// counts settle after a turn's auto-commit/push. Only when the chat has a repo.
+	// counts settle after a turn's auto-commit/push. Only when the session has a repo.
 	useEffect(() => {
 		if (!repo) {
 			setGit(null);
@@ -1615,7 +1615,7 @@ export function WorkspaceInfo({
 				.catch(() => {});
 	};
 
-	const oldest = chats[0];
+	const oldest = sessions[0];
 	const started = oldest?.createdAt
 		? new Date(oldest.createdAt).toLocaleDateString(undefined, {
 				month: "short",
@@ -1624,7 +1624,7 @@ export function WorkspaceInfo({
 		: null;
 	const meta = [
 		repo ? repoLabel(repo) : null,
-		`${chats.length} chat${chats.length === 1 ? "" : "s"}`,
+		`${sessions.length} session${sessions.length === 1 ? "" : "s"}`,
 		oldest?.startedBy ? `by ${oldest.startedBy}` : null,
 		started,
 	]
@@ -1656,7 +1656,7 @@ export function WorkspaceInfo({
 		}
 		return m;
 	}, [rawPatch]);
-	const title = workspaceName || oldest?.title || "Untitled chat";
+	const title = workspaceName || oldest?.title || "Untitled session";
 	const media = [...liveMedia, ...(data?.media || [])].filter(
 		(m, i, all) =>
 			all.findIndex(
@@ -1706,7 +1706,7 @@ export function WorkspaceInfo({
 				{pr && <ChecksChip pr={pr} onOpenChecks={onOpenChecks} />}
 			</div>
 			{pr?.number && (
-				<MichaelReviewCard
+				<AgentReviewCard
 					sessionId={sessionId}
 					repo={repo}
 					pr={pr}
@@ -1839,7 +1839,7 @@ export function WorkspaceInfo({
 											"relative aspect-video shrink-0 snap-start overflow-hidden rounded-md border border-line bg-surface transition-colors hover:border-line-strong hover:bg-hover",
 											media.length === 1 ? "w-full" : "w-[76%]",
 										)}
-										title={[m.chatTitle, new Date(m.at).toLocaleString()]
+										title={[m.sessionTitle, new Date(m.at).toLocaleString()]
 											.filter(Boolean)
 											.join(" · ")}
 									>

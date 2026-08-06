@@ -27,11 +27,11 @@
  *
  * Wired into interactive runs only (Slack + Open Session sessions), never automation
  * runs — same privilege boundary as opensession-sessions/opensession-admin: untrusted
- * ticket text must not be able to DM the team as Michael.
+ * ticket text must not be able to DM the team as the bot.
  */
 import { existsSync, readFileSync } from "node:fs";
 import { writeJsonAtomic } from "./shared/atomic-write";
-import { homeDir, OPENSESSION_CHATS_DIR } from "./paths";
+import { homeDir, OPENSESSION_SESSIONS_DIR } from "./paths";
 import { audit } from "./audit";
 import { tryGetSessionControl } from "./session-control";
 import { findSession } from "./session-cache";
@@ -46,7 +46,7 @@ import {
 import { configuredServer, personaName, productName } from "./config";
 
 const HOME = homeDir();
-const STORE = `${OPENSESSION_CHATS_DIR}/human-asks.json`;
+const STORE = `${OPENSESSION_SESSIONS_DIR}/human-asks.json`;
 const UI_BASE =
   process.env.OPENSESSION_UI_BASE ||
   configuredServer().publicBaseUrl;
@@ -504,8 +504,8 @@ export async function deliverAsk(id: string, opts?: { skipUi?: boolean }): Promi
   // matchReply claims replies first (they're an *answer*); once it's moot —
   // cancelled, answered elsewhere, timed out — this link is what keeps a late
   // reply going back to the session that asked instead of spawning a fresh,
-  // context-free one (2026-07-27: an ask was cancelled 3s before Michiel's
-  // reply landed, and his answer started a new session that could only say
+  // context-free one (seen live: an ask was cancelled 3s before the human's
+  // reply landed, and the answer started a new session that could only say
   // "Done"). The link lives as long as the ask does — terminal asks are pruned
   // after TERMINAL_RETENTION_MS, and the link goes with them at the next
   // rebuild.

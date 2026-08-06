@@ -4,7 +4,7 @@ import { PUBLIC_BASE_URL } from "./brand";
 // Dedicated marked instance for session messages so this config doesn't leak
 // into other markdown (wiki, etc.). Two customisations:
 //  - external links open in a new tab (target=_blank + safe rel); links into
-//    OS1 itself navigate in place — session/chat URLs become session-link
+//    OS1 itself navigate in place — session URLs become session-link
 //    chips handled client-side, other internal paths load in the same tab
 //  - images/videos render inline, capped in size; clicks open the media
 //    lightbox (see MediaLightbox.tsx)
@@ -18,17 +18,25 @@ function attr(v: string | null | undefined): string {
     .replace(/>/g, "&gt;");
 }
 
-// Open Session session ids (`bks-<uuidv7>` and legacy `bks-<slug>`), as they appear
-// in agent output — usually in a codespan, e.g. a create_session result or an
-// orchestrator saying "delegated to `bks-…`". Rendered as a clickable link so you
-// can jump from an orchestrator into the worker it spawned (and back). A
-// container-level click handler (SessionViewer) navigates on data-session-id,
-// since dangerouslySetInnerHTML can't carry React handlers.
-const SESSION_ID_EXACT = /^bks-[a-z0-9][a-z0-9-]{5,}$/i;
+// Open Session session ids (`os-<uuidv7>`, and the pre-rename `bks-<uuidv7>` +
+// legacy `bks-<slug>`), as they appear in agent output — usually in a codespan,
+// e.g. a create_session result or an orchestrator saying "delegated to `os-…`".
+// Rendered as a clickable link so you can jump from an orchestrator into the
+// worker it spawned (and back). A container-level click handler (SessionViewer)
+// navigates on data-session-id, since dangerouslySetInnerHTML can't carry React
+// handlers.
+const UUIDV7 = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+// Every minted id is `<prefix>-<uuidv7>`; only the pre-rename `bks-` prefix also
+// covers hand-made slug ids (`bks-ghpr-5099-review`), so it alone keeps the
+// looser shape — `os-` is short enough that a loose form would turn ordinary
+// codespans like `os-release` into session links.
+const SESSION_ID_EXACT = new RegExp(
+  `^(?:os-${UUIDV7}|bks-[a-z0-9][a-z0-9-]{5,})$`,
+  "i",
+);
 // Bare (non-code) uuidv7-shaped ids in prose — strict so it can't misfire on
 // ordinary text.
-const SESSION_ID_BARE =
-  /bks-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+const SESSION_ID_BARE = new RegExp(`(?:os|bks)-${UUIDV7}`, "i");
 
 // Chip labels. A raw `bks-<uuid>` is 40 characters of noise in the middle of a
 // sentence, so a chip shows the referenced session's own title when we know it.
@@ -36,7 +44,7 @@ const SESSION_ID_BARE =
 // that list — archived, deleted, not yet polled — falls back to a shortened id.
 let sessionTitles = new Map<string, string>();
 const SESSION_TITLE_MAX = 38;
-const SESSION_ID_SHORT = 12; // `bks-019fb3ad`
+const SESSION_ID_SHORT = 12; // `os-019fb3ad2` / `bks-019fb3ad`
 
 /** Register id → title for session chips. Cheap no-op when nothing changed. */
 export function setSessionTitles(
@@ -65,7 +73,11 @@ export function setSessionTitles(
 function shortSessionId(id: string): string {
   // Legacy `bks-<slug>` ids are already short and cutting them mid-word reads
   // worse than showing the whole thing; only uuid-shaped ids get abbreviated.
-  return id.length <= 20 ? id : `${id.slice(0, SESSION_ID_SHORT)}…`;
+  // The trailing-dash trim keeps the cut off a segment boundary — the two
+  // prefixes differ in length, so a fixed cut lands mid-separator for one.
+  return id.length <= 20
+    ? id
+    : `${id.slice(0, SESSION_ID_SHORT).replace(/-+$/, "")}…`;
 }
 
 function sessionLink(id: string, href?: string): string {
@@ -110,7 +122,7 @@ const INTERNAL_HOSTS = new Set(
 );
 
 // An auto-linked (or <bracketed>) bare URL: marked hands the raw URL over as
-// the link text. Trailing-slash tolerant so `…/chat/bks-x/` still counts.
+// the link text. Trailing-slash tolerant so `…/session/bks-x/` still counts.
 function isBareUrlLink(token: any): boolean {
   const strip = (v: string) => String(v ?? "").replace(/\/+$/, "");
   const text = strip(token.text);
@@ -132,10 +144,13 @@ function internalHref(href: string | null | undefined): {
   const sameOrigin =
     typeof location !== "undefined" && url.origin === location.origin;
   if (!sameOrigin && !INTERNAL_HOSTS.has(url.hostname)) return null;
-  const path = url.pathname.replace(/^\/(?:opensession|opensession)(?=\/)/, "");
+  const path = url.pathname.replace(/^\/(?:opensession|backstage)(?=\/)/, "");
+  // The path already says "session", so both prefixes take the loose shape here.
   const m =
-    path.match(/^\/session\/(bks-[a-z0-9][a-z0-9-]{5,})\/?$/i) ??
-    path.match(/^\/workspace\/[^/]+\/chat\/(bks-[a-z0-9][a-z0-9-]{5,})\/?$/i);
+    path.match(/^\/session\/((?:os|bks)-[a-z0-9][a-z0-9-]{5,})\/?$/i) ??
+    path.match(
+      /^\/workspace\/[^/]+\/session\/((?:os|bks)-[a-z0-9][a-z0-9-]{5,})\/?$/i,
+    );
   return { sessionId: m ? decodeURIComponent(m[1]) : undefined };
 }
 
@@ -174,13 +189,13 @@ md.use({
       const title = token.title ? ` title="${attr(token.title)}"` : "";
       const internal = internalHref(token.href);
       if (internal) {
-        // A pasted session/chat URL auto-links with the whole ~90-char URL as
+        // A pasted session URL auto-links with the whole ~90-char URL as
         // its text, which ran straight past the message bubble's edge inside
         // the nowrap chip. Label it like a bare `bks-…` in prose instead.
         if (internal.sessionId && isBareUrlLink(token)) {
           return sessionLink(internal.sessionId, token.href);
         }
-        // Same app: navigate in place. Session/chat URLs get the session-link
+        // Same app: navigate in place. Session URLs get the session-link
         // chip + data-session-id so the delegated handler (SessionViewer)
         // navigates client-side; href stays for middle/cmd-click and for
         // surfaces without the handler (full-page load, same tab).
@@ -224,9 +239,7 @@ md.use({
         return m ? m.index : undefined;
       },
       tokenizer(src: string) {
-        const m = /^bks-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.exec(
-          src,
-        );
+        const m = new RegExp(`^(?:os|bks)-${UUIDV7}`, "i").exec(src);
         if (m) return { type: "sessionId", raw: m[0], id: m[0] };
       },
       renderer(token: any) {

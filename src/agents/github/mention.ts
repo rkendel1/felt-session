@@ -1,11 +1,11 @@
 /**
- * @mention replies. When someone mentions Michael in a PR comment — inline
+ * @mention replies. When someone mentions the bot in a PR comment — inline
  * (pull_request_review_comment) or in the conversation (issue_comment) — route it
- * to the PR's mention session and post Michael's reply in-thread.
+ * to the PR's mention session and post the reply in-thread.
  *
- * Loop-safe: we skip any comment carrying one of Michael's hidden markers (our own
- * posts), and only act when the body actually mentions a Michael handle — so
- * Michael's replies (which don't mention itself) never re-trigger.
+ * Loop-safe: we skip any comment carrying one of our hidden markers (our own
+ * posts), and only act when the body actually mentions a configured handle — so
+ * the bot's replies (which don't mention itself) never re-trigger.
  */
 import { getPrDetails, type PrDetails } from "../../server/pr-info";
 import { listAutomations } from "../../server/automations";
@@ -51,7 +51,7 @@ const MENTION_HANDLES = (
   .filter(Boolean);
 const MENTION_RE = new RegExp(`@(${MENTION_HANDLES.join("|")})\\b`, "i");
 
-function mentionsMichael(body: string): boolean {
+function mentionsAgent(body: string): boolean {
   if (!body) return false;
   if (OWN_MARKERS.some((m) => body.includes(m))) return false; // our own content
   return MENTION_RE.test(body);
@@ -78,7 +78,7 @@ export async function handleMention(kind: MentionKind, payload: any): Promise<vo
   if (payload?.action !== "created") return; // ignore edits/deletes
   const comment = payload.comment;
   const body: string = comment?.body || "";
-  if (!mentionsMichael(body)) return;
+  if (!mentionsAgent(body)) return;
 
   const authorLogin: string = comment?.user?.login || "";
   if (authorLogin === BOT_LOGIN) return; // the bot's own pushes' account
@@ -151,7 +151,7 @@ export async function dispatchMention(args: {
 }): Promise<void> {
   const { prNumber, kind, body, author, replyToId, inline, ghRepo } = args;
 
-  // A whole-PR action request ("@michael adversarial review plz") → run the dedicated
+  // A whole-PR action request ("@<bot> adversarial review plz") → run the dedicated
   // behavior. Classified before any lock, since triggerPrAction claims the "code" lock.
   const action = await classifyPrActionIntent(body);
   if (action !== "none") {
@@ -227,7 +227,7 @@ export async function runConversationalMention(
     st.pendingMention = undefined;
     writePrState(st);
 
-    // Code mode in the PR-branch worktree so Michael can make + push changes if asked.
+    // Code mode in the PR-branch worktree so the agent can make + push changes if asked.
     const worktreeDir = await createWorktreeForPrBranch(
       headRef,
       ghRepo ? repoForFullName(ghRepo)?.id : undefined,

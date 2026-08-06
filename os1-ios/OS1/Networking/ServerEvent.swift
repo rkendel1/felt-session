@@ -20,30 +20,9 @@ enum ServerEvent: Sendable {
     case askResolved(sessionId: String, questionId: String)
     case notice(String)
     case serverError(String)
-    /// A team note landed on some session's chat channel (broadcast to every
-    /// client, so the receiver filters by channel).
-    case chatNote(channel: String, note: SessionNote)
     case ignored
 
-    /// Enough of a frame to route it — chat frames can't go through
-    /// `RawFrame`.
-    private struct FrameType: Decodable { let type: String }
-
-    /// A chat broadcast. Peeled off before `RawFrame` because it carries an
-    /// OBJECT in `message` where every other frame carries a string: decoding
-    /// it through `RawFrame` throws, and the frame would be silently dropped.
-    private struct ChatFrame: Decodable {
-        let channel: String
-        let message: SessionNote
-    }
-
     static func parse(_ data: Data) -> ServerEvent {
-        if let kind = try? JSONDecoder().decode(FrameType.self, from: data),
-           kind.type == "chat_message" || kind.type == "chat_message_updated" {
-            guard let frame = try? JSONDecoder().decode(ChatFrame.self, from: data)
-            else { return .ignored }
-            return .chatNote(channel: frame.channel, note: frame.message)
-        }
         guard let frame = try? JSONDecoder().decode(RawFrame.self, from: data) else {
             return .ignored
         }
@@ -133,29 +112,66 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     let id: String
     let content: String
     let user: String?
+    /// Images the message carries, as `data:` URLs — the chip shows the first
+    /// as a thumbnail so a queued screenshot is recognisable.
+    let images: [String]
+    /// Whether file attachments ride along. The server can't fold a
+    /// file-carrying message into a live run, so the chip hides Steer.
+    let hasFiles: Bool
+
+    /// Chips minted locally (the optimistic echo of a busy send) carry an id
+    /// the server has never seen, so the actions that address a queue entry
+    /// by id — edit, reorder — have to wait for the real `queue_update`.
+    var isLocalEcho: Bool { id.hasPrefix("local-") }
 
     fileprivate init(_ wire: RawFrame.WireQueueItem) {
         id = wire.id ?? UUID().uuidString
         content = wire.content ?? ""
         user = wire.user
+        images = wire.images ?? []
+        hasFiles = !(wire.files ?? []).isEmpty
     }
 
     /// Local optimistic construction — the composer's echo of a send made
     /// while a run is busy, shown as a queue chip until the server's own
     /// queue_update replaces it.
-    init(id: String, content: String, user: String?) {
+    init(
+        id: String,
+        content: String,
+        user: String?,
+        images: [String] = [],
+        hasFiles: Bool = false
+    ) {
         self.id = id
         self.content = content
         self.user = user
+        self.images = images
+        self.hasFiles = hasFiles
+    }
+
+    /// The same entry with new text, for the optimistic half of an edit.
+    func withContent(_ content: String) -> QueueItem {
+        QueueItem(
+            id: id, content: content, user: user, images: images, hasFiles: hasFiles
+        )
     }
 }
 
 /// Superset of every server frame's fields; individual events pick what they need.
 private struct RawFrame: Decodable {
     struct WireQueueItem: Decodable {
+        /// The `files` payload's shape varies by client (staged-path refs,
+        /// inline blobs) and all the chip needs is whether there are any —
+        /// so each element is consumed without being interpreted.
+        struct OpaqueFile: Decodable {
+            init(from decoder: Decoder) throws {}
+        }
+
         let id: String?
         let content: String?
         let user: String?
+        let images: [String]?
+        let files: [OpaqueFile]?
     }
 
     let type: String

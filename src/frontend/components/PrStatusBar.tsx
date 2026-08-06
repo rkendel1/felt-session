@@ -190,7 +190,7 @@ interface Props {
 	onOpenChecksTab?: () => void;
 	/** Archive via the owning viewer so it can select the neighboring sidebar row. */
 	onArchive?: () => void;
-	/** "header" renders just the PR chip + primary action for the chat header
+	/** "header" renders just the PR chip + primary action for the session header
 	    (shown while the Workspace panel is closed); default is the full strip. */
 	variant?: "bar" | "header";
 	/** Optional element rendered inside the strip, left of the PR chip (bar
@@ -353,7 +353,7 @@ function PrNumberChip({
  * The session's other PRs, as compact tone-coloured chips after the primary
  * one. Their tone IS the aggregate signal — a red #72 beside a green "Ready to
  * merge" reads at a glance — and clicking one opens it in the Review tab, which
- * is where per-PR review and merge belong. Past `maxInline` (0 in the chat
+ * is where per-PR review and merge belong. Past `maxInline` (0 in the session
  * header, where there's no room) they collapse into a `+N` menu.
  */
 function PrRefChips({
@@ -718,7 +718,7 @@ export function PrStatusBar({
 						onOpenPrTab={() => onOpenPrTab?.()}
 					/>
 				)}
-				{/* No room for a row of chips in the chat header — the siblings
+				{/* No room for a row of chips in the session header — the siblings
 				    collapse into one `+N` menu in their worst tone. */}
 				<PrRefChips
 					refs={siblings}

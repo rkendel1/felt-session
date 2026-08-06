@@ -57,7 +57,7 @@ needed.
 `~/.opensession-sandbox.json`, defaults 4 / 8g). A run is the same runner-host
 entry the systemd path uses (`src/runner-host/host.ts`), `docker exec -d`'d
 into the container; its unix socket + spec/meta/journal/log live in a
-bind-mounted per-session run dir (`~/.opensession-chats/sandbox-runs/<id>`), so
+bind-mounted per-session run dir (`~/.opensession-sessions/sandbox-runs/<id>`), so
 the server drives it with the normal HostHandle machinery and can reattach
 after a restart. Idle containers are `docker stop`ped after
 `idleStopMinutes` (default 30) and restarted on the next turn.
@@ -70,7 +70,7 @@ Mounts (rationale in the docker.ts header):
 | session worktree at identical path | rw | diff/files/status/push/preview unchanged host-side |
 | main checkout `.git` at identical path | rw | worktrees aren't self-contained (`rev-parse --git-common-dir`); accepted Phase 1 tradeoff |
 | host `~/.claude/projects/<munged-cwd>` | rw | engine transcripts stay host-visible (viewer tail, resume continuity) |
-| `~/.opensession-chats/opensession-rpc.sock` | rw | opensession-* stdio proxies (socket filename kept for protocol compat); goes stale across a server restart until the container restarts |
+| `~/.opensession-sessions/opensession-rpc.sock` | rw | opensession-* stdio proxies (socket filename kept for protocol compat); goes stale across a server restart until the container restarts |
 | `~/.ssh`, `~/.gitconfig`, `~/.config/gh` | ro | git push / PR parity — interactive-level ambient trust, same as host runs today; automations are refused in Phase 1 |
 | `mcp-config.json`, `~/.opensession-claude-accounts.json` | ro | external MCP servers + in-container account-pool selection |
 | `~/.opensession-audit` | rw | one audit jsonl stream for host + sandboxed runs |
@@ -128,7 +128,7 @@ lsof, but blind to container netns: a sandbox and a host session (or two
 sandboxes) can hold the same webapp port number. Sandbox routes therefore use
 a dedicated allocated range **[20000, 28000)**, keyed by
 `(sandboxId, containerPort)` and persisted in
-`~/.opensession-chats/sandbox-preview-ports.json`
+`~/.opensession-sessions/sandbox-preview-ports.json`
 (src/server/sandbox/preview-ports.ts): host-vs-sandbox collisions are
 impossible by range disjointness, sandbox-vs-sandbox by the allocator's
 uniqueness probe. Allocations survive restarts/recreations (stable preview
@@ -178,7 +178,7 @@ S3-backed prebuilt-artifact install).
 per workspace materialization (first ensure of the sandbox, cwd = workspace,
 same `OPENSESSION_BOOT_MODE` env), is **skipped on snapshot restore** (the
 restored container layer already carries its effects), is never retried once
-settled (log: `~/.opensession-chats/sandbox-runs/<session>/workspace-setup.log`),
+settled (log: `~/.opensession-sessions/sandbox-runs/<session>/workspace-setup.log`),
 and never blocks the session on failure. Keep both scripts convention-level:
 no framework, no arguments beyond env. Host previews honor setup.sh too, with
 one asymmetry: there is no workspace-materialization moment on the host, so it

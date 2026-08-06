@@ -11,13 +11,13 @@
  * without a restart. Missing/invalid config = provider "local" = exactly
  * today's behavior.
  *
- * Kill switch: `touch <chats-dir>/disable-sandboxes` forces "local" for
+ * Kill switch: `touch <sessions-dir>/disable-sandboxes` forces "local" for
  * new runs regardless of config — mirroring host-client's disable-run-hosts.
  */
 
 import { existsSync, readFileSync } from "fs";
 import { getDefaultModel, providerFor, resolveModel } from "../models";
-import { homeDir, OPENSESSION_CHATS_DIR } from "../paths";
+import { homeDir, OPENSESSION_SESSIONS_DIR } from "../paths";
 import { stateDir } from "../paths";
 import type { SandboxProviderId } from "./provider";
 
@@ -32,7 +32,7 @@ function configPath(): string {
     stateDir("sandbox.json")
   );
 }
-const DISABLE_FILE = `${OPENSESSION_CHATS_DIR}/disable-sandboxes`;
+const DISABLE_FILE = `${OPENSESSION_SESSIONS_DIR}/disable-sandboxes`;
 
 function modalConfigHasCredentials(): boolean {
   try {

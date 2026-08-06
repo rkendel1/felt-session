@@ -27,7 +27,7 @@ Two things that should *not* go through `adrs/`:
   took.
 
 Code pull requests aren't the path for outside contributions — forking is.
-The project is Apache-2.0 and built to be made your own: instance config
+The project is MIT-licensed and built to be made your own: instance config
 covers branding, persona, repos and integrations without touching source
 (see [Make it your own](README.md#make-it-your-own)), and a fork covers
 everything else. The rest of this document is for people doing exactly that.
@@ -117,5 +117,5 @@ sets out what counts as a vulnerability here and what is working as designed.
 ## License
 
 By contributing — proposals included — you agree that your contributions are
-licensed under the [Apache License 2.0](LICENSE), the same license as the
+licensed under the [MIT License](LICENSE), the same license as the
 project.

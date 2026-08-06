@@ -6,7 +6,7 @@ import { feedForRefKind } from "../lib/feeds-meta";
  * The generic web panel for feed-item workspaces (the feeds design): a
  * full-width iframe of the item's embeddable page with escape-hatch links to
  * the real thing. Rendered as the feed view-tab of feed-backed workspaces
- * (and by WorkspacePane on their chat-less route).
+ * (and by WorkspacePane on their session-less route).
  *
  * Per-kind knowledge (which URL embeds, which links to offer) comes entirely
  * from the feed descriptors' `panel` templates (lib/feeds-meta.ts) — provider

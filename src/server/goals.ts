@@ -1,5 +1,5 @@
 /**
- * Goals: long-running, stateful Michael missions.
+ * Goals: long-running, stateful agent missions.
  *
  * Unlike an Automation — which fires a *fresh, amnesiac* session on a cron tick
  * (automations.ts) — a Goal is a single managed session pursued over days/weeks.

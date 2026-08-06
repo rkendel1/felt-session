@@ -28,14 +28,25 @@ schema from `src/server/opencode-config.ts`:
 }
 ```
 
-- `enabled: false` (or a missing file) = the Anthropic bridge is off;
-  `opencode/anthropic/*` models error with a clear message (there is no
-  fallback engine).
+- `enabled` gates the whole `opencode/` model surface: the Anthropic bridge,
+  and whether third-party provider models reach the UI picker at all.
+  `opensession onboard` creates the file as `{"enabled": true}` when it does
+  not exist, so a fresh install has the bridge on; Settings → Setup has an
+  Engine row in the Getting-started checklist that reports the OpenCode binary,
+  the bridge state and the Claude/Codex account counts, with a button to turn
+  the bridge on (`GET`/`PUT /api/settings/opencode-engine`, body
+  `{"enabled": boolean}`).
+- The two failure shapes when it is off (missing file, or `"enabled": false`;
+  `bridge.mode: "off"` produces the first one on its own):
+  `opencode/anthropic/*` turns fail with a config error naming
+  `~/.opensession-opencode.json` — there is no fallback engine — and
+  **third-party picker models silently disappear** from the model picker
+  instead of erroring. If a model you configured is simply not in the list,
+  check this flag first.
 - `pickerModels` adds opencode model ids to the UI model picker (folded into
   the registry at load).
-- Providers beyond the two subscription bridges below use OpenCode's own auth
-  (`opencode auth login` → `~/.local/share/opencode/auth.json`; HOME is
-  passed through to the engine).
+- Providers beyond the two subscription bridges run on an API key — see
+  [Third-party providers](#third-party-providers-api-keys).
 
 ## Account pools — the mental model
 
@@ -145,11 +156,48 @@ the host `codex login` can never be invalidated):
 login` on a ChatGPT plan. Rotation is least-recently-picked with a cool-off
 on rate limits.
 
+## Third-party providers (API keys)
+
+Everything the OpenCode engine supports beyond the two subscription bridges —
+xAI, OpenRouter, Groq, Mistral, DeepSeek, Google, Cerebras, … — runs on a plain
+API key. There is no pool and no rotation: one key per provider.
+
+Configure them from **Settings → Model providers** in the UI. Add the provider
+by its OpenCode slug (`xai`, `openrouter`, …), paste the key, optionally set a
+`baseURL`, and list the model ids you want in the picker. Keys are stored
+server-side in `~/.opensession-opencode.json` (0600), returned only masked, and
+injected into the engine's config as `provider.<id>.options`. The file shape is
+the same if you would rather write it by hand:
+
+```json
+{
+  "enabled": true,
+  "providers": { "xai": { "apiKey": "xai-…" } },
+  "pickerModels": ["opencode/xai/grok-4"]
+}
+```
+
+`anthropic` and `openai` are rejected here — they run on the subscription
+bridges above, which always override this map.
+
+**The `enabled` flag applies even when you never touch Anthropic.** It gates
+`pickerModels`, so with the bridge config disabled a perfectly good xAI key
+gives you models that never appear in the picker — no error, just an empty
+list. Keep `"enabled": true` whatever provider you run on. (Onboarding writes
+it that way; older installs and hand-edited files are where this bites.)
+
+Providers you would rather not put in Open Session's config can instead use
+OpenCode's own auth — `opencode auth login`, stored in
+`~/.local/share/opencode/auth.json`; HOME is passed through to the engine, so
+the engine picks those credentials up directly. Nothing in the UI manages them,
+and their models still need a `pickerModels` entry to be offered (any opencode
+model id remains routable by typing it in).
+
 ## Usage visibility & account health
 
 Pools only work if you can see them. Two mechanisms:
 
-**The Models page** (Settings → Models) shows every account in both pools
+**The Accounts page** (Settings → Accounts) shows every account in both pools
 with its live usage: the 5-hour and 7-day windows, plan, and extra-usage
 credit spend where enabled. For Claude accounts this polling needs a full
 login-scoped credential — a bare `claude setup-token` lacks the

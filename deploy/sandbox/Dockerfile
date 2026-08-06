@@ -143,7 +143,7 @@ WORKDIR /home/ubuntu
 RUN mkdir -p /home/ubuntu/.config \
              /home/ubuntu/.local/share \
              /home/ubuntu/.backstage-chats \
-             /home/ubuntu/.opensession-chats
+             /home/ubuntu/.opensession-sessions
 
 # Containers are started long-lived and `docker exec`'d into (one per session).
 CMD ["sleep", "infinity"]

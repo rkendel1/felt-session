@@ -33,10 +33,17 @@ export function repoColor(key: string): string {
 // stable across the rename.
 export { repoLabel } from "../lib/repo-label";
 
+// Bumped when the icons behind /repo-icon/<id>.png are redrawn: the response
+// is cacheable, so without a new URL an installed PWA keeps painting the old
+// art until its copy expires.
+const ICON_VERSION = 2;
+
 // A repo's icon tile (sidebar Repo dropdown, session-header breadcrumb, repo
-// menus): the server's /repo-icon/<id>.png — the repo's GitHub org avatar,
-// with opensession wearing the OS1 mac app icon — falling back to the colored
-// letter tile when no icon resolves (unregistered/local repos). `size` (px)
+// menus): the server's /repo-icon/<id>.png — a product mark where the repo or
+// its owner ships one, else the repo's GitHub org avatar — falling back to the
+// colored letter tile when no icon resolves (unregistered/local repos). Every
+// icon arrives drawn to the same proportions (see the route), so the tile
+// scales them all identically. `size` (px)
 // shrinks it for tight spots like the phone header's model line; omitted =
 // the 18px default. `round` makes it a full circle (e.g. the phone title
 // pill, where it sits against the pill's own rounding).
@@ -62,12 +69,9 @@ export function RepoTile({
 	}
 	if (failedFor !== name) {
 		return (
-			<span
-				className={`repo-tile repo-tile--img${name === "opensession" ? " repo-tile--app-icon" : ""}`}
-				style={style}
-			>
+			<span className="repo-tile repo-tile--img" style={style}>
 				<img
-					src={`/repo-icon/${encodeURIComponent(name)}.png`}
+					src={`/repo-icon/${encodeURIComponent(name)}.png?v=${ICON_VERSION}`}
 					alt=""
 					loading="lazy"
 					onError={() => setFailedFor(name)}

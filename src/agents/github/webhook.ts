@@ -94,7 +94,7 @@ export async function handleGithubPrEvent(event: string, payload: any): Promise<
       // Butler's Vercel preview-table edits (from our bot account) carry no
       // mention and need no reaction — the session header's Preview environment button
       // already surfaces the preview URL + Ready state, so we don't inject a
-      // redundant chat notification. They fall through to the self-trigger guard.
+      // redundant session notification. They fall through to the self-trigger guard.
       if (senderIsBot) return;
       const { handleMention } = await import("./mention");
       void handleMention(event === "issue_comment" ? "issue" : "review", payload).catch((e) =>

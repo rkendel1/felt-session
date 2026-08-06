@@ -1,5 +1,5 @@
 // How a turn's folded work (tool calls + intermediate assistant messages)
-// displays in the chat: "collapsed" is the default and keeps work folded;
+// displays in the session: "collapsed" is the default and keeps work folded;
 // "auto" opens the turn fold while it is running, while "expanded" keeps it
 // open. Individual tool rows are separate disclosures and remain closed.
 // Stored server-side per user (ui-prefs) so it follows you across devices —

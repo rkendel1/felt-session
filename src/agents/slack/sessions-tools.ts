@@ -1,5 +1,5 @@
 /**
- * opensession-sessions — an in-process MCP server that lets Michael see and steer
+ * opensession-sessions — an in-process MCP server that lets the agent see and steer
  * every other Open Session session from Slack: what's running, what's waiting on a
  * question, and the controls to answer / message / cancel / spin up sessions.
  *
@@ -12,7 +12,7 @@
  * be able to puppet other sessions).
  *
  * Gating: the read tools (list/get) are available to any whitelisted user who
- * can talk to Michael; the control tools (answer/send/cancel/create, and the
+ * can talk to the bot; the control tools (answer/send/cancel/create, and the
  * spawn_task/task_status/cancel_task task primitives) are gated to the trusted
  * user via `isAdmin`, matching opensession-admin.
  */
@@ -32,10 +32,12 @@ import {
   type SessionState,
   type SessionSummary,
 } from "../../server/session-control";
-import { OPENSESSION_CHATS_DIR } from "../../server/paths";
+import { OPENSESSION_SESSIONS_DIR } from "../../server/paths";
 import { writeJsonAtomic } from "../../server/shared/atomic-write";
+import { userMatchesAny } from "../../server/shared/user-mappings";
 import { migrateSessionEngine } from "../../server/migrate-engine";
 import { resolveSessionRepoContext } from "../../server/session-repos";
+import { branchNameFromPrompt } from "../../server/suggest-branch";
 import type { NativeSessionFile, TranscriptEntry } from "../../server/types";
 
 export interface SessionsToolContext {
@@ -91,7 +93,23 @@ function questionHeaders(questions: unknown[]): string {
     .join(", ");
 }
 
-function oneLine(s: SessionSummary): string {
+function normalizedCreator(s: SessionSummary): string | null {
+  return s.createdBy || s.startedBy || null;
+}
+
+/** Case-insensitive creator match against persisted display identity or
+ * verified GitHub login, resolving configured aliases through the shared
+ * identity table. Exported for the MCP contract tests. */
+export function sessionMatchesCreatedBy(s: SessionSummary, query: string): boolean {
+  if (!query.trim()) return true;
+  return [normalizedCreator(s), s.createdByLogin]
+    .filter((value): value is string => Boolean(value))
+    .some((value) => userMatchesAny(value, [query]));
+}
+
+/** Stable, explicitly-labelled identity/timestamp fields keep callers from
+ * guessing either value from a title or relative activity text. */
+export function formatSessionLine(s: SessionSummary): string {
   const bits: string[] = [`${STATE_ICON[s.state]} *${s.title || "(untitled)"}*  \`${s.id}\``];
   const meta: string[] = [s.state];
   if (s.source) meta.push(s.source);
@@ -99,7 +117,9 @@ function oneLine(s: SessionSummary): string {
   if (s.model) meta.push(s.model);
   if (s.branch) meta.push(`branch ${s.branch}`);
   if (s.parentSessionId) meta.push(`child of ${s.parentSessionId}`);
-  if (s.startedBy) meta.push(`by ${s.startedBy}`);
+  meta.push(`createdBy=${JSON.stringify(normalizedCreator(s))}`);
+  if (s.createdByLogin) meta.push(`createdByLogin=${JSON.stringify(s.createdByLogin)}`);
+  if (s.createdAt) meta.push(`createdAt=${s.createdAt}`);
   meta.push(relTime(s.lastActivity));
   if (!s.controllable) meta.push("observe-only");
   bits.push(`   ${meta.join(" · ")}`);
@@ -119,7 +139,7 @@ function fmtTranscriptTail(entries: TranscriptEntry[]): string {
         e.type === "user"
           ? "user"
           : e.type === "assistant"
-            ? "michael"
+            ? "assistant"
             : e.type === "tool_use"
               ? `tool:${e.toolName || "?"}`
               : e.type;
@@ -179,7 +199,7 @@ export function sessionNoticePayload(message: string): string {
 /**
  * A worker reporting to its parent gets the server's facts stapled to its
  * prose, and is attributed as a worker rather than as the human whose name it
- * inherited (a report arriving as "[Michiel] …" reads to the parent model like
+ * inherited (a report arriving as "[Alex] …" reads to the parent model like
  * a human instruction, which it is not).
  *
  * The evidence is snapshotted HERE, at send time, not inside deliverToSession:
@@ -248,7 +268,7 @@ export async function workerReportPayload(
 // SessionControl.createSession code path as create_session (never a parallel
 // implementation); what it adds is the task contract: return {taskId, url}
 // immediately, poll with task_status, stop with cancel_task — plus a spawn-
-// depth loop guard and an automation refusal (defense-in-depth: michael-
+// depth loop guard and an automation refusal (defense-in-depth: opensession-
 // sessions is never wired into automation runs in the first place; opensession.ts
 // gates inProcessMcp on !isAutomationSession and admin-tools/handlers wire it
 // only for interactive Slack runs).
@@ -270,7 +290,7 @@ export interface SpawnTaskDeps {
 
 function defaultReadSessionFile(id: string): Partial<NativeSessionFile> | null {
   try {
-    const path = `${OPENSESSION_CHATS_DIR}/${id}.json`;
+    const path = `${OPENSESSION_SESSIONS_DIR}/${id}.json`;
     if (!existsSync(path)) return null;
     return JSON.parse(readFileSync(path, "utf-8"));
   } catch {
@@ -287,7 +307,7 @@ function defaultReadSessionFile(id: string): Partial<NativeSessionFile> | null {
  * (below) covers the guard in the meantime.
  */
 async function defaultStampSpawnDepth(id: string, depth: number): Promise<void> {
-  const path = `${OPENSESSION_CHATS_DIR}/${id}.json`;
+  const path = `${OPENSESSION_SESSIONS_DIR}/${id}.json`;
   for (let i = 0; i < 240; i++) {
     if (existsSync(path)) {
       try {
@@ -362,7 +382,7 @@ export interface SpawnTaskArgs {
 }
 
 export type SpawnTaskResult =
-  | { ok: true; taskId: string; url: string }
+  | { ok: true; taskId: string; url: string; createdBy: string; createdAt: string }
   | { ok: false; error: string };
 
 export async function spawnTaskImpl(
@@ -415,7 +435,7 @@ export async function spawnTaskImpl(
     parentSessionId: caller,
     reportBack: Boolean(caller),
   });
-  const { id } = await deps.control.createSession({
+  const { id, createdBy, createdAt } = await deps.control.createSession({
     prompt,
     repo: args.repo,
     mode,
@@ -436,7 +456,7 @@ export async function spawnTaskImpl(
   const base =
     process.env.OPENSESSION_UI_BASE ||
     configuredServer().publicBaseUrl;
-  return { ok: true, taskId: id, url: `${base}/session/${id}` };
+  return { ok: true, taskId: id, url: `${base}/session/${id}`, createdBy, createdAt };
 }
 
 /** Task-facing state view: running / waiting (blocked on a question) / done /
@@ -454,7 +474,7 @@ export async function taskStatusImpl(
   const s = deps.control.getSession(args.taskId);
   if (!s) return `No task/session with id \`${args.taskId}\`.`;
   const state = taskStateOf(s);
-  const parts = [`Task \`${s.id}\` — *${state}* (${s.state})`, oneLine(s)];
+  const parts = [`Task \`${s.id}\` — *${state}* (${s.state})`, formatSessionLine(s)];
   if (state === "error" && s.lastRunError) parts.push(`*Error:* ${s.lastRunError.message}`);
   if (s.state === "waiting_question" && s.pendingQuestion) {
     parts.push(
@@ -492,21 +512,28 @@ export function cancelTaskImpl(
     : `Nothing to cancel on \`${args.taskId}\` (idle, done, or an external run this server doesn't own).`;
 }
 
-export function createSessionsMcpServer(ctx: SessionsToolContext) {
+export function createSessionsMcpServer(
+  ctx: SessionsToolContext,
+  deps: { branchNameFromPrompt?: (prompt: string) => Promise<string> } = {},
+) {
   const tools: any[] = [
     // -----------------------------------------------------------------------
     // Observe (any whitelisted user)
     // -----------------------------------------------------------------------
     tool(
       "list_sessions",
-      `List all ${productName()} sessions with their live state (running / waiting_question / queued / idle / archived). Use filter 'waiting' to see only sessions blocked on a question (the ones that need a human), 'active' for running+waiting+queued, or 'all' (default, hides archived). This is the 'what's going on across all my sessions' view.`,
+      `List ${productName()} sessions with their live state and explicit creator metadata. Every row includes createdBy (null when the origin did not record one) and createdAt, so callers can answer who created sessions in a time window without guessing from titles or transcripts. Use createdBy for a case-insensitive display-name, verified-login, or configured-alias filter. Use filter 'waiting' to see only sessions blocked on a question (the ones that need a human), 'active' for running+waiting+queued, or 'all' (default, hides archived).`,
       {
         filter: z
           .enum(["all", "active", "waiting"])
           .optional()
           .describe("'all' (default, excludes archived), 'active' (running/waiting/queued), or 'waiting' (blocked on a question)."),
+        createdBy: z
+          .string()
+          .optional()
+          .describe("Case-insensitive creator display name, verified GitHub login, or configured alias. Uses persisted session identity; never title/content inference."),
       },
-      async (args: { filter?: "all" | "active" | "waiting" }) => {
+      async (args: { filter?: "all" | "active" | "waiting"; createdBy?: string }) => {
         const filter = args.filter || "all";
         let sessions = getSessionControl().listSessions();
         if (filter === "waiting") {
@@ -518,15 +545,18 @@ export function createSessionsMcpServer(ctx: SessionsToolContext) {
         } else {
           sessions = sessions.filter((s) => s.state !== "archived");
         }
+        if (args.createdBy?.trim()) {
+          sessions = sessions.filter((s) => sessionMatchesCreatedBy(s, args.createdBy!));
+        }
         if (!sessions.length) return text(`No ${filter === "all" ? "" : filter + " "}sessions.`);
         const waiting = sessions.filter((s) => s.state === "waiting_question").length;
         const header = `${sessions.length} session(s)${waiting ? ` — ⚠️ ${waiting} waiting on input` : ""}:`;
-        return text([header, "", ...sessions.map(oneLine)].join("\n"));
+        return text([header, "", ...sessions.map(formatSessionLine)].join("\n"));
       }
     ),
     tool(
       "get_session",
-      "Get detail on one session by id: its state, any pending question (with the options to choose from), how many messages are queued, and the tail of its transcript so you can see what it's doing.",
+      "Get detail on one session by id, including explicit createdBy and createdAt metadata (createdBy is null when the origin did not record identity), state, any pending question, queue depth, and transcript tail.",
       {
         id: z.string().describe("The session id, e.g. 'bks-…' or 'slack-…' from list_sessions."),
         transcript_lines: z
@@ -538,7 +568,7 @@ export function createSessionsMcpServer(ctx: SessionsToolContext) {
         const ctrl = getSessionControl();
         const s = ctrl.getSession(args.id);
         if (!s) return text(`No session with id \`${args.id}\`.`);
-        const parts = [oneLine(s)];
+        const parts = [formatSessionLine(s)];
         if (s.goal) parts.push(`\n*Pinned goal:* ${s.goal}`);
         if (s.pendingQuestion) {
           parts.push(
@@ -621,7 +651,7 @@ export function createSessionsMcpServer(ctx: SessionsToolContext) {
       ),
       tool(
         "create_session",
-        `Spin up a visible ${productName()} session and start it on a prompt. Use this as the sub-session primitive: workers can delegate focused tasks and report back to this parent session. mode 'ask' (default) runs read-only on the selected repo checkout; mode 'code' can edit files / open PRs (never merges). A worker targeting one of the parent's repos shares that exact primary or attached worktree, so reviewers see current/uncommitted work; pass repo explicitly for attached-repo tasks. \`branch\` is only used when there is nothing to share — a standalone worker, or a worker targeting a repo the parent does not carry. Repo defaults to the parent session's repo (${defaultRepo().id} when standalone); pass another registered repo id to override. For workers that only need filesystem/code access, pass mcpServers: [] to avoid unrelated MCP startup cost/failures. When called from a session, the worker defaults to the same workspace and is instructed to report back here; set standalone true or reportBack false to opt out.`,
+        `Spin up a visible ${productName()} session and start it on a prompt. Use this as the sub-session primitive: workers can delegate focused tasks and report back to this parent session. mode 'ask' (default) runs read-only on the selected repo checkout; mode 'code' can edit files / open PRs (never merges). A worker targeting one of the parent's repos shares that exact primary or attached worktree, so reviewers see current/uncommitted work; pass repo explicitly for attached-repo tasks. \`branch\` is only used when there is nothing to share — a standalone worker, or a worker targeting a repo the parent does not carry — and is generated from the prompt when omitted. Repo defaults to the parent session's repo (${defaultRepo().id} when standalone); pass another registered repo id to override. For workers that only need filesystem/code access, pass mcpServers: [] to avoid unrelated MCP startup cost/failures. When called from a session, the worker defaults to the same workspace and is instructed to report back here; set standalone true or reportBack false to opt out.`,
         {
           prompt: z.string().describe("The task/prompt to start the session on."),
           repo: z
@@ -635,7 +665,7 @@ export function createSessionsMcpServer(ctx: SessionsToolContext) {
           branch: z
             .string()
             .optional()
-            .describe("Fallback branch for code mode (required); only used when the worker can't share the parent workspace's worktree (standalone or different repo). Ignored for ask."),
+            .describe("Optional fallback branch for code mode. When the worker can't share the parent workspace's worktree, an omitted branch is generated from the prompt. Ignored for ask."),
           model: z.string().optional().describe("Optional model id (e.g. 'claude-opus-5')."),
           mcpServers: z
             .array(z.string())
@@ -682,11 +712,15 @@ export function createSessionsMcpServer(ctx: SessionsToolContext) {
                 reportBack: shouldReportBack,
               })
             : args.prompt;
-          const { id } = await getSessionControl().createSession({
+          const branch =
+            args.mode === "code" && !args.branch?.trim()
+              ? await (deps.branchNameFromPrompt ?? branchNameFromPrompt)(args.prompt)
+              : args.branch;
+          const { id, createdBy, createdAt } = await getSessionControl().createSession({
             prompt,
             repo: args.repo,
             mode: args.mode,
-            branch: args.branch,
+            branch,
             model: args.model,
             mcpServers: args.mcpServers,
             parentSessionId,
@@ -696,7 +730,7 @@ export function createSessionsMcpServer(ctx: SessionsToolContext) {
           });
           return text(
             [
-              `Started session \`${id}\` (${args.mode === "code" ? `code on ${args.branch}` : "ask"}). It'll appear in list_sessions as it boots.`,
+              `Started session \`${id}\` (${args.mode === "code" ? `code on ${branch}` : "ask"}). Metadata: createdBy=${JSON.stringify(createdBy)} · createdAt=${createdAt}. It'll appear in list_sessions as it boots.`,
               parentSessionId && shouldReportBack
                 ? `It is linked to \`${parentSessionId}\` and has instructions to report back there.`
                 : "",
@@ -761,7 +795,7 @@ export function createSessionsMcpServer(ctx: SessionsToolContext) {
           const res = await spawnTaskImpl(args, ctx);
           if (!res.ok) return text(res.error);
           return text(
-            `Spawned task \`${res.taskId}\` — ${res.url}\nIt runs in the background; poll with task_status(taskId)${ctx.isAdmin ? ", answer questions with answer_session_question," : ""} and stop with cancel_task.`
+            `Spawned task \`${res.taskId}\` — ${res.url}\nMetadata: createdBy=${JSON.stringify(res.createdBy)} · createdAt=${res.createdAt}. It runs in the background; poll with task_status(taskId)${ctx.isAdmin ? ", answer questions with answer_session_question," : ""} and stop with cancel_task.`
           );
         }
       ),

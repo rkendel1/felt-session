@@ -644,7 +644,7 @@ Help with whatever they're asking. You have a worktree ready at ${session.worktr
         session.issueCreator
       );
 
-      // Link the Linear session to the Michael web UI session viewer
+      // Link the Linear session to the web UI session viewer
       updateAgentSession(accessToken, agentSession.id, {
         addedExternalUrls: [{ url: opensessionSessionUrl(branch), label: `Open in ${personaName()}` }],
       }).catch(() => {});

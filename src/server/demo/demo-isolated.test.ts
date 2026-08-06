@@ -4,7 +4,7 @@
  * before any module loads); in the main `bun test` process every test here is
  * skipped. The hook-based seams below are NOT enough on their own: bun test
  * runs all files in one process, so module-eval snapshots (SESSIONS_DIR,
- * WORKSPACES_DIR, PR_CACHE_FILE) and ensureChatWorkspaces' fire-and-forget
+ * WORKSPACES_DIR, PR_CACHE_FILE) and ensureSessionWorkspaces' fire-and-forget
  * persists outlive afterAll's restore and would file demo sessions into the
  * operator's LIVE stores (observed 2026-08-04: bks-demo-* stubs + a minted
  * workspace in prod). In the child, HOME is scratch from first instruction to
@@ -20,7 +20,7 @@ const CHILD = process.env.OS_DEMO_TEST_CHILD === "1";
 
 let home: string;
 let priorHome: string | undefined;
-let priorChatsDir: string | undefined;
+let priorSessionsDir: string | undefined;
 let priorOcDir: string | undefined;
 let priorConfig: string | undefined;
 let priorGhBackoff: number | undefined;
@@ -37,7 +37,7 @@ beforeAll(async () => {
   // stateDir()/statePath() cache per (HOME, name) — forget resolutions made
   // for the real HOME by other test files.
   const paths = await import("../paths");
-  priorChatsDir = paths.__setChatsDirForTest(join(home, "chats"));
+  priorSessionsDir = paths.__setSessionsDirForTest(join(home, "sessions"));
   const oc = await import("../opencode-transcript");
   priorOcDir = oc.__setOpencodeTranscriptsDirForTest(join(home, "oc-transcripts"));
   // Close the GitHub gate: getAllSessions' PR enrichment must serve the
@@ -57,8 +57,8 @@ afterAll(async () => {
   if (priorGhBackoff !== undefined) {
     (await import("../github-limit")).__setGhBackoffForTest(priorGhBackoff);
   }
-  if (priorChatsDir !== undefined) {
-    (await import("../paths")).__setChatsDirForTest(priorChatsDir);
+  if (priorSessionsDir !== undefined) {
+    (await import("../paths")).__setSessionsDirForTest(priorSessionsDir);
   }
   if (priorOcDir !== undefined) {
     (await import("../opencode-transcript")).__setOpencodeTranscriptsDirForTest(
@@ -68,8 +68,8 @@ afterAll(async () => {
   // Drop the session cache built against the scratch dirs: bun test runs every
   // file in ONE process, and a later file's getAllSessions within the cache
   // TTL would otherwise serve the DEMO list against the restored real dirs —
-  // ensureChatWorkspaces then files demo sessions into the operator's live
-  // chats/workspaces stores (observed 2026-08-04: bks-demo-* stubs in prod).
+  // ensureSessionWorkspaces then files demo sessions into the operator's live
+  // sessions/workspaces stores (observed 2026-08-04: bks-demo-* stubs in prod).
   (await import("../session-cache")).invalidateSessionsCache();
   const { rmSync } = await import("node:fs");
   rmSync(home, { recursive: true, force: true });
@@ -98,7 +98,7 @@ describe.skipIf(!CHILD)("demo dataset generator", () => {
     expect(result.created).toBe(true);
     expect(result.sessionIds.length).toBeGreaterThanOrEqual(8);
 
-    // The real reader (cache-busted so it re-reads the repointed chats dir).
+    // The real reader (cache-busted so it re-reads the repointed sessions dir).
     const { getAllSessions } = await import(
       `../sessions.ts?test=${crypto.randomUUID()}`
     );
@@ -110,7 +110,7 @@ describe.skipIf(!CHILD)("demo dataset generator", () => {
 
     // Failed session carries its terminal error on the file.
     const failed = JSON.parse(
-      readFileSync(join(result.chatsDir, "bks-demo-failed.json"), "utf-8"),
+      readFileSync(join(result.sessionsDir, "bks-demo-failed.json"), "utf-8"),
     );
     expect(failed.lastRunError?.message).toContain("Usage limit");
 

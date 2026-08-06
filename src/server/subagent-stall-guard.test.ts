@@ -87,7 +87,77 @@ describe("makeSubagentStallGuard.noteTool", () => {
 		guard.noteTool({ id: "task1", tool: "task", state: { status: "completed" } });
 		// No public accessor for openTasks; this at least exercises the state
 		// transitions without throwing. The firing behavior is covered by the
-		// noteEvent clock tests above plus the interval in start().
+		// evaluate() tests below.
 		expect(guard.isFamily(PARENT)).toBe(true);
+	});
+});
+
+// Regression tests for the 2026-08-06 os-019fd67b wedge: a bash call that
+// launched a detached Chrome never resolved (the child inherited the tool's
+// stdout/stderr pipe), no task child and no retries were involved, and the
+// turn sat silent for 2h52m until the wall-clock deadline. Any open non-task
+// tool with family-wide silence past the tool window must end the turn.
+describe("makeSubagentStallGuard.evaluate (tool stalls)", () => {
+	const TASK_WINDOW = 600_000; // SUBAGENT_STALL_MS default
+	const TOOL_WINDOW = 1_200_000; // TOOL_STALL_MS default
+
+	test("an open non-task tool fires kind=tool after the tool window", () => {
+		const guard = makeGuard();
+		const t0 = Date.now();
+		guard.noteTool({
+			id: "bash1",
+			tool: "bash",
+			state: { status: "running", input: { command: "setsid -f google-chrome --remote-debugging-port=9346" } },
+		});
+		expect(guard.evaluate(t0 + TOOL_WINDOW - 60_000)).toBeNull();
+		const verdict = guard.evaluate(t0 + TOOL_WINDOW + 60_000);
+		expect(verdict?.kind).toBe("tool");
+		expect(verdict?.openToolLabels.join("")).toContain("bash: setsid -f google-chrome");
+	});
+
+	test("a completed tool no longer fires", () => {
+		const guard = makeGuard();
+		const t0 = Date.now();
+		guard.noteTool({ id: "bash1", tool: "bash", state: { status: "running" } });
+		guard.noteTool({ id: "bash1", tool: "bash", state: { status: "completed" } });
+		expect(guard.evaluate(t0 + TOOL_WINDOW * 2)).toBeNull();
+	});
+
+	test("an open task fires the task lane first, ahead of the tool lane", () => {
+		const guard = makeGuard();
+		const t0 = Date.now();
+		guard.noteTool({ id: "task1", tool: "task", state: { status: "running" } });
+		guard.noteTool({ id: "bash1", tool: "bash", state: { status: "running" } });
+		const verdict = guard.evaluate(t0 + TOOL_WINDOW + 60_000);
+		expect(verdict?.kind).toBe("task");
+		expect(verdict?.openTaskIds).toEqual(["task1"]);
+	});
+
+	test("the task lane still fires at its own (shorter) window", () => {
+		const guard = makeGuard();
+		const t0 = Date.now();
+		guard.noteTool({ id: "task1", tool: "task", state: { status: "running" } });
+		expect(guard.evaluate(t0 + TASK_WINDOW + 60_000)?.kind).toBe("task");
+	});
+
+	test("a pending permission ask pauses the clock; resolution restarts it", () => {
+		const guard = makeGuard();
+		const t0 = Date.now();
+		guard.noteTool({ id: "bash1", tool: "bash", state: { status: "running" } });
+		guard.noteAskPending(1);
+		expect(guard.evaluate(t0 + TOOL_WINDOW * 3)).toBeNull();
+		guard.noteAskPending(-1);
+		// The human's wait must not count toward silence: clock restarted at
+		// resolution, so the verdict stays null until a fresh window elapses.
+		expect(guard.evaluate(Date.now() + TOOL_WINDOW - 60_000)).toBeNull();
+		expect(guard.evaluate(Date.now() + TOOL_WINDOW + 60_000)?.kind).toBe("tool");
+	});
+
+	test("family content resets the tool-stall clock too", () => {
+		const guard = makeGuard();
+		const t0 = Date.now();
+		guard.noteTool({ id: "bash1", tool: "bash", state: { status: "running" } });
+		guard.noteEvent(partEvent(PARENT, { id: "prt-x", type: "text", text: "still going" }));
+		expect(guard.evaluate(t0 + TOOL_WINDOW - 60_000)).toBeNull();
 	});
 });

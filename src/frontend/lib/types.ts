@@ -144,6 +144,33 @@ export interface FeedFilterSpec {
 	optionsFromItems?: { value: string; label: string };
 }
 
+/**
+ * A project — the top level of the model: a source of work that owns a sidebar
+ * band and whose contents resolve to workspaces (mirror of
+ * src/server/projects.ts). Two kinds: a registered git repo, or a feed backed
+ * by an MCP server / integration. See CONCEPTS.md.
+ */
+export interface Project {
+	id: string;
+	kind: "repo" | "feed";
+	/** Unique across kinds: `repo:<id>` / `feed:<id>`. */
+	key: string;
+	label: string;
+	description?: string;
+	tileBg?: string;
+	repo?: {
+		ghRepo: string;
+		defaultBranch: string;
+		sharedCheckout: boolean;
+		isDefault: boolean;
+	};
+	feed?: {
+		refKind: string;
+		fromConfig: boolean;
+		mcpServers?: string[];
+	};
+}
+
 /** A sidebar feed band's identity (mirror of src/server/feeds.ts). */
 export interface FeedDescriptor {
 	id: string;
@@ -220,45 +247,6 @@ export interface ReportGroup {
 }
 
 /**
- * Native team-chat message (mirror of src/server/chat.ts). Lives in a channel:
- * "watercooler" (team-wide room) or "session:<id>" (a session's Chat tab).
- * Text may carry `@Name` teammate mentions and `@session:<id>` session tags.
- */
-export interface ChatImage {
-	id: string;
-	/** Original filename (alt text / download). */
-	name: string;
-	/** MIME type, e.g. "image/png". */
-	mime: string;
-}
-
-/** Snapshot of a quoted message (Slack-style "reply") — a copy, so it stays
- *  renderable even after the original leaves the bounded store. */
-export interface ChatReplyTo {
-	id: string;
-	user: string;
-	/** Excerpt of the original text (may be empty for image-only originals). */
-	text: string;
-}
-
-export interface ChatMessage {
-	id: string;
-	/** Sender's self-selected display name. */
-	user: string;
-	text: string;
-	/** Attached images (absent/empty on text-only messages). */
-	images?: ChatImage[];
-	/** ms epoch */
-	ts: number;
-	/** Thread parent's message id — set only on thread replies. */
-	threadId?: string;
-	/** Quoted message this one replies to (independent of threads). */
-	replyTo?: ChatReplyTo;
-	/** emoji → display names of teammates who reacted with it. */
-	reactions?: Record<string, string[]>;
-}
-
-/**
  * Cumulative token/cost accounting for a session (mirror of the server type).
  * Cost is the USD price returned by the engine for each completed provider
  * message. `contextTokens` is the most recent turn's full prompt size, shown
@@ -290,6 +278,10 @@ export interface UnifiedSession {
 	source: SessionSource;
 	branch: string | null;
 	worktreeDir: string | null;
+	/** Explicit creator identity from the session store. */
+	createdBy?: string | null;
+	/** Verified GitHub login when available. */
+	createdByLogin?: string;
 	startedBy: string | null;
 	title: string;
 	/** True when `title` is a manual rename rather than derived/generated. */
@@ -329,14 +321,15 @@ export interface UnifiedSession {
 	/** What the last automated review concluded on this PR. */
 	prOsReview?: OsReview;
 	mode?: "ask" | "code" | "scratch";
-	/** Primary repo this chat works in (registered repo id). */
+	/** Primary repo this session works in (registered repo id). */
 	repo?: string;
-	/** Optional Project (folder) this chat belongs to; null/undefined = standalone. */
-	projectId?: string | null;
+	/** Workspace this session belongs to; null/undefined = standalone. NOT a
+	 *  project — a project is the level above (a repo band or a feed band).
+	 *  See CONCEPTS.md. */
+	workspaceId?: string | null;
 	/** Parent/orchestrator session when spawned as a worker sub-session. */
 	parentSessionId?: string;
 	/** Legacy removed side-chat record. Kept hidden until its parent is deleted. */
-	sideChatOf?: string;
 	/** The user's standing Desk (concierge) session — fixed title, hidden from
 	 *  the session lists, opened via the Desk overlay (⌘J). */
 	desk?: boolean;
@@ -446,8 +439,14 @@ export interface UnifiedSession {
 	};
 }
 
-/** A Project — an optional folder that groups chats (sessions). */
-export interface Project {
+/**
+ * A Workspace — the container that groups the sessions about one piece of work
+ * (a branch, a PR, a support ticket). Optionally owns a worktree, which new
+ * sessions in it inherit. Usually sits *inside* a project (a repo band or a feed
+ * band); scratch workspaces are repo-less and sit outside project bands. Do not
+ * confuse the two — see CONCEPTS.md.
+ */
+export interface Workspace {
 	id: string;
 	name: string;
 	repo?: string;
@@ -575,11 +574,11 @@ export interface PrDetails {
 	/** The GitHub stack this PR is a layer of. Null/absent covers both "not
 	 *  stacked" and "the stack read failed" — the UI treats them the same. */
 	stack?: PrStack | null;
-	/** Set on the session PR route when this chat's worktree was branched off
-	 *  another chat's branch: the branch underneath. With no `stack`, it's the
+	/** Set on the session PR route when this session's worktree was branched off
+	 *  another session's branch: the branch underneath. With no `stack`, it's the
 	 *  cue to offer "link these into a stack". */
 	stackBase?: string;
-	/** The latest automated Michael review for this PR. */
+	/** The latest automated agent review for this PR. */
 	osReview?: OsReview;
 	/** An automated review is currently running for this PR. */
 	reviewActive?: boolean;
@@ -642,10 +641,7 @@ export type WSClientMessage =
 	| { type: "watch_note"; noteId: string; user?: string }
 	| { type: "leave_note" }
 	| { type: "note_update"; noteId: string; update: string }
-	| { type: "note_awareness"; noteId: string; update: string }
-	// Native team chat: ephemeral typing signal for a chat channel
-	// ("watercooler" or "session:<id>"). Relay-only, never persisted.
-	| { type: "chat_typing"; channel: string; user: string };
+	| { type: "note_awareness"; noteId: string; update: string };
 
 export type WSServerMessage =
 	// The protocol core: hello/pong/error/notice, the transcript frames (init/
@@ -704,14 +700,7 @@ export type WSServerMessage =
 	| { type: "note_state"; noteId: string; update: string }
 	| { type: "note_update"; noteId: string; update: string }
 	| { type: "note_awareness"; noteId: string; update: string }
-	| { type: "note_presence"; noteId: string; viewers: string[] }
-	// Native team chat — session note channels (session:<id>), not Slack.
-	// Broadcast to every client so unread badges work without joining.
-	| { type: "chat_message"; channel: string; message: ChatMessage }
-	// An existing message changed in place (reaction toggled) — replace by id;
-	// never bumps unread badges.
-	| { type: "chat_message_updated"; channel: string; message: ChatMessage }
-	| { type: "chat_typing"; channel: string; user: string };
+	| { type: "note_presence"; noteId: string; viewers: string[] };
 
 
 // ── Analytics (sidebar → Analytics; GET /api/analytics) ──

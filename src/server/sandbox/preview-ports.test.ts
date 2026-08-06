@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { __setChatsDirForTest } from "../paths";
+import { __setSessionsDirForTest } from "../paths";
 import {
   SANDBOX_HTTPS_BASE,
   SANDBOX_HTTPS_RANGE,
@@ -16,11 +16,11 @@ let prevDir: string;
 
 beforeAll(() => {
   scratch = mkdtempSync(join(tmpdir(), "bks-preview-ports-"));
-  prevDir = __setChatsDirForTest(scratch);
+  prevDir = __setSessionsDirForTest(scratch);
 });
 
 afterAll(() => {
-  __setChatsDirForTest(prevDir);
+  __setSessionsDirForTest(prevDir);
   rmSync(scratch, { recursive: true, force: true });
 });
 

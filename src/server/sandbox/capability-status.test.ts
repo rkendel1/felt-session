@@ -6,7 +6,7 @@
  *
  * Config is pointed at a scratch file via OPENSESSION_SANDBOX_CONFIG (read fresh
  * per call), saved/restored so the rest of the suite never sees it. The
- * kill-switch file lives under OPENSESSION_CHATS_DIR; expectations read the live
+ * kill-switch file lives under OPENSESSION_SESSIONS_DIR; expectations read the live
  * sandboxesEnabled() instead of assuming it, so a dev box with the switch on
  * still passes.
  */
@@ -131,7 +131,7 @@ describe("sandboxCapabilityStatus (the /api/sandbox/status payload)", () => {
     write({
       provider: "modal",
       modal: { tokenId: "ak-test", tokenSecret: "as-test" },
-      callbackBaseUrl: "wss://michael.example.ts.net",
+      callbackBaseUrl: "wss://os.example.ts.net",
     });
     const modal = sandboxCapabilityStatus().providers.find((p) => p.id === "modal")!;
     expect(modal.configured).toBe(true);
@@ -144,7 +144,7 @@ describe("sandboxCapabilityStatus (the /api/sandbox/status payload)", () => {
     write({
       provider: "lambda-microvm",
       awsLambdaMicrovm: { imageIdentifier: "arn:aws:lambda:us-east-1:123:microvm-image/test" },
-      callbackBaseUrl: "wss://michael.example.ts.net",
+      callbackBaseUrl: "wss://os.example.ts.net",
     });
     expect(sandboxProviderConfigured("lambda-microvm")).toBe(true);
     expect(
@@ -182,7 +182,7 @@ describe("sandboxCapabilityStatus (the /api/sandbox/status payload)", () => {
     write({
       provider: "docker",
       e2b: { apiKey: "e2b_x" },
-      callbackBaseUrl: "wss://michael.example.ts.net",
+      callbackBaseUrl: "wss://os.example.ts.net",
     });
     const e = sandboxCapabilityStatus().providers.find((p) => p.id === "e2b")!;
     expect(e.configured).toBe(true);

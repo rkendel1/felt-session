@@ -50,7 +50,7 @@ const {
   rpcSocketPath,
 } = await import("./protocol");
 const { WsFrameBuffer, replayStartFor } = await import("./ws-buffer");
-const { OPENSESSION_CHATS_DIR } = await import("../server/paths");
+const { OPENSESSION_SESSIONS_DIR } = await import("../server/paths");
 
 type RunHostSpec = import("./protocol").RunHostSpec;
 type RunHostMeta = import("./protocol").RunHostMeta;
@@ -380,7 +380,7 @@ function proxyMcpConfigs(): Record<string, unknown> | undefined {
         OPENSESSION_RPC_WS_HOST: spec.hostId,
         OPENSESSION_RPC_WS_AUTH: RUN_WS_TOKEN,
       }
-    : { OPENSESSION_RPC_SOCKET: rpcSocketPath(OPENSESSION_CHATS_DIR) };
+    : { OPENSESSION_RPC_SOCKET: rpcSocketPath(OPENSESSION_SESSIONS_DIR) };
   const out: Record<string, unknown> = {};
   for (const name of names) {
     out[name] = {

@@ -366,10 +366,30 @@ function readCredsFile(path: string): OauthCreds | null {
  * Refresh the access token in a credentials file, writing rotated tokens
  * back (Anthropic rotates refresh tokens on use — the write-back is what
  * keeps the file usable for the next refresh, ours or `claude-plan`'s).
+ *
+ * Concurrent callers for the same file coalesce onto one in-flight refresh:
+ * two simultaneous refreshes would both spend the same refresh token, and the
+ * loser's rotation can invalidate the whole token family (that's one way the
+ * usage login gets "lost"). For files shared with other writers (claude-plan
+ * snapshots), the file is also re-read just before the network call — if the
+ * cron rotated it moments ago, we use its fresh tokens instead of burning the
+ * stale ones we were called with.
  */
-async function refreshCredsFile(path: string, creds: OauthCreds): Promise<OauthCreds | null> {
+const credsRefreshInFlight = new Map<string, Promise<OauthCreds | null>>();
+
+function refreshCredsFile(path: string, creds: OauthCreds): Promise<OauthCreds | null> {
+  const inFlight = credsRefreshInFlight.get(path);
+  if (inFlight) return inFlight;
+  const p = doRefreshCredsFile(path, creds).finally(() => credsRefreshInFlight.delete(path));
+  credsRefreshInFlight.set(path, p);
+  return p;
+}
+
+async function doRefreshCredsFile(path: string, staleCreds: OauthCreds): Promise<OauthCreds | null> {
   const blockedUntil = credentialsRefreshBlockedUntil.get(path) ?? 0;
   if (Date.now() < blockedUntil) return null;
+  const creds = readCredsFile(path) ?? staleCreds;
+  if (creds.expiresAt > Date.now() + TOKEN_REFRESH_SLACK_MS) return creds;
   try {
     const res = await fetch(TOKEN_URL, {
       method: "POST",
@@ -441,7 +461,7 @@ async function usageToken(
       }
       return {
         error:
-          "OAuth credentials expired and refresh failed. Re-run `claude` login or `claude-plan auth` for this account, then set the usage credentials path again.",
+          "OAuth credentials expired and refresh failed. Reconnect usage from Settings → Models (account menu → Sign in with Claude), or re-login on the VPS and update the credentials path.",
       };
     }
     return { error: `Couldn't read OAuth credentials at ${account.credentialsPath}` };
@@ -815,6 +835,32 @@ export function setAccountOwner(
   console.log(
     `[claude-accounts] ${next.name} is now ${trimmed ? `the personal sub of ${trimmed}` : "a shared pool account"}`
   );
+  return toPublic(next);
+}
+
+/**
+ * Attach freshly minted usage OAuth credentials (see claude-oauth-login.ts)
+ * to an account: point credentialsPath at the opensession-owned file, clear
+ * any latched usageScope "missing" (the login token CAN read the usage
+ * endpoint), adopt the sign-in email when the account had none, and kick an
+ * immediate usage refresh so the UI fills in without waiting for the poller.
+ */
+export function setAccountUsageCredentials(
+  id: string,
+  path: string,
+  email?: string
+): ClaudeAccountPublic | null {
+  const accounts = readStore();
+  const idx = accounts.findIndex((a) => a.id === id);
+  if (idx === -1) return null;
+  const next: ClaudeAccount = { ...accounts[idx], credentialsPath: path };
+  delete next.usageScope;
+  if (email && !next.email) next.email = email;
+  accounts[idx] = next;
+  writeStore(accounts);
+  usageCache.delete(id);
+  credentialsRefreshBlockedUntil.delete(path);
+  void refreshAccountUsage(next);
   return toPublic(next);
 }
 

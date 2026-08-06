@@ -3,15 +3,15 @@
  * `backstage-user` name from the UserPicker — not an auth identity) gets one
  * JSON file `~/.opensession-hides/<user>.json` of shape
  * `{ hides: { [rowKey]: isoHiddenAt } }`, where `rowKey` is a sidebar row key
- * (`workspace:<id>` or a solo chat id).
+ * (`workspace:<id>` or a solo session id).
  *
  * Hiding is the personal counterpart to archiving: archive.ts is a GLOBAL
- * registry, so archiving a chat removes it for the whole team — wrong when a
+ * registry, so archiving a session removes it for the whole team — wrong when a
  * teammate is still working in it. A hide only ever affects the one user, and
- * leaves the chat running and visible for everyone else.
+ * leaves the session running and visible for everyone else.
  *
  * The server does no lifecycle logic (same split as snoozes): the frontend
- * resurfaces a hidden row while any of its chats is blocked on a question, and
+ * resurfaces a hidden row while any of its sessions is blocked on a question, and
  * consumes the entry when it does, so a hide can never swallow work that needs
  * you.
  */

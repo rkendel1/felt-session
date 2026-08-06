@@ -1,5 +1,5 @@
 /**
- * opensession-github — an in-process MCP server that lets Michael trigger the GitHub
+ * opensession-github — an in-process MCP server that lets the agent trigger the GitHub
  * PR behaviors (the same review / auto-fix / simplify / adversarial actions the PR
  * labels fire) from Slack, for cases where the agent is mid-conversation. Explicit
  * "review PR <n>"-style commands are also intercepted deterministically before the

@@ -10,12 +10,14 @@
  *
  *  - Claude account with an `owner` (personal sub) → DM that teammate
  *    (resolved through the same identity table as commit attribution).
- *  - Pool Claude accounts and all codex accounts → DM Michiel.
+ *  - Pool Claude accounts and all codex accounts → DM the instance owner.
  *
  * Detected issues: unreadable/expired Claude OAuth credential files, revoked
  * setup-tokens (401 from the usage endpoint), Claude refresh tokens within a
  * week of expiry, and codex ChatGPT access tokens expired or within a day of
- * expiry (they only refresh when a codex turn runs, so an idle account rots).
+ * expiry. The sweep first runs refreshIdleCodexTokens (codex-token-refresh.ts)
+ * so a codex expiry alert only ever fires when the in-process refresh itself
+ * failed (dead refresh token, endpoint trouble).
  *
  * Alerts dedupe through a state file: a standing issue re-alerts daily, and
  * clears silently once fixed. Transient poller noise (rate-limit cooldowns)
@@ -25,6 +27,7 @@
 import { existsSync, readFileSync } from "fs";
 import { listAccountsPublic } from "./claude-accounts";
 import { listCodexAccountsPublic } from "./codex-accounts";
+import { refreshIdleCodexTokens } from "./codex-token-refresh";
 import { stateDir } from "./paths";
 import { resolveTeammate } from "./shared/user-mappings";
 import { writeFileAtomic } from "./shared/atomic-write";
@@ -102,9 +105,11 @@ function claudeIssues(): Issue[] {
     const who = a.owner || FALLBACK_TEAMMATE;
     const label = a.owner ? `your personal Claude sub "${a.name}"` : `pool Claude account "${a.name}"`;
     const err = a.usage?.error || "";
-    const relogin = a.credentialsPath
-      ? `Re-login on the VPS: \`CLAUDE_CONFIG_DIR=${a.credentialsPath.replace(/\/credentials\.json$/, "")} claude login\`.`
-      : "Generate a fresh token with `claude setup-token` and update it in Settings → Models.";
+    const relogin = a.credentialsPath?.includes(".opensession-claude-oauth")
+      ? `Reconnect it in Settings → Models → account menu → "Sign in with Claude".`
+      : a.credentialsPath
+        ? `Re-login on the VPS: \`CLAUDE_CONFIG_DIR=${a.credentialsPath.replace(/\/credentials\.json$/, "")} claude login\` — or switch it to the web flow: Settings → Models → account menu → "Sign in with Claude".`
+        : "Generate a fresh token with `claude setup-token` and update it in Settings → Models.";
 
     if (a.usage?.errorStatus === 401) {
       issues.push({
@@ -279,6 +284,11 @@ async function githubPatIssues(): Promise<Issue[]> {
 
 /** One sweep: detect, dedupe against state, DM, persist. Exported for tests/manual runs. */
 export async function sweepAccountHealth(): Promise<Issue[]> {
+  // Repair before detecting: refresh idle codex accounts' ChatGPT tokens so
+  // an expiry that a refresh can fix never becomes an alert.
+  await refreshIdleCodexTokens().catch((e) =>
+    console.warn("[account-health] codex token refresh failed:", e)
+  );
   const issues = [...detectAccountIssues(), ...(await githubPatIssues())];
   const state = readState();
   const now = Date.now();

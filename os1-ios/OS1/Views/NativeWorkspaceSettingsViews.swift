@@ -26,7 +26,28 @@ struct WorkspaceGeneralSettingsView: View {
     }
 }
 
-struct AccountsSettingsView: View {
+/// Settings → Models. The subscription pools and the bring-your-own-key
+/// providers are one screen, matching the web: they answer the same question
+/// ("where do the models come from?") and each half used to end by pointing at
+/// the other. Both halves render sections into this List rather than owning
+/// their own, so they read as one page.
+struct ModelsSettingsView: View {
+    @State private var reload = 0
+
+    var body: some View {
+        List {
+            ModelAccountsSections(reload: reload)
+            ModelProvidersSections(reload: reload)
+        }
+        .insetGroupedListCompat()
+        .navigationTitle("Models")
+        .refreshable { reload += 1 }
+    }
+}
+
+struct ModelAccountsSections: View {
+    /// Bumped by the enclosing pane's pull-to-refresh; re-runs `task`.
+    var reload: Int
     @State private var catalog: ModelCatalogSettings?
     @State private var claude: [ProviderAccount] = []
     @State private var codex: [ProviderAccount] = []
@@ -39,11 +60,18 @@ struct AccountsSettingsView: View {
     @State private var codexLoginSheet = false
 
     var body: some View {
-        List {
-            if loading { settingsLoadingRow }
-            if let error { settingsErrorRow(error) { Task { await load() } } }
-            if !loading, error == nil {
-                Section("Workspace defaults") {
+        Group {
+            // The `task` hangs off this section, which is rendered in every
+            // state. A `Group`'s modifiers apply to each child individually, so
+            // parking it on a conditional row would tear the task down the
+            // moment that row swapped out — cancelling the fetch mid-flight and
+            // leaving `loading` stuck true forever.
+            Section("Workspace defaults") {
+                if loading {
+                    settingsLoadingRow
+                } else if let error {
+                    settingsErrorRow(error) { Task { await load() } }
+                } else {
                     Picker("Default model", selection: $selectedModel) {
                         Text("None").tag("")
                         ForEach(validModels, id: \.id) { model in
@@ -52,15 +80,14 @@ struct AccountsSettingsView: View {
                     }
                     Toggle("Auto-fallback", isOn: $autoFallback)
                 }
+            }
+            .task(id: reload) { await load() }
 
+            if !loading, error == nil {
                 accountSection("Claude", accounts: validClaude, kind: .claude)
                 accountSection("Codex", accounts: validCodex, kind: .codex)
             }
         }
-        .insetGroupedListCompat()
-        .navigationTitle("Accounts")
-        .task { await load() }
-        .refreshable { await load() }
         .onChange(of: selectedModel) { _, value in
             guard !loading else { return }
             Task { await saveDefault(value) }
@@ -174,7 +201,9 @@ struct AccountsSettingsView: View {
     }
 }
 
-struct ModelProvidersSettingsView: View {
+struct ModelProvidersSections: View {
+    /// Bumped by the enclosing pane's pull-to-refresh; re-runs `task`.
+    var reload: Int
     @State private var providers: [ModelProvider] = []
     @State private var loading = true
     @State private var error: String?
@@ -182,11 +211,15 @@ struct ModelProvidersSettingsView: View {
     @State private var deleting: ModelProvider?
 
     var body: some View {
-        List {
+        Section("Your own providers") {
             if loading { settingsLoadingRow }
             if let error { settingsErrorRow(error) { Task { await load() } } }
             if !loading, error == nil {
-                if providers.isEmpty { ContentUnavailableView("No model providers", systemImage: "key") }
+                if providers.isEmpty {
+                    Text("No providers yet — add one to run sessions on models beyond the Anthropic and OpenAI subscriptions.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 ForEach(providers.filter { $0.id?.isEmpty == false }, id: \.id) { provider in
                     Button { editor = provider } label: {
                         VStack(alignment: .leading) {
@@ -198,8 +231,7 @@ struct ModelProvidersSettingsView: View {
                 Button { editor = ModelProvider(id: "", apiKeyMasked: nil, baseURL: nil, models: nil) } label: { Label("Add provider", systemImage: "plus") }
             }
         }
-        .navigationTitle("Model Providers")
-        .task { await load() }.refreshable { await load() }
+        .task(id: reload) { await load() }
         .sheet(item: $editor) { provider in
             ModelProviderEditor(provider: provider, onSave: save, onDelete: { deleting = provider })
         }
@@ -370,15 +402,45 @@ struct MemorySettingsView: View {
     private func delete(_ target: MemoryEditTarget) async { guard let key = target.scope.key, let id = target.entry?.id else { return }; do { _ = try await SettingsAPI.deleteMemory(scopeKey: key, id: id); editor = nil; await load() } catch { self.error = error.localizedDescription } }
 }
 
-struct WarmDepsSettingsView: View {
+/// Settings → Prewarming. Dependency templates and preview containers are the
+/// same idea — work done per repo ahead of time so a session starts fast — and
+/// were two panes of the same shape, so they share one screen as the web does.
+struct PrewarmingSettingsView: View {
+    @State private var reload = 0
+
+    var body: some View {
+        List {
+            WarmDepsSections(reload: reload)
+            PreviewPoolSections(reload: reload)
+        }
+        .insetGroupedListCompat()
+        .navigationTitle("Prewarming")
+        .refreshable { reload += 1 }
+    }
+}
+
+struct WarmDepsSections: View {
+    /// Bumped by the enclosing pane's pull-to-refresh; re-runs `task`.
+    var reload: Int
     @State private var repos: [WarmTemplate] = []
     @State private var loading = true
     @State private var error: String?
     var body: some View {
-        List {
-            if loading { settingsLoadingRow }; if let error { settingsErrorRow(error) { Task { await load() } } }
+        Group {
+            // Always-rendered section, so the task it carries survives the
+            // loading row swapping out — see ModelAccountsSections.
+            Section("Dependency templates") {
+                Text("A template worktree per repo with dependencies installed, adopted into new session worktrees instead of installing cold.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if loading { settingsLoadingRow }
+                if let error { settingsErrorRow(error) { Task { await load() } } }
+                if !loading, error == nil, repos.isEmpty {
+                    Text("No repositories configured.").foregroundStyle(.secondary)
+                }
+            }
+            .task(id: reload) { await load() }
             if !loading, error == nil {
-                if repos.isEmpty { ContentUnavailableView("No warm dependency templates", systemImage: "flame") }
                 ForEach(repos.filter { $0.repoId?.isEmpty == false }, id: \.id) { repo in
                     Section(repo.repoId ?? "Repository") {
                         Toggle("Enabled", isOn: binding(repo, keyPath: \.enabled, default: false) { enabled in await update(repo, ["enabled": enabled]) })
@@ -388,7 +450,7 @@ struct WarmDepsSettingsView: View {
                     }
                 }
             }
-        }.navigationTitle("Warm Dependencies").task { await load() }.refreshable { await load() }
+        }
     }
     private func binding<T>(_ repo: WarmTemplate, keyPath: KeyPath<WarmTemplate, T?>, default defaultValue: T, save: @escaping (T) async -> Void) -> Binding<T> where T: Equatable { Binding(get: { repo[keyPath: keyPath] ?? defaultValue }, set: { value in Task { await save(value) } }) }
     private func load() async { loading = true; error = nil; do { repos = try await SettingsAPI.warmTemplates().repos ?? [] } catch { self.error = error.localizedDescription }; loading = false }
@@ -396,15 +458,28 @@ struct WarmDepsSettingsView: View {
     private func refresh(_ repo: WarmTemplate) async { guard let id = repo.repoId else { return }; do { repos = try await SettingsAPI.refreshWarmTemplate(repoId: id).repos ?? [] } catch { self.error = error.localizedDescription } }
 }
 
-struct PreviewPoolSettingsView: View {
+struct PreviewPoolSections: View {
+    /// Bumped by the enclosing pane's pull-to-refresh; re-runs `task`.
+    var reload: Int
     @State private var repos: [PreviewPool] = []
     @State private var loading = true
     @State private var error: String?
     var body: some View {
-        List {
-            if loading { settingsLoadingRow }; if let error { settingsErrorRow(error) { Task { await load() } } }
+        Group {
+            // Always-rendered section, so the task it carries survives the
+            // loading row swapping out — see ModelAccountsSections.
+            Section("Preview containers") {
+                Text("Dev-server containers kept pre-booted so the Preview button claims one in seconds instead of paying a cold boot.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if loading { settingsLoadingRow }
+                if let error { settingsErrorRow(error) { Task { await load() } } }
+                if !loading, error == nil, repos.isEmpty {
+                    Text("No repositories configured.").foregroundStyle(.secondary)
+                }
+            }
+            .task(id: reload) { await load() }
             if !loading, error == nil {
-                if repos.isEmpty { ContentUnavailableView("No preview pools", systemImage: "rectangle.stack") }
                 ForEach(repos.filter { $0.repoId?.isEmpty == false }, id: \.id) { pool in
                     Section(pool.repoId ?? "Repository") {
                         Toggle("Enabled", isOn: Binding(get: { pool.config?.enabled ?? false }, set: { value in Task { await update(pool, ["enabled": value]) } }))
@@ -416,7 +491,7 @@ struct PreviewPoolSettingsView: View {
                     }
                 }
             }
-        }.navigationTitle("Preview Pool").task { await load() }.refreshable { await load() }
+        }
     }
     private func load() async { loading = true; error = nil; do { repos = try await SettingsAPI.previewPool().repos ?? [] } catch { self.error = error.localizedDescription }; loading = false }
     private func update(_ pool: PreviewPool, _ patch: [String: Any]) async { guard let id = pool.repoId else { return }; do { repos = try await SettingsAPI.updatePreviewPool(repoId: id, patch: patch).repos ?? [] } catch { self.error = error.localizedDescription } }

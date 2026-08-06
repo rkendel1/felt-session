@@ -1,5 +1,5 @@
 /* ─────────────────────────────────────────────────────────────
-   Michael — Tella's internal coding agent
+   Open Session
    Devin-inspired dark theme
    ───────────────────────────────────────────────────────────── */
 
@@ -70,9 +70,9 @@
 	   app's legacy radii universally and --cs selects the corner shape. */
 	--rf: 0.85;
 	--cs: round;
-	/* Chat column width — messages, work blocks, composer, ask cards all share
+	/* Session column width — messages, work blocks, composer, ask cards all share
 	   it so the conversation reads as one column. */
-	--chat-col: 780px;
+	--session-col: 780px;
 	/* Shared height for the desktop sidebar, session header and PR strip. */
 	--desktop-header-h: 48px;
 	/* Header height grows by the iOS status-bar inset when installed as a PWA
@@ -279,7 +279,7 @@ body {
    Disable text selection everywhere by default so labels, buttons,
    nav, headers, tabs and status text behave like a native app — no
    accidental blue highlight when you drag across the UI. Genuine
-   content (chat messages + the names in them, code, diffs, inputs,
+   content (session messages + the names in them, code, diffs, inputs,
    and anything tagged .selectable) opts back in just below. */
 body {
 	-webkit-user-select: none;
@@ -420,7 +420,7 @@ button {
 	.btn-panel-toggle,
 	.btn-viewer-delete,
 	.btn-viewer-archive,
-	.btn-viewer-newchat,
+	.btn-viewer-newsession,
 	.btn-viewer-share,
 	.pr-num-chip,
 	.btn-viewer-pin,
@@ -658,7 +658,7 @@ html.wco .app-body.sidebar-collapsed
 	gap: 8px;
 }
 
-/* Michael title + settings chevron, kept tight together. */
+/* Product title + settings chevron, kept tight together. */
 .app-brand {
 	display: flex;
 	align-items: center;
@@ -685,7 +685,7 @@ html.wco .app-body.sidebar-collapsed
 	letter-spacing: -0.01em;
 }
 
-/* ── Settings dropdown (chevron behind the Michael title) ── */
+/* ── Settings dropdown (chevron behind the product title) ── */
 .settings-hint {
 	margin-top: 8px;
 	font-size: 11px;
@@ -988,7 +988,7 @@ html[data-platform="windows"] .workspace-shell {
 	}
 }
 
-/* Brand row at the top of the desktop sidebar: Michael menu left, collapse
+/* Brand row at the top of the desktop sidebar: product menu left, collapse
    toggle right. */
 .sidebar-brand {
 	display: flex;
@@ -1453,9 +1453,11 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	color: #fff;
 	flex-shrink: 0;
 }
-/* Image variant: /repo-icon/<id>.png (GitHub org avatar; the OS1 app icon for
-   the opensession repo). The img fills the tile and inherits its rounding; no
-   colored backing so icons with transparency sit on the surface itself. */
+/* Image variant: /repo-icon/<id>.png (a product mark where the repo or its
+   owner ships one, else the GitHub org avatar). The img fills the tile and
+   inherits its rounding; no colored backing so icons with transparency sit on
+   the surface itself. Every icon the route serves is drawn to the same
+   proportions, so no per-icon trim is needed here. */
 .repo-tile--img {
 	background: none;
 }
@@ -1465,17 +1467,6 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	object-fit: cover;
 	border-radius: inherit;
 }
-.repo-tile--app-icon img {
-	/* The app icon spends 80% of its canvas on artwork where a GitHub avatar
-	   spends 62%, so it needs trimming to sit at the same size — but matching
-	   those areas exactly (scale 0.78) left it reading noticeably smaller than
-	   the saturated avatars beside it. It's a black-and-white plate with a
-	   generous corner radius: on either theme one half sinks into the panel,
-	   and the rounder silhouette costs it more area still. Trim it less so the
-	   two read the same weight rather than measure the same. */
-	transform: scale(0.9);
-}
-
 .sidebar-list {
 	flex: none;
 	overflow-y: visible;
@@ -1552,9 +1543,20 @@ body:is(.resizing-sidebar, .resizing-panel) {
 
 /* "Group by: Repo" — one band per repo (a RepoTile + name header) holding that
    repo's status lanes. The lanes indent slightly under the repo header so the
-   nesting reads at a glance. */
-.sidebar-repo-group + .sidebar-repo-group {
-	margin-top: 10px;
+   nesting reads at a glance.
+
+   Every band after the first opens with whitespace, whatever precedes it: a
+   sibling band, the drag-reorder list the repo bands live in, or the loose
+   workspace rows above it. The rule used to be `band + band`, which only
+   matched two bands with the same parent — so the feed projects (Plain,
+   Slack), which follow the reorder list rather than sit inside it, started
+   flush against the last workspace row of the repo band above them and read
+   as one more row of that project. The gap is wider than a band's own rows
+   (2px) and its lane headers (8px) by enough to be the thing that separates
+   one project from the next. */
+.sidebar-repo-group:not(:first-child),
+.sidebar-repo-order-list:not(:first-child) {
+	margin-top: 16px;
 }
 .sidebar-repo-head .repo-tile {
 	flex-shrink: 0;
@@ -1898,7 +1900,7 @@ body:is(.resizing-sidebar, .resizing-panel) {
 }
 
 /* 2px of breathing room between list rows — covers both the swipe-wrapped
-   rows (workspace + chat) and the bare rows (PR / support). The inner
+   rows (workspace + session) and the bare rows (PR / support). The inner
    .sidebar-item of a swipe row must not add its own margin, or wrapped rows
    would gap twice. */
 .sidebar-swipe-row,
@@ -2661,7 +2663,7 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	gap: 3px;
 	padding: 6px 8px;
 	/* No hard divider under the strip. Instead the elevated topbar background
-	   fades down into the chat body across the strip, so the whole top region
+	   fades down into the session body across the strip, so the whole top region
 	   reads as one block that dissolves into the conversation. The pills float
 	   over that fade. */
 	background: linear-gradient(to bottom, var(--topbar-bg), var(--bg));
@@ -2749,8 +2751,8 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	margin-left: auto;
 }
 
-/* The drag-to-reorder group wraps EVERY tab in the strip — chats and view panes
-   alike, so a pane can be dragged in among the chats. It's a transparent flex
+/* The drag-to-reorder group wraps EVERY tab in the strip — sessions and view panes
+   alike, so a pane can be dragged in among the sessions. It's a transparent flex
    row that keeps the same 3px inter-tab gap as the scroll, so nesting it
    changes nothing visually. flex:0 0 auto is load-bearing: the tabs inside
    never shrink, so if the group itself were allowed to (the flex default, plus
@@ -2758,7 +2760,7 @@ body:is(.resizing-sidebar, .resizing-panel) {
    spill out of it, painting over whatever the scroll laid out after the
    SHRUNKEN box. Sizing to content instead pushes the overflow out to
    .session-tabs-scroll, which is what scrolls. */
-.session-tabs-chatgroup {
+.session-tabs-sessiongroup {
 	display: inline-flex;
 	align-items: center;
 	gap: 3px;
@@ -2767,7 +2769,7 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	   positioned in the group's own coordinates so it scrolls with the tabs. */
 	position: relative;
 }
-/* Each chat tab's Reorder.Item wrapper — the draggable flex child. It hugs the
+/* Each session tab's Reorder.Item wrapper — the draggable flex child. It hugs the
    pill inside it and never shrinks, so a full strip scrolls rather than squishes.
    position:relative lets whileDrag's z-index lift the dragged tab over siblings. */
 .session-tab-reorder {
@@ -2874,7 +2876,7 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	/* The reorder group + its item wrappers are extra flex layers between the
 	   scroll and each tab; stretch them full-height too so the flat tabs' active
 	   underline still lands flush on the baseline hairline. */
-	.session-tabs-chatgroup,
+	.session-tabs-sessiongroup,
 	.session-tab-reorder {
 		align-self: stretch;
 		align-items: stretch;
@@ -3159,7 +3161,7 @@ body:is(.resizing-sidebar, .resizing-panel) {
 }
 
 /* Per-tab close (×) — reset the <button> chrome, sit at the tab's trailing
-   edge, and reveal on hover like the pin. Clicking archives the chat. */
+   edge, and reveal on hover like the pin. Clicking archives the session. */
 .session-tab-close {
 	display: inline-flex;
 	align-items: center;
@@ -3215,7 +3217,7 @@ body:is(.resizing-sidebar, .resizing-panel) {
 	background: var(--hover);
 }
 
-/* Trailing history button — opens the workspace's archived-chats menu. Same
+/* Trailing history button — opens the workspace's archived-sessions menu. Same
    quiet reveal as the + it sits next to, but it stays visible (and lit) while
    its menu is open. */
 .session-tab-history {
@@ -3402,7 +3404,7 @@ body.resizing-tab-split {
 	height: var(--desktop-header-h);
 	padding: 0 16px;
 	border-bottom: 1px solid var(--top-divider);
-	/* Match the chat body (white in light) rather than the lifted topbar tint, so
+	/* Match the session body (white in light) rather than the lifted topbar tint, so
 	   the whole top region reads as one clean surface the transcript dissolves
 	   into under the floating pills. */
 	background: var(--bg);
@@ -3456,8 +3458,8 @@ body.resizing-tab-split {
 	background: rgba(210, 153, 34, 0.18);
 	color: #e3b341;
 }
-/* Which automation produced a chat, shown beside its title. Deliberately the
-   quiet neutral the CLI chip uses — it names the chat's origin, it shouldn't
+/* Which automation produced a session, shown beside its title. Deliberately the
+   quiet neutral the CLI chip uses — it names the session's origin, it shouldn't
    outshout the title. It's a link to the automation's settings, so it hints on
    hover. */
 .source-automation {
@@ -4013,10 +4015,10 @@ html.wco .viewer-branch {
 	letter-spacing: 0;
 }
 
-/* New-chat-in-workspace row (phone ⋯ menu). Matches the archive/delete rows:
+/* New-session-in-workspace row (phone ⋯ menu). Matches the archive/delete rows:
    icon + label, neutral until hover. It's a create action, so hover leans to
    the full text color. */
-.btn-viewer-newchat {
+.btn-viewer-newsession {
 	display: inline-flex;
 	align-items: center;
 	gap: 7px;
@@ -4028,7 +4030,7 @@ html.wco .viewer-branch {
 	padding: 5px 12px;
 	font-size: 13px;
 }
-.btn-viewer-newchat:hover {
+.btn-viewer-newsession:hover {
 	color: var(--text);
 	background: var(--hover);
 }
@@ -4159,14 +4161,14 @@ html.wco .viewer-branch {
 	color: var(--text);
 }
 
-/* split layout: chat + workspace panel */
+/* split layout: session + workspace panel */
 .viewer-split {
 	display: flex;
 	flex: 1;
 	min-height: 0;
 }
 
-.viewer-chat {
+.viewer-session {
 	flex: 1;
 	display: flex;
 	flex-direction: column;
@@ -4175,22 +4177,22 @@ html.wco .viewer-branch {
 	/* Depth the transcript scrolls up behind the composer. Shared by the
 	   composer's negative margin + backdrop and the transcript's bottom inset so
 	   they always line up. The mobile media query inherits this; both viewports
-	   get the "chat scrolls under the input" fade. Kept snug so the newest row
+	   get the "session scrolls under the input" fade. Kept snug so the newest row
 	   sits just above the composer rather than floating well clear of it. */
-	--chat-under: 16px;
+	--session-under: 16px;
 }
 
 /* The panel portals into this app-level slot. `display: contents` dissolves the
    slot so the panel (and its overlay) become direct flex children of `.app-body`
    — making the panel a full-height right column at the same level as the left
-   sidebar, rather than a box confined below the chat header. */
+   sidebar, rather than a box confined below the session header. */
 .right-panel-slot {
 	display: contents;
 }
 
 .viewer-panel {
 	/* Drag-resizable from the left edge (.panel-resize sets --panel-w). The cap
-	   only reserves the left sidebar + a readable chat column — reviewing code
+	   only reserves the left sidebar + a readable session column — reviewing code
 	   needs real width on desktop, not a fixed 900px. */
 	width: var(--panel-w, 44%);
 	max-width: max(480px, calc(100vw - 620px));
@@ -4651,7 +4653,7 @@ img.workspace-info-comment-avatar {
 	text-overflow: ellipsis;
 	min-width: 0;
 }
-/* Hover "Add to chat" — floats over the right end of the row (covers time). */
+/* Hover "Add to session" — floats over the right end of the row (covers time). */
 .workspace-info-comment-add {
 	position: absolute;
 	top: 50%;
@@ -4863,7 +4865,7 @@ a.workspace-info-check-row {
 	}
 }
 
-/* Compact markdown scale (base .markdown is sized for chat) — shared by the
+/* Compact markdown scale (base .markdown is sized for session) — shared by the
    inline card body and the popover body. */
 :is(.workspace-info-comment-md, .workspace-info-comment-pop-body) .markdown {
 	font-size: 13px;
@@ -5092,9 +5094,9 @@ a.workspace-info-check-row {
 .subagent-messages {
 	/* Block, not flex-column: as flex items the mx-auto transcript turn
 	   wrappers shrink-to-fit, so unbreakable content (code lines) sizes them
-	   to their full 1000px --chat-col cap and the pane scrolls sideways when
+	   to their full 1000px --session-col cap and the pane scrolls sideways when
 	   it is narrower than that. Block children just fill the pane and wide
-	   content scrolls inside its own pre, like the main chat column.
+	   content scrolls inside its own pre, like the main session column.
 	   Vertical rhythm comes from the turn wrappers' own margins. */
 	min-width: 0;
 }
@@ -6013,7 +6015,7 @@ a.workspace-info-check-row {
 	gap: 10px;
 	padding: 8px 12px;
 	border-bottom: 1px solid var(--top-divider);
-	/* Match the chat header row so the panel's first divider lines up with it. */
+	/* Match the session header row so the panel's first divider lines up with it. */
 	min-height: var(--desktop-header-h);
 }
 /* Globe (staging) icon riding inside the PR strip, left of the PR chip, so it
@@ -6035,7 +6037,7 @@ a.workspace-info-check-row {
 	background: rgba(210, 153, 34, 0.09);
 }
 .pr-bar-muted {
-	/* Match the chat's top bar surface so the panel's top row reads as the same
+	/* Match the session's top bar surface so the panel's top row reads as the same
 	   bar across the seam (header + tab strip = one continuous light band),
 	   rather than a heavier gray block that looks shorter/misaligned. */
 	background: var(--topbar-bg);
@@ -6233,7 +6235,7 @@ a.workspace-info-check-row {
 
 /* The session's other PRs (attached repo / linked / footer-discovered) ride
    after the primary chip as smaller pills — subordinate to it, but each in its
-   own status tone. Used in the chat header, where there's no room for rows. */
+   own status tone. Used in the session header, where there's no room for rows. */
 .pr-sib-chips {
 	display: inline-flex;
 	align-items: center;
@@ -6422,7 +6424,7 @@ a.workspace-info-check-row {
 	white-space: nowrap;
 }
 
-/* Compact PR chip + primary action in the chat header while the Workspace
+/* Compact PR chip + primary action in the session header while the Workspace
    panel is closed — the strip's key info without opening the sidebar. Sized
    to sit flush with the header's bordered buttons (5px 12px / radius 6). */
 .pr-head {
@@ -8397,7 +8399,7 @@ a.workspace-info-check-row {
 .viewer-messages {
 	flex: 1;
 	overflow-y: auto;
-	/* Never a sideways-pannable chat: anything internally wide (code, tables)
+	/* Never a sideways-pannable session: anything internally wide (code, tables)
 	   scrolls inside its own pane; a stray wide element clips instead of
 	   dragging the whole transcript off-screen. */
 	overflow-x: hidden;
@@ -8424,7 +8426,7 @@ a.workspace-info-check-row {
 	flex-shrink: 0;
 	/* Messages/work blocks center with auto side margins, and in a flex
 	   container auto cross-axis margins DISABLE align-items:stretch — the
-	   children would size to their content (up to their --chat-col max-width) and
+	   children would size to their content (up to their --session-col max-width) and
 	   overflow sideways on phones. Explicit width restores the stretch; the
 	   max-width + auto margins still cap and center them. */
 	width: 100%;
@@ -8443,10 +8445,10 @@ a.workspace-info-check-row {
 @media (min-width: 721px) {
 	@supports (animation-timeline: scroll()) {
 		.viewer-messages-region {
-			timeline-scope: --viewer-chat-scroll;
+			timeline-scope: --viewer-session-scroll;
 		}
 		.viewer-messages {
-			scroll-timeline: --viewer-chat-scroll y;
+			scroll-timeline: --viewer-session-scroll y;
 		}
 		.viewer-messages-region::before,
 		.viewer-messages-region::after {
@@ -8463,24 +8465,24 @@ a.workspace-info-check-row {
 			opacity: 0;
 			animation-duration: 1ms; /* inert — the scroll timeline drives progress */
 			animation-fill-mode: both;
-			animation-timeline: --viewer-chat-scroll;
+			animation-timeline: --viewer-session-scroll;
 		}
 		.viewer-messages-region::before {
 			top: 0;
 			background: linear-gradient(to bottom, var(--bg), transparent);
-			animation-name: chat-edge-fade-in;
+			animation-name: session-edge-fade-in;
 			/* Fully in after a couple of lines of scroll-back. */
 			animation-range: 0 56px;
 		}
 		.viewer-messages-region::after {
 			bottom: 0;
 			background: linear-gradient(to top, var(--bg), transparent);
-			animation-name: chat-edge-fade-out;
+			animation-name: session-edge-fade-out;
 			animation-range: calc(100% - 56px) 100%;
 		}
 	}
 }
-@keyframes chat-edge-fade-in {
+@keyframes session-edge-fade-in {
 	from {
 		opacity: 0;
 	}
@@ -8488,7 +8490,7 @@ a.workspace-info-check-row {
 		opacity: 1;
 	}
 }
-@keyframes chat-edge-fade-out {
+@keyframes session-edge-fade-out {
 	from {
 		opacity: 1;
 	}
@@ -8551,7 +8553,7 @@ a.workspace-info-check-row {
 	position: absolute;
 	left: 50%;
 	/* Sit the pill above the composer's top edge with a little breathing room —
-	   a small fixed lift, not keyed to --chat-under (that pushed it too far up
+	   a small fixed lift, not keyed to --session-under (that pushed it too far up
 	   over the transcript). */
 	bottom: 24px;
 	transform: translateX(-50%);
@@ -8607,7 +8609,7 @@ a.workspace-info-check-row {
 	   settled replies sit inside transcript-window wrappers. Give both paths
 	   the same full row before applying the shared reading-width cap. */
 	width: 100%;
-	max-width: var(--chat-col);
+	max-width: var(--session-col);
 	margin-left: auto;
 	margin-right: auto;
 	/* Flex for the same WebKit selection-gap reason as .viewer-messages:
@@ -8743,7 +8745,7 @@ a.workspace-info-check-row {
 	align-items: center;
 	gap: 9px;
 	width: 100%;
-	max-width: var(--chat-col);
+	max-width: var(--session-col);
 	margin-top: 2px;
 	padding: 5px 0;
 	color: var(--text-dim);
@@ -9775,7 +9777,7 @@ button.home-whisper-link:hover {
 	padding: 8px 10px;
 	/* Content wraps (.tool-pre / pre.shiki are pre-wrap), but anything that
 	   still measures wider — hanging whitespace, an unbreakable run — scrolls
-	   inside the pane rather than being clipped or widening the chat. */
+	   inside the pane rather than being clipped or widening the session. */
 	overflow-x: auto;
 	tab-size: 2;
 }
@@ -9821,20 +9823,20 @@ html[data-theme="light"] .tool-code-surface .shiki-gutter {
 /* ── Input area ──────────────────────────────────────────── */
 
 .viewer-input {
-	/* Float the composer up over the transcript so the chat scrolls UNDER it
+	/* Float the composer up over the transcript so the session scrolls UNDER it
 	   (not cut off above it), in normal flow — a negative top margin only shifts
 	   it visually. z-index lifts it over the position:relative messages region it
 	   now overlaps. */
 	position: relative;
 	z-index: 1;
-	margin-top: calc(-1 * var(--chat-under));
+	margin-top: calc(-1 * var(--session-under));
 	flex-shrink: 0;
 	/* The backdrop IS the fade: transparent at the top of the overlap so the
 	   transcript shows through crisp, ramping to the solid page bg by the time a
 	   row reaches the composer — rows dissolve behind it, not on the readable
 	   content row above it. */
-	background: linear-gradient(to bottom, transparent 0, var(--bg) var(--chat-under));
-	/* Top padding is deliberately SMALLER than the negative margin (--chat-under),
+	background: linear-gradient(to bottom, transparent 0, var(--bg) var(--session-under));
+	/* Top padding is deliberately SMALLER than the negative margin (--session-under),
 	   so the composer box rises a few px above where the transcript ends — the last
 	   row tucks slightly UNDER the input instead of leaving a gap. */
 	padding: 4px 20px 14px;
@@ -9844,7 +9846,7 @@ html[data-theme="light"] .tool-code-surface .shiki-gutter {
 	display: flex;
 	gap: 10px;
 	align-items: flex-end;
-	max-width: var(--chat-col);
+	max-width: var(--session-col);
 	margin: 0 auto;
 }
 
@@ -9852,7 +9854,7 @@ html[data-theme="light"] .tool-code-surface .shiki-gutter {
 .viewer-usage-row {
 	display: flex;
 	justify-content: flex-end;
-	max-width: var(--chat-col);
+	max-width: var(--session-col);
 	margin: 4px auto 0;
 	padding: 0 2px;
 }
@@ -9894,10 +9896,10 @@ html[data-theme="light"] .tool-code-surface .shiki-gutter {
 	filter: brightness(1.1);
 }
 
-/* ── Composer (shared chat input — Claude/Codex style) ─────────────── */
+/* ── Composer (shared session input — Claude/Codex style) ─────────────── */
 
 .composer-wrap {
-	max-width: calc(var(--chat-col) + 40px);
+	max-width: calc(var(--session-col) + 40px);
 	margin: 0 auto;
 	width: 100%;
 }
@@ -10120,6 +10122,27 @@ html[data-theme="light"] .tool-code-surface .shiki-gutter {
 .composer-agents-list .is-dim {
 	color: var(--text-faint);
 	flex: none;
+}
+/* Plan section (the model's own todowrite checklist) — its own stack so the
+   section title hugs its list, and it scrolls rather than pushing the composer
+   down when the plan is long. */
+.composer-agents-plan {
+	display: flex;
+	flex-direction: column;
+	gap: 7px;
+	max-height: 168px;
+	overflow-y: auto;
+}
+/* Agent half of the card. Its own stack so it can carry a rule when the plan
+   sits above it — without one the two sections read as a single list. */
+.composer-agents-section {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+.composer-agents-section.has-divider {
+	padding-top: 10px;
+	border-top: 1px solid var(--border);
 }
 .composer-agents-open {
 	display: inline-flex;
@@ -10927,7 +10950,7 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	gap: 10px;
 	color: var(--text-dim);
 	font-size: 13px;
-	max-width: var(--chat-col);
+	max-width: var(--session-col);
 	margin: 0 auto;
 }
 
@@ -10978,7 +11001,7 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 .input-disabled {
 	color: var(--text-faint);
 	font-size: 13px;
-	max-width: var(--chat-col);
+	max-width: var(--session-col);
 	margin: 0 auto;
 }
 
@@ -12065,7 +12088,7 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 
 	/* Chevron-back at the top of the workspace panel on phones — the panel is a
 	   deeper page reached from the ⋯ menu, so it carries its own way back to the
-	   chat (matching the top-bar back chevron, no "Back" word). */
+	   session (matching the top-bar back chevron, no "Back" word). */
 	.panel-back {
 		display: inline-flex;
 		align-items: center;
@@ -12307,7 +12330,7 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 		border-bottom-color: transparent;
 	}
 
-	/* Sidebar (home) + chat (session): the bar floats over the content instead
+	/* Sidebar (home) + session (session): the bar floats over the content instead
 	   of reserving a solid band above it. Taken out of flow so the list / the
 	   transcript fill the full height and scroll UNDER the pills — the pills stay
 	   put on top (with their own soft shadow) rather than the scroll being clipped
@@ -12398,7 +12421,7 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 		min-width: 0;
 	}
 	.app-header-detail .app-header-model,
-	.app-header-detail .header-chatbar {
+	.app-header-detail .header-sessionbar {
 		justify-content: flex-start;
 	}
 	.app-header-title-row {
@@ -12455,10 +12478,10 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 		color: var(--text-faint);
 		pointer-events: auto;
 	}
-	/* The "chat bar" line under the title just *shows* repo · model (no
+	/* The "session bar" line under the title just *shows* repo · model (no
 	   per-item dropdowns) — tapping it (or the heading) opens the settings menu
 	   where they're changed. Centered to sit under the centered title. */
-	.header-chatbar {
+	.header-sessionbar {
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
@@ -12473,25 +12496,25 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 		cursor: pointer;
 		-webkit-tap-highlight-color: transparent;
 	}
-	.header-chatbar:active {
+	.header-sessionbar:active {
 		opacity: 0.6;
 	}
 
 	/* Repo tile leads the metadata line under the title (repo · model · cost). */
-	.header-chatbar .repo-tile {
+	.header-sessionbar .repo-tile {
 		flex-shrink: 0;
 	}
 
 	/* The running dot moved down from the title into the metadata line — keep it
 	   from shrinking and give it a hair of trailing room before the model label. */
-	.header-chatbar .working-dot {
+	.header-sessionbar .working-dot {
 		flex-shrink: 0;
 	}
 
 	/* ── Session info page (phone) ──────────────────────────────
 	   Tapping the top-bar title opens this as a deeper page, WhatsApp-style:
 	   a full-screen sheet with the session identity up top and every action
-	   below. Its own chevron-back returns to the chat. */
+	   below. Its own chevron-back returns to the session. */
 	.session-info-page {
 		position: fixed;
 		inset: 0;
@@ -12661,19 +12684,19 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 		background: var(--hover);
 	}
 	/* The workspace overview (Info-tab content) embedded below the actions:
-	   opening prompt, summary, files changed, chats — the whole-workspace view. */
+	   opening prompt, summary, files changed, sessions — the whole-workspace view. */
 	.session-info-overview {
 		padding: 8px 0 0;
 	}
 	/* Its title/meta duplicate the page hero — drop the title; the meta
-	   (chats · author) and PR status chips still add detail. */
+	   (sessions · author) and PR status chips still add detail. */
 	.session-info-overview .workspace-info-title {
 		display: none;
 	}
 	.session-info-overview .workspace-info-panel {
 		padding-top: 0;
 	}
-	.header-chatbar-sep {
+	.header-sessionbar-sep {
 		flex-shrink: 0;
 		/* Bigger middot between repo · model · cost — but its line box is capped
 		   at the metadata line's own height. At 20px/1 the dot was the tallest
@@ -12684,14 +12707,14 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 		color: var(--text-dim);
 	}
 	/* Repo chip: tile + name, sized to the thin subtitle line. */
-	.header-chatbar-repo {
+	.header-sessionbar-repo {
 		display: inline-flex;
 		align-items: center;
 		gap: 4px;
 		min-width: 0;
 		max-width: 45vw;
 	}
-	.header-chatbar-model {
+	.header-sessionbar-model {
 		min-width: 0;
 		max-width: 45vw;
 		font-size: 12px;
@@ -12700,15 +12723,15 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	}
 	/* Cost meter in the metadata row matches the model's dim subtitle — same
 	   size + color — with a smaller context ring and no button padding. */
-	.header-chatbar .chatbar-usage {
+	.header-sessionbar .sessionbar-usage {
 		font-size: 12px;
 		padding: 0;
 		gap: 4px;
 	}
-	.header-chatbar .chatbar-usage span {
+	.header-sessionbar .sessionbar-usage span {
 		color: var(--text-dim);
 	}
-	.header-chatbar .chatbar-usage svg {
+	.header-sessionbar .sessionbar-usage svg {
 		width: 10px;
 		height: 10px;
 	}
@@ -12911,11 +12934,11 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	/* Depth the transcript scrolls up behind the composer, shared by the
 	   composer's negative margin/backdrop and the transcript's bottom inset so
 	   they always line up. */
-	.viewer-chat {
-		--chat-under: 16px;
+	.viewer-session {
+		--session-under: 16px;
 	}
 	/* Sit the pill just above the composer's top edge — a small fixed lift, not
-	   keyed to --chat-under (that pushed it too far up over the transcript). */
+	   keyed to --session-under (that pushed it too far up over the transcript). */
 	.jump-latest {
 		bottom: 24px;
 	}
@@ -12929,7 +12952,7 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 		   down behind the composer fade, and they fade in the composer's backdrop,
 		   not here. */
 		/* --strip-clearance is 0 by default and the docked tab bar's height on a
-		   multi-chat workspace (set on .detail-pane below), so the first row
+		   multi-session workspace (set on .detail-pane below), so the first row
 		   starts just below the bar rather than under it. */
 		padding: calc(var(--pane-header-h) + var(--strip-clearance, 0px) + 8px) 12px
 			8px;
@@ -12949,14 +12972,14 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	}
 
 	.viewer-input {
-		/* Float the composer up over the transcript so the chat scrolls UNDER it
+		/* Float the composer up over the transcript so the session scrolls UNDER it
 		   (not cut off above it). It stays in normal flow — a negative top margin
 		   only shifts it visually, so the iOS keyboard handling that keeps the
 		   in-flow composer above the keyboard is untouched. z-index lifts it over
 		   the position:relative messages region it now overlaps. */
 		position: relative;
 		z-index: 1;
-		margin-top: calc(-1 * var(--chat-under));
+		margin-top: calc(-1 * var(--session-under));
 		/* The backdrop IS the fade: transparent at the top of the overlap so the
 		   transcript shows through crisp, ramping to the solid page bg by the time
 		   a row reaches the pill — rows dissolve behind the composer, not on the
@@ -12964,9 +12987,9 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 		background: linear-gradient(
 			to bottom,
 			transparent 0,
-			var(--bg) var(--chat-under)
+			var(--bg) var(--session-under)
 		);
-		/* Top padding is deliberately SMALLER than the negative margin (--chat-under),
+		/* Top padding is deliberately SMALLER than the negative margin (--session-under),
 		   so the composer rises a few px above where the transcript ends — the last
 		   row tucks slightly UNDER the input instead of leaving a gap. */
 		padding: 4px 12px 8px;
@@ -12989,13 +13012,6 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	body.kb-open .viewer-input:has(.composer:not(.composer-min)) {
 		padding-bottom: 0;
 	}
-	/* Team chat (Watercooler + session Chat tab): keyboard closed keeps its snug
-     resting gap; keyboard up drops it flush to the keyboard so the maximum
-     amount of the conversation stays visible while typing. */
-	body.kb-open .chat-input-bar {
-		padding-bottom: 0;
-	}
-
 	/* Immersive reading (Safari-style): SessionViewer toggles body.chrome-collapsed
 	   from the transcript's scroll direction — scrolling down slides the top bar
 	   and the docked tab bar off-screen to maximize the reading area; scrolling
@@ -13022,7 +13038,7 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 
 	/* 16px stops iOS Safari from zooming into focused inputs, and reads at a
 	   comfortable iOS body size. Includes the in-session composer textarea — the
-	   primary chat input — which otherwise zoomed on focus at 13.5px, and the
+	   primary session input — which otherwise zoomed on focus at 13.5px, and the
 	   Plain reply box now that Conversation is a primary phone surface. */
 	.prompt-input,
 	.composer-textarea,
@@ -13164,21 +13180,21 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	.session-tab-title {
 		font-size: 13.5px;
 	}
-	/* A one-chat workspace's tab strip is pure chrome on a phone: a single tab
+	/* A one-session workspace's tab strip is pure chrome on a phone: a single tab
 	   repeating the title in the top bar, plus a "+" that's hover-revealed and
 	   so mostly invisible on touch anyway. Hide the strip until the workspace
-	   actually has a second chat to switch between. */
+	   actually has a second session to switch between. */
 	/* The strip is worth its phone chrome when it offers a real switch: any
-	   view tab (Conversation/Review), or 2+ chats — which, since every tab is a
+	   view tab (Conversation/Review), or 2+ sessions — which, since every tab is a
 	   .session-tab-reorder wrapper in the reorder group, reads as two adjacent
-	   wrappers. A lone chat with no view tabs keeps the strip hidden as before. */
+	   wrappers. A lone session with no view tabs keeps the strip hidden as before. */
 	.session-tabs:not(:has(.session-tab-view)):not(
 			:has(.session-tab-reorder ~ .session-tab-reorder)
 		) {
 		display: none;
 	}
 
-	/* When the strip DOES show (a view tab or 2+ chats), the phone top bar is a fixed
+	/* When the strip DOES show (a view tab or 2+ sessions), the phone top bar is a fixed
 	   transparent overlay (.app-header-overlay) whose Back/title/⋯ pills float
 	   over the pane — so the strip drops to a SOLID bar docked directly under
 	   those pills. Pulled out of flow and pinned flush to the header's bottom edge, it
@@ -13201,7 +13217,7 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 		box-shadow: 0 6px 12px -8px rgba(0, 0, 0, 0.22);
 	}
 	/* Mobile Safari can rasterize two composited layers that merely touch with a
-	   hairline seam. Overlap the chat header by 2px and add those 2px back as top
+	   hairline seam. Overlap the session header by 2px and add those 2px back as top
 	   padding, keeping the tabs and the bar's bottom edge in their original place. */
 	.app:has(.app-header-overlay) .session-tabs {
 		top: calc(var(--pane-header-h) - 2px);
@@ -13209,7 +13225,7 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	}
 	/* Tell the transcript how much extra top room the docked bar takes so the
 	   first row starts just below it (see .viewer-messages). Only set when a
-	   multi-chat strip is actually shown. */
+	   multi-session strip is actually shown. */
 	.detail-pane:has(.session-tab-view),
 	.detail-pane:has(.session-tab-reorder ~ .session-tab-reorder) {
 		--strip-clearance: 46px;
@@ -13228,7 +13244,7 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	/* In that solid state the controls sit ON the bar, not floating over the
 	   transcript — so drop their white-bubble fill, border and shadow. The Back
 	   chevron, the title and the ⋯ read as flat bar controls instead of white
-	   chips on a white bar. (Single-chat keeps the floating bubbles.) */
+	   chips on a white bar. (Single-session keeps the floating bubbles.) */
 	.app:has(.session-tab-view) .app-header-overlay :is(.mobile-back, .app-header-title, .btn-viewer-overflow),
 	.app:has(.session-tab-reorder ~ .session-tab-reorder) .app-header-overlay :is(.mobile-back, .app-header-title, .btn-viewer-overflow) {
 		background: transparent;
@@ -13236,7 +13252,7 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 		box-shadow: none;
 	}
 	/* View-tab panes (Review/Conversation/Staging/Assets — .viewer-review-main
-	   in a chat, .workspace-view-main on the chat-less workspace route) fill
+	   in a session, .workspace-view-main on the session-less workspace route) fill
 	   the pane from the very top. Unlike the transcript, they don't self-pad
 	   for the fixed header + docked tab bar, so their own top chrome (the PR
 	   header rows, the ticket title) hid underneath it. Push them below the
@@ -13412,7 +13428,7 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 }
 
 /* ── Phone touch targets: the last mile ──────────────────────────
-   The blocks above already bump the primary chat surface (composer,
+   The blocks above already bump the primary session surface (composer,
    session list, header actions). This one sweeps up the smaller
    secondary controls that were still sitting well under the iOS 44pt
    guideline: the workspace panel/repo tabs, the sidebar header icons,
@@ -13432,7 +13448,7 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 		padding: 8px 12px;
 	}
 
-	/* Sidebar header icons: New chat (+) and the filter/bell. */
+	/* Sidebar header icons: New session (+) and the filter/bell. */
 	.sidebar-new-btn {
 		width: 38px;
 		height: 38px;
@@ -13459,7 +13475,7 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 		font-size: 14px;
 	}
 
-	/* The "+" new-chat and history tabs keep a comfortable square hit area. */
+	/* The "+" new-session and history tabs keep a comfortable square hit area. */
 	.session-tab-new,
 	.session-tab-history {
 		min-height: 36px;
@@ -13760,6 +13776,24 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 /* Chat images open the media lightbox (delegated handler in MediaLightbox.tsx) */
 .md-image {
 	cursor: zoom-in;
+}
+/* Rendered ```mermaid diagram (MarkdownBody swaps the fence for the SVG) */
+.md-mermaid {
+	margin: 2px 0 8px;
+	padding: 12px;
+	background: #0c0c10;
+	border: 1px solid var(--border);
+	border-radius: calc(8px * var(--rf)); corner-shape: var(--cs);
+	overflow-x: auto;
+}
+html[data-theme="light"] .md-mermaid {
+	background: #fbfbfc;
+}
+.md-mermaid svg {
+	display: block;
+	margin: 0 auto;
+	max-width: 100%;
+	height: auto;
 }
 .tool-result-videos,
 .msg-videos {
@@ -15690,7 +15724,7 @@ html.wco .settings-sidenav {
 	cursor: default;
 }
 
-/* "Settings" entry in the Michael-menu dropdown */
+/* "Settings" entry in the product-menu dropdown */
 /* Theme picker — three preview cards (System / Light / Dark) */
 .theme-cards {
 	display: grid;
@@ -15803,7 +15837,7 @@ html.wco .settings-sidenav {
 }
 
 
-/* ── Workspaces sidebar (Workspaces & Chats overhaul) ── */
+/* ── Workspaces sidebar (Workspaces & Sessions overhaul) ── */
 /* The + tab's right-click mode menu (share / stacked / ask). */
 .session-tab-new-menu {
 	display: flex;
@@ -15828,7 +15862,7 @@ html.wco .settings-sidenav {
 .session-tab-new-menu-item:hover {
 	background: var(--hover);
 }
-/* Promote button on ask chats (header, next to the ask chip). */
+/* Promote button on ask sessions (header, next to the ask chip). */
 .viewer-promote-btn {
 	flex: 0 0 auto;
 	font-size: 12px;
@@ -15849,8 +15883,8 @@ html.wco .settings-sidenav {
 	cursor: default;
 }
 
-/* Lone-chat "+ New tab" beside the session title — the tab strip's + relocated
-   here while the workspace has a single chat. A quiet plus-only icon button, same
+/* Lone-session "+ New tab" beside the session title — the tab strip's + relocated
+   here while the workspace has a single session. A quiet plus-only icon button, same
    weight/footprint as the header ⋯ menu: no label, no border, hover-lit. */
 .viewer-newtab-btn {
 	flex: 0 0 auto;
@@ -16119,7 +16153,7 @@ html.wco .settings-sidenav {
 }
 
 /* Unsent-draft pencil (Slack-style) on sidebar rows and workspace tabs: typed
-   text/attachments were left in that chat's composer. Sits at the right edge
+   text/attachments were left in that session's composer. Sits at the right edge
    after the time; yields to the hover actions like the count/time do. */
 .sidebar-ws-draft {
 	flex: 0 0 auto;
@@ -17585,13 +17619,13 @@ html.wco .settings-sidenav {
 
 
 /* ------------------------------------------------------------------ *
- * Full-width review host for the chat column.
+ * Full-width review host for the session column.
  * The PR review moves out of the cramped right panel: selecting the top tab
  * strip's Review view-tab swaps the transcript+composer for a full-width
  * PrPanel (its .pr-panel-split rail + diff get the whole main area). Only
  * offered on code sessions.
  * ------------------------------------------------------------------ */
-/* Full-width review host: a flex child of .viewer-chat that stretches, so
+/* Full-width review host: a flex child of .viewer-session that stretches, so
    the PrPanel (its .pr-panel-split is height:100%) fills the whole column. */
 .viewer-review-main {
 	flex: 1;

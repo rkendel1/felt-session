@@ -7,7 +7,7 @@ const CHANGE_EVENT = "opensession-tab-splits-changed";
  *
  * Membership is stored sparsely — only the RIGHT bar lists its ids. Every other
  * live tab belongs to the left bar. Tabs come and go from outside this model
- * (a new sibling chat, an archived one, a Review pane opening), so a sparse
+ * (a new sibling session, an archived one, a Review pane opening), so a sparse
  * assignment means arrivals land somewhere sensible without this record having
  * to be kept in sync, and a departure is just an id that no longer resolves.
  */

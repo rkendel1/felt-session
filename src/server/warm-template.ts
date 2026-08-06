@@ -30,9 +30,9 @@
  *    replenishes itself. Pool empty (burst of creates, first boot) → fall
  *    back to a direct cp -al from the template, exactly the old behavior.
  *
- * Config (Settings → Warm previews): `<chats>/warm-templates/config.json`
+ * Config (Settings → Warm previews): `<sessions>/warm-templates/config.json`
  *   { "repos": { "app": { "enabled": true, "intervalHours": 6 } } }
- * State per repo: `<chats>/warm-templates/<repoId>.state.json` (+ the
+ * State per repo: `<sessions>/warm-templates/<repoId>.state.json` (+ the
  * manifest at `<repoId>.manifest`, only rewritten on a SUCCESSFUL refresh so
  * a failed refresh keeps seeding from the last good one).
  *
@@ -55,7 +55,7 @@ import {
 } from "fs";
 import { dirname, join } from "path";
 import { configuredPaths, configuredRepos, type Repo } from "./config";
-import { OPENSESSION_CHATS_DIR } from "./paths";
+import { OPENSESSION_SESSIONS_DIR } from "./paths";
 import { isLocalProfile } from "./profile";
 import { writeJsonAtomic } from "./shared/atomic-write";
 
@@ -77,7 +77,7 @@ export const WARM_DEFAULTS: Omit<WarmTemplateRepoConfig, "enabled"> = {
 };
 
 function warmDir(): string {
-  return join(OPENSESSION_CHATS_DIR, "warm-templates");
+  return join(OPENSESSION_SESSIONS_DIR, "warm-templates");
 }
 
 function configFile(): string {

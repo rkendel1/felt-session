@@ -244,7 +244,7 @@ export async function handlePlainRoutes(
 		if (!text)
 			return Response.json({ error: "Empty message" }, { status: 400 });
 		// Plain's API can only impersonate customers, not workspace users, so
-		// everything lands as the Michael machine user — carry the human's
+		// everything lands as the bot machine user — carry the human's
 		// name in the message instead: replies get their first name as an
 		// email-style sign-off (unless they already signed), notes get an
 		// author prefix.

@@ -15,10 +15,11 @@
  */
 
 import { homeDir } from "./paths";
-import { readFileSync, statSync } from "fs";
+import { existsSync, readFileSync, statSync } from "fs";
 import { resolve as resolvePath } from "path";
 import { statePath } from "./paths";
 import { isLocalProfile, localProfileRoot } from "./profile";
+import { writeFileAtomic } from "./shared/atomic-write";
 
 const HOME = homeDir();
 const OPENSESSION_ROOT = resolvePath(import.meta.dir, "../..");
@@ -195,8 +196,8 @@ export interface OpenSessionConfig {
 // branch from.
 //
 // NOTE: a "Project" in the UI is a separate thing — an optional folder that
-// groups chats (see src/server/projects.ts). A chat's worktree lives on the
-// chat and belongs to one of these repos.
+// groups sessions (see src/server/projects.ts). A session's worktree lives on the
+// session and belongs to one of these repos.
 export interface Repo {
   id: string;
   label: string;
@@ -633,6 +634,46 @@ export function productName(): string {
  *  falls back to the full product name. */
 export function productMark(): string {
   return getConfig().branding?.productMark || productName();
+}
+
+export interface IdentityPatch {
+  /** Trimmed; empty string deletes the key so the built-in default applies. */
+  personaName?: string;
+  productName?: string;
+  productMark?: string;
+}
+
+/**
+ * Write persona.name / branding.productName / branding.productMark into
+ * config.json (Settings → General). Operates on the raw parsed JSON — not the
+ * normalized OpenSessionConfig — so every other key, including ones this
+ * module doesn't model, survives byte-for-byte in structure. Refuses to touch
+ * a file that exists but doesn't parse: overwriting a hand-edited file with a
+ * syntax error would silently destroy it.
+ */
+export function updateIdentityConfig(patch: IdentityPatch): void {
+  const path = configPath();
+  let raw: Record<string, unknown> = {};
+  if (existsSync(path)) {
+    const parsed = JSON.parse(readFileSync(path, "utf-8"));
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error(`${path} is not a JSON object`);
+    }
+    raw = parsed as Record<string, unknown>;
+  }
+  const setOrDelete = (section: "persona" | "branding", key: string, value: string | undefined) => {
+    if (value === undefined) return;
+    const cur = obj(raw[section]) || {};
+    const trimmed = value.trim();
+    if (trimmed) cur[key] = trimmed;
+    else delete cur[key];
+    if (Object.keys(cur).length) raw[section] = cur;
+    else delete raw[section];
+  };
+  setOrDelete("persona", "name", patch.personaName);
+  setOrDelete("branding", "productName", patch.productName);
+  setOrDelete("branding", "productMark", patch.productMark);
+  writeFileAtomic(path, JSON.stringify(raw, null, 2) + "\n");
 }
 
 /**

@@ -25,9 +25,18 @@ import {
 	findSession,
 	getCachedSessions,
 	invalidateSessionsCache,
-	isLegacySideChat,
+	maybePersistEffort,
+	maybePersistFastMode,
 	runErrors,
 } from "../session-cache";
+import { asDataUrlList, parseImageDataUrls } from "../uploads";
+import { mentionedUsers } from "../people";
+import { sendPushToUser } from "../push";
+import {
+	promptReceipt,
+	promptReceiptKey,
+	rememberPromptReceipt,
+} from "../prompt-receipts";
 import { searchIndex } from "../session-index";
 import { resolvePrTarget } from "../session-repos";
 import { destroySessionSandbox } from "../session-sandbox";
@@ -141,11 +150,18 @@ export async function handleSessionsRoutes(
 			images?: unknown;
 			branch?: unknown;
 			user?: unknown;
+			workspaceId?: unknown;
 		} | null;
 		const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
 		if (!prompt) {
 			return Response.json({ error: "prompt required" }, { status: 400 });
 		}
+		// Join an existing workspace as a sibling session — the native apps' "new
+		// session in this workspace", equivalent to the web tab strip's "+".
+		const workspaceId =
+			typeof body?.workspaceId === "string" && body.workspaceId
+				? body.workspaceId
+				: "";
 		const mode =
 			body?.mode === "code"
 				? ("code" as const)
@@ -153,7 +169,11 @@ export async function handleSessionsRoutes(
 					? ("scratch" as const)
 					: ("ask" as const);
 		let branch = typeof body?.branch === "string" ? body.branch.trim() : "";
-		if (mode === "code" && !branch) {
+		// A code session joining a workspace that already owns a worktree works on
+		// that worktree's branch, so skip the (LLM) branch suggestion — it would
+		// only be discarded. A workspace with no worktree yet still needs one.
+		const joinsWorktree = !!(workspaceId && getWorkspace(workspaceId)?.worktreeDir);
+		if (mode === "code" && !branch && !joinsWorktree) {
 			branch =
 				(await suggestBranchName(prompt).catch(() => null)) ||
 				`session-${Date.now().toString(36)}`;
@@ -162,7 +182,8 @@ export async function handleSessionsRoutes(
 			const { id } = await getSessionControl().createSession({
 				prompt,
 				mode,
-				...(mode === "code" ? { branch } : {}),
+				...(mode === "code" && branch ? { branch } : {}),
+				...(workspaceId ? { workspaceId } : {}),
 				...(typeof body?.repo === "string" && body.repo
 					? { repo: body.repo }
 					: {}),
@@ -206,7 +227,6 @@ export async function handleSessionsRoutes(
 		// how many prompts are queued behind it. Drives the sidebar/tab "needs
 		// input" highlight without a second round-trip.
 		const enriched = getCachedSessions()
-			.filter((s) => !isLegacySideChat(s))
 			.map((s) => ({
 				...s,
 				repo: s.repo || defaultRepo().id,
@@ -222,7 +242,7 @@ export async function handleSessionsRoutes(
 				lastRunError: runErrors.get(s.id) || s.lastRunError,
 			}));
 		const { sessions, cloudUnreachable } = await mergedCloudSessions(enriched);
-		const text = JSON.stringify(sessions.filter((s) => !isLegacySideChat(s)));
+		const text = JSON.stringify(sessions);
 		sessionsResponseSnapshot = {
 			text,
 			hash: Bun.hash(text).toString(16),
@@ -234,9 +254,16 @@ export async function handleSessionsRoutes(
 
 	// Deliver a follow-up prompt to an existing session. REST shape for the
 	// native/extension clients (os1-ios, os1-chrome) — the web UI keeps its
-	// richer WS "prompt" message (images, staged files, steer receipts). Same
-	// semantics as the opensession-sessions MCP send_to_session: steers a busy
-	// run by default, `busy: "queue"` waits behind it, idle starts a fresh turn.
+	// richer WS "prompt" message (staged file attachments, context sessions).
+	// Same semantics as the opensession-sessions MCP send_to_session: steers a
+	// busy run by default, `busy: "queue"` waits behind it, idle starts a fresh
+	// turn.
+	//
+	// Unlike the WS frame this one ACKNOWLEDGES: the reply names where the
+	// message landed (started/steered/queued/handled), which is what lets the
+	// native outbox hold a send until the server has really taken it. Composer
+	// parity with the WS path — images, the effort/fast pills, @-mention
+	// pushes — lives here so a client can use this as its only send path.
 	{
 		const m = path.match(/^\/api\/sessions\/([^/]+)\/prompt$/);
 		if (m && req.method === "POST") {
@@ -246,6 +273,10 @@ export async function handleSessionsRoutes(
 				prompt?: unknown;
 				user?: unknown;
 				busy?: unknown;
+				images?: unknown;
+				effort?: unknown;
+				fastMode?: unknown;
+				clientId?: unknown;
 			} | null;
 			const raw =
 				typeof body?.content === "string" && body.content.trim()
@@ -254,17 +285,54 @@ export async function handleSessionsRoutes(
 						? body.prompt
 						: "";
 			const content = raw.trim();
-			if (!content) {
+			const images = parseImageDataUrls(body?.images);
+			const imageUrls = asDataUrlList(body?.images);
+			// An image-only send is a real message — only reject an empty one.
+			if (!content && !images?.length) {
 				return Response.json({ error: "content required" }, { status: 400 });
 			}
-			// No findSession pre-check: the 2s session cache can lag a
-			// just-created session, and deliverToSession resolves the id (and
-			// reports unknown ids) itself.
+			const clientId =
+				typeof body?.clientId === "string" && body.clientId.trim()
+					? body.clientId.trim().slice(0, 200)
+					: undefined;
+			const receiptKey = clientId
+				? promptReceiptKey(sessionId, clientId)
+				: undefined;
+			if (receiptKey) {
+				const seen = promptReceipt(receiptKey);
+				// Already delivered under this id — replay the answer instead of
+				// posting the message a second time.
+				if (seen) return Response.json({ ...seen.body, duplicate: true });
+			}
+			// No findSession GATE: the 2s session cache can lag a just-created
+			// session, and deliverToSession resolves the id (and reports unknown
+			// ids) itself. The lookup here only drives the best-effort extras.
+			const session = findSession(sessionId);
+			if (session) {
+				// The composer's effort/fast pills ride every send; persist a
+				// change so this and future runs honor it, as the WS path does.
+				maybePersistEffort(
+					session,
+					typeof body?.effort === "string" ? body.effort : undefined,
+				);
+				maybePersistFastMode(
+					session,
+					typeof body?.fastMode === "boolean" ? body.fastMode : undefined,
+				);
+			}
+			const user = requestUser(ctx, body?.user);
 			const res = await getSessionControl().deliverToSession(
 				sessionId,
 				content,
-				requestUser(ctx, body?.user),
-				body?.busy === "queue" ? { busy: "queue" } : undefined,
+				user,
+				{
+					busy: body?.busy === "queue" ? "queue" : undefined,
+					// Queue-by-choice holds until the agent fully completes,
+					// matching what the composers mean by "queue".
+					hold: body?.busy === "queue",
+					images,
+					imageUrls,
+				},
 			);
 			if (res.status === "error") {
 				return Response.json(
@@ -272,7 +340,23 @@ export async function handleSessionsRoutes(
 					{ status: /no session/i.test(res.message) ? 404 : 400 },
 				);
 			}
-			return Response.json(res);
+			// @People-mentions ping the tagged teammates on every delivery path,
+			// exactly like the WS prompt (same matcher, never the sender).
+			if (session && content.includes("@")) {
+				const preview =
+					content.length > 140 ? `${content.slice(0, 139)}…` : content;
+				for (const name of mentionedUsers(content, String(user || ""))) {
+					void sendPushToUser(name, {
+						title: `${user || "Someone"} mentioned you in ${session.title || "a session"}`,
+						body: preview,
+						url: `/session/${encodeURIComponent(sessionId)}`,
+						tag: `opensession-mention-${sessionId}`,
+					});
+				}
+			}
+			const payload = { ...res, ...(clientId ? { clientId } : {}) };
+			if (receiptKey) rememberPromptReceipt(receiptKey, payload);
+			return Response.json(payload);
 		}
 	}
 
@@ -338,7 +422,7 @@ export async function handleSessionsRoutes(
 	}
 
 	// Workspace overview: the opening prompt + all media (screenshots,
-	// videos) across the workspace's member chats — feeds the floating
+	// videos) across the workspace's member sessions — feeds the floating
 	// preview panel in the session viewer. Images come back as
 	// transcript-image refs (below), not inline base64.
 	{
@@ -347,10 +431,10 @@ export async function handleSessionsRoutes(
 		);
 		if (m && req.method === "GET") {
 			const wsId = decodeURIComponent(m[1]);
-			const chats = getCachedSessions().filter(
-				(s) => s.projectId === wsId,
+			const members = getCachedSessions().filter(
+				(s) => s.workspaceId === wsId,
 			);
-			return Response.json(await buildWorkspaceOverview(chats));
+			return Response.json(await buildWorkspaceOverview(members));
 		}
 	}
 
@@ -427,7 +511,6 @@ export async function handleSessionsRoutes(
 		const byPath = new Map<string, string>(); // transcriptPath → sessionId
 		for (const s of getCachedSessions()) {
 			if (
-				!isLegacySideChat(s) &&
 				s.transcriptPath &&
 				!byPath.has(s.transcriptPath) &&
 				existsSync(s.transcriptPath)
@@ -566,8 +649,8 @@ export async function handleSessionsRoutes(
 		invalidateSessionsCache();
 		if (archived) {
 			// setArchived drops the plain id pin; also drop legacy alias-id pins,
-			// and the workspace pin once its last live chat is archived (else the
-			// row resurfaces in Pinned when a new chat joins the workspace).
+			// and the workspace pin once its last live session is archived (else the
+			// row resurfaces in Pinned when a new session joins the workspace).
 			unpinArchivedSessions([session], getAllSessions());
 		}
 		return Response.json({ ok: true, stoppedRun });
@@ -767,18 +850,6 @@ export async function handleSessionsRoutes(
 			} catch {}
 		};
 		try {
-			// Cascade-delete legacy side-chat records with their parent. They remain
-			// hidden after the feature's removal, so orphaning them would leave
-			// unreachable files on disk.
-			for (const child of getAllSessions().filter(
-				(s) => s.sideChatOf === sessionId,
-			)) {
-				try {
-					deleteSession(child);
-					destroySessionSandbox(child, "delete");
-				} catch {}
-				purgeTranscriptRows(child.id);
-			}
 			deleteSession(session);
 			purgeTranscriptRows(session.id);
 			invalidateSessionsCache();
@@ -787,14 +858,14 @@ export async function handleSessionsRoutes(
 			// loss is the mode's documented contract). Best-effort and detached:
 			// a docker hiccup must never block the delete.
 			destroySessionSandbox(session, "delete");
-			// If that was the workspace's last chat, delete the workspace too —
+			// If that was the workspace's last session, delete the workspace too —
 			// otherwise auto-wrapped 1:1 workspaces linger as undeletable empty
 			// sidebar rows. PR-backed workspaces (`key`) stay: they regroup new
-			// chats for the same PR.
-			if (session.projectId) {
-				const ws = getWorkspace(session.projectId);
+			// sessions for the same PR.
+			if (session.workspaceId) {
+				const ws = getWorkspace(session.workspaceId);
 				const members = getAllSessions().filter(
-					(s) => s.projectId === session.projectId,
+					(s) => s.workspaceId === session.workspaceId,
 				);
 				if (ws && !ws.key && members.length === 0)
 					deleteWorkspace(ws.id);

@@ -64,24 +64,24 @@ function activityTime(session: Session): number {
 }
 
 /**
- * Group sessions into workspaces. `projectId` is the workspace key; sessions
+ * Group sessions into workspaces. `workspaceId` is the workspace key; sessions
  * without one are grouped by repo, which is what a session that never got
  * promoted to a workspace actually shares.
  */
 export function groupSessions(
 	sessions: Session[],
-	projectNames: Map<string, string>,
+	workspaceNames: Map<string, string>,
 ): WorkspaceGroup[] {
 	const groups = new Map<string, WorkspaceGroup>();
 	for (const session of sessions) {
-		const id = session.projectId || `repo:${session.repo || "unknown"}`;
+		const id = session.workspaceId || `repo:${session.repo || "unknown"}`;
 		let group = groups.get(id);
 		if (!group) {
 			group = {
 				id,
 				name:
-					projectNames.get(id) ||
-					(session.projectId ? session.projectId : session.repo || "unknown"),
+					workspaceNames.get(id) ||
+					(session.workspaceId ? session.workspaceId : session.repo || "unknown"),
 				sessions: [],
 				waiting: 0,
 				running: 0,
@@ -108,7 +108,7 @@ export class SessionsPoller {
 	private state: SessionsState;
 	private listeners = new Set<() => void>();
 	private timer: ReturnType<typeof setTimeout> | null = null;
-	private projectNames = new Map<string, string>();
+	private workspaceNames = new Map<string, string>();
 	private stopped = false;
 	/** Everything the last poll returned, unscoped — re-scoping is local. */
 	private raw: Session[] = [];
@@ -187,7 +187,7 @@ export class SessionsPoller {
 		const sessions = truncated ? matched.slice(0, MAX_SESSIONS) : matched;
 		return {
 			sessions,
-			groups: groupSessions(sessions, this.projectNames),
+			groups: groupSessions(sessions, this.workspaceNames),
 			scope: chosen,
 			scopeAuto: auto,
 			totalSessions: this.raw.length,
@@ -199,16 +199,16 @@ export class SessionsPoller {
 	async start(): Promise<void> {
 		this.stopped = false;
 		// Awaited, not fired-and-forgotten: groups are named from this map, and a
-		// first paint that raced it showed raw `prj-…` ids instead of workspace
+		// first paint that raced it showed raw `ws-…` ids instead of workspace
 		// names. Names are near-static, so this is one fetch for the process.
-		await this.refreshProjects();
+		await this.refreshWorkspaces();
 		await this.tick();
 	}
 
-	private async refreshProjects(): Promise<void> {
+	private async refreshWorkspaces(): Promise<void> {
 		try {
-			const projects = await this.api.projects();
-			this.projectNames = new Map(projects.map((p) => [p.id, p.name]));
+			const workspaces = await this.api.workspaces();
+			this.workspaceNames = new Map(workspaces.map((w) => [w.id, w.name]));
 		} catch {
 			// Non-fatal: groups fall back to the raw id / repo name.
 		}
@@ -219,7 +219,7 @@ export class SessionsPoller {
 		try {
 			this.raw = (await this.api.sessions()).filter(
 				// Side chats and desk todos aren't standalone sessions in the UI.
-				(s) => !s.sideChatOf && !s.desk && !s.archived,
+				(s) => !s.desk && !s.archived,
 			);
 			this.set({
 				...this.state,
@@ -228,7 +228,7 @@ export class SessionsPoller {
 				error: undefined,
 				needsAuth: false,
 			});
-			if (!this.projectNames.size) void this.refreshProjects();
+			if (!this.workspaceNames.size) void this.refreshWorkspaces();
 		} catch (e) {
 			const error = e instanceof ApiError ? e : new ApiError(0, String(e));
 			this.set({

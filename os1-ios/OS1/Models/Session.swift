@@ -14,8 +14,7 @@ struct Session: Identifiable, Decodable, Equatable, Hashable {
     var repo: String?
     var branch: String?
     var worktreeDir: String?
-    var projectId: String?
-    var sideChatOf: String?
+    var workspaceId: String?
     var mode: String?
     var model: String?
     var effort: String?
@@ -164,12 +163,18 @@ extension Session {
         model: String?,
         effort: String?,
         fastMode: Bool,
-        startedBy: String
+        startedBy: String,
+        workspaceId: String? = nil
     ) -> Session {
         var session = Session(id: id)
         session.title = title
         session.source = "opensession"
         session.repo = repo
+        // A session created into an existing workspace carries its id from the
+        // start, so the pending row joins that workspace's tab strip (and its
+        // sidebar row) immediately instead of flashing as a separate session
+        // until the first poll lands.
+        session.workspaceId = workspaceId
         session.mode = mode
         session.model = model
         session.effort = effort
@@ -190,7 +195,7 @@ extension Session {
 }
 
 /// The server's `automation` field is `true` OR the automation's name —
-/// either way it means "not a person's chat". Tolerant of both shapes.
+/// either way it means "not a person's session". Tolerant of both shapes.
 struct AutomationFlag: Decodable, Equatable, Hashable {
     let isAutomation: Bool
 

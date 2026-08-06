@@ -91,7 +91,7 @@ describe("workflow notice detection", () => {
 
 	it("detects the sentinel through the human attribution it's delivered under", () => {
 		const parsed = parseWorkflowNotice(
-			`[Michiel Westerbeek] <!--os:workflow-notice:${run}-->\n✅ Workflow "perspective-review" finished (${run}) — 2 agents: 2 done.`,
+			`[Alex Rivera] <!--os:workflow-notice:${run}-->\n✅ Workflow "perspective-review" finished (${run}) — 2 agents: 2 done.`,
 		);
 		expect(parsed?.runId).toBe(run);
 		expect(parsed?.body.startsWith("✅ Workflow")).toBe(true);
@@ -127,7 +127,7 @@ describe("workflow notice detection", () => {
 describe("service restart recovery detection", () => {
 	it("detects synthetic continuation prompts across persona names", () => {
 		const content =
-			"This session was interrupted by a Michael service restart mid-run. Review what you had already done.";
+			"This session was interrupted by an Ada service restart mid-run. Review what you had already done.";
 		expect(parseRecoveryNotice(content)).toEqual({ body: content });
 		expect(
 			parseRecoveryNotice(
@@ -139,7 +139,7 @@ describe("service restart recovery detection", () => {
 	it("leaves human messages that merely quote a recovery prompt alone", () => {
 		expect(
 			parseRecoveryNotice(
-				"Can we collapse this?\n\nThis session was interrupted by a Michael service restart mid-run.",
+				"Can we collapse this?\n\nThis session was interrupted by an Ada service restart mid-run.",
 			),
 		).toBeNull();
 	});
@@ -147,7 +147,7 @@ describe("service restart recovery detection", () => {
 
 describe("cross-session notice detection", () => {
 	const headsUp =
-		"Heads-up from another session (Michael, working on the sidebar): a shared-checkout commit picked up your changes.\n\nNothing was lost.";
+		"Heads-up from another session (Ada, working on the sidebar): a shared-checkout commit picked up your changes.\n\nNothing was lost.";
 
 	it("detects an existing unmarked heads-up", () => {
 		expect(parseSessionNotice(headsUp)).toEqual({ body: headsUp });
@@ -155,7 +155,7 @@ describe("cross-session notice detection", () => {
 
 	it("strips the marker and delivery attribution from new notices", () => {
 		expect(
-			parseSessionNotice(`[Michiel] <!--os:session-notice-->\n${headsUp}`),
+			parseSessionNotice(`[Alex] <!--os:session-notice-->\n${headsUp}`),
 		).toEqual({ body: headsUp });
 	});
 

@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import {
 	buildForkHandoffNote,
 	buildEngineSwitchHandoffNote,
-	buildChatContextNote,
+	buildSessionContextNote,
 } from "./fork-handoff";
 import type { TranscriptEntry } from "./types";
 
@@ -54,9 +54,9 @@ describe("buildForkHandoffNote", () => {
 	});
 });
 
-describe("buildChatContextNote", () => {
-	it("sections each attached chat with its id, title, model and conversational turns", () => {
-		const note = buildChatContextNote([
+describe("buildSessionContextNote", () => {
+	it("sections each attached session with its id, title, model and conversational turns", () => {
+		const note = buildSessionContextNote([
 			{
 				id: "bks-one",
 				title: "Lighten tab background",
@@ -74,24 +74,24 @@ describe("buildChatContextNote", () => {
 			},
 		]);
 
-		expect(note).toContain("## Attached chat transcripts");
+		expect(note).toContain("## Attached session transcripts");
 		expect(note).toContain("### Lighten tab background — @session:bks-one (gpt-5.5)");
 		expect(note).toContain("- User: Make the active tab lighter.");
 		expect(note).toContain("- Assistant: Done — bumped the token.");
 		expect(note).not.toContain("Using Edit");
-		// A chat with no transcript still gets a section, marked empty.
-		expect(note).toContain("### Untitled chat — @session:bks-two");
+		// A session with no transcript still gets a section, marked empty.
+		expect(note).toContain("### Untitled session — @session:bks-two");
 		expect(note).toContain("(no transcript yet)");
 		// Points at the tool that fetches the full history beyond the excerpt.
 		expect(note).toContain("get_session");
 	});
 
-	it("keeps only the newest entries per chat", () => {
+	it("keeps only the newest entries per session", () => {
 		const entries = Array.from({ length: 40 }, (_, i) =>
 			entry(`u${i}`, "user", `turn ${i}`),
 		);
-		const note = buildChatContextNote(
-			[{ id: "bks-long", title: "Long chat", entries }],
+		const note = buildSessionContextNote(
+			[{ id: "bks-long", title: "Long session", entries }],
 			5,
 		);
 		expect(note).toContain("turn 39");

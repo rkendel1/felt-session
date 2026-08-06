@@ -9,7 +9,7 @@ import {
 import { basename } from "path";
 import { configPath, configuredRepos, type RepoSection } from "../config";
 import { rawConfig, withConfigMutationLock } from "../config-mutation";
-import { OPENSESSION_CHATS_DIR } from "../paths";
+import { OPENSESSION_SESSIONS_DIR } from "../paths";
 import { isLocalProfile, localProfileRoot } from "../profile";
 import { writeJsonAtomic } from "../shared/atomic-write";
 import type { RouteContext } from "./context";
@@ -197,11 +197,11 @@ export function sessionDataReferencesRepo(data: unknown, id: string): boolean {
 }
 
 function repoIsInUse(id: string): boolean {
-  if (!existsSync(OPENSESSION_CHATS_DIR)) return false;
-  for (const file of readdirSync(OPENSESSION_CHATS_DIR)) {
+  if (!existsSync(OPENSESSION_SESSIONS_DIR)) return false;
+  for (const file of readdirSync(OPENSESSION_SESSIONS_DIR)) {
     if (!file.endsWith(".json")) continue;
     try {
-      const data = JSON.parse(readFileSync(`${OPENSESSION_CHATS_DIR}/${file}`, "utf-8"));
+      const data = JSON.parse(readFileSync(`${OPENSESSION_SESSIONS_DIR}/${file}`, "utf-8"));
       if (sessionDataReferencesRepo(data, id)) return true;
     } catch {}
   }

@@ -53,7 +53,7 @@ export function filterMcpServers(
     if (Array.isArray(allowedUsers) && allowedUsers.length) {
       // Cleared when the prompter OR the session creator (grantUsers[0]) is
       // on the list — anyone with access to a cleared person's session can
-      // use it there (Michiel 2026-07-29; per-session invites = future).
+      // use it there (per-session invites = future).
       const gateUsers = [user, ...(grantUsers || [])].filter(
         (u): u is string => !!u,
       );
@@ -141,7 +141,7 @@ export function isClaudeSubscriptionError(message: string): boolean {
  * native binary at <path> exists but failed to launch.") or was missing.
  *
  * This is a spawn-time failure on THIS box, not a verdict on the account: the
- * runs it hit (2026-08-01/03) were on michael-tella-dev and Michiel-com, both
+ * runs it hit were on two accounts, both
  * healthy and serving other sessions at that moment, and the binary launches
  * fine by hand. Treat it as a wedge — sideline briefly, respawn, retry — not
  * as an account-level fault.

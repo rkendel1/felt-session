@@ -7,7 +7,7 @@ import { IconChevronLeft, IconChevronRight, IconX } from "./icons";
 /**
  * Full-screen lightbox for all in-app media: workspace-media thumbnails (the
  * sidebar hover card, the mobile sheet, and the WorkspaceInfo panel) and any
- * chat media (markdown images, pasted-image attachments, tool-result
+ * session media (markdown images, pasted-image attachments, tool-result
  * screenshots and recordings), with prev/next browsing instead of jumping to
  * the raw file in a new tab — which for data:/blob URLs browsers block,
  * leaving an empty window.
@@ -19,7 +19,7 @@ import { IconChevronLeft, IconChevronRight, IconX } from "./icons";
  * Global singleton: the thumbnails live inside transient popovers — the
  * hover card unmounts on mouseleave/scroll — so the modal is hosted once in
  * App and opened imperatively via openLightbox(), surviving its opener.
- * Chat media is wired through a delegated capture-phase click listener here
+ * Session media is wired through a delegated capture-phase click listener here
  * (rather than per-component onClicks) because markdown images are injected
  * via dangerouslySetInnerHTML and can't carry React handlers.
  */
@@ -27,7 +27,7 @@ import { IconChevronLeft, IconChevronRight, IconX } from "./icons";
 export interface LightboxItem {
 	kind: "image" | "video";
 	src: string;
-	chatTitle?: string;
+	sessionTitle?: string;
 	at?: string;
 }
 
@@ -156,11 +156,11 @@ export function openLightbox(
 	host?.({ items, index, origin: mediaElement(origin) });
 }
 
-/** Every piece of chat media currently in the DOM, in document order —
+/** Every piece of session media currently in the DOM, in document order —
  * markdown images/videos, pasted attachments, tool-result screenshots. */
 const GALLERY_SELECTOR = "img.md-image, video.md-video";
 
-/** Open the lightbox on `el`, with prev/next browsing across all chat media
+/** Open the lightbox on `el`, with prev/next browsing across all session media
  * currently on screen (a conversation-wide gallery). */
 export function openGalleryFrom(el: Element) {
 	const nodes = Array.from(document.querySelectorAll(GALLERY_SELECTOR));
@@ -231,7 +231,7 @@ export function MediaLightboxHost() {
 		};
 	}, []);
 	// Delegated capture-phase listener: intercept plain left-clicks on any
-	// chat image and open the gallery instead of following the wrapping
+	// session image and open the gallery instead of following the wrapping
 	// <a target="_blank"> (kept for cmd/middle-click open-in-tab). Videos are
 	// not intercepted — clicks there drive the native controls.
 	useEffect(() => {
@@ -695,7 +695,7 @@ function MediaLightbox({
 	useEffect(() => {
 		const previousFocus = document.activeElement as HTMLElement | null;
 		// Focus returns to whatever opened the viewer, but the ring only comes
-		// back if it was there to begin with: a mouse click on a chat image
+		// back if it was there to begin with: a mouse click on a session image
 		// focuses its wrapping <a> silently, and closing with Escape puts the
 		// browser in keyboard modality, so a plain focus() would leave an
 		// outline around an image nobody deliberately focused.
@@ -753,7 +753,7 @@ function MediaLightbox({
 
 	if (!item) return null;
 	const caption = [
-		item.chatTitle,
+		item.sessionTitle,
 		item.at ? new Date(item.at).toLocaleString() : null,
 	]
 		.filter(Boolean)

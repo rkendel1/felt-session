@@ -50,7 +50,7 @@ export const WorkBlock = React.memo(function WorkBlock({
   ).length;
 
   return (
-    <div className="mx-auto mb-3 max-w-[var(--chat-col)]">
+    <div className="mx-auto mb-3 max-w-[var(--session-col)]">
       <button
         type="button"
         aria-expanded={expanded}

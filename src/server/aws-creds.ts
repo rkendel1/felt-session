@@ -13,7 +13,7 @@
  * it — can reach IMDS. The child receives a fixed, expiring copy in its env; it
  * cannot refresh them or read any other instance metadata.
  *
- * Scope today == the michael-ai instance role (AWS-managed ReadOnlyAccess):
+ * Scope today == the instance role (AWS-managed ReadOnlyAccess):
  * account-wide read, no writes. To narrow this, point the helper at an
  * sts:AssumeRole of a tighter role instead of vending the instance creds.
  */

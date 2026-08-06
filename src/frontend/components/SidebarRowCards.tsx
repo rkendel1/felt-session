@@ -10,11 +10,11 @@ import { Popover } from "../ui/popover";
 /**
  * Hover cards for the sidebar's rows.
  *
- * Every row in the sidebar — workspace, chat, pull request, support ticket,
+ * Every row in the sidebar — workspace, session, pull request, support ticket,
  * feed item — answers "what is this, and what does it need?" on a dwell, and
  * they are all the same card: one shell (RowCardPopup) around a body that
  * differs only in what the row has to say. The bodies for the PR and support
- * rows live here; the workspace and chat bodies stay in Sidebar.tsx, where
+ * rows live here; the workspace and session bodies stay in Sidebar.tsx, where
  * their data lives, but they render into this same shell.
  */
 
@@ -201,7 +201,7 @@ export function osReviewLabel(review: OsReview): React.ReactNode {
 	);
 }
 
-/** Shared with the chat card, so one PR's checks read the same wherever the
+/** Shared with the session card, so one PR's checks read the same wherever the
  *  sidebar surfaces it. */
 export function checksLabel(
 	checks: OpenPr["checks"] | undefined,

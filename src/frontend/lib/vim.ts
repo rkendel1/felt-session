@@ -5,7 +5,7 @@
 // unit-testable and keeps the textarea React-controlled (edits flow through
 // onChange, never el.value).
 //
-// Scope: the useful chat-composer subset, not full vim. Modes insert (the
+// Scope: the useful session-composer subset, not full vim. Modes insert (the
 // default — a composer opens ready to type), normal, visual and visual-line.
 // Counts; motions h l j k w b e 0 ^ $ gg G f F t T; operators d c y (+ dd/cc/
 // yy and linewise j/k/gg/G targets); x X D C s S r p P; u / Ctrl+r on an

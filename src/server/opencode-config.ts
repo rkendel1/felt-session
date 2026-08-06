@@ -263,6 +263,28 @@ export function turnTimeoutError(ms = opencodeTurnTimeoutMs()): string {
   return `Stopped after ${turnLimitLabel(ms)}, the limit for a single turn.`;
 }
 
+/* The tool-stall cutoff messages live here for the same reason as the
+ * turn-timeout pair above: the guard fires from both the fresh-turn and the
+ * reattached-turn paths. `label` is the hung call as the transcript shows it
+ * (tool name + input excerpt, e.g. `bash: setsid -f google-chrome …`). */
+
+/** Durable transcript line when a turn is cut off on a hung tool call. */
+export function toolStallNotice(label: string, quietMs: number): string {
+  return (
+    `Stopped this turn: a tool call (${label}) produced no output for ` +
+    `${turnLimitLabel(quietMs)} and looks hung. Everything up to here is saved; ` +
+    "send a message to continue. If the call started a background process " +
+    "(setsid, nohup, &), note that a detached child inheriting the tool's " +
+    "stdout/stderr keeps the call open forever — relaunch it with " +
+    "`</dev/null >/tmp/<name>.log 2>&1`."
+  );
+}
+
+/** The same tool-stall cutoff as a run failure (session list, header banner). */
+export function toolStallError(label: string, quietMs: number): string {
+  return `Stopped: a tool call (${label}) produced no output for ${turnLimitLabel(quietMs)} and looks hung.`;
+}
+
 export const DEFAULT_BRIDGE_MAX_REQUESTS_PER_HOUR = 300;
 
 /** Rolling per-account request ceiling for the native Anthropic bridge. */
@@ -321,6 +343,21 @@ function rawPickerModels(raw: Record<string, unknown>): string[] {
   return Array.isArray(raw.pickerModels)
     ? raw.pickerModels.filter((x: unknown): x is string => typeof x === "string" && !!x)
     : [];
+}
+
+/**
+ * Turn the engine config on or off. This is the flag that gates the whole
+ * `opencode/` model surface: the Anthropic bridge, and (via
+ * `opencodePickerModels`) whether third-party provider models reach the picker
+ * at all. Nothing used to write it, so a fresh install had it absent — every
+ * Anthropic turn failed pointing at a file no code path created, and
+ * UI-configured providers never showed up. Onboarding seeds it, and Settings →
+ * Setup toggles it; both land here.
+ */
+export function setBridgeEnabled(enabled: boolean): void {
+  const raw = readRawOpencodeConfig();
+  raw.enabled = enabled;
+  writeRawOpencodeConfig(raw);
 }
 
 /** Configured third-party providers (id → apiKey/baseURL). Read fresh. */

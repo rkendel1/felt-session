@@ -73,17 +73,6 @@ final class SessionViewModel {
     private(set) var prLoadFailed = false
     private var prTask: Task<Void, Never>?
 
-    // ── Team notes ──
-
-    /// Human-to-human notes on this session, interleaved into the transcript
-    /// by the time they were written. The agent never sees them.
-    private(set) var notes: [SessionNote] = []
-    private var notesTask: Task<Void, Never>?
-    /// Composer mode: the draft posts as a team note instead of prompting.
-    /// Mirrors the web composer's note mode, and like it survives a send —
-    /// writing notes usually comes in twos and threes.
-    var noteMode = false
-
     // ── Session goal ──
     /// Goal set from this app (`/goal`), used to label the composer menu's
     /// row and prefill its editor. The server owns the real value; this is
@@ -113,6 +102,9 @@ final class SessionViewModel {
     private var socket: (any SessionSocket)?
     /// Injection seam for tests; production always builds a real OS1Socket.
     private let socketFactory: @MainActor () -> any SessionSocket
+    /// Where sends go. Messages live here — on disk — until the server
+    /// acknowledges them, so nothing is lost to a dead socket or no signal.
+    let outbox: Outbox
     private var reconnectTask: Task<Void, Never>?
     /// Multiple views can briefly overlap during a reversed tab transition.
     /// The connection stays alive until the last mounted view releases it.
@@ -280,10 +272,12 @@ final class SessionViewModel {
         session: Session,
         seed: OptimisticSeed? = nil,
         composerDraft: ComposerDraft? = nil,
-        socketFactory: @escaping @MainActor () -> any SessionSocket = { OS1Socket() }
+        socketFactory: @escaping @MainActor () -> any SessionSocket = { OS1Socket() },
+        outbox: Outbox = .shared
     ) {
         self.session = session
         self.socketFactory = socketFactory
+        self.outbox = outbox
         self.isRunning = session.isRunning ?? false
         self.queuedCount = session.queuedCount ?? 0
         self.model = session.model ?? ""
@@ -296,6 +290,13 @@ final class SessionViewModel {
         if self.isRunning {
             self.runStartedAt = session.runStartedDate
         }
+        // A session the server says has never run has no transcript to wait
+        // for, and the watch confirms that in a moment. Opening on the loading
+        // spinner would make an empty tab — the tab strip's "+" lands on one —
+        // look like it was still fetching something. `createdAt` is the proof
+        // that this IS the server's row: `neverRan` reads as true for a bare
+        // id-only stub as well, and about one of those we know nothing.
+        if session.createdAt != nil, session.neverRan { isLoadingConversation = false }
         if let seed {
             awaitingCreation = true
             isLoadingConversation = false
@@ -351,9 +352,15 @@ final class SessionViewModel {
 
     private func startConnection() {
         stopped = false
+        // While this conversation is on screen it shows its own deliveries;
+        // a closed session needs no observer (reopening it resyncs from the
+        // server, which by then holds the message).
+        outbox.observe(sessionId: session.id) { [weak self] item, delivery in
+            self?.acceptDelivery(item, delivery)
+        }
+        outbox.poke()
         connect()
         loadPr()
-        loadNotes()
     }
 
     func stop() {
@@ -368,32 +375,14 @@ final class SessionViewModel {
 
     private func stopConnection() {
         stopped = true
+        outbox.stopObserving(sessionId: session.id)
         reconnectTask?.cancel()
         resyncProbeTask?.cancel()
         creationRetryTask?.cancel()
         deliveringPruneTask?.cancel()
         prTask?.cancel()
-        notesTask?.cancel()
         socket?.disconnect()
         socket = nil
-    }
-
-    /// Backfill the session's notes. Live ones arrive over the WS, so this
-    /// runs once per connect; a failure just leaves the transcript noteless.
-    private func loadNotes() {
-        notesTask?.cancel()
-        notesTask = Task { [weak self] in
-            guard let sessionId = self?.session.id,
-                  let loaded = try? await OS1API.sessionNotes(sessionId: sessionId),
-                  let self, !Task.isCancelled
-            else { return }
-            // Anything that arrived over the WS while this was in flight wins.
-            let known = Set(self.notes.map(\.id))
-            let merged = loaded.filter { !known.contains($0.id) } + self.notes
-            guard merged != self.notes else { return }
-            self.notes = merged.sorted { $0.ts < $1.ts }
-            self.rebuildDisplayItems()
-        }
     }
 
     /// Fire-and-forget PR refresh (open, foreground, run end).
@@ -429,6 +418,9 @@ final class SessionViewModel {
     /// down and reconnect immediately.
     func appDidBecomeActive() {
         guard !stopped else { return }
+        // Coming back is the most likely moment for "we have signal again".
+        outbox.clearBackoff()
+        outbox.poke()
         loadPr()
         guard connectionState == .connected, let socket else {
             // Not connected (or a pre-suspension connect is stuck mid
@@ -454,79 +446,92 @@ final class SessionViewModel {
         }
     }
 
+    /// Nothing here asks whether we're connected: an offline send is held in
+    /// the outbox and delivered when the server is reachable again. Disabling
+    /// the button was how messages used to be lost — you'd type, tap a dead
+    /// button (or hit a socket that only LOOKED alive), and the text vanished.
     var canSend: Bool {
         let hasText = !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        // A note is plain text over REST — no socket needed, and no image
-        // path behind it (the composer's picker rows hide in note mode).
-        if noteMode { return hasText }
-        return (hasText || !attachedImages.isEmpty) && connectionState == .connected
+        return hasText || !attachedImages.isEmpty
     }
 
+    /// Hand the draft to the outbox. It's on disk before the composer clears,
+    /// and it stays there until the server says it has it — so a send made in
+    /// a tunnel arrives when the signal does, in the order it was written.
     func sendDraft(busyModeOverride: String? = nil) {
-        if noteMode {
-            postNote()
-            return
-        }
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         let images = attachedImages.map(\.dataURL)
-        guard !text.isEmpty || !images.isEmpty, let socket else { return }
-        // You can't be done with a chat you're actively working in: prompting
+        guard !text.isEmpty || !images.isEmpty else { return }
+        let busyMode = busyModeOverride
+            ?? UserDefaults.standard.string(forKey: "os1.composer.busySend")
+            ?? "queue"
+        guard outbox.enqueue(
+            sessionId: session.id,
+            content: text,
+            images: images,
+            effort: effort.isEmpty ? nil : effort,
+            fastMode: fastMode ? true : nil,
+            busyMode: busyMode,
+            user: ServerConfig.shared.userName
+        ) != nil else {
+            // Full: keep the draft where it is rather than swallowing it.
+            notice = "Too many unsent messages — send or delete some first."
+            return
+        }
+        // You can't be done with a session you're actively working in: prompting
         // clears any sidebar hide covering it (opening it deliberately doesn't).
         HideStore.shared.unhide(for: session)
         draft = ""
         attachedImages = []
-        let busyMode = busyModeOverride
-            ?? UserDefaults.standard.string(forKey: "os1.composer.busySend")
-            ?? "queue"
-        if isRunning {
-            // A send during a run is held server-side (busyMode "queue") and
-            // only enters the transcript when the queue delivers it after the
-            // run — echoing it into the thread now would strand a bubble out
-            // of chronological order. Echo it as a queue chip instead; the
-            // server's next queue_update replaces this local copy.
-            let item = QueueItem(
-                id: "local-queued-\(UUID().uuidString)",
-                content: text,
-                user: ServerConfig.shared.userName
+        sendSeq += 1
+    }
+
+    /// The server took a message: put it where the server says it went. This
+    /// replaces the old guess from local `isRunning` — a client that has been
+    /// offline has no idea whether a run started meanwhile, and a bubble in
+    /// the wrong place blinks out at the next resync.
+    private func acceptDelivery(_ item: Outbox.Item, _ delivery: Outbox.Delivery) {
+        switch delivery.status {
+        case "queued", "steered":
+            // Held server-side; it enters the transcript when the queue
+            // delivers it. Show the chip the queue_update will replace —
+            // unless that update has already arrived. The socket routinely
+            // wins this race (the broadcast goes out while the HTTP response
+            // is still travelling, and on a slow link that's the common case,
+            // not the rare one), and appending anyway showed the message
+            // twice: the server's entry plus an optimistic copy that only
+            // cleared when the queue next changed.
+            let content = item.content.trimmingCharacters(in: .whitespacesAndNewlines)
+            let alreadyShown = (delivery.status == "steered" ? steeredItems : queuedItems)
+                .contains {
+                    !$0.isLocalEcho
+                        && $0.content.trimmingCharacters(in: .whitespacesAndNewlines) == content
+                }
+            guard !alreadyShown else { return }
+            let chip = QueueItem(
+                id: "local-queued-\(item.id)",
+                content: item.content,
+                user: item.user
             )
-            if busyMode == "steer" { steeredItems.append(item) }
-            else { queuedItems.append(item) }
+            if delivery.status == "steered" { steeredItems.append(chip) }
+            else { queuedItems.append(chip) }
             queuedCount = queuedItems.count
-        } else {
-            let localId = "local-\(UUID().uuidString)"
+        case "handled":
+            // A slash command (/model, /goal …) — the server's answer is the
+            // whole result; nothing enters the transcript.
+            if !delivery.message.isEmpty { notice = delivery.message }
+        default:
+            let localId = "local-\(item.id)"
             localEchoIds.insert(localId)
             entries.append(TranscriptEntry(
                 id: localId,
                 type: "user",
-                content: text,
+                content: item.content,
                 timestamp: ISO8601DateFormatter().string(from: .now),
-                images: images.isEmpty ? nil : images
+                images: delivery.images.isEmpty ? nil : delivery.images
             ))
             rebuildDisplayItems()
         }
-        socket.prompt(
-            sessionId: session.id,
-            content: text,
-            user: ServerConfig.shared.userName,
-            images: images.isEmpty ? nil : images,
-            effort: effort.isEmpty ? nil : effort,
-            fastMode: fastMode ? true : nil,
-            busyMode: busyMode
-        )
-        sendSeq += 1
-    }
-
-    /// Post the draft as a team note on the session's chat channel. Notes are
-    /// human-to-human — they never reach the engine — and the server
-    /// broadcasts the stored note back as a `chat_message`, which is what puts
-    /// it in the transcript, so there's no local echo to keep in sync.
-    func postNote() {
-        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return }
-        draft = ""
-        let sessionId = session.id
-        Task { try? await OS1API.postSessionNote(sessionId: sessionId, text: text) }
-        sendSeq += 1
     }
 
     /// Pin (or clear) the session goal. Goals have no endpoint of their own —
@@ -541,6 +546,42 @@ final class SessionViewModel {
             content: trimmed.isEmpty ? "/goal clear" : "/goal \(trimmed)",
             user: ServerConfig.shared.userName
         )
+    }
+
+    /// Append an `@`-mention to the draft. SwiftUI hands out no cursor
+    /// position for a TextField, so mentions land at the end rather than at
+    /// the caret — where a reference reads naturally anyway.
+    func insertMention(_ insert: String) {
+        if !draft.isEmpty, !draft.hasSuffix(" "), !draft.hasSuffix("\n") { draft += " " }
+        draft += "@\(insert) "
+    }
+
+    /// Hold the draft until `at` — the server sends it then, whether or not
+    /// the app is running. Clears the draft only once the server has it.
+    func schedulePrompt(at: Date) async throws {
+        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        try await OS1API.schedulePrompt(sessionId: session.id, prompt: text, at: at)
+        draft = ""
+        sendSeq += 1
+    }
+
+    /// Promote an ask-mode session to code mode. One-way: the server cuts a
+    /// worktree, and the local snapshot follows so the row disappears without
+    /// waiting for the next sessions refresh. The branch it returns is for
+    /// callers that want to say so; the notice covers the rest.
+    @discardableResult
+    func promoteToCode() async -> String? {
+        do {
+            let branch = try await OS1API.promoteToCode(sessionId: session.id)
+            session.mode = "code"
+            if let branch { session.branch = branch }
+            notice = "Switched to code mode"
+            return branch
+        } catch {
+            notice = "Couldn't switch to code mode"
+            return nil
+        }
     }
 
     /// Switch this session's model via the `/model` slash command — handled
@@ -592,13 +633,85 @@ final class SessionViewModel {
         historyFirstSeq = cursor.firstSeq
     }
 
+    /// Deliberately NOT optimistic: a steer can be refused (nothing steerable
+    /// right now, files attached) and the message legitimately stays queued —
+    /// the server answers with a notice and the queue_update that follows is
+    /// the truth. Moving the chip first would show a steer that didn't happen.
     func steerQueued(_ item: QueueItem) {
         socket?.steerQueued(sessionId: session.id, queueId: item.id)
     }
 
     func deleteQueued(_ item: QueueItem) {
         socket?.deleteQueued(sessionId: session.id, queueId: item.id)
+        removeChip(item)
+    }
+
+    /// Drop a steer receipt from view. The run keeps going — the message is
+    /// already committed to it — this just stops the receipt from hanging
+    /// around until the turn ends.
+    func dismissSteered(_ item: QueueItem) {
+        socket?.deleteQueued(sessionId: session.id, queueId: item.id)
+        removeChip(item)
+    }
+
+    /// Removals have to be optimistic in BOTH lists: a chip that leaves the
+    /// server's queue without its message landing in the transcript is what
+    /// `queueUpdate` reads as "mid-delivery", so a discarded one we still hold
+    /// locally would come back as a ghost "Delivering…" row until it timed out.
+    private func removeChip(_ item: QueueItem) {
         queuedItems.removeAll { $0.id == item.id }
+        steeredItems.removeAll { $0.id == item.id }
+        deliveringItems.removeAll { $0.id == item.id }
+        queuedCount = queuedItems.count
+    }
+
+    /// Rewrite a queued message in place, keeping its position in the queue.
+    /// Only server-known entries can be addressed this way — a local echo has
+    /// an id the server has never seen.
+    func editQueued(_ item: QueueItem, content: String) {
+        let text = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !item.isLocalEcho else { return }
+        guard !text.isEmpty else {
+            deleteQueued(item)
+            return
+        }
+        socket?.updateQueued(sessionId: session.id, queueId: item.id, content: text)
+        if let index = queuedItems.firstIndex(where: { $0.id == item.id }) {
+            queuedItems[index] = queuedItems[index].withContent(text)
+        }
+    }
+
+    /// Move a queued message one place towards (-1) or away from (+1) the
+    /// front of the queue. The server takes the full id order and leaves
+    /// entries it doesn't recognise where they are, so local echoes ride
+    /// along without being named.
+    func moveQueued(_ item: QueueItem, by offset: Int) {
+        guard let from = queuedItems.firstIndex(where: { $0.id == item.id }) else { return }
+        let to = from + offset
+        guard queuedItems.indices.contains(to) else { return }
+        queuedItems.swapAt(from, to)
+        let order = queuedItems.filter { !$0.isLocalEcho }.map(\.id)
+        guard order.count > 1 else { return }
+        socket?.reorderQueued(sessionId: session.id, order: order)
+    }
+
+    /// Whether a queued message can be reordered at all — a one-item queue
+    /// has nothing to move, and a local echo isn't addressable yet.
+    func canReorder(_ item: QueueItem) -> Bool {
+        queuedItems.count > 1 && !item.isLocalEcho
+    }
+
+    /// Pull a message the server hasn't taken yet back into the composer.
+    /// Unlike a queued message (edited in place server-side), an outbox item
+    /// was never sent — taking it back is a pure local move, and the draft it
+    /// becomes is the only copy, so it's dropped from the outbox last.
+    func editUnsent(_ item: Outbox.Item) {
+        let images = outbox.images(for: item).compactMap {
+            AttachedImage(dataURL: $0)
+        }
+        draft = draft.isEmpty ? item.content : draft + "\n\n" + item.content
+        attachedImages.append(contentsOf: images)
+        outbox.delete(id: item.id)
     }
 
     // MARK: - Socket lifecycle
@@ -635,6 +748,11 @@ final class SessionViewModel {
             connectionState = .connected
             // Watch after the handshake frame so the send cannot race the upgrade.
             socket?.watch(sessionId: session.id)
+            // A completed handshake is proof the server is reachable — better
+            // evidence than any network path status, so anything waiting out a
+            // backoff goes now.
+            outbox.clearBackoff()
+            outbox.poke()
 
         case .transcriptInit(let id, let newEntries, let cursor) where id == session.id:
             creationRetryTask?.cancel()
@@ -882,19 +1000,6 @@ final class SessionViewModel {
                 self.socket?.watch(sessionId: self.session.id)
             }
 
-        case .chatNote(let channel, let note)
-            where channel == SessionNote.channel(for: session.id):
-            // Chat frames go to every client, so an edit of an existing note
-            // replaces it in place rather than appending a duplicate.
-            if let index = notes.firstIndex(where: { $0.id == note.id }) {
-                guard notes[index] != note else { return }
-                notes[index] = note
-            } else {
-                notes.append(note)
-                notes.sort { $0.ts < $1.ts }
-            }
-            rebuildDisplayItems()
-
         case .notice(let message), .serverError(let message):
             notice = message.isEmpty ? nil : message
 
@@ -971,7 +1076,6 @@ final class SessionViewModel {
             from: items,
             live: isRunning || isStreaming,
             worktreeDir: session.worktreeDir,
-            notes: notes,
             walkthrough: session.walkthrough
         )
     }

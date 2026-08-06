@@ -4,8 +4,8 @@
  * test runs them in a CHILD bun process whose HOME/state env point at scratch
  * BEFORE any module evaluates. Why: bun test runs all files in one process,
  * so hook-based seams can't contain module-eval path snapshots or
- * ensureChatWorkspaces' fire-and-forget persists — demo sessions ended up
- * filed into the operator's LIVE chats/workspaces stores (2026-08-04). In the
+ * ensureSessionWorkspaces' fire-and-forget persists — demo sessions ended up
+ * filed into the operator's LIVE sessions/workspaces stores (2026-08-04). In the
  * child, every resolver and every deferred write sees scratch from first
  * instruction to process exit.
  */
@@ -30,10 +30,10 @@ describe("demo dataset generator (isolated child process)", () => {
             ...process.env,
             OS_DEMO_TEST_CHILD: "1",
             HOME: home,
-            // A fresh namespace, not the operator's: no chats-dir/config/state
+            // A fresh namespace, not the operator's: no sessions-dir/config/state
             // overrides may leak in from the outer environment.
             OPENSESSION_STATE_DIR: "",
-            OPENSESSION_CHATS_DIR: "",
+            OPENSESSION_SESSIONS_DIR: "",
             OPENSESSION_CONFIG: join(home, "config.json"),
           },
           stdout: "pipe",

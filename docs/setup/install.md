@@ -1,5 +1,41 @@
 # Install: bare box to running service
 
+## Fastest path: nothing to a first session
+
+One prerequisite the installer cannot give you: **a model subscription** — a
+Claude Max subscription for the Anthropic path, or a ChatGPT plan for the
+OpenAI one. Sessions run on subscription capacity, not on a bundled key.
+
+The tooling it does give you: the OpenCode engine plus the `claude` and `codex`
+CLIs, which are how you mint an account token and how the in-app ChatGPT
+sign-in works. Each is skipped if you already have it, and `--no-engine` skips
+all three.
+
+Then, end to end:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh | bash
+# onboarding: accept the defaults — bind 127.0.0.1, press enter through the
+# public base URL, point it at one repo, say no to every integration
+claude setup-token     # on your Max login; copy the sk-ant-… it prints
+opensession start
+```
+
+Now **open <http://127.0.0.1:3850>**. Add your account under Settings → Accounts
+(paste the `sk-ant-…`, or use the ChatGPT device-code sign-in for the OpenAI
+path), then pick your repo on the home screen, write a prompt, and create the
+session. A turn that actually runs is the only proof the install works — a
+health check is not.
+
+Budget 5-15 minutes on a fresh box, most of it unattended: the installer
+downloads Bun, the OpenCode engine and the two model CLIs, and installs a
+multi-gigabyte dependency tree.
+
+Sections 3-7 below — automations, the env-var inventory, the `config.json`
+reference, MCP — are reference material you can skip on a first install, and
+networking, TLS, GitHub and systemd are all optional for session #1. Come back
+to them when the first session has run.
+
 Prerequisites: Linux (or macOS), `git`, and `curl`. The installer brings its
 own [Bun](https://bun.sh) and [OpenCode](https://opencode.ai). `gh`
 (authenticated) is needed for pull-request operations. See
@@ -87,6 +123,7 @@ URL, your first repository, and which integrations to turn on. It writes:
 | `~/.opensession/config.json` | instance config — re-read on change, no restart |
 | `~/.opensession.env` | secrets and feature flags, `0600` |
 | `~/.opensession/opensession.service` | systemd unit templated for this box |
+| `~/.opensession-opencode.json` | engine config — created as `{"enabled": true}` when absent, so the Anthropic bridge is on out of the box ([engines.md](engines.md)) |
 
 Re-run it any time with `opensession onboard --force`; the previous files are
 backed up to `.bak-<n>` first.
@@ -148,7 +185,7 @@ what the code actually reads, by feature:
 | `OPENSESSION_UI_BASE` | `http://127.0.0.1:<port>` | public base URL used in links posted to Slack/Linear/notes |
 | `OPENSESSION_CONFIG` | `~/.opensession/config.json` | config-file path override |
 | `SHUTDOWN_DRAIN_MS` | `60000` | graceful-shutdown drain window for in-flight runs |
-| `OPENSESSION_CHATS_DIR` | `~/.opensession-chats` | session store override (mostly a test seam) |
+| `OPENSESSION_SESSIONS_DIR` | `~/.opensession-sessions` | session store override (mostly a test seam) |
 | `OPENSESSION_WORKTREES_DIR` | `~/.opensession/worktrees` | where session worktrees are created |
 | `OPENSESSION_DEV` | unset | `1` = dev frontend build only; does NOT disable agent loops (a second naive instance double-sends) |
 
@@ -243,8 +280,15 @@ on:
 claude setup-token   # on a Claude Max login; prints sk-ant-…
 ```
 
-Add it via the Connections UI, or create `~/.opensession-claude-accounts.json`
-by hand — file shapes, account picking, Codex accounts
+Accounts are added in the web UI under **Settings → Accounts** — which means
+this step happens *after* [section 8](#8-first-run): the server has to be
+running before you can paste anything into it. Mint the token whenever you
+like, start the server, then paste it. (The same page signs in ChatGPT-plan
+logins by device code.)
+
+The alternative, if you would rather have accounts in place before the first
+boot, is to create `~/.opensession-claude-accounts.json` by hand — file
+shapes, account picking, Codex accounts
 (`~/.opensession-codex-accounts.json`), and OpenCode config are documented in
 [engines.md](engines.md).
 

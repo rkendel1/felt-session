@@ -289,7 +289,7 @@ const ACTION_MIN_GAP_MS = 2000;
  * Coalescing sender for action activities: tool bursts post at most one
  * activity per ACTION_MIN_GAP_MS (latest wins, trailing flush) so a busy run
  * doesn't flood the Linear timeline or the API. The full log stays in the
- * Michael UI; this is a progress feed.
+ * web UI; this is a progress feed.
  */
 function makeActionStreamer(accessToken: string, linearSessionId: string) {
   let lastSent = 0;

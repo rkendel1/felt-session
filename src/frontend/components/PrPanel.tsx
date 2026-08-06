@@ -1,4 +1,5 @@
 import { repoLabel } from "../lib/repo-label";
+import { AGENT_NAME } from "../lib/brand";
 import { commitPrompt } from "../lib/commit-prompt";
 import React, { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import type {
@@ -25,6 +26,8 @@ import {
   setPrFileViewed,
   fetchGitStatus,
   fetchReviewGuide,
+  fetchWorktreeFile,
+  saveWorktreeFile,
   gitPushApi,
   submitPrReviewApi,
   mergePrApi,
@@ -106,6 +109,14 @@ interface Props {
   walkthrough?: SessionWalkthrough;
   /** Diff-first review canvas used by the Pull requests sidebar inbox. */
   reviewCanvas?: boolean;
+  /**
+   * Allow in-place edit mode (@pierre/diffs edit) on the review canvas's diff.
+   * Only meaningful for callers whose session backs the shown PR with a live
+   * worktree; carries the same agent-idle gate as the Changes tab (edits and
+   * agent writes must not race). Linked/discovered PRs and session-less
+   * previews stay read-only regardless.
+   */
+  editGate?: boolean;
   /** Session-less PR target; uses the same canvas with repo+branch APIs. */
   previewTarget?: { repo: string; branch: string };
   /**
@@ -305,6 +316,7 @@ export function PrPanel({
   send,
   walkthrough,
   reviewCanvas,
+  editGate,
   previewTarget,
   sessions,
   onOpenSessionById,
@@ -899,6 +911,58 @@ export function PrPanel({
     [prBase, prHead, activeRepoId],
   );
 
+  // In-place edit mode on the review canvas. Only targets backed by one of the
+  // session's own worktrees qualify (primary/attached repos — their worktree is
+  // the PR's head branch); linked/discovered PRs live on branches this session
+  // doesn't have checked out, so they stay read-only. Saves only touch the
+  // worktree — the PR diff won't reflect them until they're committed and
+  // pushed — so saved files accumulate into a "tell the agent" note that asks
+  // it to commit them on this branch.
+  const [handEdited, setHandEdited] = useState<string[]>([]);
+  useEffect(() => setHandEdited([]), [sessionId, activeRepoId]);
+  const worktreeEditable =
+    !!editGate && !previewTarget && !!active && !active.branch;
+  const editFile = useMemo(
+    () =>
+      worktreeEditable
+        ? {
+            load: (file: FileDiffMetadata, side: "new" | "base") =>
+              fetchWorktreeFile(
+                sessionId,
+                side === "base" ? file.prevName || file.name : file.name,
+                activeRepoId,
+                side,
+              ),
+            save: async (path: string, content: string) => {
+              await saveWorktreeFile(sessionId, path, content, activeRepoId);
+              setHandEdited((prev) =>
+                prev.includes(path) ? prev : [...prev, path],
+              );
+              // The diff column is the PR's committed state, so it can't show
+              // the edit yet — but the divergence strip's dirty state can.
+              void fetchGitStatus(sessionId, activeRepoId)
+                .then((g) => setGit(g))
+                .catch(() => {});
+            },
+          }
+        : undefined,
+    [worktreeEditable, sessionId, activeRepoId],
+  );
+  const tellAgentAboutEdits = useCallback(() => {
+    if (!send || !handEdited.length) return;
+    const list = handEdited.map((p) => `- \`${p}\``).join("\n");
+    send({
+      type: "prompt",
+      sessionId,
+      user: getCurrentUser(),
+      content:
+        `${getCurrentUser()} hand-edited these files directly in the worktree via the review tab editor` +
+        `${activeRepoId ? ` (${activeRepoId} repo)` : ""}:\n\n${list}\n\n` +
+        `Review the edits, keep them (don't revert them unless they're clearly broken), and commit + push them on this branch so the pull request picks them up.`,
+    });
+    setHandEdited([]);
+  }, [send, handEdited, sessionId, activeRepoId]);
+
   // GitHub "Viewed" state: fetched per PR (and refetched when the head moves,
   // since a push flips changed files to DIRTY = unviewed on GitHub's side).
   const viewedKey = diff ? `${activeRepoId || "pr"}#${diff.number}` : null;
@@ -1227,6 +1291,18 @@ export function PrPanel({
                 </Button>
               </div>
               <div className="ml-auto flex items-center gap-3">
+                {handEdited.length > 0 && send && (
+                  <Button
+                    variant="default"
+                    size="xs"
+                    className="min-h-0 px-2 py-0.5 text-meta"
+                    onClick={tellAgentAboutEdits}
+                    title="Sends a note listing your hand-edits so they get committed and pushed"
+                  >
+                    Tell {AGENT_NAME} about {handEdited.length} edit
+                    {handEdited.length === 1 ? "" : "s"}
+                  </Button>
+                )}
                 {pending.length > 0 && (
                   <span className="text-meta text-faint">
                     {pending.length} pending comment{pending.length === 1 ? "" : "s"}
@@ -1308,6 +1384,7 @@ export function PrPanel({
                       onRemovePending={handleRemovePending}
                       onSubmit={handleAddPending}
                       imageSrcs={prImageSrcs}
+                      editFile={editFile}
                     />
                   </>
                 ) : guideFailed ? (
@@ -1365,6 +1442,7 @@ export function PrPanel({
                             onRemovePending={handleRemovePending}
                             onSubmit={handleAddPending}
                             imageSrcs={prImageSrcs}
+                            editFile={editFile}
                           />
                         )}
                       </section>
@@ -1384,6 +1462,7 @@ export function PrPanel({
                   onRemovePending={handleRemovePending}
                   onSubmit={handleAddPending}
                   imageSrcs={prImageSrcs}
+                  editFile={editFile}
                 />
               )}
           </div>
@@ -1765,7 +1844,7 @@ export function PrPanel({
                     className="pr-comments-add-all"
                     onClick={() => onAddToInput(formatPrCommentsPrompt(comments, pr))}
                   >
-                    Add all to chat
+                    Add all to session
                   </button>
                 ) : undefined
               }
@@ -1787,7 +1866,7 @@ export function PrPanel({
                       className="pr-comment-add"
                       onClick={() => onAddToInput(formatPrCommentPrompt(comment, pr))}
                     >
-                      Add to chat
+                      Add to session
                     </button>
                   )}
                 </div>
@@ -1935,7 +2014,7 @@ export function PrPanel({
                     className="text-meta"
                     onClick={() => onAddToInput(formatPendingCommentsPrompt(pending, pr))}
                   >
-                    Add to chat
+                    Add to session
                   </Button>
                 )}
               </div>
@@ -2307,8 +2386,8 @@ function PrCard({
  * sits under the last row, the way the stack is drawn on github.com). The row
  * for the PR being viewed is marked rather than linked — it's already here.
  *
- * Also carries the "link into a stack" action for a chat that was branched off
- * another chat's branch but whose PRs were never linked (pr.stackBase, set by
+ * Also carries the "link into a stack" action for a session that was branched off
+ * another session's branch but whose PRs were never linked (pr.stackBase, set by
  * the session PR route).
  */
 /**
@@ -2317,8 +2396,8 @@ function PrCard({
  * The row for the PR being viewed is marked rather than linked — it's already
  * here. Rendered by both PrPanel layouts through the wrappers below.
  *
- * Also carries the "link into a stack" action for a chat that was branched off
- * another chat's branch but whose PRs were never linked (pr.stackBase, set by
+ * Also carries the "link into a stack" action for a session that was branched off
+ * another session's branch but whose PRs were never linked (pr.stackBase, set by
  * the session PR route).
  */
 function StackBody({
@@ -2443,7 +2522,7 @@ function StackBody({
 }
 
 /**
- * Whether this PR has anything stack-shaped to say: a real stack, or a chat
+ * Whether this PR has anything stack-shaped to say: a real stack, or a session
  * stacked locally whose PRs a human could still link. Both layouts gate on
  * this so a standalone PR never grows an empty section.
  */
@@ -2461,7 +2540,7 @@ function StackCard({
 }: {
   pr: PrDetails;
   /** Absent on the session-less /pr/<repo>/<branch> view: the map still
-   *  renders there, only the link action needs a chat to act on. */
+   *  renders there, only the link action needs a session to act on. */
   sessionId?: string;
   repo?: string;
   onOpenPr?: (repo: string, branch: string) => void;
@@ -2688,11 +2767,11 @@ export function CheckRow({ check }: { check: PrCheck }) {
  * The local/remote work a branch still owes: conflicts to resolve, base
  * commits to pull, local commits to push, a dirty tree to commit. Shared by
  * the workspace panel's Git status rows and the review canvas's divergence
- * strip so both name the task — and ask Michael for it — identically.
+ * strip so both name the task — and ask the agent for it — identically.
  *
  * Push is a direct server-side `git push`; the judgment calls (resolve
  * conflicts, update from base, commit stray changes) prompt the session —
- * Michael does the work, not a bare button.
+ * the agent does the work, not a bare button.
  */
 /** Status-dot colours for a Git status row — the state, not a step marker. */
 type GitDotTone = "green" | "yellow" | "red" | "blue" | "purple" | "muted";
@@ -2890,7 +2969,7 @@ function GitDivergenceStrip({
         </span>
       ))}
       {runner.prompted && (
-        <span className="text-xs text-faint">Asked Michael to {runner.prompted} ✓</span>
+        <span className="text-xs text-faint">Asked {AGENT_NAME} to {runner.prompted} ✓</span>
       )}
       {runner.error && <span className="text-xs text-red">{runner.error}</span>}
     </section>
@@ -2901,7 +2980,7 @@ function GitDivergenceStrip({
  * Local/remote discrepancy rows for the Status card: each gets a line with one
  * action on the right. Push is a direct server-side `git push`; the judgment
  * calls (create the PR, resolve conflicts, update from base, commit stray
- * changes) prompt the session — Michael does the work, not a bare button.
+ * changes) prompt the session — the agent does the work, not a bare button.
  */
 function GitStatusRows({
   git,
@@ -3037,7 +3116,7 @@ function GitStatusRows({
           {row.action}
         </div>
       ))}
-      {prompted && <div className="pr-git-note">Asked Michael to {prompted} ✓</div>}
+      {prompted && <div className="pr-git-note">Asked {AGENT_NAME} to {prompted} ✓</div>}
       {error && <div className="pr-git-note pr-git-note-error">{error}</div>}
     </>
   );

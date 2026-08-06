@@ -1,5 +1,5 @@
 // Per-user default model for NEW sessions (Settings → Composer): what the
-// New-session palette (and the workspace/support first-chat composers)
+// New-session palette (and the workspace/support first-session composers)
 // preselect for this user. "" = no preference — fall back to the workspace's
 // interactive default from GET /api/models. Stored server-side per user
 // (ui-prefs) so it follows you across devices, with a localStorage copy as

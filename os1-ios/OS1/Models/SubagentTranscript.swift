@@ -2,7 +2,7 @@ import Foundation
 
 /// One worker a session spawned through the Task tool, and its transcript.
 ///
-/// The main chat only ever shows the Task CALL — what the worker actually did
+/// The main session only ever shows the Task CALL — what the worker actually did
 /// lives in its own transcript, which is why a `Task` row without a way in is
 /// a dead end. Mirrors the server's `SubagentTranscript`
 /// (`GET /api/sessions/:id/subagent/:agentId`); decoding is tolerant like

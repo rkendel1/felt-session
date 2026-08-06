@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
 import {
   parseOpencodeModel,
   opencodeGateReason,
@@ -7,7 +10,6 @@ import {
   proxyOpencodeMcpConfigs,
   remoteOpencodeMcpConfigs,
   inProcessOpencodeMcpConfigs,
-  buildOpencodeInstructions,
   reconnectSharedInProcessMcp,
   sharedOpencodeEligible,
   sharedServerKey,
@@ -17,6 +19,7 @@ import {
   emptyCompletionRepairPrompt,
   meridianRequiredModels,
 } from "./opencode-runner";
+import { buildRunInstructions } from "./run-instructions";
 import { STRIPE_CONFIRM_TOOLS, filterMcpServers } from "./runner-shared";
 import { DESK_NOTE } from "./desk";
 import { buildSystemPromptParts } from "./system-prompt";
@@ -66,7 +69,7 @@ describe("shared server eligibility", () => {
       sharedOpencodeEligible({
         journal: { kind: "prompt" },
         user: "happylinks",
-        mcpGrantUser: "Michiel",
+        mcpGrantUser: "Alex",
       }),
     ).toBe(true);
   });
@@ -92,7 +95,7 @@ describe("shared server eligibility", () => {
       sharedOpencodeEligible({
         journal: { kind: "prompt" },
         user: "Jaap",
-        mcpGrantUser: "Michiel",
+        mcpGrantUser: "Alex",
       }),
     ).toBe(false);
   });
@@ -605,10 +608,10 @@ describe("reconnectSharedInProcessMcp", () => {
   });
 });
 
-describe("buildOpencodeInstructions", () => {
+describe("buildRunInstructions", () => {
   test("every run forbids interactive AWS login and human device-code asks", () => {
     for (const isAsk of [true, false]) {
-      const s = buildOpencodeInstructions({ isAsk });
+      const s = buildRunInstructions({ isAsk });
       expect(s).toContain("## AWS access is non-interactive");
       expect(s).toContain("NEVER run `aws login` or `aws sso login`");
       expect(s).toContain("NEVER ask a human to authorize AWS");
@@ -622,31 +625,58 @@ describe("buildOpencodeInstructions", () => {
   // prompt-level because no credential boundary can enforce it.
   test("every run forbids uploads to public file hosts", () => {
     for (const isAsk of [true, false]) {
-      const s = buildOpencodeInstructions({ isAsk });
+      const s = buildRunInstructions({ isAsk });
       expect(s).toContain("never upload to public hosts");
       expect(s).toContain("stop and report the failure");
     }
   });
+  test("every run learns the UI renders mermaid fences as diagrams", () => {
+    for (const isAsk of [true, false]) {
+      const s = buildRunInstructions({ isAsk });
+      expect(s).toContain("## Session UI rendering");
+      expect(s).toContain("```mermaid fenced code blocks render as actual diagrams");
+    }
+  });
   test("every run knows the private-key-backed GitHub checks command", () => {
     for (const isAsk of [true, false]) {
-      const s = buildOpencodeInstructions({ isAsk });
+      const s = buildRunInstructions({ isAsk });
       expect(s).toContain("## GitHub checks authentication");
       expect(s).toContain("scripts/gh-checks.ts <pr-number>");
       expect(s).toContain("short-lived, read-only installation token");
     }
   });
   test("shared-pool runs are told their real cwd; per-session runs aren't", () => {
-    const shared = buildOpencodeInstructions({
+    const shared = buildRunInstructions({
       isAsk: false,
       cwd: "/home/ubuntu/projects/opensession",
     });
     expect(shared).toContain("## Working directory");
     expect(shared).toContain("`/home/ubuntu/projects/opensession` — you are already there");
     expect(shared).toContain("cd /home/ubuntu/projects/opensession &&");
-    expect(buildOpencodeInstructions({ isAsk: false })).not.toContain("## Working directory");
+    expect(buildRunInstructions({ isAsk: false })).not.toContain("## Working directory");
+  });
+  test("a pre-rename checkout path is named by the path that exists today", () => {
+    // Sessions persisted before a checkout rename store the old path, which
+    // survives as a symlink. Naming it here would have the model narrate the
+    // pre-rename name back in every command, so the text resolves it.
+    const root = mkdtempSync(join(tmpdir(), "opensession-cwd-test-"));
+    const real = join(root, "opensession");
+    const legacy = join(root, "tella-backstage");
+    mkdirSync(real);
+    symlinkSync("opensession", legacy);
+    const s = buildRunInstructions({ isAsk: false, cwd: legacy });
+    expect(s).toContain(`\`${real}\` — you are already there`);
+    expect(s).not.toContain("tella-backstage");
+    rmSync(root, { recursive: true, force: true });
+  });
+  test("an unresolvable cwd is left exactly as given", () => {
+    const missing = join(tmpdir(), "opensession-cwd-missing-does-not-exist");
+    expect(buildRunInstructions({ isAsk: false, cwd: missing })).toContain(
+      `\`${missing}\` — you are already there`
+    );
   });
   test("ask mode gets the read-only guardrail", () => {
-    const s = buildOpencodeInstructions({ isAsk: true });
+    const s = buildRunInstructions({ isAsk: true });
     expect(s).toContain("READ-ONLY with respect to the checkout and shell");
     expect(s).toContain("does not prohibit intentional changes");
     expect(s).toContain("shared notes");
@@ -660,7 +690,7 @@ describe("buildOpencodeInstructions", () => {
     expect(DESK_NOTE).toContain("use the requested Desk tool directly");
   });
   test("code mode gets the session link; confirm-tool notes ride deniedToolNotes", () => {
-    const s = buildOpencodeInstructions({
+    const s = buildRunInstructions({
       isAsk: false,
       osSessionId: "abc-123",
       deniedToolNotes: opencodeRunPolicy({
@@ -674,18 +704,18 @@ describe("buildOpencodeInstructions", () => {
     expect(s).toContain("human approval");
   });
   test("a resolved requester gets named + assigned in the PR instruction", () => {
-    const s = buildOpencodeInstructions({
+    const s = buildRunInstructions({
       isAsk: false,
       osSessionId: "abc-123",
-      user: "michiel",
-      author: { name: "Michiel Westerbeek", email: "alice@example.com" },
+      user: "alex",
+      author: { name: "Alex Rivera", email: "alice@example.com" },
     });
-    expect(s).toContain("Started by Michiel Westerbeek in [this");
+    expect(s).toContain("Started by Alex Rivera in [this");
     expect(s).toContain("--assignee happylinks");
     expect(s).not.toContain("Created by [this");
   });
   test("an unresolved user keeps the generic footer", () => {
-    const s = buildOpencodeInstructions({
+    const s = buildRunInstructions({
       isAsk: false,
       osSessionId: "abc-123",
       user: "Anonymous",
@@ -695,7 +725,7 @@ describe("buildOpencodeInstructions", () => {
     expect(s).not.toContain("--assignee");
   });
   test("unattended deny-set renders as a run-policy section", () => {
-    const s = buildOpencodeInstructions({
+    const s = buildRunInstructions({
       isAsk: true,
       deniedToolNotes: opencodeRunPolicy({
         journalKind: "automation",
@@ -710,7 +740,7 @@ describe("buildOpencodeInstructions", () => {
     expect(s).toContain("internal note");
   });
   test("dial runs get the oracle block; everyone else never hears of it", () => {
-    const s = buildOpencodeInstructions({
+    const s = buildRunInstructions({
       isAsk: false,
       dialOracle: {
         agent: "oracle-fable",
@@ -723,7 +753,7 @@ describe("buildOpencodeInstructions", () => {
     expect(s).toContain("`oracle-fable` subagent");
     expect(s).toContain('"Dial · High" preset');
     expect(s).toContain("advisory");
-    expect(buildOpencodeInstructions({ isAsk: false })).not.toContain("oracle");
+    expect(buildRunInstructions({ isAsk: false })).not.toContain("oracle");
   });
 });
 

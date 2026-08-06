@@ -185,7 +185,7 @@ to `provider: "local"` (today's host behavior). Env override for the path:
   //  "volume": the repo is cloned INTO a per-session volume inside the
   //           container; no host worktree exists at all. destroy() (session
   //           delete / archive sweep) DELETES the volume — un-pushed work
-  //           is gone. Push your work. Attached repos + sibling chats are
+  //           is gone. Push your work. Attached repos + sibling sessions are
   //           not supported in volume mode.
   "workspace": "bind",
 
@@ -440,7 +440,7 @@ so no ingress URL is reachable from inside.
 ## Kill switch
 
 ```sh
-touch ~/.opensession-chats/disable-sandboxes
+touch ~/.opensession-sessions/disable-sandboxes
 ```
 
 Checked per run: while the file exists every NEW run goes local regardless

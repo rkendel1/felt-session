@@ -41,7 +41,7 @@ const sizes: Record<Size, string> = {
 	//
 	// One radius across every size: `rounded-control`, the corner the rest of
 	// the chrome already uses (global.css authors it as `calc(10px*var(--rf))`
-	// on .btn-viewer-pin / .btn-panel-toggle / .btn-viewer-newchat). The
+	// on .btn-viewer-pin / .btn-panel-toggle / .btn-viewer-newsession). The
 	// `rounded-xs`/`rounded-sm` this used to ship read visibly squarer than the
 	// buttons it sat beside — enough that call sites kept patching it back out
 	// by hand. Holding one corner across the scale is also what makes the four

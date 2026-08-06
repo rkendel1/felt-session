@@ -197,7 +197,7 @@ export function updateTodo(
 
 // ── Reminders ────────────────────────────────────────────────────────────────
 // A 30s sweep fires each open todo's remindAt exactly once: Web Push to the
-// owner's devices + a Slack DM (prefixed as Michael, per the messaging rule).
+// owner's devices + a Slack DM (prefixed with the agent's name, per the messaging rule).
 // Started once from opensession.ts's __opensessionBooted block.
 
 const SWEEP_MS = 30_000;

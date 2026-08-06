@@ -6,12 +6,12 @@
  * Like opensession-sessions / opensession-admin, this is an in-process SDK MCP wired ONLY
  * into interactive runs (Slack processMessage + Open Session interactiveMcpServers),
  * never into automation runs — untrusted ticket text must not be able to DM the
- * team as Michael. Its tools go through src/server/human-asks.ts, which owns the
+ * team as the bot. Its tools go through src/server/human-asks.ts, which owns the
  * ask registry, the Slack delivery, reply matching, and routing the answer back
  * through the session-control registry.
  *
  * Gating: creating/cancelling asks is gated to the trusted user via `isAdmin`
- * (sending DMs to the team as Michael is outward-facing); listing is open to any
+ * (sending DMs to the team as the bot is outward-facing); listing is open to any
  * whitelisted user. In Open Session sessions everyone is treated as admin (the UI is
  * Tailscale- and team-gated already), matching opensession-sessions.
  */

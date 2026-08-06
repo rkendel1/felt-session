@@ -16,11 +16,9 @@ import {
 	SettingsFormRow,
 	SettingsFormTitle,
 	SettingsGroupLabel,
-	SettingsHeader,
 	SettingsHint,
 	rowMenuTriggerClasses,
 	settingsInputClass,
-	SettingsPanel,
 } from "../ui/settings";
 import { Menu } from "../ui/menu";
 import { IconDotsHorizontal, IconPlus, IconTrash } from "./icons";
@@ -96,12 +94,7 @@ export function ModelProvidersPanel() {
 	}
 
 	return (
-		<SettingsPanel>
-			<SettingsHeader
-				title="Model providers"
-				description="Bring your own models: any provider the OpenCode engine supports (xAI, OpenRouter, Groq, Mistral, …) with your API key. Registered model ids show up in the model picker; runs on them authenticate with the stored key. Anthropic and OpenAI run on the subscription bridges — manage those under Accounts."
-			/>
-
+		<>
 			<SettingsGroupLabel
 				actions={
 					<Button size="sm" icon={<IconPlus size={16} />} onClick={() => setShowAdd(true)}>
@@ -109,7 +102,7 @@ export function ModelProvidersPanel() {
 					</Button>
 				}
 			>
-				Configured providers
+				Your own providers
 			</SettingsGroupLabel>
 
 			{showAdd && (
@@ -186,12 +179,14 @@ export function ModelProvidersPanel() {
 			</SettingCard>
 
 			<SettingsHint>
-				Keys are stored on the server (0600) and only ever shown masked.
-				Changes apply to new session runs immediately, and saved models appear
-				in the picker without a restart. To update a provider, add it again
-				with the same id — the key, base URL and model list are replaced.
+				Any provider the OpenCode engine supports (xAI, OpenRouter, Groq,
+				Mistral, …) with your API key. Keys are stored on the server (0600) and
+				only ever shown masked. Changes apply to new session runs immediately,
+				and saved models appear in the picker without a restart. To update a
+				provider, add it again with the same id — the key, base URL and model
+				list are replaced.
 			</SettingsHint>
-		</SettingsPanel>
+		</>
 	);
 }
 

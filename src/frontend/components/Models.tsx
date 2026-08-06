@@ -17,9 +17,7 @@ import {
 	SettingsFormActions,
 	SettingsFormTitle,
 	SettingsGroupLabel,
-	SettingsHeader,
 	SettingsHint,
-	SettingsPanel,
 	rowMenuTriggerClasses,
 	settingsInputClass,
 	settingsSelectClass,
@@ -27,8 +25,7 @@ import {
 import { Switch } from "../ui/switch";
 import { cn } from "../ui/cn";
 import { toast } from "../ui/toast";
-import { fetchProviderAccounts, type ProviderAccountOption } from "../lib/api";
-import { IconDotsHorizontal, IconHistory, IconPlus, IconSliders, IconTrash, IconX } from "./icons";
+import { IconDotsHorizontal, IconHistory, IconPlug, IconPlus, IconSliders, IconTrash } from "./icons";
 
 // The Settings → Accounts panel: the Claude / Codex subscription accounts
 // session runs draw from, plus the default model new runs start on. Everything
@@ -87,21 +84,20 @@ interface CodexAccountInfo {
 	usable: boolean;
 }
 
+/** The subscription half of Settings → Models: the Anthropic/OpenAI accounts
+ * runs draw from, and the model new runs start on. Renders as groups, not a
+ * page — Settings' ModelsPanel owns the header, so this sits above the
+ * bring-your-own-key providers rather than telling you to go find them. */
 export function AccountsPanel() {
 	return (
-		<SettingsPanel>
-			<SettingsHeader
-				title="Accounts"
-				description="The Claude (Anthropic) and Codex (OpenAI) subscription accounts that session runs draw from, plus the model new runs start on. Other model providers with their own API keys live under Model providers."
-			/>
-
-			<SettingsGroupLabel>Default model</SettingsGroupLabel>
+		<>
+			<SettingsGroupLabel className="mt-0">Default model</SettingsGroupLabel>
 			<SettingCard>
 				<DefaultModelRow />
 				<AutoFallbackRow />
 			</SettingCard>
 
-			<PiEngineSection />
+			<EnginesSection />
 
 			<ClaudeAccountsSection />
 			<CodexAccountsSection />
@@ -110,7 +106,7 @@ export function AccountsPanel() {
 				Changes apply to new session runs immediately (config is read per run) — no restart
 				needed. Per-session model overrides still win over the default.
 			</SettingsHint>
-		</SettingsPanel>
+		</>
 	);
 }
 
@@ -215,7 +211,7 @@ function DefaultModelRow() {
  * Manual vs auto: when a session's model runs out of usage credits pool-wide,
  * either drop it to a fallback model and keep going (auto, the default) or stop
  * on the limit notice and let the human pick the next model (manual). Global,
- * read fresh per run. The switch is always announced in the chat as a divider.
+ * read fresh per run. The switch is always announced in the session as a divider.
  */
 function AutoFallbackRow() {
 	const [auto, setAuto] = useState<boolean | null>(null);
@@ -258,7 +254,7 @@ function AutoFallbackRow() {
 				<SettingRowTitle>Auto-switch when out of credits</SettingRowTitle>
 				<SettingRowDescription>
 					{error ||
-						"When a run has an explicit fallback model and the current model runs out of usage credits, keep going on that configured fallback. Off = the run halts and you pick the next model. Either way the switch shows in the chat."}
+						"When a run has an explicit fallback model and the current model runs out of usage credits, keep going on that configured fallback. Off = the run halts and you pick the next model. Either way the switch shows in the session."}
 				</SettingRowDescription>
 			</SettingRowText>
 			<SettingRowControl>
@@ -273,99 +269,85 @@ function AutoFallbackRow() {
 	);
 }
 
-// ── Pi engine ──────────────────────────────────────────────────────────────
+// ── Engines ────────────────────────────────────────────────────────────────
 
 interface PiEngineConfig {
 	enabled: boolean;
 	pickerModels: string[];
-	bridgeAccounts?: string[];
 }
 
 /**
- * The pi engine's config card (~/.opensession-pi.json via
- * /api/settings/pi-engine): the on/off switch, which pi/<provider>/<model>
- * ids the picker advertises, and which Claude accounts may serve its loopback
- * Anthropic bridge. Lives in Accounts because the bridge-accounts selector
- * draws on the same Claude pool the rest of this panel manages.
+ * Engine switches: OpenCode (the default engine) and pi, plus which engine
+ * new sessions default to. Which models each engine advertises in the picker
+ * is config-owned (`pickerModels` in ~/.opensession-opencode.json /
+ * ~/.opensession-pi.json) — no per-engine model curation UI, same as it has
+ * always been for opencode.
  */
-function PiEngineSection() {
-	const [cfg, setCfg] = useState<PiEngineConfig | null>(null);
-	const [claudeAccounts, setClaudeAccounts] = useState<ProviderAccountOption[] | null>(null);
+function EnginesSection() {
+	const [ocEnabled, setOcEnabled] = useState<boolean | null>(null);
+	const [pi, setPi] = useState<PiEngineConfig | null>(null);
 	const [saving, setSaving] = useState(false);
 	const [testing, setTesting] = useState(false);
-	const [newModel, setNewModel] = useState("");
 	const [error, setError] = useState<string | null>(null);
 
 	useEffect(() => {
+		fetch(`${BASE_PATH}/api/settings/opencode-engine`)
+			.then((r) => (r.ok ? r.json() : null))
+			.then((body) => body && setOcEnabled(body.enabled === true))
+			.catch(() => {});
 		fetch(`${BASE_PATH}/api/settings/pi-engine`)
 			.then((r) => (r.ok ? r.json() : null))
-			.then((body) => body && setCfg(body))
+			.then((body) => body && setPi(body))
 			.catch(() => {});
-		fetchProviderAccounts()
-			.then((list) => setClaudeAccounts(list.filter((a) => a.provider === "claude")))
-			.catch(() => setClaudeAccounts([]));
 	}, []);
 
-	/** PUT a partial update (present field = wholesale replace), optimistically
-	 *  showing `optimistic` and reverting + toasting when the save fails. */
-	async function save(patch: Partial<PiEngineConfig>, optimistic: PiEngineConfig) {
+	async function toggleOpencode(next: boolean) {
 		if (saving) return;
-		const prev = cfg;
 		setSaving(true);
 		setError(null);
-		setCfg(optimistic);
+		const prev = ocEnabled;
+		setOcEnabled(next);
 		try {
-			const res = await fetch(`${BASE_PATH}/api/settings/pi-engine`, {
+			const res = await fetch(`${BASE_PATH}/api/settings/opencode-engine`, {
 				method: "PUT",
 				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify(patch),
+				body: JSON.stringify({ enabled: next }),
 			});
 			const body = await res.json();
 			if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
-			setCfg(body);
+			setOcEnabled(body.enabled === true);
 		} catch (e: any) {
-			setCfg(prev);
+			setOcEnabled(prev);
 			setError(e.message);
 			toast(e.message, { variant: "error" });
 		}
 		setSaving(false);
 	}
 
-	function handleAddModel() {
-		if (!cfg) return;
-		const tail = newModel.trim();
-		if (!tail) return;
-		// Accept "pi/anthropic/claude-opus-5" or bare "anthropic/claude-opus-5".
-		const id = tail.startsWith("pi/") ? tail : `pi/${tail}`;
-		if (!id.slice("pi/".length).includes("/")) {
-			toast(`"${tail}" isn't a <provider>/<model> id`, { variant: "error" });
-			return;
+	async function togglePi(next: boolean) {
+		if (saving || !pi) return;
+		setSaving(true);
+		setError(null);
+		const prev = pi;
+		setPi({ ...pi, enabled: next });
+		try {
+			const res = await fetch(`${BASE_PATH}/api/settings/pi-engine`, {
+				method: "PUT",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ enabled: next }),
+			});
+			const body = await res.json();
+			if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
+			setPi(body);
+		} catch (e: any) {
+			setPi(prev);
+			setError(e.message);
+			toast(e.message, { variant: "error" });
 		}
-		setNewModel("");
-		if (cfg.pickerModels.includes(id)) return;
-		const pickerModels = [...cfg.pickerModels, id];
-		save({ pickerModels }, { ...cfg, pickerModels });
+		setSaving(false);
 	}
 
-	function handleRemoveModel(id: string) {
-		if (!cfg) return;
-		const pickerModels = cfg.pickerModels.filter((m) => m !== id);
-		save({ pickerModels }, { ...cfg, pickerModels });
-	}
-
-	function handleToggleAccount(accountId: string) {
-		if (!cfg) return;
-		const current = cfg.bridgeAccounts || [];
-		const next = current.includes(accountId)
-			? current.filter((id) => id !== accountId)
-			: [...current, accountId];
-		save(
-			{ bridgeAccounts: next },
-			{ ...cfg, ...(next.length ? { bridgeAccounts: next } : { bridgeAccounts: undefined }) },
-		);
-	}
-
-	async function handleTest() {
+	async function handleTestPi() {
 		if (testing) return;
 		setTesting(true);
 		try {
@@ -383,18 +365,9 @@ function PiEngineSection() {
 		setTesting(false);
 	}
 
-	const selected = cfg?.bridgeAccounts || [];
 	return (
 		<>
-			<SettingsGroupLabel
-				actions={
-					<Button size="sm" onClick={handleTest} disabled={testing || !cfg?.enabled}>
-						{testing ? "Running…" : "Test engine"}
-					</Button>
-				}
-			>
-				Pi engine
-			</SettingsGroupLabel>
+			<SettingsGroupLabel>Engines</SettingsGroupLabel>
 
 			{error && (
 				<InlineAlert className="mb-2" onDismiss={() => setError(null)}>
@@ -405,117 +378,126 @@ function PiEngineSection() {
 			<SettingCard>
 				<SettingRow>
 					<SettingRowText>
-						<SettingRowTitle>Run sessions on the pi engine</SettingRowTitle>
+						<SettingRowTitle>OpenCode engine</SettingRowTitle>
 						<SettingRowDescription>
-							pi.dev's coding agent as an alternative engine — its models join the
-							session picker as pi/&lt;provider&gt;/&lt;model&gt; while enabled.
+							The default engine — Anthropic models on the Claude account pool via the
+							Meridian bridge, OpenAI models on the codex pool, plus API-key providers.
 						</SettingRowDescription>
 					</SettingRowText>
 					<SettingRowControl>
 						<Switch
-							checked={cfg?.enabled ?? false}
-							aria-label="Enable the pi engine"
-							disabled={!cfg || saving}
-							onCheckedChange={(next) => cfg && save({ enabled: next }, { ...cfg, enabled: next })}
+							checked={ocEnabled ?? false}
+							aria-label="Enable the OpenCode engine"
+							disabled={ocEnabled === null || saving}
+							onCheckedChange={toggleOpencode}
 						/>
 					</SettingRowControl>
 				</SettingRow>
 
-				<SettingRow className="items-start">
+				<SettingRow>
 					<SettingRowText>
-						<SettingRowTitle>Picker models</SettingRowTitle>
+						<SettingRowTitle>Pi engine</SettingRowTitle>
 						<SettingRowDescription>
-							The pi model ids the UI picker advertises. Other well-formed pi ids
-							still resolve when typed — they're just not listed.
+							pi.dev's coding agent as an alternative engine, on the same account pools —
+							its models join the picker as pi/&lt;provider&gt;/&lt;model&gt; while enabled.
 						</SettingRowDescription>
-						{cfg && cfg.pickerModels.length > 0 && (
-							<div className="mt-1.5 flex flex-wrap gap-1">
-								{cfg.pickerModels.map((m) => (
-									<span
-										key={m}
-										className="inline-flex items-center gap-1 rounded-sm bg-active px-1.5 py-px text-meta text-dim"
-										title={m}
-									>
-										{m.split("/").slice(1).join("/")}
-										<button
-											type="button"
-											className="text-faint hover:text-red"
-											aria-label={`Remove ${m}`}
-											disabled={saving}
-											onClick={() => handleRemoveModel(m)}
-										>
-											<IconX size={12} />
-										</button>
-									</span>
-								))}
-							</div>
-						)}
 					</SettingRowText>
-					<SettingRowControl className="flex items-center gap-1.5">
-						<input
-							className={cn(settingsInputClass, "w-56")}
-							value={newModel}
-							onChange={(e) => setNewModel(e.target.value)}
-							onKeyDown={(e) => e.key === "Enter" && handleAddModel()}
-							placeholder="anthropic/claude-opus-5"
-							aria-label="Add pi picker model"
-							disabled={!cfg || saving}
-						/>
-						<Button
-							size="sm"
-							icon={<IconPlus size={16} />}
-							onClick={handleAddModel}
-							disabled={!cfg || saving || !newModel.trim()}
-						>
-							Add
+					<SettingRowControl className="flex items-center gap-2.5">
+						<Button size="sm" onClick={handleTestPi} disabled={testing || !pi?.enabled}>
+							{testing ? "Running…" : "Test"}
 						</Button>
+						<Switch
+							checked={pi?.enabled ?? false}
+							aria-label="Enable the pi engine"
+							disabled={!pi || saving}
+							onCheckedChange={togglePi}
+						/>
 					</SettingRowControl>
 				</SettingRow>
 
-				<SettingRow className="items-start">
-					<SettingRowText>
-						<SettingRowTitle>Bridge accounts</SettingRowTitle>
-						<SettingRowDescription>
-							{selected.length === 0
-								? "Claude accounts that may serve pi's loopback Anthropic bridge. None selected — pi uses OpenCode's bridge designation."
-								: "Claude accounts that may serve pi's loopback Anthropic bridge (never the whole pool)."}
-						</SettingRowDescription>
-						{claudeAccounts && claudeAccounts.length > 0 && (
-							<div className="mt-1.5 flex flex-col gap-1">
-								{claudeAccounts.map((a) => (
-									<label
-										key={a.id}
-										className="inline-flex cursor-pointer items-center gap-2 text-supporting text-dim"
-									>
-										<input
-											type="checkbox"
-											checked={selected.includes(a.id)}
-											disabled={!cfg || saving}
-											onChange={() => handleToggleAccount(a.id)}
-										/>
-										<span className="truncate">{a.name}</span>
-										{a.owner && (
-											<span className="rounded-sm bg-active px-1.5 py-px text-meta text-faint">
-												👤 {a.owner}
-											</span>
-										)}
-									</label>
-								))}
-							</div>
-						)}
-						{claudeAccounts && claudeAccounts.length === 0 && (
-							<div className="mt-1 text-meta text-faint">
-								No Claude accounts in the pool yet — add one below first.
-							</div>
-						)}
-					</SettingRowText>
-				</SettingRow>
+				<DefaultEngineRow piEnabled={pi?.enabled ?? false} />
 			</SettingCard>
 			<SettingsHint>
-				Changes apply to new runs immediately — the pi config is read fresh per run,
-				no restart needed.
+				Both engines draw on the same subscription account pools. Which models each engine
+				advertises comes from its config file's <code>pickerModels</code>; any well-formed
+				engine id still resolves when typed. Changes apply to new runs immediately.
 			</SettingsHint>
 		</>
+	);
+}
+
+/**
+ * Which engine new sessions default to. Flips the default model's engine
+ * prefix while keeping the same provider/model tail — the model choice itself
+ * stays in the Default model select above.
+ */
+function DefaultEngineRow({ piEnabled }: { piEnabled: boolean }) {
+	const [current, setCurrent] = useState<string>("");
+	const [saving, setSaving] = useState(false);
+
+	useEffect(() => {
+		fetch(`${BASE_PATH}/api/models`)
+			.then((r) => (r.ok ? r.json() : null))
+			.then((body) => body && setCurrent(body.default))
+			.catch(() => {});
+	}, []);
+
+	const engine = current.startsWith("pi/") ? "pi" : "opencode";
+	const tail = current.startsWith("pi/")
+		? current.slice("pi/".length)
+		: current.startsWith("opencode/")
+			? current.slice("opencode/".length)
+			: null;
+	// Pi only serves the subscription-bridge providers.
+	const piCanServe = !!tail && (tail.startsWith("anthropic/") || tail.startsWith("openai/"));
+
+	async function handleChange(next: string) {
+		if (next === engine || !tail) return;
+		const id = next === "pi" ? `pi/${tail}` : `opencode/${tail}`;
+		setSaving(true);
+		try {
+			const res = await fetch(`${BASE_PATH}/api/models/default`, {
+				method: "PUT",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ model: id }),
+			});
+			const body = await res.json();
+			if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
+			setCurrent(body.default);
+			toast(`New sessions default to ${body.default}`);
+		} catch (e: any) {
+			toast(e.message, { variant: "error" });
+		}
+		setSaving(false);
+	}
+
+	return (
+		<SettingRow>
+			<SettingRowText>
+				<SettingRowTitle>Default engine</SettingRowTitle>
+				<SettingRowDescription>
+					{tail
+						? `Moves the default model (currently ${current}) onto the chosen engine, keeping the same model.`
+						: current
+							? `The default (${current}) isn't an engine-prefixed model — pick an opencode/… or pi/… default model above to switch engines here.`
+							: "Which engine new sessions start on."}
+				</SettingRowDescription>
+			</SettingRowText>
+			<SettingRowControl>
+				<select
+					className={settingsSelectClass}
+					value={engine}
+					disabled={!current || saving || !tail}
+					onChange={(e) => handleChange(e.target.value)}
+					aria-label="Default engine"
+				>
+					<option value="opencode">OpenCode</option>
+					<option value="pi" disabled={!piCanServe || !piEnabled}>
+						{`Pi${!piEnabled ? " (disabled)" : !piCanServe ? " (model not served)" : ""}`}
+					</option>
+				</select>
+			</SettingRowControl>
+		</SettingRow>
 	);
 }
 
@@ -731,6 +713,7 @@ function ClaudeStatusPill({ a }: { a: ClaudeAccountInfo }) {
 function ClaudeAccountsSection() {
 	const [accounts, setAccounts] = useState<ClaudeAccountInfo[] | null>(null);
 	const [showAdd, setShowAdd] = useState(false);
+	const [signIn, setSignIn] = useState<ClaudeAccountInfo | null>(null);
 	const [refreshing, setRefreshing] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
@@ -853,7 +836,8 @@ function ClaudeAccountsSection() {
 					</EmptyState>
 				) : (
 					accounts.map((a) => (
-						<SettingRow key={a.id} className="items-start">
+						<React.Fragment key={a.id}>
+						<SettingRow className="items-start">
 							<Avatar name={a.name} className="bg-[#d97757]" />
 							<SettingRowText>
 								<div className="flex items-center gap-2 min-w-0">
@@ -867,8 +851,8 @@ function ClaudeAccountsSection() {
 								</SettingRowDescription>
 								{a.noUsageScope && !a.usage ? (
 									<div className="mt-1.5 text-meta text-faint">
-										Usage not visible — setup-tokens cannot read the usage endpoint. Add
-										a Claude OAuth credentials path for this account to show usage.
+										Usage not visible — setup-tokens cannot read the usage endpoint. Use
+										“Sign in with Claude” in this account's menu to connect usage.
 									</div>
 								) : (
 									<>
@@ -923,6 +907,10 @@ function ClaudeAccountsSection() {
 										<IconDotsHorizontal size={18} />
 									</Menu.Trigger>
 									<Menu.Popup align="end" sideOffset={4}>
+										<Menu.Item onClick={() => setSignIn(a)}>
+											<IconPlug size={16} className="text-faint" />
+											Sign in with Claude (usage)…
+										</Menu.Item>
 										<Menu.Item onClick={() => handleSetCredentialsPath(a)}>
 											<IconSliders size={16} className="text-faint" />
 											Usage credentials…
@@ -938,16 +926,26 @@ function ClaudeAccountsSection() {
 								</Menu.Root>
 							</SettingRowControl>
 						</SettingRow>
+						{signIn?.id === a.id && (
+							<ClaudeSignInForm
+								account={a}
+								onClose={() => setSignIn(null)}
+								onDone={() => {
+									setSignIn(null);
+									load();
+								}}
+							/>
+						)}
+						</React.Fragment>
 					))
 				)}
 			</SettingCard>
 			<SettingsHint>
 				The usage pool for Claude session runs — each run picks the least-used usable account.
 				A personal account is used first by its owner's runs and never by anyone else's;
-				automations only use the shared pool. For usage bars, setup-tokens need a matching
-				OAuth snapshot such as <code>~/.claude/accounts/team/credentials.json</code>.
-				If that snapshot expires and cannot refresh, log into that account with <code>claude</code>
-				or <code>claude-plan auth</code> again and update the path.
+				automations only use the shared pool. For usage bars, use “Sign in with Claude” in an
+				account's menu: it stores its own auto-refreshing OAuth credentials, so usage tracking
+				doesn't share (and can't lose) the CLI's login.
 			</SettingsHint>
 		</>
 	);
@@ -1155,8 +1153,8 @@ function AddClaudeAccountForm({ onClose, onAdded }: { onClose: () => void; onAdd
 			<SettingRowDescription className="-mt-2">
 				On any machine, log into the Max account with <code>claude</code>, run{" "}
 				<code>claude setup-token</code>, and paste the one-year token here. It's stored on the
-				VPS (0600) and only ever shown masked. To show usage, also point at that account's
-				<code> credentials.json</code> snapshot from <code>~/.claude/accounts</code>.
+				VPS (0600) and only ever shown masked. To show usage afterwards, use “Sign in with
+				Claude” from the account's menu.
 			</SettingRowDescription>
 
 			<div className="flex gap-3.5 max-[700px]:flex-col">
@@ -1214,6 +1212,131 @@ function AddClaudeAccountForm({ onClose, onAdded }: { onClose: () => void; onAdd
 	);
 }
 
+/**
+ * "Sign in with Claude" — PKCE OAuth that attaches auto-refreshing usage
+ * credentials to an existing pool account. The server hands us an authorize
+ * URL; the user signs in on any device and pastes back the code Anthropic
+ * displays (`…#…`), which the server exchanges and stores.
+ *
+ * Renders as an expansion directly beneath the triggering account row inside
+ * the SettingCard (CardList draws the divider) — row-triggered content must
+ * uncollapse in place, never teleport to the top of the section.
+ */
+function ClaudeSignInForm({
+	account,
+	onClose,
+	onDone,
+}: {
+	account: ClaudeAccountInfo;
+	onClose: () => void;
+	onDone: () => void;
+}) {
+	const [login, setLogin] = useState<{ id: string; url: string } | null>(null);
+	const [code, setCode] = useState("");
+	const [busy, setBusy] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+
+	useEffect(() => {
+		let cancelled = false;
+		(async () => {
+			try {
+				const res = await fetch(`${BASE_PATH}/api/claude-accounts/oauth-login`, {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ accountId: account.id }),
+				});
+				const body = await res.json();
+				if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
+				if (!cancelled) setLogin(body);
+			} catch (e: any) {
+				if (!cancelled) setError(e.message);
+			}
+		})();
+		return () => {
+			cancelled = true;
+		};
+	}, [account.id]);
+
+	function handleClose() {
+		if (login) {
+			fetch(`${BASE_PATH}/api/claude-accounts/oauth-login/${encodeURIComponent(login.id)}`, {
+				method: "DELETE",
+			}).catch(() => {});
+		}
+		onClose();
+	}
+
+	async function handleConnect() {
+		if (!login) return;
+		setBusy(true);
+		setError(null);
+		try {
+			const res = await fetch(
+				`${BASE_PATH}/api/claude-accounts/oauth-login/${encodeURIComponent(login.id)}`,
+				{
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ code }),
+				},
+			);
+			const body = await res.json();
+			if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
+			toast(`Usage tracking connected for ${account.name}`);
+			onDone();
+		} catch (e: any) {
+			setError(e.message);
+			setBusy(false);
+		}
+	}
+
+	return (
+		<div className="flex flex-col gap-3.5 bg-panel px-4 py-3.5">
+			<SettingRowDescription>
+				Connect usage tracking with its own auto-refreshing Claude login (runs keep using the
+				setup-token). Open the link, sign in as{" "}
+				{account.email ? <b>{account.email}</b> : "the Claude account behind this token"}, then
+				paste the code Anthropic shows you.
+			</SettingRowDescription>
+
+			{login ? (
+				<div className="flex gap-3.5 max-[700px]:flex-col">
+					<SettingsField className="mb-0 shrink-0 self-end">
+						<a href={login.url} target="_blank" rel="noreferrer">
+							<Button icon={<IconPlug size={16} />}>Open Claude sign-in</Button>
+						</a>
+					</SettingsField>
+					<SettingsField className="mb-0 flex-1">
+						Code
+						<input
+							className={settingsInputClass}
+							value={code}
+							onChange={(e) => setCode(e.target.value)}
+							placeholder="Paste the code from the sign-in page (…#…)"
+						/>
+					</SettingsField>
+				</div>
+			) : !error ? (
+				<LoadingState placement="row">Preparing sign-in…</LoadingState>
+			) : null}
+
+			{error && <InlineAlert>{error}</InlineAlert>}
+
+			<div className="flex justify-end gap-2.5">
+				<Button onClick={handleClose} disabled={busy}>
+					Cancel
+				</Button>
+				<Button
+					variant="primary"
+					onClick={handleConnect}
+					disabled={busy || !login || !code.trim()}
+				>
+					{busy ? "Connecting…" : "Connect usage"}
+				</Button>
+			</div>
+		</div>
+	);
+}
+
 interface CodexDeviceLogin {
 	id: string;
 	name: string;
@@ -1225,12 +1348,16 @@ interface CodexDeviceLogin {
 
 function AddCodexAccountForm({ onClose, onAdded }: { onClose: () => void; onAdded: () => void }) {
 	const [name, setName] = useState("");
-	const [kind, setKind] = useState<"device" | "api_key" | "home">("device");
+	const [kind, setKind] = useState<"device" | "oauth" | "api_key" | "home">("device");
 	const [value, setValue] = useState("");
 	const [owner, setOwner] = useState("");
 	const [saving, setSaving] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [login, setLogin] = useState<CodexDeviceLogin | null>(null);
+	// Paste-link OAuth flow (kind "oauth") — the codex analog of the Claude
+	// sign-in: open the URL anywhere, paste back the localhost redirect.
+	const [oauth, setOauth] = useState<{ id: string; url: string } | null>(null);
+	const [oauthCode, setOauthCode] = useState("");
 
 	// Poll an in-flight device sign-in until it lands (or fails).
 	useEffect(() => {
@@ -1276,7 +1403,57 @@ function AddCodexAccountForm({ onClose, onAdded }: { onClose: () => void; onAdde
 				method: "DELETE",
 			}).catch(() => {});
 		}
+		if (oauth) {
+			fetch(`${BASE_PATH}/api/codex-accounts/oauth-login/${encodeURIComponent(oauth.id)}`, {
+				method: "DELETE",
+			}).catch(() => {});
+		}
 		onClose();
+	}
+
+	async function handleStartOauth() {
+		setSaving(true);
+		setError(null);
+		try {
+			const res = await fetch(`${BASE_PATH}/api/codex-accounts/oauth-login`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					name: name.trim(),
+					...(owner.trim() ? { owner: owner.trim() } : {}),
+				}),
+			});
+			const body = await res.json();
+			if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
+			setOauth(body);
+		} catch (e: any) {
+			setError(e.message);
+		}
+		setSaving(false);
+	}
+
+	async function handleCompleteOauth() {
+		if (!oauth) return;
+		setSaving(true);
+		setError(null);
+		try {
+			const res = await fetch(
+				`${BASE_PATH}/api/codex-accounts/oauth-login/${encodeURIComponent(oauth.id)}`,
+				{
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ code: oauthCode }),
+				},
+			);
+			const body = await res.json();
+			if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
+			toast(`Codex account "${name.trim()}" added to the pool`);
+			onAdded();
+			return;
+		} catch (e: any) {
+			setError(e.message);
+		}
+		setSaving(false);
 	}
 
 	async function handleAdd() {
@@ -1314,6 +1491,12 @@ function AddCodexAccountForm({ onClose, onAdded }: { onClose: () => void; onAdde
 						one-time code to enter on any device. (Device-code login must be enabled in the
 						ChatGPT workspace's security settings.)
 					</>
+				) : kind === "oauth" ? (
+					<>
+						Sign in with ChatGPT on any device — works even where device-code login is
+						disabled. After signing in you'll land on a <code>localhost</code> page that
+						fails to load; copy that page's full address and paste it back here.
+					</>
 				) : kind === "home" ? (
 					<>
 						On the VPS run <code>CODEX_HOME=~/.codex-accounts/&lt;name&gt; codex login</code>{" "}
@@ -1333,7 +1516,7 @@ function AddCodexAccountForm({ onClose, onAdded }: { onClose: () => void; onAdde
 						value={name}
 						onChange={(e) => setName(e.target.value)}
 						placeholder="team"
-						disabled={!!login}
+						disabled={!!login || !!oauth}
 					/>
 				</SettingsField>
 				<SettingsField className="mb-0 flex-1">
@@ -1341,15 +1524,16 @@ function AddCodexAccountForm({ onClose, onAdded }: { onClose: () => void; onAdde
 					<select
 						className={settingsInputClass}
 						value={kind}
-						onChange={(e) => setKind(e.target.value as "device" | "api_key" | "home")}
-						disabled={!!login}
+						onChange={(e) => setKind(e.target.value as "device" | "oauth" | "api_key" | "home")}
+						disabled={!!login || !!oauth}
 					>
 						<option value="device">ChatGPT sign-in — device code</option>
+						<option value="oauth">ChatGPT sign-in — link + paste</option>
 						<option value="home">ChatGPT login — existing CODEX_HOME directory</option>
 						<option value="api_key">OpenAI API key</option>
 					</select>
 				</SettingsField>
-				{kind !== "device" && (
+				{kind !== "device" && kind !== "oauth" && (
 					<SettingsField className="mb-0 flex-1">
 						{kind === "api_key" ? "API key" : "CODEX_HOME path"}
 						<input
@@ -1363,7 +1547,7 @@ function AddCodexAccountForm({ onClose, onAdded }: { onClose: () => void; onAdde
 				)}
 				<SettingsField className="mb-0 flex-1" title="Personal sub: this person's runs use the account first, with the shared pool as backup — nobody else's runs touch it. Shared pool = used by everyone and by automations.">
 					Owner
-					<select className={settingsInputClass} value={owner} onChange={(e) => setOwner(e.target.value)} disabled={!!login}>
+					<select className={settingsInputClass} value={owner} onChange={(e) => setOwner(e.target.value)} disabled={!!login || !!oauth}>
 						<option value="">Shared pool</option>
 						{TEAM.map((n) => (
 							<option key={n} value={n}>
@@ -1417,11 +1601,39 @@ function AddCodexAccountForm({ onClose, onAdded }: { onClose: () => void; onAdde
 				</div>
 			)}
 
+			{oauth && (
+				<div className="mt-2 rounded-md bg-surface px-4 py-3 text-supporting">
+					<div>
+						1. Open{" "}
+						<a
+							href={oauth.url}
+							target="_blank"
+							rel="noreferrer"
+							className="text-accent underline"
+						>
+							the ChatGPT sign-in
+						</a>{" "}
+						and sign in to the account.
+					</div>
+					<div className="mt-1.5">
+						2. The browser lands on a <code>localhost</code> page that can't load — copy its
+						full address (starts with <code>http://localhost:1455/…</code>) and paste it:
+					</div>
+					<input
+						className={cn(settingsInputClass, "mt-2 w-full")}
+						value={oauthCode}
+						onChange={(e) => setOauthCode(e.target.value)}
+						placeholder="http://localhost:1455/auth/callback?code=…"
+						aria-label="Pasted sign-in redirect URL"
+					/>
+				</div>
+			)}
+
 			{error && <InlineAlert>{error}</InlineAlert>}
 
 			<SettingsFormActions className="mt-0 gap-2.5">
 				<Button onClick={handleCancel} disabled={saving}>
-					{loginPending ? "Cancel sign-in" : "Cancel"}
+					{loginPending || oauth ? "Cancel sign-in" : "Cancel"}
 				</Button>
 				{kind === "device" ? (
 					<Button
@@ -1431,6 +1643,24 @@ function AddCodexAccountForm({ onClose, onAdded }: { onClose: () => void; onAdde
 					>
 						{saving ? "Starting…" : loginPending ? "Waiting for sign-in…" : "Start sign-in"}
 					</Button>
+				) : kind === "oauth" ? (
+					oauth ? (
+						<Button
+							variant="primary"
+							onClick={handleCompleteOauth}
+							disabled={saving || !oauthCode.trim()}
+						>
+							{saving ? "Connecting…" : "Connect"}
+						</Button>
+					) : (
+						<Button
+							variant="primary"
+							onClick={handleStartOauth}
+							disabled={saving || !name.trim()}
+						>
+							{saving ? "Starting…" : "Start sign-in"}
+						</Button>
+					)
 				) : (
 					<Button
 						variant="primary"

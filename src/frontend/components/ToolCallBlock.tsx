@@ -1,6 +1,8 @@
 import React, { Suspense, createContext, lazy, useContext, useEffect, useState } from "react";
 import type { TranscriptEntry } from "../lib/types";
 import { langForFile, langForGrep } from "../lib/lang";
+import { currentPlanItem, parsePlanItems, planDoneCount } from "../lib/todo-plan";
+import { PlanChecklist } from "./PlanChecklist";
 import { resolveEntryImageSrc } from "../lib/osBlob";
 import { cn } from "../ui/cn";
 import { openGalleryFrom } from "./MediaLightbox";
@@ -253,15 +255,9 @@ function lineCount(value: string): number {
 
 /** "3/7 done" plus whatever the run is on right now. */
 function todoSummary(inp: Record<string, unknown>): string {
-  const list = Array.isArray(inp.todos) ? inp.todos : Array.isArray(inp.plan) ? inp.plan : null;
-  if (!list) return "";
-  const items = list.filter(
-    (t): t is Record<string, unknown> => Boolean(t) && typeof t === "object"
-  );
+  const items = parsePlanItems(inp);
   if (items.length === 0) return "";
-  const active = items.find((t) => t.status === "in_progress");
-  const done = items.filter((t) => t.status === "completed").length;
-  return [pickStr(active || {}, "content", "step", "activeForm"), `${done}/${items.length} done`]
+  return [currentPlanItem(items), `${planDoneCount(items)}/${items.length} done`]
     .filter(Boolean)
     .join("  ·  ");
 }
@@ -728,6 +724,13 @@ function toolInputNode(toolName: string, input: unknown): React.ReactNode | null
         />
       </div>
     );
+  }
+
+  // The plan is a checklist, not a payload — render it as one (same component
+  // the status flap above the composer uses).
+  if (toolName === "TodoWrite") {
+    const items = parsePlanItems(input);
+    if (items.length > 0) return <PlanChecklist items={items} className="px-1 py-1.5" />;
   }
 
   // Read's input is fully covered by the row summary (plus offset/limit when

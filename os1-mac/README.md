@@ -84,7 +84,7 @@ single-instance lock would otherwise reuse that older process.
 Edits hot-reload in place (React Fast Refresh + CSS hot-swap; Tailwind output
 refreshes within ~3s). ⚠️ Writes are real — prompts/steers/archives hit
 production. For a fully isolated sandbox instead, run the whole server locally
-(`mkdir -p ~/.opensession-chats && bun --hot run opensession.ts`, port 3850) —
+(`mkdir -p ~/.opensession-sessions && bun --hot run opensession.ts`, port 3850) —
 empty local state, optionally rsync'd from prod.
 `OS1_URL` overrides the server for a run. Distributions set
 `opensession.defaultServer` in `package.json` (or `OS1_CLOUD_URL`).

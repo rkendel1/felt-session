@@ -45,6 +45,19 @@ async function ownerAvatar(
 	}
 }
 
+/** A tile icon that lives on disk, or undefined when the file isn't there. */
+function localIcon(iconPath: string): Response | undefined {
+	if (!existsSync(iconPath)) return undefined;
+	return new Response(Bun.file(iconPath), {
+		headers: {
+			"Content-Type": "image/png",
+			// These are editable assets: a day-long hard cache pins a redrawn
+			// icon on every client that already fetched it.
+			"Cache-Control": "public, max-age=3600, must-revalidate",
+		},
+	});
+}
+
 export async function handleStaticAssetsRoutes(
 	ctx: RouteContext,
 ): Promise<Response | undefined> {
@@ -94,52 +107,46 @@ export async function handleStaticAssetsRoutes(
 	}
 
 	// Per-repo icons for the RepoTile UI: a repo's configured `icon` PNG when
-	// set, else the repo's GitHub org avatar, fetched server-side and cached.
-	// Unregistered ids 404 — the client falls back to its colored letter tile.
+	// set, else its owner's local mark, else the repo's GitHub org avatar,
+	// fetched server-side and cached. Unregistered ids 404 — the client falls
+	// back to its colored letter tile.
+	//
+	// Every icon served from src/frontend is drawn to the same proportions
+	// (artwork on ~80% of a square canvas, corners rounded to match the tile's
+	// own clip), because nothing downstream can normalize them: the tiles sit
+	// side by side in the sidebar, in the phone app and in the PWA, and a mark
+	// with more built-in padding than its neighbour just reads as a smaller
+	// icon. Keep new icons on those proportions.
 	const repoIcon = path.match(/^\/repo-icon\/([\w.-]+)\.png$/);
 	if (repoIcon && req.method === "GET") {
 		const id = repoIcon[1];
-		// The sidebar's Plain project band (support tickets) wears the Plain
-		// logo — not a repo, but it rides the same RepoTile pipeline.
-		if (id === "plain") {
-			return new Response(Bun.file(`${FRONTEND_SRC}/plain-icon.png`), {
-				headers: {
-					"Content-Type": "image/png",
-					"Cache-Control": "public, max-age=86400",
-				},
-			});
-		}
-		// Feed bands (the feeds design) ride the same tile pipeline:
-		// any `<id>-icon.png` dropped in src/frontend serves generically.
+		// Feed bands (the feeds design) and the Plain project band ride the
+		// same tile pipeline: any `<id>-icon.png` dropped in src/frontend
+		// serves generically.
 		if (/^[a-z0-9][a-z0-9_-]{0,40}$/i.test(id)) {
-			const generic = `${FRONTEND_SRC}/${id}-icon.png`;
-			if (existsSync(generic)) {
-				return new Response(Bun.file(generic), {
-					headers: {
-						"Content-Type": "image/png",
-						"Cache-Control": "public, max-age=86400",
-					},
-				});
-			}
+			const generic = localIcon(`${FRONTEND_SRC}/${id}-icon.png`);
+			if (generic) return generic;
 		}
 		// A repo's optional `icon` (absolute path, or relative to its checkout)
-		// overrides the org-avatar default below.
+		// overrides the owner and org-avatar defaults below.
 		const repo = configuredRepos()[id];
 		if (repo?.icon) {
-			const iconPath = repo.icon.startsWith("/")
-				? repo.icon
-				: `${repo.repo}/${repo.icon}`;
-			if (existsSync(iconPath)) {
-				return new Response(Bun.file(iconPath), {
-					headers: {
-						"Content-Type": "image/png",
-						"Cache-Control": "public, max-age=3600, must-revalidate",
-					},
-				});
-			}
+			const configured = localIcon(
+				repo.icon.startsWith("/") ? repo.icon : `${repo.repo}/${repo.icon}`,
+			);
+			if (configured) return configured;
 		}
 		const owner = repo?.ghRepo?.split("/")[0];
 		if (!owner) return new Response("Not found", { status: 404 });
+		// An owner's own mark, as `owner-<owner>-icon.png`. Worth having
+		// because a GitHub avatar is uploaded art with whatever padding its
+		// author chose — tellahq's leaves 38% of its canvas empty — so the
+		// repos that fall through to it would wear tiles that read smaller
+		// than every icon beside them.
+		if (/^[a-z0-9][a-z0-9-]{0,38}$/i.test(owner)) {
+			const ownerIcon = localIcon(`${FRONTEND_SRC}/owner-${owner}-icon.png`);
+			if (ownerIcon) return ownerIcon;
+		}
 		const icon = await ownerAvatar(owner);
 		if (!icon) return new Response("Not found", { status: 404 });
 		return new Response(icon.bytes, {

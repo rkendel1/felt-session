@@ -32,7 +32,7 @@ afterEach(() => resetKeychain());
 
 const cred = (over: Partial<Parameters<typeof kc.addCredential>[0]> = {}) =>
   kc.addCredential({
-    owner: "Michiel",
+    owner: "Alex",
     service: "vercel",
     host: "api.vercel.com",
     secret: "sk-live-secret",
@@ -67,9 +67,9 @@ describe("credentials", () => {
   test("only the owner may delete, and deleting revokes live grants", () => {
     const meta = cred();
     expect(() => kc.deleteCredential(meta.id, "Grant")).toThrow(/owner/);
-    expect(kc.deleteCredential(meta.id, "Michiel")).toBe(true);
+    expect(kc.deleteCredential(meta.id, "Alex")).toBe(true);
     expect(kc.listCredentials()).toHaveLength(0);
-    expect(kc.deleteCredential(meta.id, "Michiel")).toBe(false);
+    expect(kc.deleteCredential(meta.id, "Alex")).toBe(false);
   });
 
   test("findCredential resolves by id or service slug", () => {
@@ -151,7 +151,7 @@ describe("grant lifecycle", () => {
   });
 
   test("revoking an unknown grant reports it rather than throwing", () => {
-    expect(kc.revokeGrant("kg-missing", "Michiel")).toEqual({ error: "no such grant" });
+    expect(kc.revokeGrant("kg-missing", "Alex")).toEqual({ error: "no such grant" });
   });
 
   test("requesting an unknown credential names what exists", () => {
@@ -159,7 +159,7 @@ describe("grant lifecycle", () => {
     const r = kc.requestCredential({
       credential: "stripe",
       sessionId: "bks-1",
-      requestedBy: "Michiel",
+      requestedBy: "Alex",
       purpose: "test",
     });
     expect(r).toHaveProperty("error");
@@ -171,7 +171,7 @@ describe("grant lifecycle", () => {
     const r = kc.requestCredential({
       credential: "vercel",
       sessionId: "bks-1",
-      requestedBy: "Michiel",
+      requestedBy: "Alex",
       purpose: "   ",
     });
     expect((r as { error: string }).error).toMatch(/purpose/);
@@ -205,7 +205,7 @@ describe("grant enforcement", () => {
     });
     expect(kc.consumeGrantForBroker(gr.id, "GET", "/v1/x")).toHaveProperty("credential");
     expect(kc.consumeGrantForBroker(gr.id, "GET", "/v1/x")).toHaveProperty("credential");
-    expect(kc.revokeGrant(gr.id, "Michiel")).toEqual({ ok: true });
+    expect(kc.revokeGrant(gr.id, "Alex")).toEqual({ ok: true });
     expect(kc.consumeGrantForBroker(gr.id, "GET", "/v1/x")).toMatchObject({ status: 403 });
   });
 
@@ -249,7 +249,7 @@ describe("grant enforcement", () => {
       requestedBy: "Grant",
       mode: "standing",
     });
-    kc.deleteCredential(meta.id, "Michiel");
+    kc.deleteCredential(meta.id, "Alex");
     expect(kc.consumeGrantForBroker(gr.id, "GET", "/v1/x")).toMatchObject({ status: 403 });
   });
 
@@ -285,7 +285,7 @@ describe("grant instructions", () => {
       {
         id: "kg-abc",
         credentialId: meta.id,
-        owner: "Michiel",
+        owner: "Alex",
         sessionId: "bks-1",
         requestedBy: "Grant",
         purpose: "check the failing preview deploy",

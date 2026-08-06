@@ -66,7 +66,7 @@ export function PreviewButton({
    *  into stray Electron windows). The interstitial flow stays for contexts
    *  without a tab (phones, PreviewWait deep links). */
   onOpenTab?: () => void;
-  /** When set, the snapshot modal offers "Attach to chat" (stages the PNG as a
+  /** When set, the snapshot modal offers "Attach to session" (stages the PNG as a
    *  composer image, like a paste). */
   onAttachImage?: (dataUrl: string) => void;
   /** Mirrors the polled status to the parent so other preview affordances can
@@ -248,7 +248,7 @@ export function PreviewButton({
                 setShot(null);
               }}
             >
-              Attach to chat
+              Attach to session
             </Button>
           )}
           {shot && (
@@ -462,7 +462,7 @@ export function PreviewButton({
   // primary action; right-click opens the services popover (stop / snapshot).
   // While the server is up (or starting) a small caret rides beside the icon —
   // the popover's stop action was right-click-only and nobody found it
-  // (Michiel, 2026-07-09).
+  // (seen live, 2026-07-09).
   if (variant === "header") {
     const menuCaret = (running || anyRunning || isStarting) && (
       <Tooltip label="Dev services — stop the server, snapshot" side="bottom">

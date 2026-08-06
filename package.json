@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Open Session — self-hosted agent session dashboard: run, watch, and steer AI coding sessions from the web UI, Slack, and native clients",
-  "license": "Apache-2.0",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/tellahq/opensession.git"
@@ -55,6 +55,7 @@
     "emoji-datasource": "^16.0.0",
     "ghostty-web": "^0.4.0",
     "marked": "^15.0.0",
+    "mermaid": "^11.16.1",
     "modal": "0.9.0",
     "motion": "^12.42.2",
     "opencode-with-claude": "1.6.18",

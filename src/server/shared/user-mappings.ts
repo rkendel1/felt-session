@@ -123,7 +123,7 @@ export function githubUsernameToSlackId(username: string): string | null {
  * GitHub login → the web user-picker key (the lowercased first name, e.g.
  * "kentdebruin" → "kent"). Lets the UI attribute a PR to a teammate: the
  * sidebar's Open PRs section shows a person's PRs whether they authored them
- * from their own account or Michael opened them from a session they started.
+ * from their own account or the bot opened them from a session they started.
  */
 export function githubLoginToPersonKeyFromTeam(
   login: string | null | undefined,

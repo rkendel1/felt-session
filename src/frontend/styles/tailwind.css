@@ -86,7 +86,7 @@
 	--radius-panel: calc(var(--radius) * var(--rf));
 	/* The corner every button and chip in the chrome shares. global.css authors
 	   it as `calc(10px * var(--rf))` on .btn-viewer-pin / .btn-panel-toggle /
-	   .btn-viewer-newchat and friends; naming it here lets the Button primitive
+	   .btn-viewer-newsession and friends; naming it here lets the Button primitive
 	   and any Tailwind-authored control land on the same corner instead of
 	   re-deriving it with an arbitrary value. Because it is built from --rf it
 	   tracks the squircle bump on its own (8.5px round → 13.5px squircle), and

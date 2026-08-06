@@ -2,7 +2,7 @@
   "name": "@opensession/tui",
   "version": "0.1.0",
   "private": true,
-  "license": "Apache-2.0",
+  "license": "MIT",
   "type": "module",
   "bin": {
     "os": "src/index.ts"

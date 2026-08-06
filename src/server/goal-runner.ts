@@ -42,7 +42,7 @@ export const runningGoals: Set<string> = (g.__runningGoals ??= new Set());
 
 /** MCP surface for a goal's own run: pull-a-human-in + its self-cadence controls.
  *  Deliberately excludes opensession-admin / opensession-sessions — an autonomous,
- *  weeks-long run gets least privilege (can't reconfigure Michael or steer other
+ *  weeks-long run gets least privilege (can't reconfigure the agent or steer other
  *  sessions); human sign-off goes through opensession-humans ask_human. */
 function goalMcpServers(
 	osSessionId: string,

@@ -42,7 +42,7 @@ const { parseJsonlLines } = await import("./jsonl-parser");
 const { TranscriptStore, transcriptStore, __setTranscriptStoreForTest } = await import(
   "./transcript-store"
 );
-const { __setChatsDirForTest } = await import("./paths");
+const { __setSessionsDirForTest } = await import("./paths");
 
 // Since the 2026-07-23 mirror retirement (35bb2767, transcript-v2 design §11)
 // the three transcript WRITERS below — appendOpencodeTranscript,
@@ -64,7 +64,7 @@ const { __setChatsDirForTest } = await import("./paths");
 // from any code in this process).
 const priorBksMapPath = mod.__setOpencodeBksMapPathForTest(join(scratch, "bks-map.json"));
 const priorBksMapState = mod.__setOpencodeBksMapStateForTest();
-const priorChatsDir = __setChatsDirForTest(scratch);
+const priorSessionsDir = __setSessionsDirForTest(scratch);
 // The store's import-first gate reads OpenCode's SQLite through the BARE
 // opencode-transcript module, not this file's cache-busted `mod` — and the
 // bare one resolves its db path at ITS load, which in a full `bun test` run
@@ -127,7 +127,7 @@ afterAll(() => {
   // only the path bindings would leave a live store pointed at a removed db.
   __setTranscriptStoreForTest(priorStore);
   scratchStore.close();
-  __setChatsDirForTest(priorChatsDir);
+  __setSessionsDirForTest(priorSessionsDir);
   bare.__setOpencodeDbPathForTest(priorBareDb);
   bare.__setOpencodeTranscriptsDirForTest(priorBareTranscriptsDir);
   mod.__setOpencodeBksMapPathForTest(priorBksMapPath);

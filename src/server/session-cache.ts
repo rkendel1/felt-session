@@ -5,7 +5,7 @@
  */
 
 import { existsSync, readFileSync } from "fs";
-import { OPENSESSION_CHATS_DIR } from "./paths";
+import { OPENSESSION_SESSIONS_DIR } from "./paths";
 import { getAllSessions } from "./sessions";
 import { activeRunRecords } from "./run-journal";
 import { getRunState, transitionRunState, type RunState } from "./run-state";
@@ -15,13 +15,7 @@ import { SESSION_EFFORTS as MODEL_EFFORTS } from "./models";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import type { UnifiedSession, NativeSessionFile } from "./types";
 
-export const SESSIONS_DIR = OPENSESSION_CHATS_DIR;
-
-/** Persisted records from the removed side-chat feature stay internal until
- * their parent is deleted. They must never reappear in user-facing discovery. */
-export function isLegacySideChat(session: { sideChatOf?: string | null }): boolean {
-	return Boolean(session.sideChatOf);
-}
+export const SESSIONS_DIR = OPENSESSION_SESSIONS_DIR;
 
 const g = globalThis as any;
 

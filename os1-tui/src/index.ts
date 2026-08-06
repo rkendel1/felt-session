@@ -144,7 +144,7 @@ async function listSessions(): Promise<number> {
 			login: status?.login ?? config.login,
 			name: status?.name,
 		});
-		const all = (await api.sessions()).filter((s) => !s.archived && !s.sideChatOf);
+		const all = (await api.sessions()).filter((s) => !s.archived);
 		const sessions = all.filter((s) => inScope(s, scope, tokens));
 		if (!sessions.length) {
 			console.log(

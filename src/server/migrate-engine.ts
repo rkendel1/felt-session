@@ -20,7 +20,7 @@
  *  - targets that don't resolve to the opencode provider.
  */
 import { existsSync, readFileSync } from "fs";
-import { OPENSESSION_CHATS_DIR } from "./paths";
+import { OPENSESSION_SESSIONS_DIR } from "./paths";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import { resolveModel } from "./models";
 import type { ActiveRunRecord } from "./run-journal";
@@ -43,7 +43,7 @@ function readJson<T>(path: string): T | null {
 function journaledRuns(): ActiveRunRecord[] {
   const path =
     process.env.OPENSESSION_RUN_JOURNAL ||
-    `${OPENSESSION_CHATS_DIR}/active-runs.json`;
+    `${OPENSESSION_SESSIONS_DIR}/active-runs.json`;
   const journal = readJson<Record<string, ActiveRunRecord>>(path);
   return journal ? Object.values(journal) : [];
 }
@@ -89,7 +89,7 @@ export function migrateSessionEngine(
   targetModel: string,
   by = "engine-migration"
 ): MigrateEngineResult {
-  const path = `${OPENSESSION_CHATS_DIR}/${sessionId}.json`;
+  const path = `${OPENSESSION_SESSIONS_DIR}/${sessionId}.json`;
   const data = readJson<NativeSessionFile>(path);
   if (!data?.id) {
     return { ok: false, error: `No opensession session file for "${sessionId}".` };

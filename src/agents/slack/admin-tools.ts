@@ -1,5 +1,5 @@
 /**
- * opensession-admin — an in-process MCP server that lets Michael manage his own
+ * opensession-admin — an in-process MCP server that lets the agent manage its own
  * setup conversationally from Slack: automations (routines), MCP connections,
  * and channel memory.
  *
@@ -12,7 +12,7 @@
  * Gating: it is ONLY wired into interactive Slack runs (never automation runs,
  * which never go through handlers.processMessage). The powerful automation/MCP
  * tools are further gated to the trusted user via `isAdmin`; channel-memory
- * tools are available to anyone who can talk to Michael.
+ * tools are available to anyone who can talk to the bot.
  */
 
 import { createSdkMcpServer, tool } from "../../server/inprocess-mcp";
@@ -72,7 +72,7 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
 
   const tools: any[] = [
     // -----------------------------------------------------------------------
-    // Channel memory (available to anyone who can talk to Michael)
+    // Channel memory (available to anyone who can talk to the bot)
     // -----------------------------------------------------------------------
     tool(
       "remember",

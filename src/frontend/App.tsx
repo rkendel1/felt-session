@@ -82,27 +82,26 @@ import {
 	renameSessionApi,
 	setSessionStatusApi,
 	fetchNotes,
-	fetchProjects,
-	updateProjectApi,
-	deleteProjectApi,
-	newChatApi,
-	fetchSessionNoteActivityApi,
+	fetchWorkspaces,
+	updateWorkspaceApi,
+	deleteWorkspaceApi,
+	newSessionApi,
 	resolveWorkspaceApi,
 	type NoteMeta,
 	type OpenPr,
 } from "./lib/api";
 import {
-	defaultChatWorkspaceView,
-	mainChat,
-	pickLandingChat,
-} from "./lib/landing-chat";
+	defaultSessionWorkspaceView,
+	mainSession,
+	pickLandingSession,
+} from "./lib/landing-session";
 import {
-	getWorkspaceLastChat,
-	saveWorkspaceLastChat,
-} from "./lib/workspace-last-chat";
+	getWorkspaceLastSession,
+	saveWorkspaceLastSession,
+} from "./lib/workspace-last-session";
 import { sessionHasWorkspace } from "./lib/session-workspace";
 import type {
-	Project,
+	Workspace,
 	SupportThread,
 	FeedDescriptor,
 	FeedItem,
@@ -114,7 +113,7 @@ import { pushRecent } from "./lib/recents";
 import { setLane, type Lane } from "./lib/lanes";
 import { markRead } from "./lib/reads";
 import {
-	chatPath,
+	sessionPath,
 	prPath,
 	absoluteLink,
 	copyToClipboard,
@@ -160,11 +159,11 @@ type Route =
 	| { view: "home" }
 	| { view: "new"; prompt?: string }
 	| { view: "session"; id: string }
-	// The workspace container without a chat selected: its view tabs (Review /
-	// Conversation) and, when it has no chats, the first-chat composer. An
+	// The workspace container without a session selected: its view tabs (Review /
+	// Conversation) and, when it has no sessions, the first-session composer. An
 	// optional tab suffix picks the foregrounded pane on entry.
 	| { view: "workspace"; id: string; tab?: "review" | "conversation" | "video" }
-	// Session-less PR preview (a sidebar PR row with no chat yet).
+	// Session-less PR preview (a sidebar PR row with no session yet).
 	| { view: "pr"; repo: string; branch: string }
 	// Session-less support-ticket preview (a Support row with no session yet).
 	| { view: "support"; threadId: string }
@@ -188,7 +187,7 @@ type Route =
 	| { view: "archived" }
 	| { view: "catchup" };
 
-// Stable empty stack, so a chat with no sub-agent open hands the same array
+// Stable empty stack, so a session with no sub-agent open hands the same array
 // identity down every render (the transcript memo compares props by identity).
 const NO_SUBAGENTS: SubagentRef[] = [];
 
@@ -207,36 +206,45 @@ function isToolView(view: string): view is ToolView {
 
 // Non-tool settings sections, addressable as <base>/settings/<section>.
 const SETTINGS_SECTIONS = new Set<SettingsSectionKey>([
-	"notifications",
-	"composer",
-	"appearance",
-	"personalPrompt",
 	"myAccounts",
+	"keychain",
+	"personalPrompt",
+	"composer",
+	"deskVoice",
+	"notifications",
+	"appearance",
 	"setup",
 	"workspace",
-	"model",
-	"modelProviders",
+	"models",
 	"connections",
 	"memory",
-	"warmPreviews",
-	"previewPool",
+	"prewarming",
+	"deploys",
 	"papercuts",
 	"audit",
 ]);
 
+// Sections that were merged into another one — old links keep working.
+const LEGACY_SETTINGS_SECTIONS: Record<string, SettingsSectionKey> = {
+	model: "models",
+	modelProviders: "models",
+	warmPreviews: "prewarming",
+	previewPool: "prewarming",
+};
+
 function parseRoute(pathname: string): Route {
 	// Accept both prefixes: /opensession (primary) and /backstage (legacy alias).
 	pathname = stripBasePath(pathname);
-	// Canonical chat URL: <base>/workspace/<wsId>/chat/<chatId>. The chat id
+	// Canonical session URL: <base>/workspace/<wsId>/session/<sessionId>. The session id
 	// alone identifies the session; the workspace segment makes the hierarchy
 	// shareable/readable. Old <base>/session/<id> links keep working and get
 	// canonicalized once the session (and its workspace) is known.
-	const wsChatMatch = pathname.match(
-		/^\/workspace\/[^/]+\/chat\/(.+)$/,
+	const wsSessionMatch = pathname.match(
+		/^\/workspace\/[^/]+\/session\/(.+)$/,
 	);
-	if (wsChatMatch)
-		return { view: "session", id: decodeURIComponent(wsChatMatch[1]) };
-	// The workspace container itself (no chat selected), optionally landing on
+	if (wsSessionMatch)
+		return { view: "session", id: decodeURIComponent(wsSessionMatch[1]) };
+	// The workspace container itself (no session selected), optionally landing on
 	// a specific view tab: <base>/workspace/<wsId>[/review|/conversation].
 	const wsMatch = pathname.match(
 		/^\/workspace\/([^/]+)(?:\/(review|conversation|video))?$/,
@@ -307,6 +315,8 @@ function parseRoute(pathname: string): Route {
 			return key === "notes" ? { view: "notes", sel: null } : { view: key };
 		if (key && SETTINGS_SECTIONS.has(key as SettingsSectionKey))
 			return { view: "settings", section: key as SettingsSectionKey };
+		if (key && LEGACY_SETTINGS_SECTIONS[key])
+			return { view: "settings", section: LEGACY_SETTINGS_SECTIONS[key] };
 		return { view: "settings" };
 	}
 	if (pathname === "/archived") return { view: "archived" };
@@ -446,7 +456,7 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 		mode: "ask" | "code" | "scratch";
 		repo: string;
 		branch: string | null;
-		projectId?: string;
+		workspaceId?: string;
 		model?: string;
 		images?: string[];
 		startedAt: string;
@@ -488,26 +498,6 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 		}
 		return parsed;
 	});
-	// Latest team note per session — the sidebar's unread-note dots.
-	const [noteActivity, setNoteActivity] = useState<
-		Record<string, { lastTs: number; lastUser: string }>
-	>({});
-	useEffect(() => {
-		fetchSessionNoteActivityApi().then(setNoteActivity).catch(() => {});
-	}, []);
-	useEffect(
-		() =>
-			addHandler((msg) => {
-				if (msg.type !== "chat_message" || !msg.channel.startsWith("session:"))
-					return;
-				const id = msg.channel.slice("session:".length);
-				setNoteActivity((prev) => ({
-					...prev,
-					[id]: { lastTs: msg.message.ts, lastUser: msg.message.user },
-				}));
-			}),
-		[addHandler],
-	);
 	// Session-reference chips in transcripts (`bks-…`) label themselves with the
 	// referenced session's title. markdown.ts renders to an HTML string rather
 	// than React nodes, so it can't read this from context — hand it the titles
@@ -598,7 +588,7 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 	// before session_created, so this window is just one list fetch). While
 	// pending, the detail pane shows a "Starting…" state instead of flashing
 	// "Session not found". pendingNewWorkspace words it for a brand-new
-	// workspace vs. a chat added to an existing one.
+	// workspace vs. a session added to an existing one.
 	const [pendingSessionId, setPendingSessionId] = useState<string | null>(null);
 	const [pendingNewWorkspace, setPendingNewWorkspace] = useState(false);
 	// Who's viewing what, app-wide (from global_presence).
@@ -625,23 +615,23 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 		return () => window.removeEventListener("focus", onFocus);
 	}, [refreshNotes]);
 
-	// Projects (folders that group chats) — powers the sidebar's Projects section
-	// and the project-scoped tab strip. Refetched on focus and when sessions change
-	// (a new PR chat can auto-create a folder server-side).
-	const [projects, setProjects] = useState<Project[]>([]);
-	const [projectsLoaded, setProjectsLoaded] = useState(false);
-	const refreshProjects = React.useCallback(() => {
-		fetchProjects()
-			.then(setProjects)
+	// Workspaces (containers that group sessions) — powers the sidebar rows
+	// and the workspace-scoped tab strip. Refetched on focus and when sessions
+	// change (a new PR session can auto-create a workspace server-side).
+	const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+	const [workspacesLoaded, setWorkspacesLoaded] = useState(false);
+	const refreshWorkspaces = React.useCallback(() => {
+		fetchWorkspaces()
+			.then(setWorkspaces)
 			.catch(() => {})
-			.finally(() => setProjectsLoaded(true));
+			.finally(() => setWorkspacesLoaded(true));
 	}, []);
 	useEffect(() => {
-		refreshProjects();
-		const onFocus = () => refreshProjects();
+		refreshWorkspaces();
+		const onFocus = () => refreshWorkspaces();
 		window.addEventListener("focus", onFocus);
 		return () => window.removeEventListener("focus", onFocus);
-	}, [refreshProjects]);
+	}, [refreshWorkspaces]);
 
 	// Subscribe to the per-user pin/color stores. Both hydrate async at module
 	// load, and on a fast localhost that load() can resolve (and emit) before
@@ -654,8 +644,8 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 	}, []);
 
 	// Drop the pins made stale by archiving `justArchived`, mirroring the
-	// server's unpinArchivedSessions: each chat's own id + alias ids, plus a
-	// `workspace:<id>` pin once none of that workspace's chats are live anymore.
+	// server's unpinArchivedSessions: each session's own id + alias ids, plus a
+	// `workspace:<id>` pin once none of that workspace's sessions are live anymore.
 	// The server already does this, but our pin cache is optimistic and never
 	// hears about that write — without this a later savePinsApi re-uploads the
 	// stale list and resurrects the archived pin as an unreachable ghost row.
@@ -664,14 +654,14 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 		const archivedIds = new Set(justArchived.map((s) => s.id));
 		const all = sessionsRef.current;
 		const keys: string[] = [];
-		const projectIds = new Set<string>();
+		const workspaceIds = new Set<string>();
 		for (const s of justArchived) {
 			keys.push(s.id, ...(s.aliasIds || []));
-			if (s.projectId) projectIds.add(s.projectId);
+			if (s.workspaceId) workspaceIds.add(s.workspaceId);
 		}
-		for (const pid of projectIds) {
+		for (const pid of workspaceIds) {
 			const hasLive = all.some(
-				(s) => s.projectId === pid && !s.archived && !archivedIds.has(s.id),
+				(s) => s.workspaceId === pid && !s.archived && !archivedIds.has(s.id),
 			);
 			if (!hasLive) keys.push(`workspace:${pid}`);
 		}
@@ -748,8 +738,8 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 		const path = routePath(next);
 		const cur = routeRef.current;
 		const toRoot = next.view === "home";
-		// Compare on the route, not `location.pathname`: an open chat's URL gets
-		// canonicalized to /workspace/<id>/chat/<id> below, so the raw path no
+		// Compare on the route, not `location.pathname`: an open session's URL gets
+		// canonicalized to /workspace/<id>/session/<id> below, so the raw path no
 		// longer matches the /session/<id> we would build for the same session.
 		const samePath =
 			path === location.pathname ||
@@ -778,7 +768,7 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 	// rather than popping to the root the way `goBack` does. The root is the
 	// useful destination on a phone — it's the sidebar you can't otherwise see —
 	// but on desktop the sidebar never went away, so popping there reveals
-	// nothing and costs you the chat you were reading before the detour.
+	// nothing and costs you the session you were reading before the detour.
 	function leaveDeck() {
 		const depth = entryDepth();
 		if (depth !== null && depth > 0) history.back();
@@ -818,9 +808,9 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 	const [palette, setPalette] = useState<{
 		open: boolean;
 		prompt?: string;
-		// When starting a chat inside a project, prefill the folder + its shared repo
-		// and worktree so the new chat lands next to its siblings by default.
-		projectId?: string;
+		// When starting a session inside a workspace, prefill it + its shared repo
+		// and worktree so the new session lands next to its siblings by default.
+		workspaceId?: string;
 		repo?: string;
 		branch?: string;
 		mode?: "ask" | "code" | "scratch";
@@ -836,13 +826,13 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 		setPalette({ open: true, ...prefill });
 	}, []);
 
-	// A "new tab" while a session is open is a *new chat in that same session*, not
+	// A "new tab" while a session is open is a *new session in that same session*, not
 	// a whole new session — so it must NOT pop the new-session palette. It's a
 	// visual fresh-start (one thread under the hood): bumping this counter tells the
 	// open SessionViewer to clear its composer and scroll to the live edge. With no
 	// session open there's nothing to stay in, so it falls back to the palette.
-	const [newChatSeq, setNewChatSeq] = useState(0);
-	// Which non-chat view-tab is foregrounded. A single field makes "both open
+	const [newSessionSeq, setNewSessionSeq] = useState(0);
+	// Which non-session view-tab is foregrounded. A single field makes "both open
 	// at once" unrepresentable; the show-flags derive from it. The selection is
 	// restored per workspace below rather than leaking across workspaces.
 	const [activeViewTab, setActiveViewTabState] =
@@ -861,12 +851,12 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 		() => new Set(getActiveViewTabKeys("review")),
 	);
 	// PR-backed workspaces (adopted from a PR — the ghpr ones) show Review by
-	// default even when you land straight in one of their chats; this tracks
+	// default even when you land straight in one of their sessions; this tracks
 	// their explicit closes, mirroring conversationClosed below.
 	const [reviewClosed, setReviewClosed] = useState<Set<string>>(
 		() => new Set(),
 	);
-	// Conversation is default-PRESENT on any workspace/chat linked to a Plain
+	// Conversation is default-PRESENT on any workspace/session linked to a Plain
 	// thread (unlike Review, which is opened on demand) — so the state tracks
 	// explicit closes, not opens.
 	const [conversationClosed, setConversationClosed] = useState<Set<string>>(
@@ -886,15 +876,15 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 	const [assetsOpen, setAssetsOpen] = useState<Set<string>>(
 		() => new Set(getActiveViewTabKeys("assets")),
 	);
-	// Sub-agent drill-ins, keyed by the chat they were opened from (a sub-agent
-	// belongs to one chat's run). The value is a breadcrumb stack — a Task call
+	// Sub-agent drill-ins, keyed by the session they were opened from (a sub-agent
+	// belongs to one session's run). The value is a breadcrumb stack — a Task call
 	// inside a sub-agent pushes another entry. In-memory only, like the tab
 	// itself: the transcript is re-fetched whenever it's reopened.
 	const [subagentTabs, setSubagentTabs] = useState<Record<string, SubagentRef[]>>(
 		{},
 	);
 	// Bumped when the per-workspace tab order changes (a drag-drop commit, or a
-	// storage push from another tab) so the strip re-derives `projectChats` in
+	// storage push from another tab) so the strip re-derives `workspaceSessions` in
 	// the new order. The order itself lives in localStorage (lib/tab-order).
 	const [, setTabOrderRev] = useState(0);
 	useEffect(
@@ -987,7 +977,7 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 	}, []);
 
 	// Creator Micro macropad → client-side navigation. A local daemon on the
-	// user's machine streams app route paths (e.g. "/workspace/<prj>/chat/<bks>")
+	// user's machine streams app route paths (e.g. "/workspace/<ws>/session/<session>")
 	// over SSE; each message navigates in-app via the router — no reload.
 	// Silently inert when the daemon isn't running / not on this machine.
 	useEffect(() => {
@@ -1006,13 +996,13 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 		return () => es?.close();
 	}, []);
 
-	// The link ⌘⇧C copies: the open chat/workspace, or the open PR preview.
+	// The link ⌘⇧C copies: the open session/workspace, or the open PR preview.
 	// Assigned during render (below, once currentSession is known); null when
 	// the current view has nothing linkable.
 	const copyLinkPathRef = useRef<string | null>(null);
 
 	// ⌘K toggles the command palette; ⌘N the new-session palette; ⌘⇧C copies a
-	// link to the open chat/PR. Esc closes whichever palette is open (search's
+	// link to the open session/PR. Esc closes whichever palette is open (search's
 	// own input also handles Esc, but this covers the case where focus has left
 	// it).
 	useEffect(() => {
@@ -1097,8 +1087,8 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 				const draft = pendingCreateDraftRef.current;
 				pendingCreateDraftRef.current = null;
 				// Pin the just-created session for its creator (this WS reply is
-				// creator-only, so it never pins a teammate's new chat onto my bar).
-				// Per-browser prefs in Settings: new chats/sessions pin on by
+				// creator-only, so it never pins a teammate's new session onto my bar).
+				// Per-browser prefs in Settings: new sessions/sessions pin on by
 				// default; new workspaces are heavier, so they have their own
 				// pref that's off by default.
 				const shouldPin = msg.newWorkspace
@@ -1118,8 +1108,8 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 						startedBy: user,
 						title: msg.newWorkspace
 							? "New workspace"
-							: draft?.projectId
-								? "New chat"
+							: draft?.workspaceId
+								? "New session"
 								: "New session",
 						lastActivity: now,
 						createdAt,
@@ -1128,7 +1118,7 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 						transcriptPath: null,
 						mode: draft?.mode,
 						repo: draft?.repo,
-						projectId: msg.workspaceId || draft?.projectId || null,
+						workspaceId: msg.workspaceId || draft?.workspaceId || null,
 						model: draft?.model,
 						archived: false,
 						// Worktree prep still running server-side — the viewer opens
@@ -1171,13 +1161,13 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 					unstick(msg.id);
 				}, 30000);
 				refresh();
-				refreshProjects();
+				refreshWorkspaces();
 				navigate({ view: "session", id: msg.id });
 			}
 		});
-	}, [addHandler, refresh, refreshProjects, unstick]);
+	}, [addHandler, refresh, refreshWorkspaces, unstick]);
 
-	// Drop the pending flag once we've navigated away from the pending chat (its
+	// Drop the pending flag once we've navigated away from the pending session (its
 	// fallback timeout clears it otherwise). We deliberately DON'T clear it the
 	// instant the session first shows up in the list: a poll that predates the
 	// create can momentarily drop the just-injected copy again, and clearing here
@@ -1205,56 +1195,56 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 				) || null
 			: null;
 
-	// The open chat, read by the mount-once tab-shortcut handler (⌘⌥C / ⌘W —
-	// see the effect next to closeChat below).
+	// The open session, read by the mount-once tab-shortcut handler (⌘⌥C / ⌘W —
+	// see the effect next to closeSession below).
 	const currentSessionRef = useRef<UnifiedSession | null>(null);
 	// Stable key the view-tab state (Review/Preview/Assets panes) is stored
-	// under: the workspace id, the shared isolated worktree, or the lone chat
+	// under: the workspace id, the shared isolated worktree, or the lone session
 	// id — the same grouping rule as the tab strip (tabOrderKey below), so a
-	// view tab opened in a workspace survives switching between sibling chats.
+	// view tab opened in a workspace survives switching between sibling sessions.
 	const wsKeyFor = (s: UnifiedSession | null | undefined): string | null =>
 		s
-			? s.projectId ||
+			? s.workspaceId ||
 				(s.worktreeDir?.includes("/worktrees/")
 					? s.worktreeDir
 					: s.id)
 			: null;
-	// On the chat-less workspace route the key is the route's workspace id.
+	// On the session-less workspace route the key is the route's workspace id.
 	const routeWorkspaceId = route.view === "workspace" ? route.id : null;
-	const routeWorkspace: Project | null = routeWorkspaceId
-		? projects.find((p) => p.id === routeWorkspaceId) || null
+	const routeWorkspace: Workspace | null = routeWorkspaceId
+		? workspaces.find((p) => p.id === routeWorkspaceId) || null
 		: null;
 	const wsKey = routeWorkspaceId ?? wsKeyFor(currentSession);
 	const wsRecord =
 		routeWorkspace ??
-		(currentSession?.projectId
-			? projects.find((p) => p.id === currentSession.projectId) || null
+		(currentSession?.workspaceId
+			? workspaces.find((p) => p.id === currentSession.workspaceId) || null
 			: null);
 	const reviewDismissed = !!wsKey && reviewClosed.has(wsKey);
-	// Review only leads for a chat-less PR workspace; with chats, the main/last
-	// chat is the landing surface and Review sits at the end of the strip.
-	const wsHasLiveChat =
+	// Review only leads for a session-less PR workspace; with sessions, the main/last
+	// session is the landing surface and Review sits at the end of the strip.
+	const wsHasLiveSession =
 		!!currentSession ||
 		(!!wsKey &&
 			sessions.some(
-				(s) => !s.archived && !s.sideChatOf && s.projectId === wsKey,
+				(s) => !s.archived && s.workspaceId === wsKey,
 			));
-	const defaultChatView = defaultChatWorkspaceView(
+	const defaultSessionView = defaultSessionWorkspaceView(
 		wsRecord,
 		reviewDismissed,
-		wsHasLiveChat,
+		wsHasLiveSession,
 	);
 	function setActiveViewTab(tab: ActiveViewTab) {
 		setActiveViewTabState(tab);
 		if (wsKey) saveActiveViewTab(wsKey, tab);
 	}
 	// Return each workspace to its last foregrounded tab. A workspace without a
-	// saved selection still starts on its normal default surface. Switching chats
-	// within a workspace records chat as the selection via the tab-strip handler.
+	// saved selection still starts on its normal default surface. Switching sessions
+	// within a workspace records session as the selection via the tab-strip handler.
 	useEffect(() => {
 		const remembered = wsKey ? getActiveViewTab(wsKey) : undefined;
-		setActiveViewTabState(remembered === undefined ? defaultChatView : remembered);
-	}, [wsKey, defaultChatView]);
+		setActiveViewTabState(remembered === undefined ? defaultSessionView : remembered);
+	}, [wsKey, defaultSessionView]);
 	// ...unless we just opened Review for that workspace from the sidebar: once
 	// it lands (this render or the one after navigation), foreground Review and
 	// consume the pulse. Runs after the reset effect above, so it wins.
@@ -1266,11 +1256,11 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 	}, [wsKey, pendingReviewOpen]);
 	// Landing on the workspace route: foreground its default pane. An explicit
 	// /review or /conversation suffix wins; otherwise land in the remembered
-	// chat (or the main chat on first visit). A chat-less PR workspace still
+	// session (or the main session on first visit). A session-less PR workspace still
 	// opens Review. Declared after the wsKey reset effect above so the landing
 	// choice wins the same commit.
 	useEffect(() => {
-		if (route.view !== "workspace" || !projectsLoaded) return;
+		if (route.view !== "workspace" || !workspacesLoaded) return;
 		// One-shot: closing the Review tab replaces the URL (dropping /review),
 		// which re-runs this effect — without the suppress it would immediately
 		// re-seed the default pane and reopen the tab just closed.
@@ -1278,23 +1268,23 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 			suppressWsSeedRef.current = false;
 			return;
 		}
-		const p = projects.find((x) => x.id === route.id) || null;
+		const p = workspaces.find((x) => x.id === route.id) || null;
 		// Default pane by workspace shape: ticket workspaces open on the
 		// Conversation; everything else — PR-backed included — lands in its
-		// main/last-open chat. A PR workspace only defaults to Review when it
-		// has no chat to land in (the else branch below).
-		// Default pane by workspace shape — but a workspace WITH chats always
-		// lands in its main/last-open chat (same rule as PR workspaces); the
+		// main/last-open session. A PR workspace only defaults to Review when it
+		// has no session to land in (the else branch below).
+		// Default pane by workspace shape — but a workspace WITH sessions always
+		// lands in its main/last-open session (same rule as PR workspaces); the
 		// panel (Conversation/Video) is only the landing surface when there is
-		// no chat to land in. Explicit /conversation-/video URLs still win.
-		const hasChat = !!pickLandingChat(
+		// no session to land in. Explicit /conversation-/video URLs still win.
+		const hasSession = !!pickLandingSession(
 			sessionsRef.current,
 			route.id,
-			getWorkspaceLastChat(route.id),
+			getWorkspaceLastSession(route.id),
 		);
 		const tab =
 			route.tab ??
-			(hasChat
+			(hasSession
 				? null
 				: p?.plainThreadId
 					? "conversation"
@@ -1302,16 +1292,16 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 						? "video"
 						: null);
 		const key = route.id;
-		// Landing in the workspace's first chat keeps the full session chrome —
+		// Landing in the workspace's first session keeps the full session chrome —
 		// including the right sidebar — around the foregrounded pane (wsKey is
-		// unchanged, so the view-tab reset effect doesn't fire). Chat-less
+		// unchanged, so the view-tab reset effect doesn't fire). Session-less
 		// workspaces stay on WorkspacePane, which renders its own info panel.
-		const firstChat = () =>
-			pickLandingChat(sessionsRef.current, key, getWorkspaceLastChat(key));
+		const firstSession = () =>
+			pickLandingSession(sessionsRef.current, key, getWorkspaceLastSession(key));
 		if (tab === "review") {
 			setReviewOpen((prev) => (prev.has(key) ? prev : new Set(prev).add(key)));
 			setActiveViewTab("review");
-			const first = firstChat();
+			const first = firstSession();
 			if (first) navigate({ view: "session", id: first.id }, { replace: true });
 		} else if (tab === "conversation") {
 			setConversationClosed((prev) => {
@@ -1321,7 +1311,7 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 				return next;
 			});
 			setActiveViewTab("conversation");
-			const first = firstChat();
+			const first = firstSession();
 			if (first) navigate({ view: "session", id: first.id }, { replace: true });
 		} else if (tab === "video") {
 			setVideoClosed((prev) => {
@@ -1331,17 +1321,17 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 				return next;
 			});
 			setActiveViewTab("video");
-			const first = firstChat();
+			const first = firstSession();
 			if (first) navigate({ view: "session", id: first.id }, { replace: true });
 		} else {
-			const first = firstChat();
+			const first = firstSession();
 			if (first) {
-				// A bare workspace navigation means "open this workspace's chat",
-				// even if Review was the last non-chat pane foregrounded here.
+				// A bare workspace navigation means "open this workspace's session",
+				// even if Review was the last non-session pane foregrounded here.
 				setActiveViewTab(null);
 				navigate({ view: "session", id: first.id }, { replace: true });
 			} else if (p && (p.branch || p.prNumber !== undefined)) {
-				// Chat-less PR/branch workspace: Review is the only meaningful
+				// Session-less PR/branch workspace: Review is the only meaningful
 				// surface, so foreground it like an explicit /review landing.
 				setReviewOpen((prev) =>
 					prev.has(key) ? prev : new Set(prev).add(key),
@@ -1352,7 +1342,7 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [
 		route.view === "workspace" ? `${route.id}:${route.tab ?? ""}` : null,
-		projectsLoaded,
+		workspacesLoaded,
 	]);
 	// Retired standalone pages (2026-07-24): /pr/…, /support/… and /reviews
 	// deep links resolve into the workspace container and redirect (replace).
@@ -1366,7 +1356,7 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 			tab: "review" | "conversation",
 		) => {
 			if (stale) return;
-			refreshProjects();
+			refreshWorkspaces();
 			navigate({ view: "workspace", id: workspaceId, tab }, { replace: true });
 		};
 		if (route.view === "pr") {
@@ -1385,9 +1375,9 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 				const s = sessionsRef.current.find(
 					(x) => x.id === id || x.aliasIds?.includes(id),
 				);
-				if (s?.projectId)
+				if (s?.workspaceId)
 					navigate(
-						{ view: "workspace", id: s.projectId, tab: "review" },
+						{ view: "workspace", id: s.workspaceId, tab: "review" },
 						{ replace: true },
 					);
 				else if (s?.branch)
@@ -1407,14 +1397,14 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 	// the top strip (siblings share the worktree/PR, so one Review tab suffices).
 	const currentHasWorkspace =
 		!!currentSession && sessionHasWorkspace(currentSession);
-	// Review renders without a chat too: a chat-less PR-backed workspace
+	// Review renders without a session too: a session-less PR-backed workspace
 	// (branch/prNumber on the record) reviews through the preview APIs.
 	const reviewCapable = currentSession
 		? currentHasWorkspace
 		: !!routeWorkspace &&
 			Boolean(routeWorkspace.branch || routeWorkspace.prNumber !== undefined);
 	// A PR-backed workspace's whole point is its PR, so its Review tab is
-	// default-present (leftmost) however you landed — a sidebar PR row, a chat
+	// default-present (leftmost) however you landed — a sidebar PR row, a session
 	// deep link, a tab switch — until explicitly dismissed (reviewClosed).
 	const prBackedWorkspace =
 		!!wsRecord &&
@@ -1439,7 +1429,7 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 				]
 			: [];
 	// The Conversation view-tab: the Plain support-ticket thread the workspace
-	// (or the open chat) is attached to — timeline, admin actions, replies.
+	// (or the open session) is attached to — timeline, admin actions, replies.
 	const conversationThreadId =
 		routeWorkspace?.plainThreadId ?? currentSession?.plainThreadId ?? null;
 	const conversationViewTabs: ViewTab[] =
@@ -1459,14 +1449,14 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 	useEffect(() => {
 		void ensureFeedMeta().then(() => setFeedMetaTick((t) => t + 1));
 	}, []);
-	// The Video view-tab: the web panel of the workspace's (or open chat's)
+	// The Video view-tab: the web panel of the workspace's (or open session's)
 	// feed-item ExternalRef — e.g. the Tella video embed (the feeds design).
-	// On a chat route routeWorkspace is null, so fall back to the open chat's
-	// workspace record — otherwise the tab vanishes as soon as a chat exists.
+	// On a session route routeWorkspace is null, so fall back to the open session's
+	// workspace record — otherwise the tab vanishes as soon as a session exists.
 	const videoWorkspace =
 		routeWorkspace ??
-		(currentSession?.projectId
-			? projects.find((p) => p.id === currentSession.projectId) ?? null
+		(currentSession?.workspaceId
+			? workspaces.find((p) => p.id === currentSession.workspaceId) ?? null
 			: null);
 	const videoRef =
 		(
@@ -1528,10 +1518,10 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 					},
 				]
 			: [];
-	// The sub-agent view-tab: a Task drill-in from the open chat's transcript.
-	// Bound to that chat rather than the workspace, so switching to a sibling
-	// chat hides it — and switching back brings its breadcrumb along. Only the
-	// OPEN chat's tab is ever built, so the id's session always matches the
+	// The sub-agent view-tab: a Task drill-in from the open session's transcript.
+	// Bound to that session rather than the workspace, so switching to a sibling
+	// session hides it — and switching back brings its breadcrumb along. Only the
+	// OPEN session's tab is ever built, so the id's session always matches the
 	// pane the split machinery resolves it to.
 	const subagentStack = currentSession
 		? (subagentTabs[currentSession.id] ?? NO_SUBAGENTS)
@@ -1549,7 +1539,7 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 				]
 			: [];
 	// Review leftmost, then Conversation, Preview environment, Preview, Assets,
-	// and the sub-agent drill-in last (it comes and goes with the chat).
+	// and the sub-agent drill-in last (it comes and goes with the session).
 	const viewTabs: ViewTab[] = [
 		...reviewViewTabs,
 		...conversationViewTabs,
@@ -1613,7 +1603,7 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 				return new Set(prev).add(key);
 			});
 		}
-		// Only fall back to chat if Review was the foregrounded pane — closing the
+		// Only fall back to session if Review was the foregrounded pane — closing the
 		// Review tab while the Preview environment is active leaves it up.
 		if (reviewActive) setActiveViewTab(null);
 	}
@@ -1720,7 +1710,7 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 		}
 		if (assetsActive) setActiveViewTab(null);
 	}
-	// Open (or foreground) a chat's sub-agent tab — the transcript's "Watch"
+	// Open (or foreground) a session's sub-agent tab — the transcript's "Watch"
 	// drill-in on a Task call. A Task call inside the sub-agent pushes onto the
 	// same tab's breadcrumb instead of opening a second one. Stable identity:
 	// it reaches the memoized transcript as a prop, and the tab is never
@@ -1754,17 +1744,17 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 			return next;
 		});
 		// Same commit as the close, like every other closeXTab — the effect
-		// below only has to catch the chat-switch case.
+		// below only has to catch the session-switch case.
 		setActiveViewTabState((cur) => (cur === "subagent" ? null : cur));
 	}, []);
-	// Dropping the last breadcrumb (or switching to a chat with no sub-agent
-	// open) leaves nothing to show — fall back to the chat itself.
+	// Dropping the last breadcrumb (or switching to a session with no sub-agent
+	// open) leaves nothing to show — fall back to the session itself.
 	useEffect(() => {
 		if (subagentSelected && subagentStack.length === 0) setActiveViewTabState(null);
 	}, [subagentSelected, subagentStack.length]);
 	// Sidebar PR row → the PR's ONE workspace (resolve-or-create server-side,
-	// adopt-don't-duplicate), landing in its main/last-open chat (Review only
-	// leads when the workspace has no chats — the workspace-landing effect
+	// adopt-don't-duplicate), landing in its main/last-open session (Review only
+	// leads when the workspace has no sessions — the workspace-landing effect
 	// decides). Falls back to the legacy preview routes if the resolve fails,
 	// so a click is never dead.
 	const openPrWorkspace = React.useCallback(
@@ -1778,7 +1768,7 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 						title: item.pr.title,
 					},
 				});
-				refreshProjects();
+				refreshWorkspaces();
 				navigate({ view: "workspace", id: workspaceId });
 			} catch {
 				if (item.sessionId) navigate({ view: "reviews", id: item.sessionId });
@@ -1786,7 +1776,7 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 					navigate({ view: "pr", repo: item.pr.repo, branch: item.pr.branch });
 			}
 		},
-		[refreshProjects],
+		[refreshWorkspaces],
 	);
 	const openPrReview = React.useCallback(
 		async (pr: OpenPr) => {
@@ -1799,13 +1789,13 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 						title: pr.title,
 					},
 				});
-				refreshProjects();
+				refreshWorkspaces();
 				navigate({ view: "workspace", id: workspaceId, tab: "review" });
 			} catch {
 				navigate({ view: "pr", repo: pr.repo, branch: pr.branch });
 			}
 		},
-		[refreshProjects],
+		[refreshWorkspaces],
 	);
 	// Sidebar feed row (Tella video, …) → the item's ONE workspace, its web
 	// panel foregrounded (the feeds design).
@@ -1821,13 +1811,13 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 					},
 					name: item.title,
 				});
-				refreshProjects();
+				refreshWorkspaces();
 				navigate({ view: "workspace", id: workspaceId, tab: "video" });
 			} catch (e) {
 				console.error("Feed item open failed:", e);
 			}
 		},
-		[refreshProjects],
+		[refreshWorkspaces],
 	);
 	// Sidebar Support row → the ticket's ONE workspace, Conversation tab. The
 	// row's title rides along as the workspace-name hint (no Plain round-trip).
@@ -1839,13 +1829,13 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 					name:
 						t.title || t.customer.name || t.customer.email || undefined,
 				});
-				refreshProjects();
+				refreshWorkspaces();
 				navigate({ view: "workspace", id: workspaceId, tab: "conversation" });
 			} catch {
 				navigate({ view: "support", threadId: t.id });
 			}
 		},
-		[refreshProjects],
+		[refreshWorkspaces],
 	);
 	// Open a session's Review tab from the sidebar: select it and foreground its
 	// workspace's Review once it lands (pendingReviewOpen survives the
@@ -1870,55 +1860,54 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 	const currentNoteId =
 		route.view === "notes" && route.sel?.kind === "note" ? route.sel.id : null;
 
-	// The tab strip is scoped to the open chat's workspace: its sibling chats
-	// (same projectId), oldest first. Chats with no workspace (slack/linear
+	// The tab strip is scoped to the open session's workspace: its sibling sessions
+	// (same workspaceId), oldest first. Sessions with no workspace (slack/linear
 	// sources — their files are read-only, so the migration couldn't wrap them)
 	// fall back to grouping by shared isolated worktree, so a bks- sibling made
-	// via + shows up next to its slack source. Failing that, the open chat alone
+	// via + shows up next to its slack source. Failing that, the open session alone
 	// still gets a strip (one tab + the + button).
-	const activeProjectId = routeWorkspaceId ?? (currentSession?.projectId || null);
+	const activeWorkspaceId = routeWorkspaceId ?? (currentSession?.workspaceId || null);
 
-	// Feed the ⌘⇧C copy-link shortcut: the open chat (workspace-scoped when it
+	// Feed the ⌘⇧C copy-link shortcut: the open session (workspace-scoped when it
 	// has one), the open workspace/PR preview, or nothing linkable.
 	copyLinkPathRef.current =
 		route.view === "session" && currentSession
-			? chatPath(currentSession)
+			? sessionPath(currentSession)
 			: route.view === "workspace"
 				? routePath(route)
 				: route.view === "pr"
 					? prPath(route.repo, route.branch)
 					: null;
 
-	// Canonicalize the open chat's URL to /workspace/<wsId>/chat/<chatId> once
+	// Canonicalize the open session's URL to /workspace/<wsId>/session/<sessionId> once
 	// its workspace is known (replaceState: same history depth, so Back and the
-	// mobile page-stack are unaffected). Workspace-less chats keep /session/<id>.
+	// mobile page-stack are unaffected). Workspace-less sessions keep /session/<id>.
 	useEffect(() => {
 		if (route.view !== "session" || !currentSession) return;
-		// Remember the open chat as its workspace's landing tab, so re-entering
+		// Remember the open session as its workspace's landing tab, so re-entering
 		// the workspace (sidebar, bare /workspace/<id> URL) returns here.
-		if (activeProjectId) saveWorkspaceLastChat(activeProjectId, route.id);
-		const canonical = activeProjectId
-			? `${BASE_PATH}/workspace/${encodeURIComponent(activeProjectId)}/chat/${encodeURIComponent(route.id)}`
+		if (activeWorkspaceId) saveWorkspaceLastSession(activeWorkspaceId, route.id);
+		const canonical = activeWorkspaceId
+			? `${BASE_PATH}/workspace/${encodeURIComponent(activeWorkspaceId)}/session/${encodeURIComponent(route.id)}`
 			: `${BASE_PATH}/session/${encodeURIComponent(route.id)}`;
 		if (location.pathname !== canonical)
 			// Carry the entry's state across: dropping it would erase this panel's
 			// depth and strand `goBack` (and the Back caret) on the way home.
 			history.replaceState(history.state, "", canonical);
-	}, [route, currentSession, activeProjectId]);
+	}, [route, currentSession, activeWorkspaceId]);
 	const byCreated = (a: UnifiedSession, b: UnifiedSession) =>
 		(a.createdAt || "").localeCompare(b.createdAt || "");
-	// Archived (closed) chats leave the strip — except the one you're actively
+	// Archived (closed) sessions leave the strip — except the one you're actively
 	// viewing (e.g. opened from Archived), which keeps its tab.
 	const liveTab = (s: UnifiedSession) =>
 		!s.archived || s.id === currentSession?.id;
 	// The strip's natural order (createdAt asc), before any user reordering.
-	const naturalChats: UnifiedSession[] = activeProjectId
+	const naturalSessions: UnifiedSession[] = activeWorkspaceId
 		? sessions
 				.filter(
 					(s) =>
 						liveTab(s) &&
-						s.projectId === activeProjectId &&
-						!s.sideChatOf &&
+						s.workspaceId === activeWorkspaceId &&
 						// Workers stay behind their parent until explicitly opened from the
 						// header's worker menu. The selected worker then gets a temporary tab.
 						(!s.parentSessionId || s.id === currentSession?.id),
@@ -1930,8 +1919,7 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 						(s) =>
 							liveTab(s) &&
 							s.worktreeDir === currentSession.worktreeDir &&
-							!s.sideChatOf &&
-							(!s.parentSessionId || s.id === currentSession?.id),
+								(!s.parentSessionId || s.id === currentSession?.id),
 					)
 					.sort(byCreated)
 			: currentSession
@@ -1939,26 +1927,26 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 				: [];
 	// The stable workspace key the tab order is saved under: the workspace id, or
 	// the shared isolated-worktree path for workspace-less (slack/linear) groups.
-	// Empty ⇒ a lone standalone chat, which has nothing to reorder.
-	const tabOrderKey = activeProjectId
-		? activeProjectId
+	// Empty ⇒ a lone standalone session, which has nothing to reorder.
+	const tabOrderKey = activeWorkspaceId
+		? activeWorkspaceId
 		: currentSession?.worktreeDir?.includes("/worktrees/")
 			? currentSession.worktreeDir
 			: "";
-	// Apply the user's saved left-to-right order (drag-drop). Unknown/new chats
+	// Apply the user's saved left-to-right order (drag-drop). Unknown/new sessions
 	// fall to the end in natural order; a stale saved id matches nothing.
-	const projectChats: UnifiedSession[] = (() => {
-		if (!tabOrderKey || naturalChats.length < 2) return naturalChats;
-		const byId = new Map(naturalChats.map((s) => [s.id, s] as const));
+	const workspaceSessions: UnifiedSession[] = (() => {
+		if (!tabOrderKey || naturalSessions.length < 2) return naturalSessions;
+		const byId = new Map(naturalSessions.map((s) => [s.id, s] as const));
 		return applyTabOrder(
 			tabOrderKey,
-			naturalChats.map((s) => s.id),
+			naturalSessions.map((s) => s.id),
 		)
 			.map((id) => byId.get(id))
 			.filter((s): s is UnifiedSession => !!s);
 	})();
-	// A sub-agent tab whose stack just went away (its chat switched, or the tab
-	// was closed) is no longer in the strip, and the chat is what's rendered —
+	// A sub-agent tab whose stack just went away (its session switched, or the tab
+	// was closed) is no longer in the strip, and the session is what's rendered —
 	// so treat it as no view tab rather than leaving the strip with nothing lit
 	// for the frame before the reset effect below runs.
 	const activeViewTabShown: ActiveViewTab =
@@ -1966,14 +1954,14 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 	const focusedTopTabId = activeViewTabShown
 		? viewTabs.find((tab) => tab.active)?.id ?? null
 		: currentSession?.id ?? null;
-	// Every tab in the strip, in its natural order: chats first, then the view
+	// Every tab in the strip, in its natural order: sessions first, then the view
 	// panes…
 	const naturalStripTabIds = [
-		...projectChats.map((chat) => chat.id),
+		...workspaceSessions.map((session) => session.id),
 		...viewTabs.map((tab) => tab.id),
 	];
-	// …then the arrangement the user dragged them into. Chats and panes share
-	// ONE saved order, so a Review or Assets tab can sit in front of a chat; a
+	// …then the arrangement the user dragged them into. Sessions and panes share
+	// ONE saved order, so a Review or Assets tab can sit in front of a session; a
 	// tab the saved order doesn't mention falls to the end in natural order.
 	const stripTabIds = tabOrderKey
 		? applyTabOrder(tabOrderKey, naturalStripTabIds)
@@ -2087,7 +2075,7 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 	 * One tab bar. `side` is null when there is no split (a single bar owning
 	 * every tab); otherwise the bar renders only its own side's tabs, keeps its
 	 * own active tab and its own "+", and only the rightmost bar carries the
-	 * archived-chats menu.
+	 * archived-sessions menu.
 	 */
 	function renderTabBar(side: SplitSide | null) {
 		const ids =
@@ -2097,19 +2085,19 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 					: activeTabSplit.right
 				: null;
 		const inBar = ids ? new Set(ids) : null;
-		const barChats = inBar
-			? projectChats.filter((chat) => inBar.has(chat.id))
-			: projectChats;
+		const barSessions = inBar
+			? workspaceSessions.filter((session) => inBar.has(session.id))
+			: workspaceSessions;
 		const barActive = side ? activeIdFor(side) : focusedTopTabId;
 		const barViews = (inBar ? viewTabs.filter((tab) => inBar.has(tab.id)) : viewTabs).map(
 			(tab) => (side ? { ...tab, active: tab.id === barActive } : tab),
 		);
 		return (
 			<SessionTabs
-				tabs={barChats}
-				archived={archivedChats}
+				tabs={barSessions}
+				archived={archivedSessions}
 				activeId={
-					barActive && barChats.some((chat) => chat.id === barActive)
+					barActive && barSessions.some((session) => session.id === barActive)
 						? barActive
 						: null
 				}
@@ -2161,7 +2149,7 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 						}
 					}
 				}}
-				onNewChat={(mode) => handleNewChat(mode, side)}
+				onNewSession={(mode) => handleNewSession(mode, side)}
 				onRename={async (id, title) => {
 					try {
 						await renameSessionApi(id, title);
@@ -2170,7 +2158,7 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 					}
 					refresh();
 				}}
-				onClose={closeChat}
+				onClose={closeSession}
 				onToast={showToast}
 				onRestore={async (s) => {
 					try {
@@ -2183,39 +2171,38 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 			/>
 		);
 	}
-	// The strip's history menu: archived (closed) chats of the same workspace,
-	// newest activity first. The open chat is excluded — if it's archived it
+	// The strip's history menu: archived (closed) sessions of the same workspace,
+	// newest activity first. The open session is excluded — if it's archived it
 	// already holds a live tab via liveTab().
-	const archivedChats: UnifiedSession[] = (
-		activeProjectId
+	const archivedSessions: UnifiedSession[] = (
+		activeWorkspaceId
 			? sessions.filter(
 					(s) =>
-						s.archived && s.projectId === activeProjectId && !s.sideChatOf,
+						s.archived && s.workspaceId === activeWorkspaceId,
 				)
 			: currentSession?.worktreeDir?.includes("/worktrees/")
 				? sessions.filter(
 						(s) =>
 							s.archived &&
-							s.worktreeDir === currentSession.worktreeDir &&
-							!s.sideChatOf,
+							s.worktreeDir === currentSession.worktreeDir,
 					)
 				: []
 	)
 		.filter((s) => s.id !== currentSession?.id)
 		.sort((a, b) => (b.lastActivity || "").localeCompare(a.lastActivity || ""));
 
-	async function createNewChatFrom(
+	async function createNewSessionFrom(
 		src: UnifiedSession,
 		mode: "share" | "stack" | "ask",
 	): Promise<string> {
-		const { id, session } = await newChatApi(src.id, getCurrentUser(), mode);
-		// Inject the created session so the viewer renders the new chat immediately
+		const { id, session } = await newSessionApi(src.id, getCurrentUser(), mode);
+		// Inject the created session so the viewer renders the new session immediately
 		// — no "Starting…" flash while the sessions poll catches up. If the
 		// server didn't return it, synthesize a close-enough copy from the source
-		// chat. Sticky: a poll that was already in flight when the chat was created
+		// session. Sticky: a poll that was already in flight when the session was created
 		// resolves with a list that predates it and would drop a plain inject —
 		// flashing the "Starting…" placeholder until the next poll. The server
-		// persisted the chat before responding, so the sticky copy is reconciled
+		// persisted the session before responding, so the sticky copy is reconciled
 		// away by the first fresh poll either way.
 		const now = new Date().toISOString();
 		inject(
@@ -2225,7 +2212,7 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 				source: "opensession",
 				claudeSessionId: null,
 				codexThreadId: undefined,
-				title: "New chat",
+				title: "New session",
 				createdAt: now,
 				lastActivity: now,
 				isRunning: false,
@@ -2251,9 +2238,9 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 			{ sticky: true },
 		);
 		setPendingSessionId(id);
-		// This create adds a chat to an existing workspace — clear a stale flag
+		// This create adds a session to an existing workspace — clear a stale flag
 		// from an earlier workspace create so any residual pending state words
-		// itself as "chat", not "workspace".
+		// itself as "session", not "workspace".
 		setPendingNewWorkspace(false);
 		clearTimeout(pendingTimer.current);
 		pendingTimer.current = setTimeout(() => {
@@ -2265,28 +2252,28 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 		return id;
 	}
 
-	// Start a new chat in the current workspace. The tab strip's + button and the
+	// Start a new session in the current workspace. The tab strip's + button and the
 	// SessionViewer ⋯ menu (the only reachable entry point on a phone, where the
 	// strip and its + are hidden/hover-revealed) both call this. It creates the
-	// sibling chat instantly (browser-tab feel): shares the workspace worktree by
+	// sibling session instantly (browser-tab feel): shares the workspace worktree by
 	// default, or stacks/asks. No engine run until the first prompt.
-	const handleNewChat = async (
+	const handleNewSession = async (
 		mode: "share" | "stack" | "ask",
 		side: SplitSide | null = null,
 	) => {
-		const src = currentSession || mainChat(naturalChats);
+		const src = currentSession || mainSession(naturalSessions);
 		if (!src) {
-			// "+" on an empty workspace (chat-less route): no sibling to clone —
-			// open the new-chat palette scoped to it, same as onOpenProject.
+			// "+" on an empty workspace (session-less route): no sibling to clone —
+			// open the new-session palette scoped to it, same as onOpenWorkspace.
 			if (route.view === "workspace") {
-				const p = projects.find((x) => x.id === route.id);
+				const p = workspaces.find((x) => x.id === route.id);
 				setPalette({
 					open: true,
-					projectId: route.id,
+					workspaceId: route.id,
 					repo: p?.repo,
 					branch: p?.branch,
-					// Feed workspaces (externalRefs, no repo) default new chats
-					// to Scratch — repo-less, like their existing chats.
+					// Feed workspaces (externalRefs, no repo) default new sessions
+					// to Scratch — repo-less, like their existing sessions.
 					...(p?.externalRefs?.length && !p?.repo
 						? { mode: "scratch" as const }
 						: {}),
@@ -2295,8 +2282,8 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 			return;
 		}
 		try {
-			const id = await createNewChatFrom(src, mode);
-			// A chat born in the right bar belongs to it; the left bar is the
+			const id = await createNewSessionFrom(src, mode);
+			// A session born in the right bar belongs to it; the left bar is the
 			// default home, so a left-bar "+" needs no assignment.
 			if (side === "right" && tabOrderKey && activeTabSplit)
 				saveTabSplit(tabOrderKey, {
@@ -2305,19 +2292,19 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 					rightActive: id,
 				});
 		} catch (e) {
-			console.error("New chat failed:", e);
+			console.error("New session failed:", e);
 		}
 	};
-	const handleNewChatRef = useRef(handleNewChat);
-	handleNewChatRef.current = handleNewChat;
+	const handleNewSessionRef = useRef(handleNewSession);
+	handleNewSessionRef.current = handleNewSession;
 
 	// Lanes are per-user (lib/lanes.ts): setting one moves the row in YOUR
 	// sidebar only, so teammates can hold the same workspace in their own
 	// lanes. Clearing also drops any legacy global override, so "Auto" (and
 	// "Remove from my workspaces") releases rows pinned before lanes went
 	// per-user. Shared by the sidebar rows' menus and the viewer's ⋯ menu.
-	const setChatLanes = (chats: UnifiedSession[], status: Lane | null) => {
-		for (const c of chats) {
+	const setSessionLanes = (sessions: UnifiedSession[], status: Lane | null) => {
+		for (const c of sessions) {
 			setLane(c.id, status);
 			if (c.manualStatus) {
 				patch(c.id, { manualStatus: undefined });
@@ -2327,8 +2314,8 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 	};
 
 	// ⌘Z (legacy ⌘⇧T) reopens what you just archived. Every archive path
-	// pushes the chats it tucked away as one entry, so a press undoes one
-	// action: closing a tab brings that chat back, archiving a workspace brings
+	// pushes the sessions it tucked away as one entry, so a press undoes one
+	// action: closing a tab brings that session back, archiving a workspace brings
 	// the whole row back. Ids only — the session objects go stale on the next
 	// refresh, so entries resolve against the live list when they're restored.
 	const [archiveUndo, setArchiveUndo] = useState<string[][]>([]);
@@ -2356,7 +2343,7 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 		if (!ids.length) return;
 		setArchiveUndo((prev) =>
 			[
-				// An id lives in one entry only: archiving a chat again moves it to
+				// An id lives in one entry only: archiving a session again moves it to
 				// the top instead of leaving a stale entry underneath.
 				...prev
 					.map((entry) => entry.filter((id) => !ids.includes(id)))
@@ -2368,12 +2355,12 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 		);
 	}, []);
 
-	// Close a tab = archive the chat: it leaves the strip and the active list,
-	// but stays recoverable from Archived. An empty chat that never ran has
+	// Close a tab = archive the session: it leaves the strip and the active list,
+	// but stays recoverable from Archived. An empty session that never ran has
 	// nothing to recover, so it's deleted outright instead of cluttering
 	// Archived. The local list updates before the request returns so closing
 	// feels instant. Shared by the tab ×, the tab context menu, and ⌘W.
-	const closeChatNow = async (s: UnifiedSession) => {
+	const closeSessionNow = async (s: UnifiedSession) => {
 		const neverRan =
 			s.source === "opensession" &&
 			!s.claudeSessionId &&
@@ -2384,15 +2371,15 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 		const wasOpen = currentSession?.id === s.id;
 		// No split bookkeeping here: a closed tab stops being live, so the split
 		// resolves without it, and collapses on its own once a bar is emptied.
-		// Leaving the id in the record means restoring the chat later puts it
+		// Leaving the id in the record means restoring the session later puts it
 		// back in the bar it was closed from.
-		const next = wasOpen ? projectChats.find((c) => c.id !== s.id) : null;
+		const next = wasOpen ? workspaceSessions.find((c) => c.id !== s.id) : null;
 		let replacementId: string | null = null;
 		if (wasOpen && !next) {
 			try {
-				replacementId = await createNewChatFrom(s, "share");
+				replacementId = await createNewSessionFrom(s, "share");
 			} catch (e) {
-				console.error("Replacement chat failed:", e);
+				console.error("Replacement session failed:", e);
 				return;
 			}
 		}
@@ -2442,23 +2429,23 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 	};
 	const confirmRunningClose = (session: UnifiedSession, onConfirm: () => void) =>
 		confirmRunningCloses([session], onConfirm);
-	const closeChat = (s: UnifiedSession) =>
-		confirmRunningClose(s, () => void closeChatNow(s));
-	const closeChatRef = useRef(closeChat);
-	closeChatRef.current = closeChat;
-	// Bring archived chats back. Optimistic like the archive paths: the local
+	const closeSession = (s: UnifiedSession) =>
+		confirmRunningClose(s, () => void closeSessionNow(s));
+	const closeSessionRef = useRef(closeSession);
+	closeSessionRef.current = closeSession;
+	// Bring archived sessions back. Optimistic like the archive paths: the local
 	// list flips first so it feels instant, and rolls back if the server refuses.
-	const unarchiveChats = async (chats: UnifiedSession[]): Promise<boolean> => {
-		if (!chats.length) return false;
-		const reasons = new Map(chats.map((c) => [c.id, c.archivedReason]));
-		for (const c of chats) {
+	const unarchiveSessions = async (sessions: UnifiedSession[]): Promise<boolean> => {
+		if (!sessions.length) return false;
+		const reasons = new Map(sessions.map((c) => [c.id, c.archivedReason]));
+		for (const c of sessions) {
 			patch(c.id, { archived: false, archivedReason: undefined });
 		}
 		try {
-			await Promise.all(chats.map((c) => archiveSessionApi(c.id, false)));
+			await Promise.all(sessions.map((c) => archiveSessionApi(c.id, false)));
 		} catch (e) {
 			console.error("Unarchive failed:", e);
-			for (const c of chats) {
+			for (const c of sessions) {
 				patch(c.id, { archived: true, archivedReason: reasons.get(c.id) });
 			}
 			return false;
@@ -2466,10 +2453,10 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 		refresh();
 		return true;
 	};
-	const unarchiveChat = (session: UnifiedSession) => unarchiveChats([session]);
+	const unarchiveSession = (session: UnifiedSession) => unarchiveSessions([session]);
 
 	// The newest undo entry that's still restorable, resolved against the live
-	// list: an entry whose chats were unarchived elsewhere (or deleted) falls
+	// list: an entry whose sessions were unarchived elsewhere (or deleted) falls
 	// through to the one below it, so ⌘Z never no-ops on a ghost.
 	const restorableArchived: UnifiedSession[] = (() => {
 		if (!archiveUndo.length) return [];
@@ -2479,44 +2466,44 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 			if (s.archived && wanted.has(s.id)) byId.set(s.id, s);
 		}
 		for (let i = archiveUndo.length - 1; i >= 0; i--) {
-			const chats = archiveUndo[i]
+			const sessions = archiveUndo[i]
 				.map((id) => byId.get(id))
 				.filter((s): s is UnifiedSession => !!s);
-			if (chats.length) return chats;
+			if (sessions.length) return sessions;
 		}
 		return [];
 	})();
 	const restorableArchivedRef = useRef(restorableArchived);
 	restorableArchivedRef.current = restorableArchived;
 
-	// ⌘Z (and the palette's "Reopen closed chat"): undo the last archive and
+	// ⌘Z (and the palette's "Reopen closed session"): undo the last archive and
 	// land on what came back. The entry is only dropped once the server agrees,
 	// so a failed restore stays retryable.
 	const reopenLastArchived = async () => {
-		const chats = restorableArchivedRef.current;
-		if (!chats.length) {
+		const sessions = restorableArchivedRef.current;
+		if (!sessions.length) {
 			showToast("Nothing to reopen");
 			return;
 		}
-		if (!(await unarchiveChats(chats))) return;
-		const ids = new Set(chats.map((c) => c.id));
+		if (!(await unarchiveSessions(sessions))) return;
+		const ids = new Set(sessions.map((c) => c.id));
 		setArchiveUndo((prev) =>
 			prev
 				.map((entry) => entry.filter((id) => !ids.has(id)))
 				.filter((entry) => entry.length),
 		);
-		navigate({ view: "session", id: chats[0].id });
+		navigate({ view: "session", id: sessions[0].id });
 	};
 	const reopenLastArchivedRef = useRef(reopenLastArchived);
 	reopenLastArchivedRef.current = reopenLastArchived;
 
 	// Tab shortcuts matching the strip's context-menu hints: ⌘⌥C copies the
 	// concise transcript, ⌘W closes (archives) the tab, ⌘T opens a new tab
-	// (sibling chat) in the workspace, and ⌘Z (or the legacy ⌘⇧T) reopens what
-	// you just archived — a chat, or a whole workspace row.
+	// (sibling session) in the workspace, and ⌘Z (or the legacy ⌘⇧T) reopens what
+	// you just archived — a session, or a whole workspace row.
 	// Refs keep this mount-once listener reading fresh state. A browser that
 	// reserves these for itself (Chrome) never delivers the keydown — there the
-	// browser tab opens/closes as always, and the palette's "Reopen closed chat"
+	// browser tab opens/closes as always, and the palette's "Reopen closed session"
 	// covers the undo; where the event does arrive (Safari, the installed PWA,
 	// the desktop shell), we take it.
 	useEffect(() => {
@@ -2552,10 +2539,10 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 				void copySessionTranscript(s, "concise", showToast);
 			} else if (!e.altKey && e.key.toLowerCase() === "w") {
 				e.preventDefault();
-				void closeChatRef.current(s);
+				void closeSessionRef.current(s);
 			} else if (!e.altKey && e.key.toLowerCase() === "t") {
 				e.preventDefault();
-				void handleNewChatRef.current("share");
+				void handleNewSessionRef.current("share");
 			}
 		};
 		window.addEventListener("keydown", onKey);
@@ -2619,7 +2606,7 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 			label: "New session",
 			description: "Start a new ask or code session",
 			category: "Actions",
-			keywords: ["create", "chat", "workspace"],
+			keywords: ["create", "session", "workspace"],
 			shortcut: [mod, "N"],
 			icon: <IconPlus size={18} />,
 			run: () => openPalette(),
@@ -2627,14 +2614,14 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 		...(currentSession
 			? [
 					{
-						id: "new-chat",
-						label: "New chat in this workspace",
+						id: "new-session",
+						label: "New session in this workspace",
 						description: "Share the current workspace and worktree",
 						category: "Actions" as const,
 						keywords: ["tab", "conversation", "sibling"],
 						shortcut: [mod, "T"],
 						icon: <IconPlus size={18} />,
-						run: () => void handleNewChat("share"),
+						run: () => void handleNewSession("share"),
 					},
 					{
 						id: "copy-transcript",
@@ -2648,13 +2635,13 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 							void copySessionTranscript(currentSession, "concise", showToast),
 					},
 					{
-						id: currentSession.archived ? "unarchive-chat" : "archive-chat",
+						id: currentSession.archived ? "unarchive-session" : "archive-session",
 						label: currentSession.archived
-							? "Unarchive current chat"
-							: "Archive current chat",
+							? "Unarchive current session"
+							: "Archive current session",
 						description: currentSession.archived
-							? "Return this chat to the active workspace"
-							: "Close this chat and keep it recoverable in Archived",
+							? "Return this session to the active workspace"
+							: "Close this session and keep it recoverable in Archived",
 						category: "Actions" as const,
 						keywords: currentSession.archived
 							? ["restore", "open"]
@@ -2663,8 +2650,8 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 						icon: <IconArchive size={18} />,
 						run: () =>
 							void (currentSession.archived
-								? unarchiveChat(currentSession)
-								: closeChat(currentSession)),
+								? unarchiveSession(currentSession)
+								: closeSession(currentSession)),
 					},
 				]
 			: []),
@@ -2672,11 +2659,11 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 			? [
 					{
 						id: "reopen-archived",
-						label: "Reopen closed chat",
+						label: "Reopen closed session",
 						description:
 							restorableArchived.length > 1
-								? `Bring back the ${restorableArchived.length} chats you just archived`
-								: `Bring back "${restorableArchived[0].title || "the chat you just archived"}"`,
+								? `Bring back the ${restorableArchived.length} sessions you just archived`
+								: `Bring back "${restorableArchived[0].title || "the session you just archived"}"`,
 						category: "Actions" as const,
 						keywords: ["unarchive", "restore", "undo", "closed", "reopen"],
 						shortcut: [mod, "Z"],
@@ -2690,7 +2677,7 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 					{
 						id: "copy-link",
 						label: "Copy link to current view",
-						description: "Copy a shareable link to this chat, workspace, or PR",
+						description: "Copy a shareable link to this session, workspace, or PR",
 						category: "Actions" as const,
 						keywords: ["url", "share", "clipboard"],
 						shortcut: [mod, appleShortcuts ? "⇧" : "Shift", "C"],
@@ -2867,10 +2854,10 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 			(session) => session.id === id || session.aliasIds?.includes(id),
 		);
 		if (!known) {
-			// A caller that just created the chat (Auto-fix) hands us the server's
+			// A caller that just created the session (Auto-fix) hands us the server's
 			// own copy — its file is written before the response — so drop it
-			// straight into the list and open the real chat as a new tab instead of
-			// flashing "Starting a new chat…" until the next poll. Sticky so an
+			// straight into the list and open the real session as a new tab instead of
+			// flashing "Starting a new session…" until the next poll. Sticky so an
 			// in-flight poll that predates the create can't take it away again.
 			if (created) inject(created, { sticky: true });
 			else {
@@ -2905,7 +2892,7 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 			onArchive={() =>
 				focused
 					? sidebarRef.current?.archiveSelected()
-					: closeChat(viewerSession)
+					: closeSession(viewerSession)
 			}
 			onArchived={(stoppedRun) => {
 				if (stoppedRun) showToast("Archived · stopped the running turn");
@@ -2923,7 +2910,7 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 			headerModelEl={focused ? headerModelEl : null}
 			headerRepoEl={focused ? headerRepoEl : null}
 			rightPanelEl={focused ? rightPanelEl : null}
-			newChatSeq={focused ? newChatSeq : 0}
+			newSessionSeq={focused ? newSessionSeq : 0}
 			autoFocusComposer={focused && focusComposerOnOpen}
 			composerPrefillExternal={sessionComposerPrefills[viewerSession.id] ?? null}
 			onComposerPrefillConsumed={(seq) =>
@@ -2935,8 +2922,8 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 					return next;
 				})
 			}
-			workspaceChats={projectChats}
-			onSetStatus={setChatLanes}
+			workspaceSessions={workspaceSessions}
+			onSetStatus={setSessionLanes}
 			showReview={
 				splitMode ? viewTabKind(surfaceId) === "review" : focused && reviewActive
 			}
@@ -2980,12 +2967,11 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 			onCloseAssets={closeAssetsTab}
 			onOpenWorkspace={() => setActiveViewTab(null)}
 			allSessions={sessions}
-			allProjects={projects}
-			onNewChat={handleNewChat}
+			onNewSession={handleNewSession}
 			// Mirrors SessionTabs' own "render nothing" rule so the header's
-			// lone-chat + never doubles up with the strip's.
+			// lone-session + never doubles up with the strip's.
 			tabStripVisible={
-				!!activeTabSplit || projectChats.length > 1 || viewTabs.length > 0
+				!!activeTabSplit || workspaceSessions.length > 1 || viewTabs.length > 0
 			}
 			parentSession={
 				viewerSession.parentSessionId
@@ -3022,19 +3008,19 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 				refresh();
 			}}
 			workspaceName={
-				activeProjectId
-					? projects.find((project) => project.id === activeProjectId)?.name
+				activeWorkspaceId
+					? workspaces.find((project) => project.id === activeWorkspaceId)?.name
 					: undefined
 			}
 			onRenameWorkspace={
-				activeProjectId
+				activeWorkspaceId
 					? async (name) => {
 							try {
-								await updateProjectApi(activeProjectId, { name });
+								await updateWorkspaceApi(activeWorkspaceId, { name });
 							} catch (error) {
 								console.error("Rename workspace failed:", error);
 							}
-							refreshProjects();
+							refreshWorkspaces();
 						}
 					: undefined
 			}
@@ -3056,12 +3042,12 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 			>
 				<Modal.Content widthClassName="max-w-[34rem]" className="gap-5">
 					<Modal.Title className="m-0 text-page-title font-semibold tracking-[-0.03em] text-fg">
-						Close running chat{runningCloseConfirmation?.runningCount === 1 ? "" : "s"}?
+						Close running session{runningCloseConfirmation?.runningCount === 1 ? "" : "s"}?
 					</Modal.Title>
 					<Modal.Description className="m-0 text-body leading-relaxed text-dim">
 						{runningCloseConfirmation?.runningCount === 1
-							? "This chat is currently running. Closing it will cancel its current run."
-							: `These ${runningCloseConfirmation?.runningCount ?? 0} chats are currently running. Closing them will cancel their current runs.`}
+							? "This session is currently running. Closing it will cancel its current run."
+							: `These ${runningCloseConfirmation?.runningCount ?? 0} sessions are currently running. Closing them will cancel their current runs.`}
 					</Modal.Description>
 					<Modal.Footer className="mt-3 justify-end gap-3">
 						<Modal.Close render={<Button size="lg">Cancel</Button>} />
@@ -3122,7 +3108,7 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 						)}
 					</div>
 					{/* Centered page title on pushed pages, iOS-sheet style. Sessions
-					    show the workspace name (per-chat titles live on the tabs) plus a
+					    show the workspace name (per-session titles live on the tabs) plus a
 					    working dot while the engine runs; other views show their plain
 					    title. Desktop hides the whole bar. */}
 					{mobileDetail && (
@@ -3154,8 +3140,8 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 								<span className="app-header-title-row">
 									<span className="app-header-title-text">
 										{route.view === "session"
-											? (activeProjectId
-												? projects.find((p) => p.id === activeProjectId)?.name
+											? (activeWorkspaceId
+												? workspaces.find((p) => p.id === activeWorkspaceId)?.name
 												: undefined) ||
 											currentSession?.title ||
 											""
@@ -3283,8 +3269,8 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 							sessions={sessions}
 							localMode={localMode}
 							cloudUnreachable={cloudUnreachable}
-							workspaceDataReady={!loading && projectsLoaded}
-							projects={projects}
+							workspaceDataReady={!loading && workspacesLoaded}
+							workspaces={workspaces}
 							notes={notes.map((n) => ({ id: n.id, title: n.title }))}
 							teamViewing={teamViewing}
 							selectedId={currentSession?.id || null}
@@ -3300,7 +3286,7 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 								navigate({ view: "automations", id: name })
 							}
 							onOpenPrItem={openPrWorkspace}
-							selectedWorkspaceId={activeProjectId}
+							selectedWorkspaceId={activeWorkspaceId}
 							prTinderActive={route.view === "prtinder"}
 							onOpenPrTinder={() => navigate({ view: "prtinder" })}
 							supportTinderActive={route.view === "supporttinder"}
@@ -3311,7 +3297,6 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 							onOpenAnalytics={() => navigate({ view: "analytics" })}
 							deskActive={deskOpen}
 							onOpenDesk={() => setDeskOpen(true)}
-							noteActivity={noteActivity}
 							onSelect={(s) => navigate({ view: "session", id: s.id })}
 							onOpenReview={openReviewForSession}
 							onOpenTicket={openTicketWorkspace}
@@ -3320,28 +3305,28 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 							onNewSessionInRepo={(repo) =>
 								setPalette({ open: true, repo })
 							}
-							onOpenProject={(id) => {
-								// Sidebar selection navigates directly to a chat rather than via
+							onOpenWorkspace={(id) => {
+								// Sidebar selection navigates directly to a session rather than via
 								// /workspace/<id>, so restore the same remembered tab here too.
-								const chat = pickLandingChat(
+								const session = pickLandingSession(
 									sessions,
 									id,
-									getWorkspaceLastChat(id),
+									getWorkspaceLastSession(id),
 								);
-								if (chat) {
-									// Workspace rows always foreground the remembered chat, not
+								if (session) {
+									// Workspace rows always foreground the remembered session, not
 									// a previously selected Review/Preview pane.
 									saveActiveViewTab(id, null);
 									setActiveViewTabState(null);
 									setFocusComposerOnOpen(true);
-									navigate({ view: "session", id: chat.id });
+									navigate({ view: "session", id: session.id });
 								} else {
-									const p = projects.find((x) => x.id === id);
-									// Default the new chat onto the workspace's own branch (share
-									// its worktree) when it has one — e.g. all chats archived.
+									const p = workspaces.find((x) => x.id === id);
+									// Default the new session onto the workspace's own branch (share
+									// its worktree) when it has one — e.g. all sessions archived.
 									setPalette({
 										open: true,
-										projectId: id,
+										workspaceId: id,
 										repo: p?.repo,
 										branch: p?.branch,
 									...(p?.externalRefs?.length && !p?.repo
@@ -3350,21 +3335,21 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 									});
 								}
 							}}
-							onRenameProject={async (id, name) => {
+							onRenameWorkspace={async (id, name) => {
 								try {
-									await updateProjectApi(id, { name });
-									refreshProjects();
+									await updateWorkspaceApi(id, { name });
+									refreshWorkspaces();
 								} catch (e) {
-									console.error("Rename project failed:", e);
+									console.error("Rename workspace failed:", e);
 								}
 							}}
-							onDeleteProject={async (id) => {
+							onDeleteWorkspace={async (id) => {
 								try {
-									await deleteProjectApi(id);
-									refreshProjects();
+									await deleteWorkspaceApi(id);
+									refreshWorkspaces();
 									refresh();
 								} catch (e) {
-									console.error("Delete project failed:", e);
+									console.error("Delete workspace failed:", e);
 								}
 							}}
 							onToast={showToast}
@@ -3372,9 +3357,9 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 								navigate({ view: "notes", sel: { kind: "note", id } })
 							}
 							// Only hand the sidebar the top-bar actions slot on the root
-							// page — on a pushed page (chat, etc.) the sidebar is still
+							// page — on a pushed page (session, etc.) the sidebar is still
 							// mounted underneath and would portal its filter button into
-							// the chat's top bar.
+							// the session's top bar.
 							headerActionsEl={mobileDetail ? null : headerActionsEl}
 							onOpenArchived={() => navigate({ view: "archived" })}
 							onOpenCatchUp={() => navigate({ view: "catchup" })}
@@ -3404,26 +3389,26 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 								};
 								confirmRunningClose(s, () => void archive());
 							}}
-							onArchiveWorkspace={(chats, next) => {
+							onArchiveWorkspace={(sessions, next) => {
 								const archive = async () => {
-									// Archive a whole workspace = archive every member chat (the
-									// archive registry is per-chat; the workspace row disappears
-									// once no live chats remain).
-									for (const chat of chats) {
-										patch(chat.id, { archived: true, archivedReason: "manual" });
+									// Archive a whole workspace = archive every member session (the
+									// archive registry is per-session; the workspace row disappears
+									// once no live sessions remain).
+									for (const session of sessions) {
+										patch(session.id, { archived: true, archivedReason: "manual" });
 									}
-									const openChatId =
+									const openSessionId =
 										route.view === "session" &&
-										chats.some((c) => c.id === route.id)
+										sessions.some((c) => c.id === route.id)
 											? route.id
 											: null;
-									if (openChatId) {
+									if (openSessionId) {
 										if (next) navigate({ view: "session", id: next.id });
 										else goBack();
 									}
 									try {
 										const results = await Promise.all(
-											chats.map((c) => archiveSessionApi(c.id, true)),
+											sessions.map((c) => archiveSessionApi(c.id, true)),
 										);
 										const stopped = results.filter((r) => r.stoppedRun).length;
 										if (stopped > 0)
@@ -3432,42 +3417,42 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 											);
 										// One entry for the whole row, so ⌘Z brings the
 										// workspace back in a single press.
-										rememberArchived(chats.map((c) => c.id));
+										rememberArchived(sessions.map((c) => c.id));
 									} catch (e) {
 										console.error("Archive workspace failed:", e);
-										for (const chat of chats) {
-											patch(chat.id, {
+										for (const session of sessions) {
+											patch(session.id, {
 												archived: false,
 												archivedReason: undefined,
 											});
 										}
-										if (openChatId) navigate({ view: "session", id: openChatId });
+										if (openSessionId) navigate({ view: "session", id: openSessionId });
 										return;
 									}
-									dropStalePins(chats);
+									dropStalePins(sessions);
 									refresh();
 								};
-								confirmRunningCloses(chats, () => void archive());
+								confirmRunningCloses(sessions, () => void archive());
 							}}
-							onUnarchiveWorkspace={async (chats) => {
+							onUnarchiveWorkspace={async (sessions) => {
 								// The inverse of onArchiveWorkspace: the archive registry is
-								// per-chat, so a row comes back by unarchiving every member.
+								// per-session, so a row comes back by unarchiving every member.
 								const reasons = new Map(
-									chats.map((c) => [c.id, c.archivedReason]),
+									sessions.map((c) => [c.id, c.archivedReason]),
 								);
-								for (const chat of chats) {
-									patch(chat.id, { archived: false, archivedReason: undefined });
+								for (const session of sessions) {
+									patch(session.id, { archived: false, archivedReason: undefined });
 								}
 								try {
 									await Promise.all(
-										chats.map((c) => archiveSessionApi(c.id, false)),
+										sessions.map((c) => archiveSessionApi(c.id, false)),
 									);
 								} catch (e) {
 									console.error("Unarchive workspace failed:", e);
-									for (const chat of chats) {
-										patch(chat.id, {
+									for (const session of sessions) {
+										patch(session.id, {
 											archived: true,
-											archivedReason: reasons.get(chat.id),
+											archivedReason: reasons.get(session.id),
 										});
 									}
 									return;
@@ -3482,7 +3467,7 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 								}
 								refresh();
 							}}
-							onSetStatus={setChatLanes}
+							onSetStatus={setSessionLanes}
 						/>
 						{/* Desktop: docked toast at the sidebar bottom. On phones the
 						    update nudge moves to the top bar (next to the brand). */}
@@ -3548,7 +3533,7 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 									key={route.id}
 									onOpenPr={(repo, branch) => navigate({ view: "pr", repo, branch })}
 									workspace={routeWorkspace}
-									chats={projectChats}
+									workspaceSessions={workspaceSessions}
 									sessions={sessions}
 									tab={
 										reviewActive
@@ -3566,7 +3551,7 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 								/>
 							) : (
 								<div className="panel-placeholder">
-									{projectsLoaded ? "Workspace not found." : "Loading workspace…"}
+									{workspacesLoaded ? "Workspace not found." : "Loading workspace…"}
 								</div>
 							)
 						) : route.view === "pr" ? (
@@ -3667,25 +3652,25 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 						) : route.view === "catchup" ? (
 							<CatchUpDeck
 								sessions={sessions}
-								projects={projects}
+								workspaces={workspaces}
 								send={send}
 								connected={connected}
-								onArchive={(chats) => {
+								onArchive={(sessions) => {
 									const archive = async () => {
 										try {
 											await Promise.all(
-												chats.map((c) => archiveSessionApi(c.id, true)),
+												sessions.map((c) => archiveSessionApi(c.id, true)),
 											);
 											// Swiping through the deck archives fast — one entry per
 											// card keeps ⌘Z an undo of the last swipe, not of the
 											// whole session.
-											rememberArchived(chats.map((c) => c.id));
+											rememberArchived(sessions.map((c) => c.id));
 										} catch (e) {
 											console.error("Archive failed:", e);
 										}
 										refresh();
 									};
-									confirmRunningCloses(chats, () => void archive());
+									confirmRunningCloses(sessions, () => void archive());
 								}}
 								onOpenSession={(id) => navigate({ view: "session", id })}
 								onNewWorkspace={() => openPalette()}
@@ -3748,7 +3733,7 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 															: route.id === pendingSessionId
 																? pendingNewWorkspace
 																	? "Starting a new workspace…"
-																	: "Starting a new chat…"
+																	: "Starting a new session…"
 																: "Loading session…"}
 													</div>
 													<div className="detail-empty-sub">
@@ -3763,7 +3748,7 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 						) : (
 							<Home
 								sessions={sessions}
-								projects={projects}
+								workspaces={workspaces}
 								teamViewing={teamViewing}
 								onSelect={(s) => navigate({ view: "session", id: s.id })}
 								onNewSession={() => openPalette()}
@@ -3836,7 +3821,7 @@ export function App({ serviceWorker = true }: { serviceWorker?: boolean } = {}) 
 						addHandler={addHandler}
 						connected={connected}
 						prefillPrompt={palette.prompt}
-						projectId={palette.projectId}
+						workspaceId={palette.workspaceId}
 						forceRepo={palette.repo}
 						forceBranch={palette.branch}
 						forceMode={palette.mode}

@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// A spawned worker's own transcript, opened from the Task call that started
-/// it. Rendered through exactly the same grouping and rows as the main chat,
+/// it. Rendered through exactly the same grouping and rows as the main session,
 /// so a worker's tool calls fold and read identically.
 ///
 /// Polls while the parent session is still running, since a worker's
@@ -89,7 +89,7 @@ struct SubagentView: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
-            .frame(maxWidth: OS1VisualStyle.chatMaxWidth)
+            .frame(maxWidth: OS1VisualStyle.sessionMaxWidth)
             .frame(maxWidth: .infinity)
         }
         .defaultScrollAnchor(.top)

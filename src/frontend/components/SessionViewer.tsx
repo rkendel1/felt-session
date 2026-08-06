@@ -17,9 +17,9 @@ import { isTimelineOnlyRunnerNotice } from "../lib/runner-events";
 import { noticeTone } from "../lib/notice-tone";
 import { TranscriptViewStore } from "../lib/transcript-view-store";
 import {
-	measureChatPerf,
-	recordChatPerf,
-} from "../lib/chat-performance";
+	measureSessionPerf,
+	recordSessionPerf,
+} from "../lib/session-performance";
 import { AGENT_NAME, DEFAULT_DOC_TITLE, PLAIN_WORKSPACE_ID } from "../lib/brand";
 import {
 	isGitHubAttribution,
@@ -33,7 +33,6 @@ import type {
 	TranscriptEntry,
 	WSServerMessage,
 	AskQuestion,
-	ChatMessage,
 } from "../lib/types";
 import {
 	mergeTranscriptEntries,
@@ -41,10 +40,12 @@ import {
 } from "../lib/transcript-state";
 import { TranscriptBlocks } from "./TranscriptBlocks";
 import {
+	canonicalToolName,
 	LiveSubagentsProvider,
 	ToolPathRootsProvider,
 	type LiveSubagent,
 } from "./ToolCallBlock";
+import { parsePlanItems, type PlanItem } from "../lib/todo-plan";
 import { MarkdownBody } from "./MarkdownBody";
 import { SubagentPane, type SubagentRef } from "./SubagentPane";
 import { ShellPanel } from "./TerminalPanel";
@@ -60,11 +61,9 @@ import {
 	fetchSkillMentions,
 	fetchSessionSubagents,
 	fetchRepos,
-	promoteChatApi,
+	promoteSessionApi,
 	fetchPr,
 	fetchPreview,
-	fetchChatMessagesApi,
-	postChatMessageApi,
 	type WorkspaceMediaItem,
 	type ModelOption,
 	type ProviderAccountOption,
@@ -84,7 +83,7 @@ import { UsageMeter } from "./UsageMeter";
 import { SchedulePromptButton } from "./SchedulePrompt";
 import type { FileAttachment } from "../lib/images";
 import { loadDraft, saveDraft, clearDraft } from "../lib/drafts";
-import { unhideForChat } from "../lib/hides";
+import { unhideForSession } from "../lib/hides";
 import { withPreviewPath } from "../lib/preview-url";
 import { DiffPanel, useSessionDiff } from "./DiffPanel";
 import { RepoBar } from "./RepoBar";
@@ -154,7 +153,7 @@ import { copySessionTranscript } from "../lib/transcript-copy";
 import { MoveToCloudDialog } from "./MoveToCloudDialog";
 import { isPinned, togglePin, onPinsChanged } from "../lib/pins";
 import { getLane, onLanesChanged, type Lane } from "../lib/lanes";
-import { useChatScroll } from "../hooks/useChatScroll";
+import { useSessionScroll } from "../hooks/useSessionScroll";
 import { sessionHasWorkspace } from "../lib/session-workspace";
 import {
 	getSessionPanelTab,
@@ -212,14 +211,14 @@ interface Props {
 	headerRepoEl?: HTMLElement | null;
 	/** App-level right-column node (sibling of the left sidebar); when present the
 	    workspace/sub-agent panel portals here so it spans the full height from the
-	    top, instead of opening only below the chat. */
+	    top, instead of opening only below the session. */
 	rightPanelEl?: HTMLElement | null;
-	/** Bumped by the tab-bar + to start a fresh chat in this same session: clears
+	/** Bumped by the tab-bar + to start a fresh session in this same session: clears
 	    the composer and jumps to the live edge. A visual reset — same thread. */
-	newChatSeq?: number;
+	newSessionSeq?: number;
 	/** One-shot pulse set when this session was opened by picking its workspace
 	    in the sidebar — focus the composer on open so you can type right away.
-	    Ignored on phones (would pop the keyboard over the chat). */
+	    Ignored on phones (would pop the keyboard over the session). */
 	autoFocusComposer?: boolean;
 	/** One-shot draft text appended from another surface, such as Checks. */
 	composerPrefillExternal?: { seq: number; text: string } | null;
@@ -228,26 +227,25 @@ interface Props {
 	    the derived title. Same handler the tab strip and sidebar use. */
 	onRename?: (id: string, title: string) => void;
 	/**
-	 * The workspace this chat belongs to. When set, the header titles the
-	 * WORKSPACE (every sibling chat shows the same name — per-chat titles live
-	 * on the tabs) and double-click renames the workspace, not the chat.
+	 * The workspace this session belongs to. When set, the header titles the
+	 * WORKSPACE (every sibling session shows the same name — per-session titles live
+	 * on the tabs) and double-click renames the workspace, not the session.
 	 */
 	workspaceName?: string;
 	onRenameWorkspace?: (name: string) => void;
-	/** Sibling chats in this chat's workspace (the tab strip's list, oldest
-	    first) — feeds the floating overview panel's cross-chat media. */
-	workspaceChats?: UnifiedSession[];
+	/** Sibling sessions in this session's workspace (the tab strip's list, oldest
+	    first) — feeds the floating overview panel's cross-session media. */
+	workspaceSessions?: UnifiedSession[];
 	/** Claim this workspace into your own per-user sidebar lanes ("mine"), or
 	    release it (null) — the ⋯ menu's twin of the sidebar row's action. */
-	onSetStatus?: (chats: UnifiedSession[], status: Lane | null) => void;
-	/** Every session — powers the Chat tab's @-session tagging. */
+	onSetStatus?: (sessions: UnifiedSession[], status: Lane | null) => void;
+	/** Every session — the pool the workspace-context picker and the PR panel
+	    draw their sibling sessions from. */
 	allSessions?: UnifiedSession[];
-	/** Workspace names — lets the Chat tab's @-search match workspaces too. */
-	allProjects?: Array<{ id: string; name: string }>;
-	/** Start a new chat in this workspace — surfaced in the ⋯ menu so it's
+	/** Start a new session in this workspace — surfaced in the ⋯ menu so it's
 	    reachable on a phone, where the tab strip's + button is hidden. */
-	onNewChat?: (mode: "share" | "stack" | "ask") => void;
-	/** True when the tab strip is on screen (2+ chats, an open view tab, or a
+	onNewSession?: (mode: "share" | "stack" | "ask") => void;
+	/** True when the tab strip is on screen (2+ sessions, an open view tab, or a
 	    split). The strip carries its own "+", so the header one stands down
 	    rather than showing a second plus a few pixels above it. */
 	tabStripVisible?: boolean;
@@ -257,7 +255,7 @@ interface Props {
 	parentSession?: RelatedSession | null;
 	workerSessions?: RelatedSession[];
 	/** Navigate to another session (used by the relationship chips). `created` is
-	    the server's copy of a chat the panel just made (Auto-fix), so the app can
+	    the server's copy of a session the panel just made (Auto-fix), so the app can
 	    open it without a loading placeholder. */
 	onOpenSession?: (id: string, created?: UnifiedSession | null) => void;
 	onOpenNewSession: (prefill: NewSessionPrefill) => void;
@@ -271,8 +269,8 @@ interface Props {
 	) => void;
 	/**
 	 * Whether the Review pane is foregrounded — driven by the top tab strip's
-	 * Review view-tab (App state), replacing the old inline Chat|Review toggle.
-	 * When false, the chat transcript shows.
+	 * Review view-tab (App state), replacing the old inline Session|Review toggle.
+	 * When false, the session transcript shows.
 	 */
 	showReview?: boolean;
 	/** Open/foreground this session's Review view-tab (PR/review triggers). */
@@ -317,10 +315,10 @@ interface Props {
 	onOpenPr?: (repo: string, branch: string) => void;
 	/** Close the Preview view-tab (its Stop button / tab close). */
 	onClosePreviewTab?: () => void;
-	/** Return from a view-tab (Review/Preview environment/Assets) to this workspace's active chat. */
+	/** Return from a view-tab (Review/Preview environment/Assets) to this workspace's active session. */
 	onOpenWorkspace?: () => void;
 	/**
-	 * Whether the sub-agent pane (a Task drill-in from this chat's transcript,
+	 * Whether the sub-agent pane (a Task drill-in from this session's transcript,
 	 * full-width) is foregrounded — driven by the top tab strip's sub-agent
 	 * view-tab (App state).
 	 */
@@ -336,6 +334,43 @@ interface Props {
 // Stable identity for "no sub-agent open", so the default prop doesn't hand
 // the memoized transcript a fresh array on every render.
 const NO_SUBAGENTS: SubagentRef[] = [];
+const NO_PLAN: PlanItem[] = [];
+const NO_WORKFLOW_RUNS: WorkflowRunSnapshot[] = [];
+
+// A two-item "plan" is ceremony, not a plan — below this the flap stays shut
+// and the checklist lives in the transcript like any other tool call.
+const MIN_PLAN_ITEMS = 3;
+
+/**
+ * The model's own plan for the turn that's running right now: the newest
+ * todowrite/update_plan checklist written since the last user message.
+ *
+ * Both bounds matter. Stopping at the last user entry keeps a finished turn's
+ * plan from being adopted by the next one (a steer mid-turn also stops the
+ * scan — the plan reappears the moment the model writes the next one). Gating
+ * on `running` means a half-checked list can never outlive its turn above the
+ * composer, where it would read as work still in flight.
+ */
+function useLivePlan(
+	entries: TranscriptEntry[],
+	running: boolean,
+): PlanItem[] {
+	return useMemo(() => {
+		if (!running) return NO_PLAN;
+		for (let i = entries.length - 1; i >= 0; i--) {
+			const e = entries[i];
+			if (e.type === "user") break;
+			if (e.type !== "tool_use") continue;
+			if (canonicalToolName(e.toolName) !== "TodoWrite") continue;
+			// todoread canonicalizes to the same name and carries no list —
+			// parsing to nothing means "keep looking", not "no plan".
+			const items = parsePlanItems(e.toolInput);
+			if (items.length === 0) continue;
+			return items.length >= MIN_PLAN_ITEMS ? items : NO_PLAN;
+		}
+		return NO_PLAN;
+	}, [entries, running]);
+}
 
 type PanelTab =
 	| "info"
@@ -568,18 +603,17 @@ export function SessionViewer({
 	headerActionsEl,
 	headerModelEl,
 	rightPanelEl,
-	newChatSeq,
+	newSessionSeq,
 	autoFocusComposer,
 	composerPrefillExternal,
 	onComposerPrefillConsumed,
 	onRename,
 	workspaceName,
 	onRenameWorkspace,
-	workspaceChats,
+	workspaceSessions,
 	onSetStatus,
 	allSessions,
-	allProjects,
-	onNewChat,
+	onNewSession,
 	tabStripVisible,
 	parentSession,
 	workerSessions,
@@ -713,10 +747,10 @@ export function SessionViewer({
 		};
 	}
 	// A full-width view-tab (Review, Staging, Assets, a sub-agent) takes over the
-	// chat column, so the chat DOM isn't mounted while any is up — the scroll /
+	// session column, so the session DOM isn't mounted while any is up — the scroll /
 	// history / scroll-restore effects below must bail in all cases.
 	const subagentOpen = showSubagent && subagentStack.length > 0;
-	const chatHidden =
+	const sessionHidden =
 		showReview ||
 		showStaging ||
 		showAssets ||
@@ -756,13 +790,13 @@ export function SessionViewer({
 			phase: "mount" | "update" | "nested-update",
 			actualDuration: number,
 		) => {
-			recordChatPerf("react_transcript_commit_ms", actualDuration, {
+			recordSessionPerf("react_transcript_commit_ms", actualDuration, {
 				phase,
 				entries: transcriptViewStore.getSnapshot().length,
 			});
 			transcriptCommitCount.current++;
 			if (phase === "mount" || transcriptCommitCount.current % 20 === 0) {
-				recordChatPerf(
+				recordSessionPerf(
 					"transcript_dom_nodes",
 					document.querySelectorAll(".viewer-messages [data-eid]").length,
 				);
@@ -800,7 +834,7 @@ export function SessionViewer({
 		lastChangeSeq: number;
 	} | null>(cachedTranscript?.seq ?? null);
 	// Existing engine-backed sessions can load from the owned transcript store even
-	// when no mirror file exists. Fresh chats have none of these identifiers, so
+	// when no mirror file exists. Fresh sessions have none of these identifiers, so
 	// they still render the empty canvas without flashing a loader.
 	const [loading, setLoading] = useState(
 		!cachedTranscript &&
@@ -856,11 +890,11 @@ export function SessionViewer({
 	// The composer draft lives INSIDE Composer (uncontrolled mode) so keystrokes
 	// don't re-render this whole component; the text arrives via handleSend.
 	// Same fix as the CommentableDiff draft-text gotcha.
-	// Text + attachments persist in the draft store (keyed per chat) so
-	// switching to another chat/workspace — which remounts this component —
+	// Text + attachments persist in the draft store (keyed per session) so
+	// switching to another session/workspace — which remounts this component —
 	// doesn't lose typed work. Text rides Composer's `draftKey`; the staged
 	// images/files live here, seeded from and mirrored into the same draft.
-	const draftKey = `chat:${session.id}`;
+	const draftKey = `session:${session.id}`;
 	const [images, setImages] = useState<string[]>(() => loadDraft(draftKey).images);
 	const [files, setFiles] = useState<FileAttachment[]>(() => loadDraft(draftKey).files);
 	useEffect(() => {
@@ -996,13 +1030,13 @@ export function SessionViewer({
 	useEffect(() => {
 		setShellOpened(false);
 	}, [session.id]);
-	// Main chat-area view: the transcript+composer vs. the full-width PR review
-	// that takes over the whole chat column. Which one shows is now owned by App
+	// Main session-area view: the transcript+composer vs. the full-width PR review
+	// that takes over the whole session column. Which one shows is now owned by App
 	// (the top tab strip's Review view-tab) and passed in as `showReview`; the
 	// open triggers call onOpenReview. Only meaningful on a code session
 	// (hasWorkspace) — App only offers the Review tab there.
 	// Sub-agents open as their own view-tab (App owns the breadcrumb stack, like
-	// every other tab) — a sub-agent run is a conversation, so it gets the chat
+	// every other tab) — a sub-agent run is a conversation, so it gets the session
 	// column rather than the right sidebar.
 	// Phones fold the desktop Workspace panel into the title-opened detail page.
 	// Keeping this state near panelOpen lets the shared diff poll serve either
@@ -1017,7 +1051,7 @@ export function SessionViewer({
 			onOpenSubagent?.(session.id, agentId, label),
 		[onOpenSubagent, session.id],
 	);
-	// The agent-published walkthrough, rendered inline in the chat as well as in
+	// The agent-published walkthrough, rendered inline in the session as well as in
 	// the Review tab. Keyed on its contents so the object identity only changes
 	// when the walkthrough actually does — the sessions poll hands back a fresh
 	// session object every tick, and an unstable prop here would re-render the
@@ -1030,11 +1064,11 @@ export function SessionViewer({
 				session.walkthrough.shots?.length || 0,
 			].join("|")
 		: "";
-	const chatWalkthrough = useMemo(
+	const sessionWalkthrough = useMemo(
 		() => session.walkthrough,
 		[walkthroughKey], // eslint-disable-line react-hooks/exhaustive-deps
 	);
-	// Remembered per browser; on phones the panel overlays the chat, so default closed there
+	// Remembered per browser; on phones the panel overlays the session, so default closed there
 	const [panelOpen, setPanelOpenState] = useState(() => {
 		const stored = localStorage.getItem("opensession-panel-open");
 		if (stored !== null) return stored === "true" && window.innerWidth > 920;
@@ -1067,7 +1101,7 @@ export function SessionViewer({
 		const restoreMotion = suppressLayoutAnimations();
 		const onMove = (ev: MouseEvent) => {
 			// Wide enough to review code side-by-side: only reserve room for the
-			// left sidebar + a readable chat column instead of a fixed 900px cap.
+			// left sidebar + a readable session column instead of a fixed 900px cap.
 			const max = Math.max(480, Math.round(window.innerWidth - 620));
 			const w = Math.min(max, Math.max(320, Math.round(right - ev.clientX)));
 			panelWRef.current = w;
@@ -1102,55 +1136,6 @@ export function SessionViewer({
 		null,
 	);
 	const sessionReports = useSessionReports(session.id, addHandler);
-	// Team notes — the session's chat channel (`session:<id>`), interleaved
-	// into the transcript as NoteBubbles. Human-to-human; the agent never sees
-	// them. Posted from the composer's note mode (⌘N).
-	const [notes, setNotes] = useState<ChatMessage[]>([]);
-	const [noteMode, setNoteMode] = useState(false);
-	useEffect(() => {
-		setNotes([]);
-		setNoteMode(false);
-		let cancelled = false;
-		fetchChatMessagesApi(`session:${session.id}`)
-			.then((msgs) => {
-				if (!cancelled && msgs.length) setNotes(msgs);
-			})
-			.catch(() => {});
-		return () => {
-			cancelled = true;
-		};
-	}, [session.id]);
-	useEffect(
-		() =>
-			addHandler((msg) => {
-				if (
-					(msg.type !== "chat_message" &&
-						msg.type !== "chat_message_updated") ||
-					msg.channel !== `session:${session.id}`
-				)
-					return;
-				setNotes((prev) => {
-					const i = prev.findIndex((m) => m.id === msg.message.id);
-					if (i >= 0) {
-						const next = [...prev];
-						next[i] = msg.message;
-						return next;
-					}
-					return [...prev, msg.message];
-				});
-			}),
-		[addHandler, session.id],
-	);
-	// Viewing the session marks its notes read (the sidebar unread dot keys off
-	// this stamp).
-	useEffect(() => {
-		if (!notes.length) return;
-		localStorage.setItem(
-			`opensession-note-read:${session.id}`,
-			String(notes[notes.length - 1].ts),
-		);
-		window.dispatchEvent(new Event("opensession-note-read-changed"));
-	}, [notes, session.id]);
 	const panelResizeHandle = (
 		<div
 			className="panel-resize"
@@ -1172,7 +1157,7 @@ export function SessionViewer({
 		endTurn,
 		relayout,
 		onScroll,
-	} = useChatScroll(cachedTranscript?.following ?? true);
+	} = useSessionScroll(cachedTranscript?.following ?? true);
 
 	// Keep the cached snapshot current as live frames and history pages land.
 	// Scroll position is updated synchronously in handleMessagesScroll below.
@@ -1476,9 +1461,9 @@ export function SessionViewer({
 	// Claimed into your own sidebar lanes (lib/lanes.ts) — the whole workspace,
 	// since that's the unit the sidebar row claims. Lanes live in a module cache
 	// like pins, so mirror it into state and re-read on every change.
-	const claimChats = workspaceChats?.length ? workspaceChats : [session];
-	const claimIds = claimChats.map((c) => c.id).join(",");
-	const claimedGlobally = claimChats.some((c) => !!c.manualStatus);
+	const claimSessions = workspaceSessions?.length ? workspaceSessions : [session];
+	const claimIds = claimSessions.map((c) => c.id).join(",");
+	const claimedGlobally = claimSessions.some((c) => !!c.manualStatus);
 	const [claimedLane, setClaimedLane] = useState(false);
 	useEffect(() => {
 		const read = () =>
@@ -1526,7 +1511,7 @@ export function SessionViewer({
 			setPanelTab("info");
 	}, [workflowsLoaded, panelTab, workflowRuns.length, subagents.length, hasWorkspace]);
 
-	// Ask→code promotion: creates a worktree and flips the chat to code mode.
+	// Ask→code promotion: creates a worktree and flips the session to code mode.
 	// The 5s session poll picks up the mode change and re-renders with the full
 	// code affordances (diff/PR tabs, RepoBar).
 	const [promoting, setPromoting] = useState(false);
@@ -1537,9 +1522,9 @@ export function SessionViewer({
 		if (promoting) return;
 		setPromoting(true);
 		try {
-			const { branch } = await promoteChatApi(session.id);
+			const { branch } = await promoteSessionApi(session.id);
 			// The session poll flips the header, tabs and RepoBar a beat later;
-			// say what happened now, and name the branch — the chat may have
+			// say what happened now, and name the branch — the session may have
 			// adopted the tree it was already reading rather than cutting a new
 			// one, and that difference matters before the first edit.
 			toast(branch ? `Code mode on ${branch}` : "Switched to code mode");
@@ -1766,7 +1751,7 @@ export function SessionViewer({
 
 	// ⌃⇧↑/⌃⇧↓ page the transcript up/down — keyboard scrolling that works while
 	// the composer is focused. A programmatic scroll carries no reader gesture,
-	// so useChatScroll won't re-engage auto-follow from it: a Down that would
+	// so useSessionScroll won't re-engage auto-follow from it: a Down that would
 	// land at the live edge goes through scrollToLatest, which resumes following.
 	useEffect(() => {
 		function onKeyDown(e: KeyboardEvent) {
@@ -1806,26 +1791,26 @@ export function SessionViewer({
 		return () => window.removeEventListener("keydown", onKeyDown);
 	}, [focused, messagesRef, scrollToLatest]);
 
-	// A "new tab" while this session is open is a fresh chat *in this session*:
+	// A "new tab" while this session is open is a fresh session *in this session*:
 	// clear the composer and jump to the live edge. We skip the first run (and
 	// session switches, which remount this with whatever the counter's at) and
 	// only react to real bumps from the tab-bar +.
-	const lastNewChatSeq = useRef(newChatSeq);
-	// Drop the persisted draft during render, before the key={newChatSeq}
+	const lastNewSessionSeq = useRef(newSessionSeq);
+	// Drop the persisted draft during render, before the key={newSessionSeq}
 	// remount below re-reads it — in an effect the fresh Composer's state
 	// initializer would already have restored the old text. Idempotent, so
 	// running on the renders between the bump and the effect below is fine.
-	if (newChatSeq !== lastNewChatSeq.current) clearDraft(draftKey);
+	if (newSessionSeq !== lastNewSessionSeq.current) clearDraft(draftKey);
 	useEffect(() => {
-		if (newChatSeq === lastNewChatSeq.current) return;
-		lastNewChatSeq.current = newChatSeq;
-		// The composer's text draft resets via its key={newChatSeq} remount.
+		if (newSessionSeq === lastNewSessionSeq.current) return;
+		lastNewSessionSeq.current = newSessionSeq;
+		// The composer's text draft resets via its key={newSessionSeq} remount.
 		setImages([]);
 		setFiles([]);
 		setForkFrom(null);
 		scrollToLatest("smooth");
 		composerRef.current?.focus();
-	}, [newChatSeq, scrollToLatest]);
+	}, [newSessionSeq, scrollToLatest]);
 
 	// Browser tab title follows the session
 	useEffect(() => {
@@ -1868,8 +1853,8 @@ export function SessionViewer({
 
 		const unsubscribe = addHandler((msg) => {
 			// Session-scoped messages carry the session id — drop anything meant
-			// for a different chat. Without this, a socket race (or a lingering
-			// creator-side direct send from a chat you navigated away from) bleeds
+			// for a different session. Without this, a socket race (or a lingering
+			// creator-side direct send from a session you navigated away from) bleeds
 			// another session's stream into this view. Messages without a
 			// sessionId (direct replies like slash-command notices) pass through.
 			if (
@@ -1948,7 +1933,7 @@ export function SessionViewer({
 					}
 					if (!shellTimingRef.current.recorded) {
 						shellTimingRef.current.recorded = true;
-						measureChatPerf(
+						measureSessionPerf(
 							"shell_to_transcript_ms",
 							shellTimingRef.current.startedAt,
 						);
@@ -2088,7 +2073,7 @@ export function SessionViewer({
 					if (msg.sessionId === session.id) setGitRefreshTick((t) => t + 1);
 					break;
 				case "pr_updated":
-					// Include PR-backed workspace branches: legacy review chats keep a
+					// Include PR-backed workspace branches: legacy review sessions keep a
 					// synthetic checkout branch that differs from the real PR head.
 					if (sessionPrTargetsRef.current.has(`${msg.repo}\0${msg.branch}`))
 						setGitRefreshTick((t) => t + 1);
@@ -2291,7 +2276,7 @@ export function SessionViewer({
 	);
 	const restoredCachedScrollRef = useRef(false);
 	useLayoutEffect(() => {
-		if (!cachedTranscript || restoredCachedScrollRef.current || chatHidden) return;
+		if (!cachedTranscript || restoredCachedScrollRef.current || sessionHidden) return;
 		const el = messagesRef.current;
 		if (!el) return;
 		restoredCachedScrollRef.current = true;
@@ -2327,7 +2312,7 @@ export function SessionViewer({
 		entries,
 		messagesRef,
 		session.id,
-		chatHidden,
+		sessionHidden,
 		startHistoryHold,
 	]);
 	useLayoutEffect(() => {
@@ -2342,7 +2327,7 @@ export function SessionViewer({
 		initiallyScrolledSessionRef.current = session.id;
 		scrollToLatest("auto");
 		setInitialScrollSession(session.id);
-	}, [entries, session.id, chatHidden, scrollToLatest, messagesRef]);
+	}, [entries, session.id, sessionHidden, scrollToLatest, messagesRef]);
 	// Message blocks use content-visibility with estimated heights. Those estimates
 	// resolve after the first scroll calculation without a React update, growing the
 	// transcript above the viewport. Hold the bottom through that initial browser
@@ -2396,7 +2381,7 @@ export function SessionViewer({
 		expiry = setTimeout(stop, 3000);
 		keepAtLatest();
 		return stop;
-	}, [initialScrollSession, session.id, chatHidden, messagesRef]);
+	}, [initialScrollSession, session.id, sessionHidden, messagesRef]);
 
 	// Returning to the app reads like reopening the session, not resuming a
 	// paused one. On the iOS PWA the page survives backgrounding with the scroll
@@ -2655,7 +2640,7 @@ export function SessionViewer({
 	}, [followingLive, loadEarlierHistory, messagesRef, onScroll, session.id]);
 	useEffect(() => {
 		const el = messagesRef.current;
-		if (!el || chatHidden) return;
+		if (!el || sessionHidden) return;
 		historyGestureUntilRef.current = 0;
 		historyGestureConsumedRef.current = true;
 		lastHistoryWheelAtRef.current = 0;
@@ -2724,7 +2709,7 @@ export function SessionViewer({
 			el.removeEventListener("pointerdown", onPointerDown);
 			window.removeEventListener("keydown", onKeyDown);
 		};
-	}, [focused, session.id, chatHidden, loadEarlierHistory, messagesRef]);
+	}, [focused, session.id, sessionHidden, loadEarlierHistory, messagesRef]);
 
 	// When a turn finishes, release the spacer so the layout settles back.
 	const wasBusyRef = useRef(false);
@@ -2737,7 +2722,7 @@ export function SessionViewer({
 	// sessions need an existing claude session id to resume.
 	const effectiveModel = model || defaultModel;
 	const isCodexModel = modelIsCodex(effectiveModel, models);
-	// A opensession chat with no engine ids is a *fresh* chat (e.g. a new sibling
+	// A opensession session with no engine ids is a *fresh* session (e.g. a new sibling
 	// from the tab strip's +): the composer stays enabled — its first prompt
 	// starts a new engine conversation server-side (see runSessionPrompt). Only
 	// non-opensession sources with no engine to resume stay read-only.
@@ -2779,45 +2764,44 @@ export function SessionViewer({
 		[onOpenSession],
 	);
 
-	// "Add chat transcripts" chips on a fresh chat's blank canvas: sibling
-	// workspace chats the user can attach as context — selected ids ride the
-	// first send as `contextChats` and the server inlines a fenced transcript
+	// "Add session transcripts" chips on a fresh session's blank canvas: sibling
+	// workspace sessions the user can attach as context — selected ids ride the
+	// first send as `contextSessions` and the server inlines a fenced transcript
 	// digest of each. One-shot: cleared once a send consumes them.
-	const [contextChats, setContextChats] = useState<string[]>([]);
-	const [showAllContextChats, setShowAllContextChats] = useState(false);
-	const contextChatOptions = useMemo(() => {
-		// Whole workspace, archived chats included — the common case is exactly a
-		// closed (archived-after-merge) sibling whose context the new chat needs.
-		// workspaceChats (the live tab strip) is the fallback when the chat has no
+	const [contextSessions, setContextSessions] = useState<string[]>([]);
+	const [showAllContextSessions, setShowAllContextSessions] = useState(false);
+	const contextSessionOptions = useMemo(() => {
+		// Whole workspace, archived sessions included — the common case is exactly a
+		// closed (archived-after-merge) sibling whose context the new session needs.
+		// workspaceSessions (the live tab strip) is the fallback when the session has no
 		// workspace id of its own.
-		const siblings = session.projectId
-			? (allSessions || []).filter((c) => c.projectId === session.projectId)
-			: workspaceChats || [];
+		const siblings = session.workspaceId
+			? (allSessions || []).filter((c) => c.workspaceId === session.workspaceId)
+			: workspaceSessions || [];
 		return siblings
 			.filter(
 				(c) =>
 					c.id !== session.id &&
 					// Legacy hidden sessions are not valid workspace context options.
-					!c.sideChatOf &&
-					// Only chats with something to hand over — a transcript or at
+					// Only sessions with something to hand over — a transcript or at
 					// least a started engine thread.
 					(c.transcriptPath || c.claudeSessionId || c.codexThreadId),
 			)
 			.sort((a, b) =>
 				(b.lastActivity || "").localeCompare(a.lastActivity || ""),
 			);
-	}, [allSessions, workspaceChats, session.id, session.projectId]);
+	}, [allSessions, workspaceSessions, session.id, session.workspaceId]);
 	useEffect(() => {
-		setContextChats([]);
-		setShowAllContextChats(false);
+		setContextSessions([]);
+		setShowAllContextSessions(false);
 	}, [session.id]);
 
 	const currentUser = useCurrentUser();
-	// The review request is stored per chat, but the sidebar's "Awaiting/Needs
-	// review" bands group by workspace — so a request set on a sibling chat lit
-	// the band while the open chat's Reviewer chip read empty. Surface the
-	// workspace's request in the chip: the open chat's own if it has one, else a
-	// sibling's, carrying the owner id so clear/re-assign target the right chat.
+	// The review request is stored per session, but the sidebar's "Awaiting/Needs
+	// review" bands group by workspace — so a request set on a sibling session lit
+	// the band while the open session's Reviewer chip read empty. Surface the
+	// workspace's request in the chip: the open session's own if it has one, else a
+	// sibling's, carrying the owner id so clear/re-assign target the right session.
 	// GitHub's own review requests ride alongside: the sidebar's "Needs review"
 	// band lights up for those too (review-queue's `requested` source), so the
 	// chip has to know about them or a PR waiting on you reads as an empty
@@ -2828,13 +2812,13 @@ export function SessionViewer({
 	const effectiveReview = useMemo(() => {
 		const owner = session.reviewRequest
 			? session
-			: (workspaceChats || []).find((c) => c.reviewRequest);
+			: (workspaceSessions || []).find((c) => c.reviewRequest);
 		const request = owner?.reviewRequest ?? null;
 		const completion =
 			owner && request ? prReviewCompletion(request, owner) : null;
 		const githubPending = [
 			...new Set(
-				[session, ...(workspaceChats || [])]
+				[session, ...(workspaceSessions || [])]
 					.filter((c) => c.prState === "OPEN")
 					.flatMap((c) =>
 						(c.prReviewRequested || []).map((person) => person.toLowerCase()),
@@ -2859,7 +2843,7 @@ export function SessionViewer({
 		session.prReviewRequested,
 		session.prUpdatedAt,
 		session.prState,
-		workspaceChats,
+		workspaceSessions,
 		currentUser,
 	]);
 
@@ -2872,16 +2856,6 @@ export function SessionViewer({
 		const fls = files;
 		if (!text && imgs.length === 0 && fls.length === 0) return false;
 		if (!connected) return false;
-
-		// Note mode: post a team note to the session's chat channel — never a
-		// prompt. The broadcast echoes it back into `notes` for every viewer.
-		if (noteMode) {
-			if (!text) return false;
-			postChatMessageApi(`session:${session.id}`, text, getCurrentUser()).catch(
-				() => toast("Failed to add note"),
-			);
-			return true;
-		}
 
 		const user = getCurrentUser();
 		// Prefer the staged disk path (HTTP upload); fall back to inline dataUrl.
@@ -2952,14 +2926,14 @@ export function SessionViewer({
 						fastMode,
 						...(imgs.length ? { images: imgs } : {}),
 						...(fls.length ? { files: filePayload } : {}),
-						// Attached sibling-chat transcripts (fresh chats are idle, so the
+						// Attached sibling-session transcripts (fresh sessions are idle, so the
 						// chips' selection always leaves through this branch).
-						...(contextChats.length ? { contextChats } : {}),
+						...(contextSessions.length ? { contextSessions } : {}),
 					},
 		);
-		// Prompting in a chat you'd hidden from your sidebar brings its row back
+		// Prompting in a session you'd hidden from your sidebar brings its row back
 		// — you're working in it again (see lib/hides.ts).
-		unhideForChat(session);
+		unhideForSession(session);
 		if (!isBusy) {
 			setIsRunningLive(true);
 			onRunningChange?.(session.id, true);
@@ -2976,7 +2950,7 @@ export function SessionViewer({
 				},
 			]);
 			requestAnimationFrame(() =>
-				measureChatPerf("send_to_optimistic_paint_ms", sendStartedAt),
+				measureSessionPerf("send_to_optimistic_paint_ms", sendStartedAt),
 			);
 		} else {
 			// Busy send: show it in the queue flap right away (no transcript
@@ -3002,8 +2976,8 @@ export function SessionViewer({
 		scrollToLatest("auto");
 		setImages([]);
 		setFiles([]);
-		setContextChats([]);
-		measureChatPerf("send_handler_ms", sendStartedAt);
+		setContextSessions([]);
+		measureSessionPerf("send_handler_ms", sendStartedAt);
 		return true;
 	}
 
@@ -3273,10 +3247,10 @@ export function SessionViewer({
 	}
 
 	function handleShare() {
-		// Match the canonical URL App maintains: workspace-scoped when the chat
-		// belongs to one, legacy /session/<id> only for workspace-less chats.
-		const path = session.projectId
-			? `${BASE_PATH}/workspace/${encodeURIComponent(session.projectId)}/chat/${encodeURIComponent(session.id)}`
+		// Match the canonical URL App maintains: workspace-scoped when the session
+		// belongs to one, legacy /session/<id> only for workspace-less sessions.
+		const path = session.workspaceId
+			? `${BASE_PATH}/workspace/${encodeURIComponent(session.workspaceId)}/session/${encodeURIComponent(session.id)}`
 			: `${BASE_PATH}/session/${encodeURIComponent(session.id)}`;
 		const link = `${location.origin}${path}`;
 		// Phone: native share sheet. Desktop: copy, with the inline check on
@@ -3287,7 +3261,7 @@ export function SessionViewer({
 	function commitRename() {
 		if (renameDraft !== null) {
 			// When the header titles the workspace, renaming edits the workspace —
-			// every sibling chat picks the new name up. Chat titles live on tabs.
+			// every sibling session picks the new name up. Session titles live on tabs.
 			if (workspaceName && onRenameWorkspace)
 				onRenameWorkspace(renameDraft.trim());
 			else onRename?.(session.id, renameDraft.trim());
@@ -3387,22 +3361,30 @@ export function SessionViewer({
 		return () => mq.removeEventListener("change", onChange);
 	}, []);
 
-	// Compact "agents running" flap above the composer — phone-only. On desktop
-	// the Agents panel tab (with its pulsing dot) is always visible; on a phone
-	// the right panel overlays the chat and is closed by default, so a running
-	// workflow fan-out has no glance. ComposerAgents is the tappable
-	// pill → mini-card → full-panel progression. Reuses the queue flap's
-	// tuck-under styling.
+	// Run-status flap above the composer (ComposerAgents): the tappable
+	// pill → mini-card → full-panel progression, reusing the queue flap's
+	// tuck-under styling. It carries two things at different breakpoints.
+	//
+	// Agents — phone-only. On desktop the Agents panel tab (with its pulsing
+	// dot) is always visible; on a phone the right panel overlays the session and
+	// is closed by default, so a running workflow fan-out has no glance.
 	const runningWorkflowRuns = workflowRuns.filter((r) => r.status === "running");
 	// Sub-agents ride along only while one is live, so a finished batch doesn't
 	// pad a later workflow's tallies (their statuses clamp to done once the
 	// session's run ends, so the flap can't stick around stale either).
 	const anySubagentRunning = subagents.some((s) => s.status === "running");
+	const showAgents =
+		isPhone && (runningWorkflowRuns.length > 0 || anySubagentRunning);
+	// Plan — every width, since the model's todowrite checklist has no other
+	// home at any size (in the transcript it's one dim row inside a turn fold
+	// that's collapsed by default).
+	const livePlan = useLivePlan(entries, isBusy);
 	const agentBubble =
-		isPhone && (runningWorkflowRuns.length > 0 || anySubagentRunning) ? (
+		showAgents || livePlan.length > 0 ? (
 			<ComposerAgents
-				runs={runningWorkflowRuns}
-				subagents={anySubagentRunning ? subagents : undefined}
+				runs={showAgents ? runningWorkflowRuns : NO_WORKFLOW_RUNS}
+				subagents={showAgents && anySubagentRunning ? subagents : undefined}
+				plan={livePlan}
 				onOpenPanel={() => {
 					selectPanelTab("workflows");
 					setInfoPageOpen(true);
@@ -3423,7 +3405,7 @@ export function SessionViewer({
 	// Opened by picking this session's workspace in the sidebar: focus the
 	// composer so you can start typing immediately. Runs on mount (a new session
 	// remounts this component) and when the pulse re-fires for the already-open
-	// session. Skipped on phones so we don't shove the keyboard over the chat.
+	// session. Skipped on phones so we don't shove the keyboard over the session.
 	useEffect(() => {
 		if (autoFocusComposer && !isPhone) composerRef.current?.focus();
 	}, [autoFocusComposer, isPhone]);
@@ -3529,7 +3511,7 @@ export function SessionViewer({
 					kind: "image" as const,
 					src,
 					sessionId: session.id,
-					chatTitle: session.title,
+					sessionTitle: session.title,
 					at: new Date((item.sentAt || Date.now()) + i).toISOString(),
 				})),
 			);
@@ -3805,28 +3787,28 @@ export function SessionViewer({
 							aria-label="Share"
 						/>
 					);
-				// New chat in this workspace — phone-only, since desktop has the
+				// New session in this workspace — phone-only, since desktop has the
 				// always-visible + in the tab strip. On a phone the strip (and its
 				// hover-revealed +) is hidden, so the ⋯ menu is the only way to add a
-				// sibling chat. Shares the workspace worktree, like the + default.
-				const newChatAction = isPhone && onNewChat && (
+				// sibling session. Shares the workspace worktree, like the + default.
+				const newSessionAction = isPhone && onNewSession && (
 					<Menu.Item
 						onClick={() => {
 							setOverflowOpen(false);
-							onNewChat("share");
+							onNewSession("share");
 						}}
-						title="Start a new chat in this workspace"
+						title="Start a new session in this workspace"
 					>
 						<IconPlus size={22} />
-						<span className="grow">New chat in workspace</span>
+						<span className="grow">New session in workspace</span>
 					</Menu.Item>
 				);
 				// Copy transcript. These normally live on a tab's right-click menu,
-				// but a lone-chat workspace has no tab strip (and phones hide it at
-				// every count), so the only place to grab this chat's full text is the
+				// but a lone-session workspace has no tab strip (and phones hide it at
+				// every count), so the only place to grab this session's full text is the
 				// ⋯ menu — surface both modes here when the strip isn't offering them.
 				const showTranscriptActions =
-					isPhone || (workspaceChats?.length ?? 1) <= 1;
+					isPhone || (workspaceSessions?.length ?? 1) <= 1;
 				const transcriptActions = showTranscriptActions && (
 					<>
 						<Menu.Item
@@ -3834,7 +3816,7 @@ export function SessionViewer({
 								setOverflowOpen(false);
 								void copySessionTranscript(session, "concise", toast);
 							}}
-							title="Copy a trimmed transcript of this chat"
+							title="Copy a trimmed transcript of this session"
 						>
 							<IconCopy size={20} />
 							<span className="grow">Copy concise transcript</span>
@@ -3847,7 +3829,7 @@ export function SessionViewer({
 								setOverflowOpen(false);
 								void copySessionTranscript(session, "full", toast);
 							}}
-							title="Copy the complete transcript of this chat"
+							title="Copy the complete transcript of this session"
 						>
 							<IconFile size={20} />
 							<span className="grow">Copy full transcript</span>
@@ -3874,14 +3856,14 @@ export function SessionViewer({
 						</Menu.Item>
 						{/* Claim this workspace into your own sidebar lanes — the twin of
 						    the sidebar row's right-click action, for when you're already
-						    reading the chat (an automation run, a teammate's workspace)
+						    reading the session (an automation run, a teammate's workspace)
 						    and want it in your own list. Per-user: it moves nothing for
 						    anyone else. */}
 						{onSetStatus && (
 							<Menu.Item
 								onClick={() => {
 									setOverflowOpen(false);
-									onSetStatus(claimChats, claimed ? null : "mine");
+									onSetStatus(claimSessions, claimed ? null : "mine");
 								}}
 								title={
 									claimed
@@ -3989,10 +3971,10 @@ export function SessionViewer({
 						</Button>
 					</div>
 				);
-				// Scheduled automations title their chats "<automation> — <timestamp>",
+				// Scheduled automations title their sessions "<automation> — <timestamp>",
 				// so naming the automation again beside that title reads as the same
 				// words twice. Fall back to the generic label there — the chip still
-				// marks the chat as automated and still links to its settings.
+				// marks the session as automated and still links to its settings.
 				const automationLabel =
 					session.automation &&
 					(workspaceName || session.title || "")
@@ -4008,8 +3990,8 @@ export function SessionViewer({
 				// of the panel toggle on desktop; PR status rides its own row.
 				const secondaryActions = (inMenu: boolean) => (
 					<>
-						{/* The automation that produced this chat rides in the title row
-						    beside the workspace name on desktop — it names the chat, it
+						{/* The automation that produced this session rides in the title row
+						    beside the workspace name on desktop — it names the session, it
 						    isn't an action. .viewer-title is hidden on phones, so the ⋯
 						    menu keeps carrying it there. */}
 						{session.automation && inMenu && (
@@ -4071,7 +4053,7 @@ export function SessionViewer({
 						ref={headerRef}
 					>
 						<div className="viewer-title">
-					{/* This slot says where a chat came FROM. Ask mode isn't an
+					{/* This slot says where a session came FROM. Ask mode isn't an
 					    origin — it's a mode you can change — so it rides the composer
 					    toolbar next to the model pill instead, where the switch is one
 					    click from where you're typing. "opensession" is the default
@@ -4146,7 +4128,7 @@ export function SessionViewer({
 							{workspaceName || session.title}
 						</span>
 					)}
-					{/* Which automation produced this chat, next to the name it produced
+					{/* Which automation produced this session, next to the name it produced
 					    — the same slot the source chips claim, so origin always reads on
 					    the left. Links to the automation's settings. The name is capped
 					    and ellipsized because automation names run long ("App Changelog
@@ -4164,20 +4146,20 @@ export function SessionViewer({
 					    container (docker/daytona/e2b). Renders nothing for host sessions
 					    — purely from session fields, no container polling. */}
 					<SandboxBadge sandbox={session.sandbox} />
-					{/* Lone-chat "+ New tab": with no tab strip on screen the affordance
-					    to spawn a sibling chat lives here beside the title (⌘T does the
-					    same). The moment the strip appears — a second chat, an open view
+					{/* Lone-session "+ New tab": with no tab strip on screen the affordance
+					    to spawn a sibling session lives here beside the title (⌘T does the
+					    same). The moment the strip appears — a second session, an open view
 					    tab like Review, or a split — its own + takes over and this
 					    disappears, so the two never stack. Phone uses the ⋯
-					    menu's newChatAction instead. Square 30px chip: same height and
+					    menu's newSessionAction instead. Square 30px chip: same height and
 					    corner radius as the ⋯ and side-panel buttons at the other end of
 					    the bar. Sized by padding it came out 37×33 — a wide rectangle
 					    around a 13px cross, so the hover chip read larger than every
 					    control beside it. */}
 					{!isPhone &&
-						onNewChat &&
+						onNewSession &&
 						!tabStripVisible &&
-						workspaceChats?.length === 1 && (
+						workspaceSessions?.length === 1 && (
 							<Tooltip
 								label="New tab in this workspace"
 								shortcut={isApple ? ["⌘", "T"] : ["Ctrl", "T"]}
@@ -4185,7 +4167,7 @@ export function SessionViewer({
 								<button
 									type="button"
 									className="flex-none inline-flex size-[30px] items-center justify-center rounded-control text-dim transition-colors hover:bg-hover hover:text-fg"
-									onClick={() => onNewChat("share")}
+									onClick={() => onNewSession("share")}
 									aria-label="New tab"
 								>
 									{/* 25, not the menu-row 22: the IconPlus path only fills ~52%
@@ -4279,7 +4261,7 @@ export function SessionViewer({
 								    and dismissal behavior as every other app menu. */}
 								{isPhone && secondaryActions(true)}
 								{(compactHeader || isPhone) && shareAction(true)}
-								{newChatAction}
+								{newSessionAction}
 								<PreviewButton
 									session={session}
 									onAttachImage={(img) => setImages((prev) => [...prev, img])}
@@ -4379,7 +4361,7 @@ export function SessionViewer({
 									<button
 										className="panel-back"
 										onClick={() => setInfoPageOpen(false)}
-										aria-label="Back to chat"
+										aria-label="Back to session"
 										autoFocus
 									>
 										<svg width="11" height="18" viewBox="0 0 11 18" fill="none">
@@ -4465,9 +4447,9 @@ export function SessionViewer({
 									<div className="session-info-overview">
 										<WorkspaceInfo
 											sessionId={session.id}
-											workspaceId={session.projectId || null}
+											workspaceId={session.workspaceId || null}
 											workspaceName={workspaceName}
-											chats={(workspaceChats?.length ? workspaceChats : [session]).map(
+											sessions={(workspaceSessions?.length ? workspaceSessions : [session]).map(
 												(s) => ({
 													id: s.id,
 													title: s.title,
@@ -4582,19 +4564,19 @@ export function SessionViewer({
 					headerRepoEl,
 				)}
 
-			{/* Compact "chat bar" under the mobile top-bar title: it just *shows*
+			{/* Compact "session bar" under the mobile top-bar title: it just *shows*
 			    the session's model (no per-item dropdowns) — tapping it (or the
 			    title above) opens the settings menu where they, and every other
-			    workspace/chat setting, can be changed. */}
+			    workspace/session setting, can be changed. */}
 			{isPhone &&
 				headerModelEl &&
 				(hasWorkspace || models.length > 0) &&
 				createPortal(
 					<span
-						className="header-chatbar session-settings-trigger"
+						className="header-sessionbar session-settings-trigger"
 						role="button"
 						tabIndex={0}
-						title="Workspace & chat settings"
+						title="Workspace & session settings"
 						onClick={() =>
 							// The metadata line is a React portal, so its clicks bubble
 							// through this component's tree — not App's title button. Fire
@@ -4611,7 +4593,7 @@ export function SessionViewer({
 						{/* Repo now leads the pill (portaled into headerRepoEl in front of
 						    the title), so the metadata line is just model · cost. */}
 						{models.length > 0 && (
-							<span className="header-chatbar-model truncate">
+							<span className="header-sessionbar-model truncate">
 								{/* Drop the "Claude " prefix — "Opus 4.8" reads fine in the
 								    thin subtitle and leaves room for the cost meter. */}
 								{metadataModelLabel(effectiveModel, models).replace(
@@ -4627,12 +4609,12 @@ export function SessionViewer({
 						    between the title and this line open. */}
 						{usage && usage.turns > 0 && (
 							<>
-								<span className="header-chatbar-sep" aria-hidden="true">
+								<span className="header-sessionbar-sep" aria-hidden="true">
 									·
 								</span>
 								<UsageMeter
 									usage={usage}
-									className="chatbar-usage min-h-0"
+									className="sessionbar-usage min-h-0"
 									showCacheRate
 								/>
 							</>
@@ -4680,7 +4662,7 @@ export function SessionViewer({
 			)}
 
 			<div className="viewer-split flex min-h-0 flex-1">
-				<div className="viewer-chat flex min-h-0 min-w-0 flex-1 flex-col [--chat-under:16px]">
+				<div className="viewer-session flex min-h-0 min-w-0 flex-1 flex-col [--session-under:16px]">
 					{showPreviewTab ? (
 						<div className="viewer-review-main">
 							<PreviewPane
@@ -4803,7 +4785,7 @@ export function SessionViewer({
 						</div>
 					) : subagentOpen ? (
 						// A sub-agent's conversation, full-width like Review — it reads
-						// as a conversation, so it gets the chat column instead of being
+						// as a conversation, so it gets the session column instead of being
 						// squeezed into the right sidebar. Nested Task calls push onto
 						// the same tab's breadcrumb.
 						<div className="viewer-review-main">
@@ -4816,8 +4798,8 @@ export function SessionViewer({
 						</div>
 					) : showConversation && conversationThreadId ? (
 						// The workspace's Plain ticket thread, full-width — same
-						// ConversationPane the chat-less workspace route renders, so
-						// the chat stays mounted underneath exactly like Review.
+						// ConversationPane the session-less workspace route renders, so
+						// the session stays mounted underneath exactly like Review.
 						<div className="viewer-review-main">
 							<ConversationPane
 								threadId={conversationThreadId}
@@ -4859,9 +4841,10 @@ export function SessionViewer({
 									sessionId={session.id}
 									send={send}
 									addHandler={addHandler}
-									sessions={allSessions || workspaceChats || []}
+									sessions={allSessions || workspaceSessions || []}
 									onOpenSessionById={onOpenSession}
 									reviewCanvas
+									editGate={connected && !isBusy && !noEngine}
 									onOpenSession={onOpenWorkspace}
 									onAddToInput={(text) =>
 										setComposerPrefill((p) => ({
@@ -4900,34 +4883,34 @@ export function SessionViewer({
 									}
 								/>
 							) : entries.length === 0 && !session.transcriptPath ? (
-								// A fresh chat with no run yet is just an empty conversation —
+								// A fresh session with no run yet is just an empty conversation —
 								// blank canvas, the composer below is the UI. Only a session
 								// that *ran* but has no transcript file gets the notice. When
-								// the workspace has sibling chats, the canvas offers their
+								// the workspace has sibling sessions, the canvas offers their
 								// transcripts as attachable context for the first message.
 								session.claudeSessionId || session.codexThreadId ? (
 									<div className="py-10 text-center text-faint">
 										No transcript available for this session
 									</div>
-								) : !hasLiveConversation && contextChatOptions.length > 0 ? (
+								) : !hasLiveConversation && contextSessionOptions.length > 0 ? (
 									// Simple centered empty state: the whole region centers the
-									// heading + attachable-context chips so a fresh chat reads as a
+									// heading + attachable-context chips so a fresh session reads as a
 									// calm blank canvas rather than a top-left form.
 									<div className="min-h-full flex flex-col items-center justify-center text-center w-full max-w-[840px] mx-auto px-4">
 										<div className="text-dim mb-4">
-											New chat in{" "}
+											New session in{" "}
 											<span className="text-fg font-medium">
 												{workspaceName || session.branch || "this workspace"}
 											</span>
 											.
 										</div>
-										<div className="text-dim mb-3">Add chat transcripts</div>
+										<div className="text-dim mb-3">Add session transcripts</div>
 										<div className="flex flex-wrap items-center justify-center gap-2">
-											{(showAllContextChats
-												? contextChatOptions
-												: contextChatOptions.slice(0, 4)
+											{(showAllContextSessions
+												? contextSessionOptions
+												: contextSessionOptions.slice(0, 4)
 											).map((c) => {
-												const selected = contextChats.includes(c.id);
+												const selected = contextSessions.includes(c.id);
 												const codex =
 													(c.model || "").startsWith("gpt") ||
 													(c.model || "").startsWith("codex");
@@ -4946,7 +4929,7 @@ export function SessionViewer({
 															/>
 														}
 														onClick={() =>
-															setContextChats((prev) =>
+															setContextSessions((prev) =>
 																prev.includes(c.id)
 																	? prev.filter((id) => id !== c.id)
 																	: [...prev, c.id],
@@ -4955,7 +4938,7 @@ export function SessionViewer({
 														title={
 															selected
 																? "Attached — its transcript rides along with your first message"
-																: "Attach this chat's transcript as context"
+																: "Attach this session's transcript as context"
 														}
 														className={
 															selected
@@ -4964,17 +4947,17 @@ export function SessionViewer({
 														}
 													>
 														<span className="max-w-[200px] truncate">
-															{c.title || "Untitled chat"}
+															{c.title || "Untitled session"}
 														</span>
 													</Button>
 												);
 											})}
-											{!showAllContextChats && contextChatOptions.length > 4 && (
+											{!showAllContextSessions && contextSessionOptions.length > 4 && (
 												<Button
 													variant="ghost"
-													onClick={() => setShowAllContextChats(true)}
+													onClick={() => setShowAllContextSessions(true)}
 												>
-													+{contextChatOptions.length - 4} more
+													+{contextSessionOptions.length - 4} more
 												</Button>
 											)}
 										</div>
@@ -5027,8 +5010,7 @@ export function SessionViewer({
 											entries={entries}
 											live={isBusy}
 											sessionId={session.id}
-											walkthrough={chatWalkthrough}
-											notes={notes}
+											walkthrough={sessionWalkthrough}
 											onFork={canForkSession ? handleFork : undefined}
 											onOpenSubagent={openSubagent}
 											// For automation-owned sessions (e.g. a GitHub PR run), the
@@ -5129,7 +5111,7 @@ export function SessionViewer({
 
 							<div className="viewer-input">
 								{noEngine ? (
-									<div className="mx-auto max-w-[var(--chat-col)] text-[13px] text-faint">
+									<div className="mx-auto max-w-[var(--session-col)] text-[13px] text-faint">
 										No engine session to resume
 									</div>
 								) : (
@@ -5150,9 +5132,9 @@ export function SessionViewer({
 								)}
 								<Composer
 									// Uncontrolled: the draft lives in the Composer (persisted
-									// per chat via draftKey). Remount on the tab-bar +
-									// (newChatSeq) to clear it for the fresh chat.
-									key={newChatSeq ?? 0}
+									// per session via draftKey). Remount on the tab-bar +
+									// (newSessionSeq) to clear it for the fresh session.
+									key={newSessionSeq ?? 0}
 									draftKey={draftKey}
 									onSend={handleSend}
 									images={images}
@@ -5172,15 +5154,11 @@ export function SessionViewer({
 									}
 									disabled={!connected}
 									sendDisabled={(text) =>
-										noteMode
-											? !text.trim()
-											: !text.trim() &&
-												images.length === 0 &&
-												files.length === 0 &&
-												!forkFrom
+										!text.trim() &&
+										images.length === 0 &&
+										files.length === 0 &&
+										!forkFrom
 									}
-									noteMode={noteMode}
-									onNoteModeChange={setNoteMode}
 									// Ask mode lost its chip when the toolbar collapsed into
 									// the "+", so the writing surface carries the state
 									// instead — tinted and hatched like plan mode.
@@ -5188,11 +5166,11 @@ export function SessionViewer({
 									busy={isBusy && !forkFrom}
 									onStop={handleCancel}
 									sendTitle={isBusy ? busySendLabel : undefined}
-									// Leaving ask mode is a setting of this chat, so it sits in
+									// Leaving ask mode is a setting of this session, so it sits in
 									// the composer's "+" with the rest of them rather than as its
 									// own chip. The row stays open reading "Switching to code…"
 									// until the server answers — cutting a worktree isn't always
-									// instant. Only opensession chats can promote (the server owns
+									// instant. Only opensession sessions can promote (the server owns
 									// that rule); elsewhere the row would be a dead end.
 									menuExtra={
 										isAsk && session.source === "opensession"
@@ -5201,7 +5179,7 @@ export function SessionViewer({
 														type="button"
 														className="composer-menu-item"
 														disabled={promoting}
-														title="Ask mode — this chat can read the code but not change it"
+														title="Ask mode — this session can read the code but not change it"
 														onClick={() => void handlePromote(close)}
 													>
 														<span className="composer-menu-icon">
@@ -5281,7 +5259,7 @@ export function SessionViewer({
 
 				{/* Right region: the Workspace panel. Portaled to an app-level slot so
             it opens as a full-height column beside the left sidebar (not just
-            below the chat header). */}
+            below the session header). */}
 				{(() => {
 				const rightRegion = (
 					<>
@@ -5292,7 +5270,7 @@ export function SessionViewer({
 					<div className="viewer-panel" style={panelStyle}>
 						{panelResizeHandle}
 						{/* Phones open this panel as a full-width bottom sheet, so it
-						    carries one clean header row: chevron-back to the chat on the
+						    carries one clean header row: chevron-back to the session on the
 						    left (the desktop toggle button is hidden there) and the
 						    labelled Preview/Preview environment controls on the right — on desktop
 						    those live in the session header as state-colored icons. */}
@@ -5301,7 +5279,7 @@ export function SessionViewer({
 								<button
 									className="panel-back"
 									onClick={() => setPanelOpen(false)}
-									aria-label="Back to chat"
+									aria-label="Back to session"
 								>
 									<svg width="11" height="18" viewBox="0 0 11 18" fill="none">
 										<path
@@ -5423,9 +5401,9 @@ export function SessionViewer({
 								<div className="px-1">
 									<WorkspaceInfo
 										sessionId={session.id}
-										workspaceId={session.projectId || null}
+										workspaceId={session.workspaceId || null}
 										workspaceName={workspaceName}
-										chats={(workspaceChats?.length ? workspaceChats : [session]).map(
+										sessions={(workspaceSessions?.length ? workspaceSessions : [session]).map(
 											(s) => ({
 												id: s.id,
 												title: s.title,

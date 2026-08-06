@@ -1202,7 +1202,7 @@ function AutomationForm({
             className="mono-input"
           />
           <span className="mt-1 text-meta leading-snug text-faint">
-            Invite @michael to the channel first — the bot only receives messages
+            Invite @{AGENT_NAME} to the channel first — the bot only receives messages
             for channels it's a member of. One run per top-level message; thread
             replies don't re-trigger. Channel id is in the channel's “About” tab.
           </span>

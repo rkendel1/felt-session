@@ -32,6 +32,48 @@ describe("renderMarkdown session links", () => {
     );
   });
 
+  it("links an `os-` id — the prefix minted since the rename", () => {
+    const codespan = renderMarkdown(
+      "Delegated to `os-019fd30a-785b-7000-ad89-9c2fb5b74a19` reporting back.",
+    );
+    expect(codespan).toContain(
+      'data-session-id="os-019fd30a-785b-7000-ad89-9c2fb5b74a19"',
+    );
+    const bare = renderMarkdown(
+      "Started session os-019fd30a-785b-7000-ad89-9c2fb5b74a19 as a worker.",
+    );
+    expect(bare).toContain(
+      'data-session-id="os-019fd30a-785b-7000-ad89-9c2fb5b74a19"',
+    );
+    const url = renderMarkdown(
+      "See [it](http://127.0.0.1:3850/session/os-019fd30a-785b-7000-ad89-9c2fb5b74a19).",
+    );
+    expect(url).toContain(
+      'data-session-id="os-019fd30a-785b-7000-ad89-9c2fb5b74a19"',
+    );
+    expect(url).not.toContain("target=");
+  });
+
+  it("keeps `os-` strict: only a uuid-shaped id, never a codespan that starts with it", () => {
+    // `bks-` was distinctive enough for the loose slug shape; `os-` is two
+    // letters, so anything but the minted `os-<uuidv7>` stays a code chip.
+    const html = renderMarkdown("Tagged `os-release-2026` for the cut.");
+    expect(html).toContain("<code>os-release-2026</code>");
+    expect(html).not.toContain("session-link");
+  });
+
+  it("still resolves a legacy /backstage-prefixed session URL in-app", () => {
+    // Pre-rename links live on in old transcripts; the server 301s them, but
+    // the chip has to recognize the path to keep the click client-side.
+    const html = renderMarkdown(
+      "See [this](http://127.0.0.1:3850/backstage/session/bks-019f9608-ab20-7000-b98e-4de52d5fe436).",
+    );
+    expect(html).toContain(
+      'data-session-id="bks-019f9608-ab20-7000-b98e-4de52d5fe436"',
+    );
+    expect(html).not.toContain("target=");
+  });
+
   it("leaves ordinary codespans as code", () => {
     const html = renderMarkdown("Run `bun test` to check.");
     expect(html).toContain("<code>bun test</code>");
@@ -55,9 +97,9 @@ describe("renderMarkdown session links", () => {
     expect(html).not.toContain("target=");
   });
 
-  it("labels a pasted (auto-linked) chat URL with just the session id", () => {
+  it("labels a pasted (auto-linked) session URL with just the session id", () => {
     const url =
-      "http://127.0.0.1:3850/workspace/prj-28712580-a369-4d58-996b-f8c23e523ed1/chat/bks-019f9608-ab20-7000-b98e-4de52d5fe436";
+      "http://127.0.0.1:3850/workspace/ws-28712580-a369-4d58-996b-f8c23e523ed1/session/bks-019f9608-ab20-7000-b98e-4de52d5fe436";
     const html = renderMarkdown(`${url} shows no right sidebar.`);
     expect(html).toContain(
       'data-session-id="bks-019f9608-ab20-7000-b98e-4de52d5fe436"',
@@ -107,6 +149,13 @@ describe("session chip labels", () => {
     expect(html).toContain(">bks-019f24b5…</a>");
     expect(html).toContain('data-session-label="id"');
     expect(html).toContain(`title="Open session ${id}"`);
+  });
+
+  it("cuts an `os-` id on a segment boundary, not mid-separator", () => {
+    const html = renderMarkdown(
+      "Delegated to `os-019fd30a-785b-7000-ad89-9c2fb5b74a19`.",
+    );
+    expect(html).toContain(">os-019fd30a…</a>");
   });
 
   it("keeps short legacy slug ids whole", () => {
@@ -161,14 +210,14 @@ describe("renderMarkdown strikethrough (double-tilde only)", () => {
 describe("renderPrCommentMarkdown GitHub details", () => {
   it("renders collapsible reviews and subtext", () => {
     const html = renderPrCommentMarkdown(`<details> <summary>Outdated review</summary>
-**Michael review** · request changes
+**Ada review** · request changes
 
 <sub>Reviewed 3147253 · open session</sub>
 </details>`);
 
     expect(html).toContain('<details class="md-details">');
     expect(html).toContain("<summary>Outdated review</summary>");
-    expect(html).toContain("<strong>Michael review</strong>");
+    expect(html).toContain("<strong>Ada review</strong>");
     expect(html).toContain("<sub>Reviewed 3147253 · open session</sub>");
   });
 

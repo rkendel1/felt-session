@@ -200,84 +200,6 @@ final class TranscriptGroupingTests: XCTestCase {
         XCTAssertEqual(viewModel.topmostEntryId, "u1")
     }
 
-    // MARK: - Team notes
-
-    private func note(_ id: String, _ text: String, at iso: String) -> SessionNote {
-        let date = Session.parseISO(iso) ?? Date()
-        return SessionNote(
-            id: id,
-            user: "Kent",
-            text: text,
-            ts: date.timeIntervalSince1970 * 1000,
-            images: nil
-        )
-    }
-
-    func testNotesLandAfterTheBlockThatPrecededThem() {
-        let items = TranscriptGrouping.displayItems(from: [
-            TranscriptEntry(
-                id: "u1", type: "user", content: "fix it",
-                timestamp: "2026-01-01T00:00:00Z"
-            ),
-            TranscriptEntry(
-                id: "a1", type: "assistant", content: "Fixed.",
-                timestamp: "2026-01-01T00:00:20Z"
-            ),
-        ])
-        let blocks = TranscriptGrouping.blocks(
-            from: items,
-            live: false,
-            worktreeDir: nil,
-            notes: [
-                note("n1", "before the answer", at: "2026-01-01T00:00:10Z"),
-                note("n2", "long after", at: "2026-01-01T01:00:00Z"),
-            ]
-        )
-        XCTAssertEqual(
-            blocks.map(\.id),
-            ["u1", "note:n1", "a1", "note:n2"],
-            "a note belongs after the last block written before it"
-        )
-    }
-
-    func testANoteNeverSplitsAnAnswerFromItsFooter() {
-        // The footer reports its ANSWER's timestamp, so a note written in the
-        // same moment sorts after the pair instead of between them.
-        let items = TranscriptGrouping.displayItems(from: [
-            TranscriptEntry(
-                id: "a1", type: "assistant", content: "Working.",
-                timestamp: "2026-01-01T00:00:00Z"
-            ),
-            toolUse("t1", name: "Bash", input: ["command": .string("bun test")]),
-            toolResult("t1", text: "ok"),
-            TranscriptEntry(
-                id: "a2", type: "assistant", content: "Done.",
-                timestamp: "2026-01-01T00:00:30Z"
-            ),
-        ])
-        let blocks = TranscriptGrouping.blocks(
-            from: items,
-            live: false,
-            worktreeDir: nil,
-            notes: [note("n1", "nice", at: "2026-01-01T00:00:30Z")]
-        )
-        let ids = blocks.map(\.id)
-        XCTAssertEqual(ids.last, "note:n1")
-        XCTAssertEqual(ids.dropLast().suffix(2), ["a2", "a2:footer"])
-    }
-
-    func testNotesAreNotScrollAnchors() {
-        // Anchors resolve through transcript entries; a note has none, so it
-        // can never capture the reader's restore position.
-        let blocks = TranscriptGrouping.blocks(
-            from: [],
-            live: false,
-            worktreeDir: nil,
-            notes: [note("n1", "hi", at: "2026-01-01T00:00:00Z")]
-        )
-        XCTAssertEqual(blocks.first?.entryIds, [])
-    }
-
     // MARK: - Walkthroughs
 
     private func walkthrough(at iso: String) -> SessionWalkthrough {
@@ -363,10 +285,10 @@ final class SessionLinkTests: XCTestCase {
     }
 
     func testACodespannedIdBecomesALink() {
-        SessionLinks.register(titles: [id: "Improve iOS chat UI"])
+        SessionLinks.register(titles: [id: "Improve iOS session UI"])
         XCTAssertEqual(
             SessionLinks.linkify("Delegated to `\(id)` just now."),
-            "Delegated to [Improve iOS chat UI](os1session:\(id)) just now."
+            "Delegated to [Improve iOS session UI](os1session:\(id)) just now."
         )
     }
 

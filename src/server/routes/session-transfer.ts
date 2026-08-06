@@ -4,7 +4,7 @@ import { configuredCloudAccess } from "../cloud-proxy";
 import { gitPush } from "../git-status";
 import { parseJsonlLines } from "../jsonl-parser";
 import { sessionHasJournaledRun } from "../migrate-engine";
-import { OPENSESSION_CHATS_DIR } from "../paths";
+import { OPENSESSION_SESSIONS_DIR } from "../paths";
 import { isLocalProfile } from "../profile";
 import { promptQueues } from "../queue-state";
 import {
@@ -687,7 +687,7 @@ async function runGit(
 const productionImportDependencies: ImportDependencies = {
   repos: configuredRepos,
   sessionExists: (id) =>
-    existsSync(`${OPENSESSION_CHATS_DIR}/${id}.json`) ||
+    existsSync(`${OPENSESSION_SESSIONS_DIR}/${id}.json`) ||
     getCachedSessions().some(
       (session) => session.id === id || session.aliasIds?.includes(id),
     ),
@@ -731,7 +731,7 @@ const productionImportDependencies: ImportDependencies = {
   removeTranscript: (sessionId) =>
     transcriptStore().deleteSessionTranscript(sessionId),
   writeSession: (id, session) => {
-    writeJsonAtomic(`${OPENSESSION_CHATS_DIR}/${id}.json`, session);
+    writeJsonAtomic(`${OPENSESSION_SESSIONS_DIR}/${id}.json`, session);
     invalidateSessionsCache();
   },
   sessionUrl: (id) =>
@@ -744,7 +744,7 @@ const productionUpgradeDependencies: UpgradeDependencies = {
   readSession: (id) => {
     try {
       return JSON.parse(
-        readFileSync(`${OPENSESSION_CHATS_DIR}/${id}.json`, "utf-8"),
+        readFileSync(`${OPENSESSION_SESSIONS_DIR}/${id}.json`, "utf-8"),
       );
     } catch {
       return null;
@@ -791,7 +791,7 @@ const productionUpgradeDependencies: UpgradeDependencies = {
   fetch,
   archive: (id, data, upgradedTo) => {
     const now = new Date().toISOString();
-    writeJsonAtomic(`${OPENSESSION_CHATS_DIR}/${id}.json`, {
+    writeJsonAtomic(`${OPENSESSION_SESSIONS_DIR}/${id}.json`, {
       ...data,
       archived: true,
       archivedAt: now,

@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import type { WSServerMessage, WSClientMessage } from "../lib/types";
 import { API_BASE, getWebSocketUrl } from "../lib/api";
-import { countChatPerf } from "../lib/chat-performance";
+import { countSessionPerf } from "../lib/session-performance";
 
 // Liveness probe cadence. iOS/Safari kills backgrounded sockets without firing
 // onclose, leaving a half-open socket that reads as OPEN but delivers nothing —
-// the "chat frozen until refresh" trap. We ping over the app protocol (browsers
+// the "session frozen until refresh" trap. We ping over the app protocol (browsers
 // can't send WS protocol pings) and force-close if nothing arrives back, which
 // triggers the normal reconnect + re-watch path.
 const HEARTBEAT_MS = 20_000;
@@ -13,7 +13,7 @@ const HEARTBEAT_MS = 20_000;
 // backgrounded PWA is exactly when the socket is most likely dead.
 const RESUME_PROBE_MS = 4_000;
 // How long a visible-but-untouched tab still counts as "here". Long enough to
-// read a transcript without your face blinking off, short enough that a chat
+// read a transcript without your face blinking off, short enough that a session
 // left open behind another window stops claiming you.
 const IDLE_MS = 5 * 60_000;
 // What proves a person is at the keyboard. Passive and cheap: the handler
@@ -41,7 +41,7 @@ export function useWebSocket() {
   const aliveRef = useRef(true);
   // Presence, tracked separately from the watch: a hidden or idle tab keeps
   // streaming its session (unread counts, notifications) but must stop telling
-  // teammates its owner is looking at that chat.
+  // teammates its owner is looking at that session.
   const awayRef = useRef(false);
   const idleTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined,
@@ -93,7 +93,7 @@ export function useWebSocket() {
     ws.onmessage = (e) => {
       if (wsRef.current !== ws) return; // superseded socket — ignore stragglers
       aliveRef.current = true;
-      countChatPerf(
+      countSessionPerf(
         "ws_bytes_received",
         typeof e.data === "string" ? e.data.length : (e.data?.byteLength ?? 0),
       );
@@ -221,7 +221,7 @@ export function useWebSocket() {
     };
     // Presence: "here" means this tab is visible AND its owner has touched it
     // recently. The watch deliberately outlives both — a backgrounded tab still
-    // streams — so presence needs its own signal, or a chat left open on a
+    // streams — so presence needs its own signal, or a session left open on a
     // second monitor keeps claiming someone is reading it.
     const sendAway = (away: boolean) => {
       if (awayRef.current === away) return;

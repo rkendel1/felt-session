@@ -1,6 +1,6 @@
-# Chat performance contract
+# Session performance contract
 
-The chat renderer exposes `window.__chatPerf()` in development and production.
+The session renderer exposes `window.__sessionPerf()` in development and production.
 It returns recent samples, counters, and p50/p95/max summaries.
 
 Budgets:
@@ -12,6 +12,6 @@ Budgets:
 - no long task over 100 ms during a 100-delta/s fixture
 
 Deterministic fixtures live in
-`src/frontend/lib/chat-performance-fixtures.ts` for 200, 2,000, and 10,000
+`src/frontend/lib/session-performance-fixtures.ts` for 200, 2,000, and 10,000
 entries plus a configurable delta stream. Compare `stream_frames_received`
 with `stream_paints`; paints should remain bounded by the display frame rate.

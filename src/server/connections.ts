@@ -1,5 +1,5 @@
 /**
- * Connection status + management for the MCP servers Michael's sessions
+ * Connection status + management for the MCP servers agent sessions
  * run with (mcp-config.json). Targets are sanitized — never expose URL
  * query strings (they can embed tokens) or env values.
  */
@@ -49,8 +49,8 @@ const LINEAR_AGENT_TOKENS_PATH = `${HOME}/.linear-agent-tokens.json`;
 
 /**
  * Overlay credentials that rotate outside this process. Linear runs as the
- * Michael bot via the linear-agent's OAuth token (actor=app, refreshed by
- * that service) so issues/comments attribute to the bot, not Michiel. When
+ * bot via the linear-agent's OAuth token (actor=app, refreshed by
+ * that service) so issues/comments attribute to the bot, not a person. When
  * the token file is missing or stale, the static header in mcp-config.json
  * (personal API key) applies instead. Read per run — never persisted back.
  */

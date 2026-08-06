@@ -422,7 +422,7 @@ describe("a sidebar longer than the terminal", () => {
 			sessions: Array.from({ length: 40 }, (_, i) =>
 				fakeSession({
 					id: `bks-${i}`,
-					projectId: `prj-${i % 8}`,
+					workspaceId: `ws-${i % 8}`,
 					title: `session number ${i}`,
 					startedBy: "Jaap",
 				}),

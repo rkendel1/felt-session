@@ -48,6 +48,7 @@ describe("noticeTone", () => {
 			noticeTone("Couldn't recreate the worktree (fatal: branch not found); running in the main checkout instead."),
 		).toBe("warn");
 		expect(noticeTone("This session's worktree is gone; running in the main checkout.")).toBe("warn");
+		expect(noticeTone("App update paused. No action needed.")).toBe("warn");
 	});
 
 	test("routine operational chatter stays neutral", () => {

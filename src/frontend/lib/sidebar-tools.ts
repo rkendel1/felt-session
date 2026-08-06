@@ -26,14 +26,16 @@ export const SIDEBAR_TOOL_LABELS: Record<SidebarToolId, string> = {
 
 const HIDDEN_TOOLS_KEY = "opensession-sidebar-hidden-tools";
 const TOOLS_CHANGED_EVENT = "opensession-sidebar-tools-changed";
-const DEFAULT_HIDDEN_TOOLS: SidebarToolId[] = [
-	"catchup",
-	"prtinder",
-	"supporttinder",
-	"analytics",
-	"notes",
-	"desk",
-];
+// A new account starts with Home only. Every other tool is either empty until
+// something else exists (Tasks needs todos, Reports needs automations) or needs
+// an integration (Support Tinder, Analytics), so shipping them on makes the
+// sidebar look busy and broken at once. They're one click away in the Tools
+// band's ••• menu and in Settings. Derived from the visible list so a tool
+// added later defaults to hidden rather than silently showing up for everyone.
+const DEFAULT_VISIBLE_TOOLS: SidebarToolId[] = ["home"];
+const DEFAULT_HIDDEN_TOOLS: SidebarToolId[] = SIDEBAR_TOOL_IDS.filter(
+	(id) => !DEFAULT_VISIBLE_TOOLS.includes(id),
+);
 
 export function readHiddenSidebarTools(): Set<SidebarToolId> {
 	try {

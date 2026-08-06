@@ -152,7 +152,7 @@ export async function getComment(commentId: number, ghRepo: string = GITHUB_REPO
   return r.ok && r.data ? r.data : null;
 }
 
-/** Find the current (active, not-outdated) Michael review comment id, if any. */
+/** Find the current (active, not-outdated) agent review comment id, if any. */
 export async function findActiveReviewComment(prNumber: number, ghRepo: string = GITHUB_REPO): Promise<number | null> {
   const list = await githubRequest<IssueComment[]>(
     "GET",
@@ -224,7 +224,7 @@ export interface ReviewInfo {
   state: string;
 }
 
-/** List the formal reviews on a PR that carry a summary body (Greptile/human/Michael). */
+/** List the formal reviews on a PR that carry a summary body (Greptile/human/agent). */
 export async function listReviews(prNumber: number, ghRepo: string = GITHUB_REPO): Promise<ReviewInfo[]> {
   const r = await githubRequest<any[]>("GET", `/repos/${ghRepo}/pulls/${prNumber}/reviews?per_page=100`);
   if (!r.ok || !Array.isArray(r.data)) return [];
@@ -496,9 +496,9 @@ export async function removeLabel(prNumber: number, label: string, ghRepo: strin
 
 /**
  * All open review feedback on the PR, formatted for a fix prompt — inline
- * comments AND review summaries, from EVERY reviewer (Michael, Greptile, humans),
- * each tagged with its author so the agent addresses them all (not just Michael's,
- * not just CI). Skips outdated inline comments and Michael's own boilerplate review
+ * comments AND review summaries, from EVERY reviewer (the agent, Greptile, humans),
+ * each tagged with its author so the agent addresses them all (not just the agent's,
+ * not just CI). Skips outdated inline comments and the agent's own boilerplate review
  * body. Returns "" when there's nothing. Shared by auto-fix and the review handoff.
  */
 export async function fetchReviewFindings(prNumber: number, ghRepo?: string): Promise<string> {
@@ -512,7 +512,7 @@ export async function fetchReviewFindings(prNumber: number, ghRepo?: string): Pr
     lines.push(`- [@${c.login} · comment ${c.id}] ${c.path}:${c.line} — ${c.body.replace(/\s+/g, " ").trim().slice(0, 400)}`);
   }
   for (const rv of reviews) {
-    // Skip Michael's own short "Michael review · <sha>" boilerplate (the inline
+    // Skip the agent's own short "<persona> review · <sha>" boilerplate (legacy "Michael review" form included) (the inline
     // comments above already carry its findings).
     if (
       rv.login === BOT_LOGIN &&

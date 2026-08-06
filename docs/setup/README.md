@@ -10,7 +10,7 @@ For a single-user, interactive-only installation on macOS, use the smaller
 
 Open Session is a self-hosted agent-infrastructure server. One Bun process serves:
 
-- **A web UI** for creating and steering coding sessions (chats) that run
+- **A web UI** for creating and steering coding sessions that run
   against registered git repos, in isolated worktrees or Docker sandboxes.
 - **Agents** that turn external events into sessions: Slack messages, Linear
   issues, Plain support tickets, GitHub PR review comments.
@@ -43,7 +43,7 @@ flowchart LR
 
   clients --> http
   hooks --> wh
-  http --- store[("session store<br/>~/.opensession-chats")]
+  http --- store[("session store<br/>~/.opensession-sessions")]
   runner --> exec["each run: git worktree<br/>or Docker sandbox"]
   runner --> mcp["MCP servers (mcp-config.json)<br/>Linear · Plain · Stripe · WorkOS · Sentry · …"]
 ```
@@ -131,5 +131,5 @@ when adding anything that touches this.
 
 The remaining files in `docs/` are contributor docs, not setup guides:
 [transcripts.md](../transcripts.md) covers the transcript store and serve
-protocol; [chat-performance.md](../chat-performance.md) is the frontend
-chat-render performance contract.
+protocol; [session-performance.md](../session-performance.md) is the frontend
+session-render performance contract.

@@ -263,8 +263,8 @@ export async function handleSystemRoutes(
 		// as unread on the macropad.
 		const reads = getReads(user);
 		// Canonical open-in-app link per session (the macropad opens it on
-		// keypress) — same shape as the frontend's chatPath (share-link.ts):
-		// workspace-scoped when the chat belongs to a Project.
+		// keypress) — same shape as the frontend's session path helper (share-link.ts):
+		// workspace-scoped when the session belongs to a Project.
 		const uiBase = configuredServer().publicBaseUrl;
 		const sessions: Array<{
 			id: string;
@@ -281,7 +281,7 @@ export async function handleSystemRoutes(
 			// A queued prompt means the session is about to run — show it as
 			// working, same as taskStateOf (sessions-tools.ts). An engine session
 			// id means it has run before, so an idle session with one is "done";
-			// without one it's a fresh pinned chat that never ran.
+			// without one it's a fresh pinned session that never ran.
 			const lastRunError = runErrors.get(s.id) || s.lastRunError;
 			// Precedence (first match wins) — surface the single most important
 			// thing: error > working > needs_input > unread > idle. The old "done"
@@ -298,8 +298,8 @@ export async function handleSystemRoutes(
 							: isUnread(s.lastActivity, reads[s.id])
 								? "unread"
 								: "idle";
-			const sessionUrl = s.projectId
-				? `${uiBase}/workspace/${encodeURIComponent(s.projectId)}/chat/${encodeURIComponent(s.id)}`
+			const sessionUrl = s.workspaceId
+				? `${uiBase}/workspace/${encodeURIComponent(s.workspaceId)}/session/${encodeURIComponent(s.id)}`
 				: `${uiBase}/session/${encodeURIComponent(s.id)}`;
 			sessions.push({
 				id: s.id,

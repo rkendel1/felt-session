@@ -52,7 +52,7 @@
 
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, unlinkSync } from "fs";
 import { dirname } from "path";
-import { OPENSESSION_CHATS_DIR } from "../../paths";
+import { OPENSESSION_SESSIONS_DIR } from "../../paths";
 import { stateDir, } from "../../paths";
 import { journalSet, journalClear, type ActiveRunRecord } from "../../run-journal";
 import { shouldPersistModelSwitch, type StreamEvent } from "../../run-events";
@@ -121,8 +121,8 @@ const WORKSPACE_BOOTSTRAP_SIGNATURE = "workspace-runtime-v1+bun";
 export const REMOTE_OPENAI_SEED_DIR = `${REMOTE_HOME}/.opensession-openai-seeds`;
 const REMOTE_PATH = `${REMOTE_HOME}/.bun/bin:${REMOTE_HOME}/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`;
 
-const RUNS_BASE = `${OPENSESSION_CHATS_DIR}/sandbox-runs`;
-const STATE_DIR = `${OPENSESSION_CHATS_DIR}/sandboxes`;
+const RUNS_BASE = `${OPENSESSION_SESSIONS_DIR}/sandbox-runs`;
+const STATE_DIR = `${OPENSESSION_SESSIONS_DIR}/sandboxes`;
 
 // ── The wire each adapter implements ─────────────────────────────────────────
 

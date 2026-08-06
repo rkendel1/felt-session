@@ -14,6 +14,7 @@
  * A future autonomous monitor (src/agents/loops) can call the same
  * getSessionControl() surface directly, no MCP involved.
  */
+import type { ImageInput } from "./run-events";
 import type { UnifiedSession, TranscriptEntry } from "./types";
 
 /**
@@ -67,6 +68,15 @@ export interface CreateSessionOpts {
   images?: string[];
   /** Optional MCP allowlist for the opening run. Empty array means no MCP servers. */
   mcpServers?: string[];
+  /**
+   * Join an existing workspace as a sibling session — a new tab, the create path's
+   * equivalent of the web tab strip's "+". The session takes the workspace's
+   * `workspaceId` (so it lands in that sidebar row's tab strip), defaults its repo
+   * to the workspace's, and in code mode shares the workspace's worktree/branch
+   * instead of minting its own. An unknown id fails the create rather than
+   * silently starting a standalone session.
+   */
+  workspaceId?: string;
   /** Parent/orchestrator session id when this is a worker sub-session. */
   parentSessionId?: string;
   /** Whether the opening prompt was augmented with parent report-back instructions. */
@@ -87,9 +97,9 @@ export interface CreateSessionOpts {
  * the live opensession process state.
  */
 export interface SessionControl {
-  /** All sessions with a derived state, queue depth and controllability. */
+  /** All sessions with creator identity, derived state, queue depth and controllability. */
   listSessions(): SessionSummary[];
-  /** One session's summary, or undefined if no such id. */
+  /** One session's summary including creator identity, or undefined if no such id. */
   getSession(id: string): SessionSummary | undefined;
   /** Last `n` transcript entries for a session (for the "what's it doing" view). */
   transcriptTail(id: string, n: number): TranscriptEntry[];
@@ -110,6 +120,10 @@ export interface SessionControl {
    * `opts.slackReplyTo` marks the message as coming from a Slack thread — the
    * answering turn's reply is mirrored back into that thread (rides the queue,
    * so it survives a busy run and a restart).
+   * `opts.images` carries composer attachments on every branch (steer folds
+   * them into the live run, the queue stores their data URLs, an idle send
+   * passes them to the fresh turn) — that's what lets a REST caller match the
+   * WebSocket composer instead of silently dropping the pictures.
    */
   deliverToSession(
     id: string,
@@ -118,12 +132,26 @@ export interface SessionControl {
     opts?: {
       busy?: "steer" | "queue";
       slackReplyTo?: { channel: string; threadTs: string };
+      /** Decoded images for the run/steer path. */
+      images?: ImageInput[];
+      /** The same images as `data:` URLs, for the queue's stored copy. */
+      imageUrls?: string[];
+      /**
+       * Hold a queued message until the agent FULLY completes (child workers
+       * included) instead of delivering at the next drain point — the web and
+       * native composers' "queue" semantics.
+       */
+      hold?: boolean;
     },
   ): Promise<DeliverResult>;
   /** Cancel a session's in-flight run (only runs this process owns). */
   cancelSession(id: string): boolean;
   /** Create a new session and start its first turn in the background. */
-  createSession(opts: CreateSessionOpts): Promise<{ id: string }>;
+  createSession(opts: CreateSessionOpts): Promise<{
+    id: string;
+    createdBy: string;
+    createdAt: string;
+  }>;
 }
 
 let impl: SessionControl | null = null;

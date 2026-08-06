@@ -5,12 +5,12 @@
  *
  * zz- prefix + dynamic imports in beforeAll (the zz-run-ws pattern): the
  * dangerous modules (run-session → interactive-mcp → startRunRpcServer) load
- * only after NODE_ENV=test is in effect and the chats dir is redirected.
+ * only after NODE_ENV=test is in effect and the sessions dir is redirected.
  * __opensessionBooted is set BEFORE those imports so module-scope tickers (the
  * /loop ticker etc.) never arm in the test process.
  *
  * Full-suite caveat: earlier test files may have already loaded sessions.ts /
- * session-cache.ts, freezing their SESSIONS_DIR consts on a different chats
+ * session-cache.ts, freezing their SESSIONS_DIR consts on a different sessions
  * dir — then our temp-dir session files are invisible to findSession. The
  * beforeAll detects that (probe session lookup) and the tests skip loudly
  * rather than touching the real store. Run this file directly for full
@@ -31,7 +31,7 @@ let queueState: typeof import("./queue-state");
 let fakeEngineMod: typeof import("./testing/fake-engine");
 let ocTranscript: typeof import("./opencode-transcript");
 let transcriptStoreMod: typeof import("./transcript-store");
-let restoreChatsDir: (() => void) | null = null;
+let restoreSessionsDir: (() => void) | null = null;
 let restoreJournal: (() => void) | null = null;
 let redirected = false;
 
@@ -53,8 +53,8 @@ function writeSessionFile(id: string, extra: Record<string, unknown> = {}) {
 beforeAll(async () => {
 	(globalThis as any).__opensessionBooted = true;
 	const paths = await import("./paths");
-	const prevDir = paths.__setChatsDirForTest(tmp);
-	restoreChatsDir = () => paths.__setChatsDirForTest(prevDir);
+	const prevDir = paths.__setSessionsDirForTest(tmp);
+	restoreSessionsDir = () => paths.__setSessionsDirForTest(prevDir);
 	const runJournal = await import("./run-journal");
 	const prevJournal = runJournal.__setActiveRunsPathForTest(
 		`${tmp}/active-runs.json`,
@@ -77,7 +77,7 @@ beforeAll(async () => {
 	redirected = !!sessionCache.findSession("bks-zz-probe");
 	if (!redirected) {
 		console.warn(
-			"[zz-fake-run] chats-dir redirect didn't take (module cache already " +
+			"[zz-fake-run] sessions-dir redirect didn't take (module cache already " +
 				"warm from earlier test files) — skipping; run this file directly.",
 		);
 	}
@@ -86,7 +86,7 @@ beforeAll(async () => {
 afterAll(() => {
 	agentRunner?.__setEngineForTest(null);
 	restoreJournal?.();
-	restoreChatsDir?.();
+	restoreSessionsDir?.();
 	sessionCache?.invalidateSessionsCache();
 });
 
@@ -163,7 +163,7 @@ describe("fake-engine session runs (consumer loop end-to-end)", () => {
 	test("failed run: the failure lands in the transcript as a system chip", () => {
 		if (!redirected) return;
 		// The store is a globalThis singleton — if an earlier suite file opened
-		// it against the real chats dir, skip rather than write to it.
+		// it against the real sessions dir, skip rather than write to it.
 		const store = transcriptStoreMod.transcriptStore();
 		if (!store.dbPath.startsWith(tmp)) return;
 

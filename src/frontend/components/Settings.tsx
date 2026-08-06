@@ -92,6 +92,9 @@ import {
 	revokeKeychainGrant,
 	fetchPersonalPrompt,
 	savePersonalPrompt,
+	fetchInstanceIdentity,
+	saveInstanceIdentity,
+	type InstanceIdentityDto,
 	relativeTime,
 	fetchModels,
 	fetchFeeds,
@@ -136,13 +139,13 @@ import {
 	IconChevronDown,
 	IconChevronLeft,
 	IconChevronRight,
+	IconMic,
 	IconPencil,
 	IconPlus,
 	IconTrash,
 	IconX,
 } from "./icons";
 import { toast } from "../ui/toast";
-import { Tooltip } from "../ui/tooltip";
 import { AGENT_NAME, PRODUCT_NAME } from "../lib/brand";
 import {
 	onSidebarToolsChanged,
@@ -163,15 +166,27 @@ import {
 	readHiddenSidebarFeeds,
 	setSidebarFeedVisible,
 } from "../lib/sidebar-feeds";
+import {
+	getDeskVoicePref,
+	setDeskVoicePref,
+	onDeskVoiceChanged,
+} from "../lib/desk-voice-pref";
 
 // The full-window Settings surface: a left sub-nav + a scrolling body, reached
 // from the "Settings" item in the account menu. Designed to grow — each area is
 // just another entry in SECTIONS and a matching panel below. The "Tools" group
 // holds the app's tool surfaces (Automations, Goals, …) — those render at their
 // own routes (<base>/automations, …) with this surface as chrome, so the
-// section is controlled by the router, not local state. The "Personal" group
-// holds per-browser preferences (notifications, theme); the "Workspace" group holds
-// shared setup that configures how every session runs (default model, connections).
+// section is controlled by the router, not local state.
+//
+// Groups run from what one person owns to what the whole instance does:
+// "Personal" is yours alone — the per-user half first (who sessions act as,
+// your standing prompt, how you write) and the per-device half last
+// (notifications, theme); "Workspace" is shared config every session runs
+// under; "Automation" is the standing work the instance does on its own —
+// those are the tool surfaces, grouped by what they are rather than sold as
+// the headline; "Infrastructure" is the machinery prepared ahead of a run; and
+// "Activity" is the read-only record agents leave behind.
 
 /** Tool surfaces hosted inside Settings — App renders their panel as children. */
 export type ToolSectionKey =
@@ -180,23 +195,23 @@ export type ToolSectionKey =
 	| "actions"
 	| "security";
 
+/** Listed in nav order (SECTIONS below). */
 export type SettingsSectionKey =
-	| "notifications"
-	| "composer"
-	| "appearance"
-	| "personalPrompt"
 	| "myAccounts"
+	| "keychain"
+	| "personalPrompt"
+	| "composer"
+	| "deskVoice"
+	| "notifications"
+	| "appearance"
 	| "setup"
 	| "workspace"
-	| "model"
-	| "modelProviders"
+	| "models"
 	| "connections"
 	| "memory"
-	| "warmPreviews"
-	| "previewPool"
-	| "papercuts"
-	| "keychain"
+	| "prewarming"
 	| "deploys"
+	| "papercuts"
 	| "audit"
 	| ToolSectionKey;
 
@@ -214,86 +229,8 @@ const SECTIONS: {
 	icon: React.ReactNode;
 }[] = [
 	{
-		key: "automations",
-		label: "Automations",
-		group: "Tools",
-		icon: (
-			<svg
-				width="20"
-				height="20"
-				viewBox="0 0 16 16"
-				fill="none"
-				stroke="currentColor"
-				strokeWidth="1.4"
-			>
-				<circle cx="8" cy="8" r="5.5" />
-				<path d="M8 5v3l2 1.5" strokeLinecap="round" strokeLinejoin="round" />
-			</svg>
-		),
-	},
-	{
-		key: "goals",
-		label: "Goals",
-		group: "Tools",
-		icon: (
-			<svg
-				width="20"
-				height="20"
-				viewBox="0 0 16 16"
-				fill="none"
-				stroke="currentColor"
-				strokeWidth="1.4"
-			>
-				<circle cx="8" cy="8" r="6" />
-				<circle cx="8" cy="8" r="3" />
-				<circle cx="8" cy="8" r="0.6" fill="currentColor" stroke="none" />
-			</svg>
-		),
-	},
-	{
-		key: "actions",
-		label: "Actions",
-		group: "Tools",
-		icon: (
-			<svg
-				width="20"
-				height="20"
-				viewBox="0 0 16 16"
-				fill="none"
-				stroke="currentColor"
-				strokeWidth="1.4"
-			>
-				<path
-					d="M8.5 1.5L3 9h4l-.5 5.5L13 7H9l-.5-5.5z"
-					strokeLinejoin="round"
-				/>
-			</svg>
-		),
-	},
-	{
-		key: "security",
-		label: "Security",
-		group: "Tools",
-		icon: (
-			<svg
-				width="20"
-				height="20"
-				viewBox="0 0 16 16"
-				fill="none"
-				stroke="currentColor"
-				strokeWidth="1.4"
-			>
-				<path
-					d="M8 1.8l4.6 1.7v3.8c0 3-1.9 5.2-4.6 6.5-2.7-1.3-4.6-3.5-4.6-6.5V3.5L8 1.8z"
-					strokeLinejoin="round"
-				/>
-				<path d="M6.1 8l1.3 1.3 2.5-2.6" strokeLinecap="round" strokeLinejoin="round" />
-			</svg>
-		),
-	},
-	{
-		key: "notifications",
-		label: "Notifications",
+		key: "myAccounts",
+		label: "My accounts",
 		group: "Personal",
 		icon: (
 			<svg
@@ -304,17 +241,14 @@ const SECTIONS: {
 				stroke="currentColor"
 				strokeWidth="1.4"
 			>
-				<path
-					d="M8 2.2a3.4 3.4 0 0 0-3.4 3.4c0 2.9-1.1 3.9-1.1 3.9h9A5.4 5.4 0 0 1 11.4 5.6 3.4 3.4 0 0 0 8 2.2z"
-					strokeLinejoin="round"
-				/>
-				<path d="M6.7 12a1.4 1.4 0 0 0 2.6 0" strokeLinecap="round" />
+				<circle cx="8" cy="5.2" r="2.7" />
+				<path d="M2.8 13.5a5.2 5.2 0 0 1 10.4 0" strokeLinecap="round" />
 			</svg>
 		),
 	},
 	{
-		key: "composer",
-		label: "Composer",
+		key: "keychain",
+		label: "Keychain",
 		group: "Personal",
 		icon: (
 			<svg
@@ -325,29 +259,8 @@ const SECTIONS: {
 				stroke="currentColor"
 				strokeWidth="1.4"
 			>
-				<rect x="1.75" y="4.25" width="12.5" height="7.5" rx="1.2" />
-				<path
-					d="M4 6.8h.01M6.7 6.8h.01M9.4 6.8h.01M12.1 6.8h.01M5 9.5h6"
-					strokeLinecap="round"
-				/>
-			</svg>
-		),
-	},
-	{
-		key: "appearance",
-		label: "Appearance",
-		group: "Personal",
-		icon: (
-			<svg
-				width="20"
-				height="20"
-				viewBox="0 0 16 16"
-				fill="none"
-				stroke="currentColor"
-				strokeWidth="1.4"
-			>
-				<circle cx="8" cy="8" r="5.5" />
-				<path d="M8 2.5a5.5 5.5 0 0 1 0 11z" fill="currentColor" stroke="none" />
+				<circle cx="5.4" cy="8" r="2.6" />
+				<path d="M8 8h6M12 8v2.2M10 8v1.6" strokeLinecap="round" />
 			</svg>
 		),
 	},
@@ -376,8 +289,8 @@ const SECTIONS: {
 		),
 	},
 	{
-		key: "myAccounts",
-		label: "My accounts",
+		key: "composer",
+		label: "Composer",
 		group: "Personal",
 		icon: (
 			<svg
@@ -388,8 +301,56 @@ const SECTIONS: {
 				stroke="currentColor"
 				strokeWidth="1.4"
 			>
-				<circle cx="8" cy="5.2" r="2.7" />
-				<path d="M2.8 13.5a5.2 5.2 0 0 1 10.4 0" strokeLinecap="round" />
+				<rect x="1.75" y="4.25" width="12.5" height="7.5" rx="1.2" />
+				<path
+					d="M4 6.8h.01M6.7 6.8h.01M9.4 6.8h.01M12.1 6.8h.01M5 9.5h6"
+					strokeLinecap="round"
+				/>
+			</svg>
+		),
+	},
+	{
+		key: "deskVoice",
+		label: "Desk voice",
+		group: "Personal",
+		icon: <IconMic size={20} />,
+	},
+	{
+		key: "notifications",
+		label: "Notifications",
+		group: "Personal",
+		icon: (
+			<svg
+				width="20"
+				height="20"
+				viewBox="0 0 16 16"
+				fill="none"
+				stroke="currentColor"
+				strokeWidth="1.4"
+			>
+				<path
+					d="M8 2.2a3.4 3.4 0 0 0-3.4 3.4c0 2.9-1.1 3.9-1.1 3.9h9A5.4 5.4 0 0 1 11.4 5.6 3.4 3.4 0 0 0 8 2.2z"
+					strokeLinejoin="round"
+				/>
+				<path d="M6.7 12a1.4 1.4 0 0 0 2.6 0" strokeLinecap="round" />
+			</svg>
+		),
+	},
+	{
+		key: "appearance",
+		label: "Appearance",
+		group: "Personal",
+		icon: (
+			<svg
+				width="20"
+				height="20"
+				viewBox="0 0 16 16"
+				fill="none"
+				stroke="currentColor"
+				strokeWidth="1.4"
+			>
+				<circle cx="8" cy="8" r="5.5" />
+				<path d="M8 2.5a5.5 5.5 0 0 1 0 11z" fill="currentColor" stroke="none" />
 			</svg>
 		),
 	},
@@ -434,28 +395,8 @@ const SECTIONS: {
 		),
 	},
 	{
-		key: "model",
-		label: "Accounts",
-		group: "Workspace",
-		icon: (
-			<svg
-				width="20"
-				height="20"
-				viewBox="0 0 16 16"
-				fill="none"
-				stroke="currentColor"
-				strokeWidth="1.4"
-			>
-				<rect x="1.75" y="3.25" width="12.5" height="9.5" rx="1.5" />
-				<circle cx="5.75" cy="7" r="1.5" />
-				<path d="M3.75 10.75c.4-1.1 1.3-1.6 2-1.6s1.6.5 2 1.6" strokeLinecap="round" />
-				<path d="M9.75 6.5h2.75M9.75 9h2.75" strokeLinecap="round" />
-			</svg>
-		),
-	},
-	{
-		key: "modelProviders",
-		label: "Model providers",
+		key: "models",
+		label: "Models",
 		group: "Workspace",
 		icon: (
 			<svg
@@ -513,9 +454,87 @@ const SECTIONS: {
 		),
 	},
 	{
-		key: "warmPreviews",
-		label: "Warm deps",
-		group: "Workspace",
+		key: "automations",
+		label: "Automations",
+		group: "Automation",
+		icon: (
+			<svg
+				width="20"
+				height="20"
+				viewBox="0 0 16 16"
+				fill="none"
+				stroke="currentColor"
+				strokeWidth="1.4"
+			>
+				<circle cx="8" cy="8" r="5.5" />
+				<path d="M8 5v3l2 1.5" strokeLinecap="round" strokeLinejoin="round" />
+			</svg>
+		),
+	},
+	{
+		key: "goals",
+		label: "Goals",
+		group: "Automation",
+		icon: (
+			<svg
+				width="20"
+				height="20"
+				viewBox="0 0 16 16"
+				fill="none"
+				stroke="currentColor"
+				strokeWidth="1.4"
+			>
+				<circle cx="8" cy="8" r="6" />
+				<circle cx="8" cy="8" r="3" />
+				<circle cx="8" cy="8" r="0.6" fill="currentColor" stroke="none" />
+			</svg>
+		),
+	},
+	{
+		key: "actions",
+		label: "Actions",
+		group: "Automation",
+		icon: (
+			<svg
+				width="20"
+				height="20"
+				viewBox="0 0 16 16"
+				fill="none"
+				stroke="currentColor"
+				strokeWidth="1.4"
+			>
+				<path
+					d="M8.5 1.5L3 9h4l-.5 5.5L13 7H9l-.5-5.5z"
+					strokeLinejoin="round"
+				/>
+			</svg>
+		),
+	},
+	{
+		key: "security",
+		label: "Security",
+		group: "Automation",
+		icon: (
+			<svg
+				width="20"
+				height="20"
+				viewBox="0 0 16 16"
+				fill="none"
+				stroke="currentColor"
+				strokeWidth="1.4"
+			>
+				<path
+					d="M8 1.8l4.6 1.7v3.8c0 3-1.9 5.2-4.6 6.5-2.7-1.3-4.6-3.5-4.6-6.5V3.5L8 1.8z"
+					strokeLinejoin="round"
+				/>
+				<path d="M6.1 8l1.3 1.3 2.5-2.6" strokeLinecap="round" strokeLinejoin="round" />
+			</svg>
+		),
+	},
+	{
+		key: "prewarming",
+		label: "Prewarming",
+		group: "Infrastructure",
 		icon: (
 			<svg
 				width="20"
@@ -533,28 +552,9 @@ const SECTIONS: {
 		),
 	},
 	{
-		key: "previewPool",
-		label: "Preview pool",
-		group: "Workspace",
-		icon: (
-			<svg
-				width="20"
-				height="20"
-				viewBox="0 0 16 16"
-				fill="none"
-				stroke="currentColor"
-				strokeWidth="1.4"
-			>
-				<path d="M3 4.5l5-2.7 5 2.7v7l-5 2.7-5-2.7v-7z" strokeLinejoin="round" />
-				<path d="M3 4.5L8 7.2l5-2.7M8 7.2v7" strokeLinejoin="round" />
-				<path d="M6.6 9.4l1.9 1.1 1.9-1.1" strokeLinecap="round" strokeLinejoin="round" />
-			</svg>
-		),
-	},
-	{
 		key: "deploys",
 		label: "Deploys",
-		group: "Workspace",
+		group: "Infrastructure",
 		icon: (
 			<svg
 				width="20"
@@ -571,27 +571,9 @@ const SECTIONS: {
 		),
 	},
 	{
-		key: "keychain",
-		label: "Keychain",
-		group: "Workspace",
-		icon: (
-			<svg
-				width="20"
-				height="20"
-				viewBox="0 0 16 16"
-				fill="none"
-				stroke="currentColor"
-				strokeWidth="1.4"
-			>
-				<circle cx="5.4" cy="8" r="2.6" />
-				<path d="M8 8h6M12 8v2.2M10 8v1.6" strokeLinecap="round" />
-			</svg>
-		),
-	},
-	{
 		key: "papercuts",
 		label: "Papercuts",
-		group: "Workspace",
+		group: "Activity",
 		icon: (
 			<svg
 				width="20"
@@ -617,7 +599,7 @@ const SECTIONS: {
 	{
 		key: "audit",
 		label: "Audit log",
-		group: "Workspace",
+		group: "Activity",
 		icon: (
 			<svg
 				width="20"
@@ -647,19 +629,18 @@ function SectionPanel({
 		<>
 			{TOOL_SECTIONS.has(section) && children}
 			{section === "notifications" && <NotificationsPanel />}
+			{section === "deskVoice" && <DeskVoicePanel />}
 			{section === "composer" && <ComposerPanel />}
 			{section === "appearance" && <AppearancePanel />}
 			{section === "setup" && <SetupPanel />}
 			{section === "workspace" && <WorkspacePanel />}
 			{section === "audit" && <AuditPanel />}
-			{section === "model" && <AccountsPanel />}
-			{section === "modelProviders" && <ModelProvidersPanel />}
+			{section === "models" && <ModelsPanel />}
 			{section === "connections" && <Connections />}
 			{section === "personalPrompt" && <PersonalPromptPanel />}
 			{section === "myAccounts" && <MyAccountsPanel />}
 			{section === "memory" && <MemoryPanel />}
-			{section === "warmPreviews" && <WarmPreviewsPanel />}
-			{section === "previewPool" && <PreviewPoolPanel />}
+			{section === "prewarming" && <PrewarmingPanel />}
 			{section === "papercuts" && <PapercutsPanel />}
 			{section === "keychain" && <KeychainPanel />}
 			{section === "deploys" && <DeploysPanel />}
@@ -713,7 +694,10 @@ export function Settings({
 			</MobileSettings>
 		);
 
-	const active = section ?? "notifications";
+	// Default landing = the first non-tool row in the nav. Tool sections can't be
+	// the default: their panel arrives as `children`, which App only passes on a
+	// tool route, so a bare /settings would render an empty pane.
+	const active = section ?? "myAccounts";
 
 	return (
 		<div className="settings-page">
@@ -1126,6 +1110,123 @@ function NotificationsPanel() {
 						/>
 					}
 				/>
+			</SettingCard>
+		</SettingsPanel>
+	);
+}
+
+// ── Desk voice ─────────────────────────────────────────────────────────────
+
+interface DeskVoiceStatus {
+	configured: boolean;
+	keyMasked?: string;
+}
+
+function DeskVoiceApiKeyRow() {
+	const [status, setStatus] = useState<DeskVoiceStatus | null>(null);
+	const [apiKey, setApiKey] = useState("");
+	const [busy, setBusy] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+
+	const load = useCallback(() => {
+		fetch(`${BASE_PATH}/api/desk/voice/status`)
+			.then((r) => r.json())
+			.then(setStatus)
+			.catch((e) => setError(e.message));
+	}, []);
+	useEffect(load, [load]);
+
+	async function put(value: string) {
+		setBusy(true);
+		setError(null);
+		try {
+			const res = await fetch(`${BASE_PATH}/api/desk/voice/key`, {
+				method: "PUT",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ apiKey: value }),
+			});
+			const body = await res.json();
+			if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
+			setStatus(body);
+			setApiKey("");
+		} catch (e: any) {
+			setError(e.message || "Failed to save the API key");
+		} finally {
+			setBusy(false);
+		}
+	}
+
+	return (
+		<>
+			{status?.configured && (
+				<SettingRow
+					title="OpenAI API key"
+					desc={status.keyMasked}
+					control={
+						<Button size="sm" disabled={busy} onClick={() => put("")}>
+							Remove
+						</Button>
+					}
+				/>
+			)}
+			<SettingRow
+				title={status?.configured ? "Replace key" : "OpenAI API key"}
+				desc={
+					error || (
+						<>
+							Stored on the server, used only for Desk voice calls. Any
+							signed-in user can start voice calls once set.
+						</>
+					)
+				}
+				control={
+					<div className="flex items-center gap-2">
+						<input
+							className={settingsInputClass}
+							type="password"
+							value={apiKey}
+							onChange={(e) => setApiKey(e.target.value)}
+							placeholder="sk-…"
+						/>
+						<Button
+							size="sm"
+							variant="primary"
+							disabled={busy || !apiKey.trim()}
+							onClick={() => put(apiKey.trim())}
+						>
+							{busy ? "Saving…" : "Save"}
+						</Button>
+					</div>
+				}
+			/>
+		</>
+	);
+}
+
+function DeskVoicePanel() {
+	const [on, setOn] = useState(getDeskVoicePref);
+	useEffect(() => onDeskVoiceChanged(() => setOn(getDeskVoicePref())), []);
+
+	return (
+		<SettingsPanel>
+			<SettingsHeader
+				title="Desk voice"
+				description="Talk to your Desk out loud. Voice mode uses OpenAI Realtime and adds a microphone button to the Desk overlay."
+			/>
+
+			<SettingCard>
+				<SettingRow
+					title="Voice mode"
+					desc="Show the voice toggle in your Desk. Off hides it for you only."
+					control={
+						<Toggle label="Voice mode" checked={on} onChange={setDeskVoicePref} />
+					}
+				/>
+			</SettingCard>
+
+			<SettingsGroupLabel>OpenAI API key</SettingsGroupLabel>
+			<SettingCard>
+				<DeskVoiceApiKeyRow />
 			</SettingCard>
 		</SettingsPanel>
 	);
@@ -1611,28 +1712,25 @@ function WarmPreviewsPanel() {
 		p.then((r) => setRepos(r.repos)).catch((e) => setError(e.message));
 	}
 
-	const header = (
-		<SettingsHeader
-			title="Warm deps"
-			description="Keep a template worktree per repo with node_modules installed, refreshed from its default branch on a schedule. Prebuilt spares of those dep trees are adopted into new session worktrees near-instantly, instead of every session paying a cold install."
-		/>
+	const label = (
+		<SettingsGroupLabel className="mt-0">Dependency templates</SettingsGroupLabel>
 	);
 
 	if (!repos)
 		return (
-			<SettingsPanel>
-				{header}
+			<>
+				{label}
 				{error ? (
 					<InlineAlert>{error}</InlineAlert>
 				) : (
 					<LoadingState>Loading repos…</LoadingState>
 				)}
-			</SettingsPanel>
+			</>
 		);
 
 	return (
-		<SettingsPanel>
-			{header}
+		<>
+			{label}
 
 			{error && <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>}
 
@@ -1695,7 +1793,13 @@ function WarmPreviewsPanel() {
 					);
 				})}
 			</SettingCard>
-		</SettingsPanel>
+			<SettingsHint>
+				Keeps a template worktree per repo with node_modules installed,
+				refreshed from its default branch on a schedule. Prebuilt spares of
+				those dep trees are adopted into new session worktrees near-instantly,
+				instead of every session paying a cold install.
+			</SettingsHint>
+		</>
 	);
 }
 
@@ -1752,28 +1856,23 @@ function PreviewPoolPanel() {
 		p.then((r) => setRepos(r.repos)).catch((e) => setError(e.message));
 	}
 
-	const header = (
-		<SettingsHeader
-			title="Preview pool"
-			description="Keep dev-server containers pre-booted from a nightly golden image, so the Preview button claims one in seconds instead of paying a cold boot. Claims follow the session's branch (small edits stream in live; big branch jumps reboot the dev server cleanly) and are released on stop or after sitting unwatched."
-		/>
-	);
+	const label = <SettingsGroupLabel>Preview containers</SettingsGroupLabel>;
 
 	if (!repos)
 		return (
-			<SettingsPanel>
-				{header}
+			<>
+				{label}
 				{error ? (
 					<InlineAlert>{error}</InlineAlert>
 				) : (
 					<LoadingState>Loading repos…</LoadingState>
 				)}
-			</SettingsPanel>
+			</>
 		);
 
 	return (
-		<SettingsPanel>
-			{header}
+		<>
+			{label}
 
 			{error && <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>}
 
@@ -1883,6 +1982,46 @@ function PreviewPoolPanel() {
 					);
 				})}
 			</SettingCard>
+			<SettingsHint>
+				Keeps dev-server containers pre-booted from a nightly golden image, so
+				the Preview button claims one in seconds instead of paying a cold boot.
+				Claims follow the session's branch (small edits stream in live; big
+				branch jumps reboot the dev server cleanly) and are released on stop or
+				after sitting unwatched.
+			</SettingsHint>
+		</>
+	);
+}
+
+/** Models: everywhere a model a session can run on comes from — the Anthropic
+ * and OpenAI subscription pools, and any provider you brought a key for. These
+ * were two sections whose descriptions each ended by pointing at the other. */
+function ModelsPanel() {
+	return (
+		<SettingsPanel>
+			<SettingsHeader
+				title="Models"
+				description="Where the models sessions run on come from — the Claude (Anthropic) and Codex (OpenAI) subscription accounts, plus any provider you bring your own API key for — and which model new runs start on."
+			/>
+			<AccountsPanel />
+			<ModelProvidersPanel />
+		</SettingsPanel>
+	);
+}
+
+/** Prewarming: the two pre-provisioned things that make a session start fast —
+ * dependency trees for its worktree, dev-server containers for its preview.
+ * Both are the same shape (a per-repo toggle with a status line), which is why
+ * they read better as two groups of one page than as two pages. */
+function PrewarmingPanel() {
+	return (
+		<SettingsPanel>
+			<SettingsHeader
+				title="Prewarming"
+				description="Work done ahead of time, per repo, so a session starts fast instead of paying for it on first use."
+			/>
+			<WarmPreviewsPanel />
+			<PreviewPoolPanel />
 		</SettingsPanel>
 	);
 }
@@ -1949,7 +2088,7 @@ function KeychainPanel() {
 	const panelHeader = (
 		<SettingsHeader
 			title="Keychain"
-			description="Credentials you own that a session can borrow — with your approval, for a stated purpose. Approved calls go through a broker that injects the secret server-side, so the agent never sees it. Grants are scoped to one session, expire, and are revocable."
+			description="Credentials a session can borrow — with the owner's approval, for a stated purpose. Approved calls go through a broker that injects the secret server-side, so the agent never sees it. Grants are scoped to one session, expire, and are revocable. Everyone on this instance sees the list below (who owns what, never the secret); only the owner can approve or remove theirs."
 		/>
 	);
 
@@ -2546,7 +2685,7 @@ function ComposerPanel() {
 		<SettingsPanel>
 			<SettingsHeader
 				title="Composer"
-				description="How the message box behaves when you write and send."
+				description="How the message box behaves when you write and send. These follow your account, so they're the same on every device you sign in from."
 			/>
 			<SettingCard>
 				<SettingRow
@@ -2673,13 +2812,89 @@ function ComposerPanel() {
 
 const IDENTITY_INPUT_CLASS = cn(settingsInputClass, "w-[140px]");
 
+/** Text field that commits on blur/Enter (Esc reverts), for the identity
+ *  settings backed by the config file rather than local prefs. */
+function IdentityInput({
+	label,
+	value,
+	placeholder,
+	onSave,
+}: {
+	label: string;
+	value: string;
+	placeholder: string;
+	onSave: (next: string) => Promise<void>;
+}) {
+	const [draft, setDraft] = useState(value);
+	const [saving, setSaving] = useState(false);
+	useEffect(() => setDraft(value), [value]);
+	const commit = async () => {
+		const next = draft.trim();
+		if (saving) return;
+		if (next === value) {
+			setDraft(value);
+			return;
+		}
+		setSaving(true);
+		try {
+			await onSave(next);
+		} catch {
+			setDraft(value);
+		} finally {
+			setSaving(false);
+		}
+	};
+	return (
+		<input
+			className={IDENTITY_INPUT_CLASS}
+			value={draft}
+			disabled={saving}
+			onChange={(e) => setDraft(e.target.value)}
+			onBlur={commit}
+			onKeyDown={(e) => {
+				if (e.key === "Enter") e.currentTarget.blur();
+				else if (e.key === "Escape") setDraft(value);
+			}}
+			placeholder={placeholder}
+			aria-label={label}
+		/>
+	);
+}
+
 /**
  * Instance identity. The source of truth is ~/.opensession/config.json
- * (persona.name / branding.productName) on the server — there is no
- * settings-write API for the config file yet, so the fields render the
- * built-in defaults, disabled, until a read/write endpoint exists.
+ * (persona.name / branding.productName) on the server, read and written
+ * through /api/settings/identity. A save applies to new runs immediately and
+ * schedules a frontend rebuild, so open tabs get the update-pill nudge once
+ * the re-branded bundle is live.
  */
 function WorkspacePanel() {
+	const [identity, setIdentity] = useState<InstanceIdentityDto | null>(null);
+	useEffect(() => {
+		let cancelled = false;
+		fetchInstanceIdentity()
+			.then((dto) => {
+				if (!cancelled) setIdentity(dto);
+			})
+			.catch(() => {});
+		return () => {
+			cancelled = true;
+		};
+	}, []);
+	const save = async (patch: {
+		personaName?: string;
+		productName?: string;
+	}) => {
+		try {
+			setIdentity(await saveInstanceIdentity(patch));
+			toast("Saved — open tabs update after the next rebuild", {
+				variant: "success",
+			});
+		} catch (e: any) {
+			toast(e?.message || "Failed to save", { variant: "error" });
+			throw e;
+		}
+	};
 	return (
 		<SettingsPanel>
 			<SettingsHeader
@@ -2693,52 +2908,40 @@ function WorkspacePanel() {
 					desc={
 						<>
 							What the agent calls itself in prompts, Slack messages, and the
-							UI. Configured via <code>persona.name</code> in{" "}
-							<code>~/.backstage/config.json</code> on the server.
+							UI. Stored as <code>persona.name</code> in{" "}
+							<code>~/.opensession/config.json</code> on the server.
 						</>
 					}
 					control={
-						<Tooltip label="Wire-up pending. Edit ~/.backstage/config.json for now.">
-							{/* Disabled inputs swallow hover events, so the tooltip
-							    hangs off a wrapping span. */}
-							<span className="inline-flex">
-								<input
-									className={IDENTITY_INPUT_CLASS}
-									value={AGENT_NAME}
-									disabled
-									readOnly
-									aria-label="Agent name"
-								/>
-							</span>
-						</Tooltip>
+						<IdentityInput
+							label="Agent name"
+							value={identity?.personaName ?? AGENT_NAME}
+							placeholder="Assistant"
+							onSave={(next) => save({ personaName: next })}
+						/>
 					}
 				/>
 				<SettingRow
 					title="Product name"
 					desc={
 						<>
-							What this app calls itself in titles and headers. Configured via{" "}
+							What this app calls itself in titles and headers. Stored as{" "}
 							<code>branding.productName</code> in the same config file.
 						</>
 					}
 					control={
-						<Tooltip label="Wire-up pending. Edit ~/.backstage/config.json for now.">
-							<span className="inline-flex">
-								<input
-									className={IDENTITY_INPUT_CLASS}
-									value={PRODUCT_NAME}
-									disabled
-									readOnly
-									aria-label="Product name"
-								/>
-							</span>
-						</Tooltip>
+						<IdentityInput
+							label="Product name"
+							value={identity?.productName ?? PRODUCT_NAME}
+							placeholder="Open Session"
+							onSave={(next) => save({ productName: next })}
+						/>
 					}
 				/>
 			</SettingCard>
 			<SettingsHint>
-				Changes to the config file apply to new runs without a restart; a
-				settings-write API for these fields is pending.
+				Changes apply to new agent runs immediately. Clearing a field restores
+				the built-in default.
 			</SettingsHint>
 		</SettingsPanel>
 	);
@@ -2803,7 +3006,7 @@ function AppearancePanel() {
 		<SettingsPanel>
 			<SettingsHeader
 				title="Appearance"
-				description="How this app looks on this device, and what the sidebar shows."
+				description="How this app looks, and what the sidebar shows. Theme and the tool toggles are per browser; sidebar order, feeds and transcript density follow your account everywhere."
 			/>
 			<SettingsGroupLabel>Theme</SettingsGroupLabel>
 			<SettingsSection>
@@ -2828,12 +3031,12 @@ function AppearancePanel() {
 			</SettingsSection>
 
 			<SettingsGroupLabel>
-				Chat
+				Session
 			</SettingsGroupLabel>
 			<SettingCard>
 				<SettingRow
 					title="Tool calls & messages"
-					desc="How each turn's working — tool calls and in-between messages — folds in the chat. Work stays folded by default; expanding a turn does not open its individual tool inputs."
+					desc="How each turn's working — tool calls and in-between messages — folds in the session. Work stays folded by default; expanding a turn does not open its individual tool inputs."
 					control={
 						<Select
 							label="Tool calls & messages"

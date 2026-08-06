@@ -11,8 +11,8 @@
  *
  * State isolation is a separate, mandatory knob: OPENSESSION_STATE_DIR
  * (rename-compat statePath — every `~/.opensession-*` store resolves under
- * it, fresh namespace) or at minimum OPENSESSION_CHATS_DIR. A dev instance
- * with neither REFUSES to boot: sharing the live chats dir means unlinking
+ * it, fresh namespace) or at minimum OPENSESSION_SESSIONS_DIR. A dev instance
+ * with neither REFUSES to boot: sharing the live sessions dir means unlinking
  * and stealing the production run-rpc unix socket, which wedges every
  * interactive run fleet-wide (2026-07-16/17 outages).
  */
@@ -25,7 +25,7 @@ export function isDevInstance(): boolean {
 
 /**
  * The refuse-to-boot condition, pure so tests can drive it: a dev instance
- * with no isolated state namespace would share the live instance's chats dir
+ * with no isolated state namespace would share the live instance's sessions dir
  * (and its run-rpc socket). Returns the error to print, or null when booting
  * is fine. Checked in opensession.ts (exit) AND in run-rpc.ts's socket bind
  * (module side effects run before the entry file's statements).
@@ -35,11 +35,11 @@ export function devInstanceBootError(
 ): string | null {
 	if ((env.OPENSESSION_DEV || env.OPENSESSION_DEV) !== "1") return null;
 	if (env.OPENSESSION_STATE_DIR) return null;
-	if (env.OPENSESSION_CHATS_DIR || env.OPENSESSION_CHATS_DIR) return null;
+	if (env.OPENSESSION_SESSIONS_DIR || env.OPENSESSION_SESSIONS_DIR) return null;
 	return (
 		"OPENSESSION_DEV=1 refuses to boot on the live state: set OPENSESSION_STATE_DIR " +
 		"(isolated state root; every ~/.opensession-* store resolves under it) or at " +
-		"least OPENSESSION_CHATS_DIR. A dev instance sharing the live chats dir would " +
+		"least OPENSESSION_SESSIONS_DIR. A dev instance sharing the live sessions dir would " +
 		"steal the production run-rpc socket and wedge every interactive run."
 	);
 }

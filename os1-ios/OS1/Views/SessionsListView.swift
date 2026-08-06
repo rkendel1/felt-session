@@ -38,7 +38,11 @@ struct SessionsListView: View {
 
     @State private var viewModel = SessionsListViewModel()
     @State private var showSettings = false
-    @State private var path = NavigationPath()
+    @State private var showDesk = false
+    /// The push stack, typed rather than a `NavigationPath`, so a create that
+    /// resolves after the person has navigated elsewhere can find its own
+    /// pending entry instead of assuming it is still on top.
+    @State private var path: [Session] = []
     @State private var searchText = ""
     /// Non-nil opens the new-session sheet; carries the per-repo "+" preset.
     @State private var newSessionRequest: NewSessionRequest?
@@ -58,6 +62,8 @@ struct SessionsListView: View {
     /// Surfaced when a background session create fails after the sheet closed.
     @State private var createError: String?
     @State private var showArchived = false
+    /// A tapped "Try again" on the unreachable screen, until it lands.
+    @State private var isRetrying = false
     #if os(iOS)
     @State private var renamingWorkspace: SidebarWorkspace?
     @State private var renameText = ""
@@ -67,13 +73,16 @@ struct SessionsListView: View {
     struct NewSessionRequest: Identifiable {
         let id = UUID()
         var repo: String?
+        /// Set when the create joins an existing workspace as a new tab (the
+        /// session's ⋯ menu); nil starts a standalone session.
+        var workspaceId: String?
     }
 
     @AppStorage("os1.list.groupBy") private var groupByRaw = GroupBy.repoStatus.rawValue
     @AppStorage("os1.list.repo") private var repoFilter = "all"
     @AppStorage("os1.list.sort") private var sortByRaw = SortBy.updated.rawValue
     // Default to the signed-in person's own sessions, like the web sidebar —
-    // the server also hosts hundreds of automation runs and teammates' chats.
+    // the server also hosts hundreds of automation runs and teammates' sessions.
     @AppStorage("os1.list.people") private var peopleFilter = "mine"
     @AppStorage("os1.sidebar.repoOrder") private var preferredRepoOrder = "[]"
     /// Section headings the person has folded shut — repo bands, status lanes
@@ -136,10 +145,6 @@ struct SessionsListView: View {
 
     #if os(macOS)
     @State private var selectedSessionID: String?
-    #else
-    /// Temp id of the pending session pushed onto the stack, so the resolved
-    /// real session can swap in place (and a failed create can pop it).
-    @State private var pushedPendingId: String?
     #endif
 
     var body: some View {
@@ -198,7 +203,7 @@ struct SessionsListView: View {
                     viewModel.rename(workspace, to: renameText)
                 }
                 .disabled(
-                    workspace.projectId != nil
+                    workspace.workspaceId != nil
                         && renameText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 )
             } message: { _ in
@@ -226,9 +231,20 @@ struct SessionsListView: View {
         } detail: {
             if let selectedSessionID,
                let session = viewModel.sessions.first(where: { $0.id == selectedSessionID }) {
-                SessionView(session: session, seed: optimisticSeeds[session.id])
+                SessionView(
+                    session: session,
+                    seed: optimisticSeeds[session.id],
+                    workspaceNames: viewModel.workspaceNames
+                )
                     // Fresh view (and socket) per session, not a reused one.
                     .id(selectedSessionID)
+                    // The selected session reads as read, and keeps re-marking as
+                    // the poll hands it fresher activity — see SessionTabsView
+                    // for the same rule on the iOS stack.
+                    .onChange(of: session, initial: true) { _, open in
+                        ReadsStore.shared.open(open)
+                    }
+                    .onDisappear { ReadsStore.shared.close(session.id) }
             } else {
                 ContentUnavailableView(
                     "Select a session",
@@ -237,7 +253,10 @@ struct SessionsListView: View {
             }
         }
         .sheet(item: $newSessionRequest) { request in
-            NewSessionView(initialRepo: request.repo) { session, seed in
+            NewSessionView(
+                initialRepo: request.repo,
+                initialWorkspaceId: request.workspaceId
+            ) { session, seed in
                 openOptimistic(session, seed: seed)
             } onResolved: { tempId, result in
                 resolveCreate(tempId: tempId, result: result)
@@ -248,6 +267,10 @@ struct SessionsListView: View {
                 sessions: visibleArchivedSessions,
                 onRestore: viewModel.unarchive
             )
+        }
+        .sheet(isPresented: $showDesk) {
+            DeskSheet()
+                .frame(minWidth: 520, minHeight: 600)
         }
         .safeAreaInset(edge: .bottom) {
             errorBanner
@@ -271,6 +294,13 @@ struct SessionsListView: View {
                     .menuIndicator(.hidden)
                     .controlSize(.small)
                     .help("Filter, group, and sort sessions")
+                Button {
+                    showDesk = true
+                } label: {
+                    Image(systemName: "lamp.desk")
+                }
+                .controlSize(.small)
+                .help("Open the Desk")
                 Button {
                     newSessionRequest = NewSessionRequest()
                 } label: {
@@ -331,6 +361,15 @@ struct SessionsListView: View {
                     // circle around it read as a stray border.
                     .sharedBackgroundVisibility(.hidden)
                     ToolbarItem(placement: .topTrailingCompat) {
+                        Button {
+                            showDesk = true
+                        } label: {
+                            Image(systemName: "lamp.desk")
+                                .foregroundStyle(OS1VisualStyle.text)
+                        }
+                        .accessibilityLabel("Open the Desk")
+                    }
+                    ToolbarItem(placement: .topTrailingCompat) {
                         filterMenu
                     }
                     // New session lives in the top bar; search moved into the
@@ -350,8 +389,16 @@ struct SessionsListView: View {
                 .sheet(isPresented: $showSettings) {
                     SettingsView()
                 }
+                .sheet(isPresented: $showDesk) {
+                    DeskSheet()
+                        .presentationDetents([.large])
+                        .presentationDragIndicator(.visible)
+                }
                 .sheet(item: $newSessionRequest) { request in
-                    NewSessionView(initialRepo: request.repo) { session, seed in
+                    NewSessionView(
+                        initialRepo: request.repo,
+                        initialWorkspaceId: request.workspaceId
+                    ) { session, seed in
                         openOptimistic(session, seed: seed)
                     } onResolved: { tempId, result in
                         resolveCreate(tempId: tempId, result: result)
@@ -373,20 +420,59 @@ struct SessionsListView: View {
     @ViewBuilder
     private var loadingOrList: some View {
         if !viewModel.hasLoaded {
-            ProgressView()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if viewModel.sessions.isEmpty && viewModel.archivedSessions.isEmpty {
-            emptyState
+            loadingState
+        } else if hasNoRows {
+            if let failure = viewModel.loadFailure {
+                unreachableState(failure)
+            } else {
+                emptyState
+            }
         } else {
             list
         }
     }
 
+    private var hasNoRows: Bool {
+        viewModel.sessions.isEmpty && viewModel.archivedSessions.isEmpty
+    }
+
+    /// True while the whole screen is given over to a failed load — which is
+    /// also the one time the banner has nothing to add.
+    private var showsFailureScreen: Bool {
+        viewModel.hasLoaded && hasNoRows && viewModel.loadFailure != nil
+    }
+
+    /// The first load. A tailnet server with the tunnel down answers nothing
+    /// for a full minute, and a bare spinner spends that minute saying
+    /// nothing — so the diagnosis joins it as soon as there is one.
+    private var loadingState: some View {
+        VStack(spacing: 14) {
+            ProgressView()
+            if let failure = viewModel.loadFailure {
+                VStack(spacing: 3) {
+                    Text(failure.title)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(OS1VisualStyle.text)
+                    Text(failure.fix ?? failure.detail)
+                        .font(.footnote)
+                        .foregroundStyle(OS1VisualStyle.textDim)
+                }
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 300)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .animation(.easeOut(duration: 0.2), value: viewModel.loadFailure)
+    }
+
     /// Floating glass capsule, matching the session view's banner styling,
     /// instead of a full-width opaque bar.
+    ///
+    /// Silent while the failure screen is up: the same sentence twice, once
+    /// mid-screen and once in red at the bottom, reads as two problems.
     @ViewBuilder
     private var errorBanner: some View {
-        if let error = viewModel.error {
+        if let error = viewModel.error, !showsFailureScreen {
             Text(error)
                 .font(.footnote)
                 .foregroundStyle(.red)
@@ -443,9 +529,31 @@ struct SessionsListView: View {
         #if os(macOS)
         selectedSessionID = session.id
         #else
-        pushedPendingId = session.id
         path.append(session)
         #endif
+    }
+
+    /// The tab strip's "+" — a new session in a workspace opens as a tab right
+    /// away, with no composer sheet in between. The server mints an EMPTY
+    /// sibling that shares this workspace's worktree and branch; it carries no
+    /// run until its first message, so there is no prompt to collect up front,
+    /// and nothing the sheet would have asked for is still open (repo, branch
+    /// and mode all come from the workspace).
+    ///
+    /// The create is awaited rather than optimistic: writing the session file
+    /// is one round trip — no worktree to prepare — so the tab appears with a
+    /// real id from its first frame, and a failure lands before there's a tab
+    /// to tear down. The row is filed locally so the strip has it immediately
+    /// instead of on the next poll.
+    private func openSiblingTab(of source: Session) async -> Session? {
+        do {
+            let created = try await OS1API.newSiblingSession(from: source.id)
+            viewModel.addOptimistic(created)
+            return created
+        } catch {
+            createError = error.localizedDescription
+            return nil
+        }
     }
 
     /// The background create finished: move the pending row (and the open
@@ -466,20 +574,22 @@ struct SessionsListView: View {
             #if os(macOS)
             if selectedSessionID == tempId { selectedSessionID = id }
             #else
-            if pushedPendingId == tempId, !path.isEmpty,
+            // Swap the pending entry wherever it sits in the stack, rather
+            // than whatever happens to be on top: worktree prep takes seconds,
+            // and by the time it lands the person may have gone back and
+            // opened a different session — replacing the top would yank them
+            // into the session they started earlier.
+            if let index = path.firstIndex(where: { $0.id == tempId }),
                let session = viewModel.sessions.first(where: { $0.id == id }) {
-                // Swap the pending push for the real session without a
-                // visible pop/push double transition.
                 var next = path
-                next.removeLast()
-                next.append(session)
+                next[index] = session
+                // No visible pop/push double transition.
                 var transaction = Transaction()
                 transaction.disablesAnimations = true
                 withTransaction(transaction) {
                     path = next
                 }
             }
-            pushedPendingId = nil
             #endif
         case .failure(let error):
             viewModel.removeOptimistic(tempId)
@@ -488,10 +598,9 @@ struct SessionsListView: View {
             #if os(macOS)
             if selectedSessionID == tempId { selectedSessionID = nil }
             #else
-            if pushedPendingId == tempId, !path.isEmpty {
-                path.removeLast()
-            }
-            pushedPendingId = nil
+            // Same care as the success path: drop the failed session's own
+            // screen, not whatever the person is looking at now.
+            path.removeAll { $0.id == tempId }
             #endif
             createError = error.localizedDescription
         }
@@ -544,7 +653,7 @@ struct SessionsListView: View {
         let repo = repoFilter
         let query = searchText.trimmingCharacters(in: .whitespaces).lowercased()
         // Rows this person has hidden drop out of the sidebar — except while
-        // a chat of theirs is blocked on a question (the poll consumes the
+        // a session of theirs is blocked on a question (the poll consumes the
         // hide when that happens), and except while searching, which is how a
         // hidden row is found again so its menu can restore it.
         #if os(iOS)
@@ -553,7 +662,7 @@ struct SessionsListView: View {
         return { workspace in
             #if os(iOS)
             if !hides.isEmpty, workspace.lane != .needsInput,
-               hides[HideStore.rowKey(for: workspace)] != nil {
+               hides[SidebarRowKeys.rowKey(for: workspace)] != nil {
                 return false
             }
             #endif
@@ -808,6 +917,7 @@ struct SessionsListView: View {
                     in: viewModel.sessions,
                     containing: session
                 ),
+                workspaceNames: viewModel.workspaceNames,
                 viewModelForSession: {
                     sessionPageCache.viewModel(
                         for: $0,
@@ -821,7 +931,28 @@ struct SessionsListView: View {
                     composerDrafts[id] = draft.isEmpty ? nil : draft
                 },
                 onNewSession: {
-                    newSessionRequest = NewSessionRequest(repo: session.effectiveRepo)
+                    // The session's ⋯ → "New session in this workspace": a sibling
+                    // tab, not a standalone session. The workspace id comes from
+                    // the latest polled copy — the row NavigationPath retained
+                    // predates a workspace this session may have joined since.
+                    let current = viewModel.sessions.first { $0.id == session.id } ?? session
+                    guard current.workspaceId?.isEmpty == false else {
+                        // A workspace-less legacy session has no strip to join,
+                        // so the composer sheet stays the way in — it's a
+                        // standalone session, and its repo/mode are still open
+                        // questions.
+                        newSessionRequest = NewSessionRequest(repo: session.effectiveRepo)
+                        return nil
+                    }
+                    return await openSiblingTab(of: current)
+                },
+                onRenameWorkspace: { name in
+                    guard let workspace = workspace(containing: session) else { return }
+                    viewModel.rename(workspace, to: name)
+                },
+                onArchiveWorkspace: {
+                    guard let workspace = workspace(containing: session) else { return }
+                    archive(workspace)
                 },
                 onCloseTab: { closed in
                     sessionPageCache.remove(sessionId: closed.id)
@@ -845,6 +976,7 @@ struct SessionsListView: View {
         SessionRow(
             session: workspace.statusSession,
             title: workspace.title,
+            sessions: workspace.sessions,
             onArchive: canArchive ? { archive(workspace) } : nil
         )
         .tag(session.id)
@@ -854,13 +986,20 @@ struct SessionsListView: View {
         Button {
             path.append(session)
         } label: {
-            SessionRow(session: workspace.statusSession, title: workspace.title)
+            SessionRow(
+                session: workspace.statusSession,
+                title: workspace.title,
+                sessions: workspace.sessions
+            )
         }
         .buttonStyle(.plain)
         .listRowInsets(EdgeInsets(top: 2, leading: 16, bottom: 2, trailing: 16))
         .listRowSeparator(.hidden)
         .listRowBackground(Color.clear)
         .swipeActions(edge: .trailing) { archiveButton(workspace, viaSwipe: true) }
+        // Swipe right to pin, left to archive: the pin is the reversible one,
+        // so it takes the leading edge (and its full swipe just toggles).
+        .swipeActions(edge: .leading) { pinButton(workspace) }
         .contextMenu {
             if canArchive { workspaceMenu(workspace) }
         }
@@ -868,8 +1007,30 @@ struct SessionsListView: View {
     }
 
     #if os(iOS)
+    /// Leading swipe (and context menu) action. Non-destructive: the row stays
+    /// where it is and gains a copy in the Pinned band, so the cell just closes
+    /// — no `.destructive` role, and the toggle animates the band's insert.
+    @ViewBuilder
+    private func pinButton(_ workspace: SidebarWorkspace) -> some View {
+        if !workspace.isOptimistic {
+            let pinned = PinStore.shared.isPinned(workspace)
+            Button {
+                withAnimation(.snappy(duration: 0.28)) {
+                    PinStore.shared.toggle(workspace)
+                }
+            } label: {
+                Label(pinned ? "Unpin" : "Pin", systemImage: pinned ? "pin.slash.fill" : "pin.fill")
+            }
+            .tint(OS1VisualStyle.yellow)
+        }
+    }
+
     @ViewBuilder
     private func workspaceMenu(_ workspace: SidebarWorkspace) -> some View {
+        // Same action as the leading swipe, for anyone who reaches for the
+        // long press instead.
+        pinButton(workspace)
+
         Button {
             detailsWorkspace = workspace
         } label: {
@@ -883,7 +1044,7 @@ struct SessionsListView: View {
             Label("Rename", systemImage: "pencil")
         }
 
-        if let link = workspaceLink(workspace) {
+        if let link = workspace.shareURL {
             ShareLink(item: link) {
                 Label("Share link", systemImage: "square.and.arrow.up")
             }
@@ -899,11 +1060,11 @@ struct SessionsListView: View {
         if !workspace.isOptimistic {
             Divider()
             // Hiding is the personal counterpart to archiving: the row leaves
-            // YOUR sidebar (here and in the web one) while the chat keeps
+            // YOUR sidebar (here and in the web one) while the session keeps
             // running for everyone else — so it isn't destructive-styled.
             if HideStore.shared.isHidden(workspace) {
                 Button {
-                    HideStore.shared.clear([HideStore.rowKey(for: workspace)])
+                    HideStore.shared.clear([SidebarRowKeys.rowKey(for: workspace)])
                 } label: {
                     Label("Restore to my sidebar", systemImage: "eye")
                 }
@@ -928,19 +1089,14 @@ struct SessionsListView: View {
         }
     }
 
-    private func workspaceLink(_ workspace: SidebarWorkspace) -> URL? {
-        guard let base = ServerConfig.shared.baseURL else { return nil }
-        let session = workspace.mainSession
-        if let projectId = session.projectId, !projectId.isEmpty {
-            return base
-                .appendingPathComponent("workspace")
-                .appendingPathComponent(projectId)
-                .appendingPathComponent("chat")
-                .appendingPathComponent(session.id)
+    /// The sidebar row a pushed session belongs to, so the session's own overflow
+    /// menu can act on the whole worktree. Resolved ids first: a session pushed
+    /// while it was still optimistic keeps its temp id in the stack.
+    private func workspace(containing session: Session) -> SidebarWorkspace? {
+        let id = resolvedSessionIds[session.id] ?? session.id
+        return viewModel.sidebarWorkspaces.first { workspace in
+            workspace.sessions.contains { $0.id == id }
         }
-        return base
-            .appendingPathComponent("session")
-            .appendingPathComponent(session.id)
     }
     #endif
 
@@ -964,12 +1120,19 @@ struct SessionsListView: View {
             Button(role: viaSwipe ? .destructive : nil) {
                 archive(workspace, animated: !viaSwipe)
             } label: {
-                VStack(spacing: 2) {
-                    WebIcon(kind: .archive, size: 22, color: .white)
-                    Text("Archive")
-                }
+                // A Label, not our own icon+text stack: a swipe action lays
+                // out the system's label shape (glyph over caption, dropping
+                // to the glyph alone in a short swipe), and a custom view is
+                // rendered as its text only — which is why the archive glyph
+                // never appeared. `archivebox` is the metaphor the overflow
+                // menus here and in the session already use.
+                Label("Archive", systemImage: "archivebox.fill")
             }
-            .tint(.purple)
+            // Red, matching the web sidebar's own swipe action at phone width
+            // (.sidebar-swipe-action--archive, var(--red)): the same gesture on
+            // the same row should not change colour between the two clients.
+            // Our own palette rather than stock .red — see OS1VisualStyle.
+            .tint(OS1VisualStyle.red)
         }
     }
 
@@ -977,6 +1140,12 @@ struct SessionsListView: View {
         workspace.sessions.forEach {
             sessionPageCache.remove(sessionId: $0.id)
         }
+        #if os(iOS)
+        // The server unpins archived work for everyone (`unpinEverywhere`);
+        // dropping it locally too keeps the Pinned band from holding a row
+        // that just left the list.
+        PinStore.shared.unpin(workspace)
+        #endif
         #if os(macOS)
         if workspace.sessions.contains(where: { $0.id == selectedSessionID }) {
             selectedSessionID = nil
@@ -1003,8 +1172,42 @@ struct SessionsListView: View {
         )
     }
 
+    /// Rows this person pinned, lifted to the top of the list in their own pin
+    /// order. They also stay in their normal band below: pinning is quick
+    /// access, not a status — the rule the web sidebar's Pinned band follows.
+    /// Built from the filtered rows, so the search field and the repo/people
+    /// filters narrow the band like everything else.
+    #if os(iOS)
+    private var pinnedWorkspaces: [SidebarWorkspace] {
+        let store = PinStore.shared
+        guard !store.pins.isEmpty else { return [] }
+        return filteredWorkspaces
+            .compactMap { workspace in store.rank(workspace).map { (workspace, $0) } }
+            .sorted { $0.1 < $1.1 }
+            .map(\.0)
+    }
+    #endif
+
     private var listSections: some View {
         Group {
+            #if os(iOS)
+            if !pinnedWorkspaces.isEmpty {
+                Section {
+                    ForEach(
+                        visibleWorkspaces(pinnedWorkspaces, collapsedKey: "pinned")
+                    ) { workspace in
+                        sessionRow(workspace)
+                    }
+                } header: {
+                    groupHeader(
+                        title: "Pinned",
+                        count: pinnedWorkspaces.count,
+                        collapseKey: "pinned"
+                    )
+                }
+            }
+            #endif
+
             if groupBy == .repoStatus || groupBy == .repoInbox {
                 ForEach(groupBy == .repoInbox ? repoInboxGroups : repoSessionGroups) { repoGroup in
                     // Folding a repo band takes its lane headings with it —
@@ -1069,7 +1272,9 @@ struct SessionsListView: View {
                             #endif
                             Text("Archived")
                                 #if os(iOS)
-                                .font(.body.weight(.medium))
+                                // Same type as a repo band: it's a row that
+                                // leads somewhere, not a caption.
+                                .font(.callout.weight(.medium))
                                 #else
                                 .font(.body)
                                 #endif
@@ -1108,16 +1313,20 @@ struct SessionsListView: View {
             if !searchText.isEmpty {
                 ContentUnavailableView.search(text: searchText)
             } else if peopleFilter == "mine" {
-                ContentUnavailableView {
-                    Label("No sessions of yours yet", systemImage: "person.crop.circle")
-                } description: {
-                    Text("Sessions you start appear here.")
-                } actions: {
+                // Same look as the other two states on this screen: three
+                // different placeholder styles on one list is what makes a
+                // surface read as unfinished.
+                ListPlaceholder(
+                    symbol: "person.crop.circle",
+                    title: "No sessions of yours yet",
+                    message: "Sessions you start appear here."
+                ) {
                     Button("New session") {
                         newSessionRequest = NewSessionRequest()
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(PlaceholderActionStyle())
                     Button("Show everyone's") { peopleFilter = "all" }
+                        .buttonStyle(PlaceholderActionStyle(prominent: false))
                 }
             }
         }
@@ -1150,7 +1359,10 @@ struct SessionsListView: View {
                     }
                     Text(repo.map { RepoTile.label(for: $0) } ?? title)
                         #if os(iOS)
-                        .font(.subheadline.weight(.semibold))
+                        // A repo band leads somewhere, so it's typed like the
+                        // rows under it (web phone: 16px medium), not like the
+                        // captions that only label them.
+                        .font(.callout.weight(.medium))
                         #else
                         .font(.caption.weight(.semibold))
                         #endif
@@ -1194,23 +1406,37 @@ struct SessionsListView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .textCase(nil)
         .padding(.top, 4)
+        #if os(iOS)
+        // Lopsided on purpose, like the lane headings below it: a band leads
+        // the rows under it, so it sits nearer to them than to whatever came
+        // before. The list's own header inset is what's being trimmed, hence
+        // the negative value.
+        .padding(.bottom, -3)
+        #endif
     }
 
     /// A lane heading labels the rows under it, so its own insets are
     /// lopsided on purpose: air above to separate it from the previous lane,
-    /// almost none below so the label reads as attached to its rows. Those
-    /// insets only bite because the list drops its 44pt minimum row height
-    /// (see `list`) — that floor stretched the caption to a full row and left
-    /// the label marooned in the middle of it.
+    /// less below so the label reads as attached to its rows. The pair is
+    /// measured off the web sidebar at phone width, where the same caption
+    /// sits 19pt below the previous lane's last row and 9pt above its own
+    /// first one (`.sidebar-lane-group` header: 8px group margin + 9/5px
+    /// padding); the rows' own 2pt insets make up the rest. Those insets only
+    /// bite because the list drops its 44pt minimum row height (see `list`) —
+    /// that floor stretched the caption to a full row and left the label
+    /// marooned in the middle of it.
     private func statusLaneHeader(_ group: SessionGroup) -> some View {
         Button {
             toggleCollapsed(group.id)
         } label: {
             HStack(spacing: 5) {
+                // Captions, a size below the rows — the web's
+                // `.sidebar-lane-group` pair at its phone step (13px semibold
+                // label, 12px count).
                 Text(group.title)
-                    .font(.caption.weight(.semibold))
+                    .font(.footnote.weight(.semibold))
                 Text("\(group.workspaces.count)")
-                    .font(.caption2.monospacedDigit())
+                    .font(.caption.monospacedDigit())
             }
             .foregroundStyle(OS1VisualStyle.textDim)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -1218,7 +1444,7 @@ struct SessionsListView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(collapseLabel(group.title, group.id))
-        .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 1, trailing: 16))
+        .listRowInsets(EdgeInsets(top: 17, leading: 16, bottom: 7, trailing: 16))
         .listRowSeparator(.hidden)
         .listRowBackground(Color.clear)
     }
@@ -1241,16 +1467,91 @@ struct SessionsListView: View {
     }
 
     private var emptyState: some View {
-        ContentUnavailableView {
-            Label("No sessions", systemImage: "bubble.left.and.bubble.right")
-        } description: {
-            Text(viewModel.error ?? "Sessions from the OS1 server will appear here.")
-        } actions: {
-            #if os(macOS)
-            SettingsLink { Text("Settings") }
-            #else
-            Button("Settings") { showSettings = true }
-            #endif
+        ListPlaceholder(
+            symbol: "bubble.left.and.bubble.right",
+            title: "No sessions",
+            message: "Start one and it shows up here."
+        ) {
+            // The only thing worth offering here. Settings used to sit under
+            // it, but the app tile in the corner is already that door — a
+            // placeholder shouldn't spend its one moment of attention
+            // pointing at chrome that never left the screen.
+            Button("New session") { newSessionRequest = NewSessionRequest() }
+                .buttonStyle(PlaceholderActionStyle())
+        }
+    }
+
+    /// The list is empty because nothing came back, which is a different
+    /// screen from an empty list: "No sessions" reads as a server with
+    /// nothing on it, when the truth is a dropped tailnet or a dead signal
+    /// and the fix is nowhere near Settings. So the failure gets the
+    /// headline, the server we couldn't reach gets named, and the first
+    /// button is the one that answers a connection problem.
+    private func unreachableState(_ failure: Reachability.Diagnosis) -> some View {
+        ListPlaceholder(
+            symbol: failure.isConnection
+                ? "wifi.exclamationmark"
+                : "exclamationmark.triangle",
+            title: failure.title,
+            message: failureMessage(failure)
+        ) {
+            // One button, the one the diagnosis asks for. A wrong address
+            // doesn't heal by being retried, and a timeout isn't fixed in
+            // Settings — offering both would just make you pick.
+            switch failure.remedy {
+            case .retry:
+                // The poll keeps trying underneath either way; this is for
+                // the person who just turned the VPN back on and doesn't
+                // want to wonder whether the app noticed.
+                Button(action: retryLoad) {
+                    if isRetrying {
+                        // Same footprint as the label it replaces, so the
+                        // capsule doesn't resize when the retry starts.
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Text("Try again")
+                    }
+                }
+                .buttonStyle(PlaceholderActionStyle())
+                .disabled(isRetrying)
+            case .settings:
+                settingsButton
+            }
+        }
+    }
+
+    /// The one line under the headline: the fix when the diagnosis knows one,
+    /// otherwise the server that stayed silent — naming it is what tells you
+    /// whether the app is pointed where you think it is. The system's own
+    /// wording is the last resort, for failures that aren't about the
+    /// network at all.
+    private func failureMessage(_ failure: Reachability.Diagnosis) -> String {
+        if let fix = failure.fix { return fix }
+        guard failure.isConnection,
+              let host = ServerConfig.shared.baseURL?.host(), !host.isEmpty
+        else { return failure.detail }
+        return "\(host) didn't answer."
+    }
+
+    /// Only shown where Settings is the actual fix — a server that can't be
+    /// found, a token that isn't accepted — so it wears the full weight.
+    @ViewBuilder
+    private var settingsButton: some View {
+        #if os(macOS)
+        SettingsLink { Text("Open Settings") }
+            .buttonStyle(PlaceholderActionStyle())
+        #else
+        Button("Open Settings") { showSettings = true }
+            .buttonStyle(PlaceholderActionStyle())
+        #endif
+    }
+
+    private func retryLoad() {
+        guard !isRetrying else { return }
+        isRetrying = true
+        Task {
+            await viewModel.refresh()
+            isRetrying = false
         }
     }
 }
@@ -1326,6 +1627,10 @@ extension Session.Lane {
 struct SessionRow: View {
     let session: Session
     var title: String? = nil
+    /// Every session the row stands for. Unread emphasis is per ROW, like the web
+    /// sidebar's `.sidebar-item-unread`: one session with activity past your read
+    /// mark bolds the whole workspace. Empty falls back to `session` alone.
+    var sessions: [Session] = []
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     /// Mac: hover-revealed archive button (nil hides it).
     var onArchive: (() -> Void)? = nil
@@ -1366,10 +1671,14 @@ struct SessionRow: View {
                 .frame(width: markSize, height: markSize)
             Text(rowTitle)
                 #if os(iOS)
-                .font(.body.weight(.medium))
-                .foregroundStyle(OS1VisualStyle.textDim)
+                // The web sidebar's phone type, exactly: 16px titles (callout)
+                // in medium, dimmed — and, when the row has activity you
+                // haven't read, semibold at full strength. Same Slack-style
+                // pair as `.sidebar-item-title` / `.sidebar-item-unread`.
+                .font(.callout.weight(unread ? .semibold : .medium))
+                .foregroundStyle(unread ? OS1VisualStyle.text : OS1VisualStyle.textDim)
                 #else
-                .font(.body)
+                .font(.body.weight(unread ? .semibold : .regular))
                 .foregroundStyle(.primary)
                 #endif
                 .lineLimit(1)
@@ -1400,6 +1709,13 @@ struct SessionRow: View {
         #if os(macOS)
         .help(rowTitle)
         #endif
+    }
+
+    /// Read here rather than at the call site on purpose: `ReadsStore` is
+    /// `@Observable`, so a mark landing invalidates the rows that read it
+    /// instead of the whole list body.
+    private var unread: Bool {
+        ReadsStore.shared.isUnread(sessions.isEmpty ? [session] : sessions)
     }
 
     private var markSize: CGFloat {
@@ -1453,6 +1769,8 @@ struct SessionRow: View {
 
     private var accessibilityStatus: String {
         var parts = [session.lane.label, RepoTile.label(for: session.effectiveRepo)]
+        // The bold title is the only sighted cue for unread; say it out loud.
+        if unread { parts.insert("unread", at: 0) }
         if let prState = session.prState?.lowercased() {
             parts.append("pull request \(prState)")
         }
@@ -1476,7 +1794,8 @@ private struct WorkspaceRunElapsedLabel: View {
             }
         }
         #if os(iOS)
-        .font(.footnote.weight(.medium).monospacedDigit())
+        // 12px, like the web's `.sidebar-ws-ticker` on a phone.
+        .font(.caption.weight(.medium).monospacedDigit())
         #else
         .font(.caption.monospacedDigit())
         #endif

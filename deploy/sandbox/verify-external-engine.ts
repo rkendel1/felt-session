@@ -31,7 +31,7 @@ import {
   type RunnableSandboxProviderId,
 } from "../../src/server/sandbox/config";
 import type { Sandbox } from "../../src/server/sandbox/provider";
-import { OPENSESSION_CHATS_DIR } from "../../src/server/paths";
+import { OPENSESSION_SESSIONS_DIR } from "../../src/server/paths";
 
 const HOME = process.env.HOME || homedir();
 const DEFAULT_SERVER = "http://127.0.0.1:3850";
@@ -380,7 +380,7 @@ async function runTurn(args: {
 }
 
 async function readSessionFile(sessionId: string): Promise<SessionFile> {
-  const path = join(OPENSESSION_CHATS_DIR, `${sessionId}.json`);
+  const path = join(OPENSESSION_SESSIONS_DIR, `${sessionId}.json`);
   const deadline = Date.now() + 10_000;
   while (Date.now() < deadline) {
     try {
@@ -512,7 +512,7 @@ async function assertSandboxState(args: {
   assert(
     !existsSync(
       join(
-        OPENSESSION_CHATS_DIR,
+        OPENSESSION_SESSIONS_DIR,
         "opencode",
         "remote-cwd",
         session.id,
@@ -643,7 +643,7 @@ async function certify(
       assert(
         !existsSync(
           join(
-            OPENSESSION_CHATS_DIR,
+            OPENSESSION_SESSIONS_DIR,
             "opencode",
             "remote-cwd",
             session.id,

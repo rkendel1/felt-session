@@ -25,6 +25,12 @@ command when present, plain `bun install` when there is a `package.json` — so 
 session starts with dependencies already installed rather than spending its
 first two minutes on `bun install`.
 
+That script is half of a small convention: commit `.opensession/setup.sh` and
+`.opensession/start.sh` to a repo and every worktree of it provisions itself
+and can boot its dev server on demand — which is also what lets an agent open
+its own change in a browser. See
+[repo-lifecycle.md](repo-lifecycle.md).
+
 ## Modes
 
 **`code` sessions** get their own worktree on their own branch. They can commit

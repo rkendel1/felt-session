@@ -18,6 +18,7 @@ import {
   IconConnections,
   IconReturn,
   IconBox,
+  IconFile,
   IconFolderPlus,
   IconMap,
   IconStack,
@@ -43,19 +44,19 @@ interface Props {
   /** Prefill the prompt (e.g. from the Home "New session" box). */
   prefillPrompt?: string;
   forceMode?: "ask" | "code" | "scratch";
-  /** When starting a chat inside a Project (folder), the chat joins this project… */
-  projectId?: string;
-  /** …and defaults to the project's shared repo + worktree (a sibling's branch). */
+  /** When starting a session inside a workspace, the session joins that workspace… */
+  workspaceId?: string;
+  /** …and defaults to the workspace's shared repo + worktree (a sibling's branch). */
   forceRepo?: string;
   forceBranch?: string;
-  /** Lets App render the pending chat shell before the created session appears
+  /** Lets App render the pending session shell before the created session appears
       in the polled session list. */
   onCreateStarted?: (draft: {
     prompt: string;
     mode: "ask" | "code" | "scratch";
     repo: string;
     branch: string | null;
-    projectId?: string;
+    workspaceId?: string;
     model?: string;
     images?: string[];
   }) => void;
@@ -80,6 +81,7 @@ const LIGHT_CREATE =
 
 const LAST_REPO_KEY = "opensession-new-session-repo";
 const ADD_REPO_VALUE = "__add_repo__";
+const SCRATCH_REPO_VALUE = "__scratch__";
 
 function lastSelectedRepo(): string | null {
   try {
@@ -135,7 +137,7 @@ function slugifyBranch(text: string): string {
   return slug || "new-session";
 }
 
-export function NewSession({ onBack, send, addHandler, connected, prefillPrompt, forceMode, projectId, forceRepo, forceBranch, onCreateStarted }: Props) {
+export function NewSession({ onBack, send, addHandler, connected, prefillPrompt, forceMode, workspaceId, forceRepo, forceBranch, onCreateStarted }: Props) {
   const auth = useAuthStatus();
   const desktopShell =
     (window as { os1?: { desktop?: boolean } }).os1?.desktop === true ||
@@ -155,7 +157,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
     if (auth?.local || desktopShell) setCreateTarget("cloud");
   }, [auth?.local, desktopShell]);
   const cloudTarget = auth?.local === true && createTarget === "cloud";
-  // In a Project, default to the folder's shared repo; else the prefill/filter repo.
+  // In a workspace, default to its shared repo; else the prefill/filter repo.
   const [repo, setRepo] = useState(forceRepo || prefill.repo);
   const [repos, setRepos] = useState<RepoOption[]>([]);
   const [configuredDefaultRepo, setConfiguredDefaultRepo] = useState("");
@@ -198,7 +200,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
     });
   }, [configuredDefaultRepo, forceRepo, repos]);
   const [worktrees, setWorktrees] = useState<Worktree[]>([]);
-  // In a Project, default to a sibling's branch so the new chat reuses its
+  // In a workspace, default to a sibling's branch so the new session reuses its
   // worktree; the user can still switch to "New branch" to fork a fresh one.
   const [selectedWorktree, setSelectedWorktree] = useState(forceBranch || "__new__");
   const [newBranch, setNewBranch] = useState(prefill.branch);
@@ -247,7 +249,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
   // Phones open on just the prompt — repo/base/model/effort have sensible
   // defaults and hide behind the sliders toggle until you actually need them.
   const isPhone = useIsPhone();
-  // "Send messages with" (Settings → Composer). The chat composer honors it,
+  // "Send messages with" (Settings → Composer). The session composer honors it,
   // so this field has to as well — otherwise Enter silently does nothing here
   // while the Create button advertises ↩.
   const [sendKey, setSendKey] = useState(getSendKeyPref);
@@ -461,7 +463,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
   }, [cloudTarget]);
 
   // Worktrees are per-repo; refetch and reset the selection when it changes.
-  // Inside a Project, snap back to the shared sibling branch, not "New branch".
+  // Inside a workspace, snap back to the shared sibling branch, not "New branch".
   useEffect(() => {
     setSelectedWorktree(forceBranch || "__new__");
     if (!repo) {
@@ -560,17 +562,17 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
     setCreating(true);
     creatingRef.current = true;
     // Workspace linkage: scoped to an existing workspace (the tab/sidebar +),
-    // the chat joins it — sharing its worktree when reusing the sibling branch,
+    // the session joins it — sharing its worktree when reusing the sibling branch,
     // stacking a fresh worktree off it for a new branch. Unscoped, the default
-    // is a brand-new Workspace + first Chat created together.
-    const chatMode =
+    // is a brand-new Workspace + first Session created together.
+    const worktreeMode =
       mode === "ask" ? "ask" : mode === "code" && selectedWorktree === "__new__" ? "stack" : "share";
     onCreateStarted?.({
       prompt: prompt.trim(),
       mode,
       repo,
       branch: mode === "code" ? branch : null,
-      ...(projectId ? { projectId } : {}),
+      ...(workspaceId ? { workspaceId } : {}),
       ...(model ? { model } : {}),
       ...(images.length ? { images } : {}),
     });
@@ -579,8 +581,8 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
       ...(auth?.local && createTarget === "cloud" ? { cloud: true } : {}),
       mode,
       repo,
-      ...(projectId
-        ? { workspaceId: projectId, chatMode }
+      ...(workspaceId
+        ? { workspaceId: workspaceId, worktreeMode }
         : { createWorkspace: {} }),
       branch: mode === "code" ? branch : "",
       prompt: prompt.trim(),
@@ -614,14 +616,11 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
     (prompt.trim() || images.length > 0 || files.length > 0) &&
     (mode === "ask" || mode === "scratch" || selectedWorktree !== "");
 
-  // "Create from…" combines the mode + base into one control.
-  const createFromValue =
-    mode === "ask" ? "__ask__" : mode === "scratch" ? "__scratch__" : selectedWorktree;
+  // "Create from…" combines the repo-backed mode + base into one control.
+  const createFromValue = mode === "ask" ? "__ask__" : selectedWorktree;
   function onCreateFromChange(v: string) {
     if (v === "__ask__") {
       setMode("ask");
-    } else if (v === "__scratch__") {
-      setMode("scratch");
     } else {
       setMode("code");
       setSelectedWorktree(v);
@@ -630,24 +629,19 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
   const createFromLabel =
     mode === "ask"
       ? "Ask · read-only"
-      : mode === "scratch"
-        ? "Scratch · no repo"
-        : selectedWorktree === "__new__"
-          ? "New branch"
-          : selectedWorktree;
+      : selectedWorktree === "__new__"
+        ? "New branch"
+        : selectedWorktree;
   const createFromOptions = [
     {
       value: "__new__",
-      label: projectId && forceBranch
+      label: workspaceId && forceBranch
         ? `New stacked branch (off ${forceBranch})`
         : "New branch",
     },
     // Ask stays above the branch list — as the last option it drowned below
     // the scroll fold once the worktree list grew, reading as "Ask is gone".
     { value: "__ask__", label: "Ask — read-only on main", menuLabel: "Ask · read-only on main" },
-    // Scratch: repo-less scratch dir with write+bash (media/MCP work —
-    // the feeds design). No branch, no PR flow.
-    { value: "__scratch__", label: "Scratch — no repo, writable scratch dir", menuLabel: "Scratch · no repo" },
     ...worktrees.map((wt) => ({ value: wt.branch, label: wt.branch })),
   ];
 
@@ -662,7 +656,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
   const planBody: React.CSSProperties | undefined = planFirst
     ? {
         backgroundColor: "color-mix(in srgb, var(--bg-panel) 96%, var(--accent))",
-        // The hatch fades out downwards, same as the composer's note mode: the
+        // The hatch fades out downwards, same as the composer's ask mode: the
         // flat tint is layered back over the stripes so the writing surface
         // settles into the footer instead of hatching all the way to the edge.
         backgroundImage:
@@ -699,27 +693,21 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
             always visible — on phones the create-from picker hides until the
             options toggle in the footer opens it. */}
         <div className="palette-header">
-          {mode === "scratch" ? (
-            // Scratch sessions are repo-less — a picker here would imply the
-            // choice matters. A muted chip holds the slot instead.
-            <span
-              className="palette-trigger palette-trigger-strong pointer-events-none opacity-60"
-              title="Scratch sessions have no repository"
-            >
-              <RepoTile name="scratch" />
-              <span className="palette-trigger-label">No repo</span>
-            </span>
-          ) : (
           <PaletteSelect
             className="palette-trigger palette-trigger-strong"
             title="Repository"
-            value={repo}
+            value={mode === "scratch" ? SCRATCH_REPO_VALUE : repo}
             options={[
               ...repos.map((p) => ({
                 value: p.id,
                 label: p.label,
                 icon: <RepoTile name={p.id} />,
               })),
+              {
+                value: SCRATCH_REPO_VALUE,
+                label: "Scratch · no repo",
+                icon: <IconFile size={20} />,
+              },
               ...(auth?.local && createTarget === "local"
                 ? [
                     {
@@ -731,10 +719,15 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
                 : []),
             ]}
             onChange={(nextRepo) => {
+              if (nextRepo === SCRATCH_REPO_VALUE) {
+                setMode("scratch");
+                return;
+              }
               if (nextRepo === ADD_REPO_VALUE) {
                 setAddRepoOpen(true);
                 return;
               }
+              if (mode === "scratch") setMode("code");
               setRepo(nextRepo);
               rememberSelectedRepo(nextRepo);
             }}
@@ -742,15 +735,20 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
             ariaLabel="Repository"
             isPhone={isPhone}
           >
-            <RepoTile name={repo} />
+            {mode === "scratch" ? (
+              <IconFile className="shrink-0" size={20} />
+            ) : (
+              <RepoTile name={repo} />
+            )}
             <span className="palette-trigger-label">
-              {repos.find((p) => p.id === repo)?.label || repo || "No repositories"}
+              {mode === "scratch"
+                ? "Scratch · no repo"
+                : repos.find((p) => p.id === repo)?.label || repo || "No repositories"}
             </span>
             <IconChevronDown className="palette-chevron" size={22} />
           </PaletteSelect>
-          )}
 
-          {optionsVisible && (
+          {optionsVisible && mode !== "scratch" && (
           <PaletteSelect
             className="palette-trigger"
             title="What to create from"
@@ -822,7 +820,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
               }
               // The @/slash popup claims plain Enter to accept a suggestion.
               if (mentions.handleKeyDown(e)) return;
-              // Otherwise the send key creates, exactly as it sends in the chat
+              // Otherwise the send key creates, exactly as it sends in the session
               // composer — including the unclosed-``` fence exception, so a
               // multi-line code block can still be typed into the first prompt.
               // Nothing to create yet? Let the newline land rather than eating

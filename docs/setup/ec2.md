@@ -181,7 +181,7 @@ Useful paths:
 | `~/.opensession/src` | the checkout — a normal git repo, edit it |
 | `~/.opensession/config.json` | instance config (re-read on change) |
 | `~/.opensession.env` | secrets, loaded by the service |
-| `~/.opensession-chats/` | session store |
+| `~/.opensession-sessions/` | session store |
 | `~/.opensession/worktrees/` | per-session git worktrees |
 
 All of these live under the service user's `$HOME`; on Ubuntu's default EC2

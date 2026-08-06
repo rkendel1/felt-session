@@ -1,10 +1,10 @@
 /**
  * Per-composer draft persistence, so typed text and staged attachments survive
- * navigating away (chat → other chat / workspace / home) instead of dying with
+ * navigating away (session → other session / workspace / home) instead of dying with
  * the unmounted component.
  *
  * The module-level Map is the source of truth while the app is open — every
- * SessionViewer remounts on chat switch (key=session.id in App), so component
+ * SessionViewer remounts on session switch (key=session.id in App), so component
  * state can't carry a draft across. sessionStorage is a best-effort mirror so a
  * tab reload keeps the draft too; writes are debounced because images ride
  * along as multi-MB `data:` URLs and drafts are saved on every keystroke.

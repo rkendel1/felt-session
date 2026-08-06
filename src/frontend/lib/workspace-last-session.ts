@@ -1,8 +1,8 @@
-// The chat last open in each workspace, so re-entering a workspace (sidebar
-// click, bare /workspace/<id> URL) lands on the chat tab it was left on
-// rather than the oldest chat. A per-device working preference, like the
+// The session last open in each workspace, so re-entering a workspace (sidebar
+// click, bare /workspace/<id> URL) lands on the session tab it was left on
+// rather than the oldest session. A per-device working preference, like the
 // per-workspace view tab in active-view-tab.ts.
-const KEY = "opensession-workspace-last-chats";
+const KEY = "opensession-workspace-last-sessions";
 
 // Workspaces accumulate over time, so cap the map. Entries are kept in
 // insertion order; a save re-appends its workspace, so trimming from the
@@ -23,20 +23,20 @@ function read(): Record<string, string> {
 	}
 }
 
-/** `undefined` means no chat has been opened in this workspace on this device. */
-export function getWorkspaceLastChat(workspaceId: string): string | undefined {
+/** `undefined` means no session has been opened in this workspace on this device. */
+export function getWorkspaceLastSession(workspaceId: string): string | undefined {
 	return read()[workspaceId];
 }
 
-export function saveWorkspaceLastChat(
+export function saveWorkspaceLastSession(
 	workspaceId: string,
-	chatId: string,
+	sessionId: string,
 ): void {
-	if (!workspaceId || !chatId) return;
+	if (!workspaceId || !sessionId) return;
 	const map = read();
-	if (map[workspaceId] === chatId) return;
+	if (map[workspaceId] === sessionId) return;
 	delete map[workspaceId];
-	map[workspaceId] = chatId;
+	map[workspaceId] = sessionId;
 	const ids = Object.keys(map);
 	for (const stale of ids.slice(0, Math.max(0, ids.length - MAX_ENTRIES)))
 		delete map[stale];

@@ -107,7 +107,7 @@ function readConfig(): PapercutsConfigFile {
 }
 
 /** Default ON: only an explicit `enabled: false` turns a repo off, and an
- *  unknown/undefined repo (chat-only sessions) always logs. */
+ *  unknown/undefined repo (session-only sessions) always logs. */
 export function papercutsEnabledForRepo(repoId: string | undefined): boolean {
   if (!repoId) return true;
   return readConfig().repos?.[repoId]?.enabled !== false;

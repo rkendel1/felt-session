@@ -52,7 +52,7 @@
  * Everything is sbxtest-prefixed and cleaned up at the end. Safe to run next
  * to the live server: the run journal AND the sandbox config are redirected
  * to the scratch dir BEFORE any module import, so nothing here can leak into
- * ~/.opensession-chats/active-runs.json or flip the live sandbox config.
+ * ~/.opensession-sessions/active-runs.json or flip the live sandbox config.
  */
 
 const SCRATCH = `${process.env.HOME || homedir()}/.sandbox-verify-scratch`;
@@ -81,7 +81,7 @@ const { getSessionDiff } = await import("../../src/server/git-diff");
 const { getGitStatus } = await import("../../src/server/git-status");
 const { worktreePathFor } = await import("../../src/server/worktree");
 const { rpcSocketPath } = await import("../../src/runner-host/protocol");
-const { OPENSESSION_CHATS_DIR } = await import("../../src/server/paths");
+const { OPENSESSION_SESSIONS_DIR } = await import("../../src/server/paths");
 const { statePath } = await import("../../src/server/paths");
 type RunHostSpec = import("../../src/runner-host/protocol").RunHostSpec;
 
@@ -173,8 +173,8 @@ async function cleanup(): Promise<void> {
       .out.split("\n").map((s) => s.trim()).filter(Boolean);
     for (const id of new Set(imgIds)) await sh(["docker", "rmi", "-f", id]);
     try {
-      rmSync(`${OPENSESSION_CHATS_DIR}/sandboxes/${container}.json`, { force: true });
-      rmSync(`${OPENSESSION_CHATS_DIR}/sandbox-runs/${session}`, { recursive: true, force: true });
+      rmSync(`${OPENSESSION_SESSIONS_DIR}/sandboxes/${container}.json`, { force: true });
+      rmSync(`${OPENSESSION_SESSIONS_DIR}/sandbox-runs/${session}`, { recursive: true, force: true });
     } catch {}
   }
   // Transcript dirs the container-create mkdir'd for the scratch cwds.
@@ -282,7 +282,7 @@ try {
 
   // ── RPC socket ──────────────────────────────────────────────────────────────
   console.log("\n── rpc socket ──");
-  const sock = rpcSocketPath(OPENSESSION_CHATS_DIR);
+  const sock = rpcSocketPath(OPENSESSION_SESSIONS_DIR);
   const sockLs = await sandbox.exec(["ls", sock]);
   ok("rpc socket mounted", sockLs.exitCode === 0, sock);
   const sockProbe = await sandbox.exec(["bun", "-e",
@@ -561,7 +561,7 @@ try {
   const rpcProbe = await wsSbx.exec(["bun", "-e", `
     const ws = new WebSocket("${wsBase}/rpc-ws?host=${probeHostId}", { headers: { authorization: "Bearer ${probeWsToken}" } });
     const bail = setTimeout(() => { console.log("TIMEOUT"); process.exit(1); }, 10000);
-    ws.onopen = () => ws.send(JSON.stringify({ id: "p1", path: "/mcp/list", token: "${scratchToken}", server: "michael-sessions" }));
+    ws.onopen = () => ws.send(JSON.stringify({ id: "p1", path: "/mcp/list", token: "${scratchToken}", server: "opensession-sessions" }));
     ws.onmessage = (ev) => { console.log(String(ev.data)); clearTimeout(bail); process.exit(0); };
     ws.onclose = () => { console.log("CLOSED"); clearTimeout(bail); process.exit(1); };
   `]);
@@ -675,7 +675,7 @@ try {
 
   // Backdate the state file, then run the REAL sweep scoped to this sandbox:
   // it must snapshot first, then stop.
-  const snapStatePath = `${OPENSESSION_CHATS_DIR}/sandboxes/${SNAP_CONTAINER}.json`;
+  const snapStatePath = `${OPENSESSION_SESSIONS_DIR}/sandboxes/${SNAP_CONTAINER}.json`;
   const snapState = JSON.parse(await Bun.file(snapStatePath).text());
   snapState.lastActivityAt = new Date(Date.now() - 2 * 60 * 60_000).toISOString();
   snapState.createdAt = snapState.lastActivityAt;

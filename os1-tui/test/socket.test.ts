@@ -83,12 +83,12 @@ describe("outbound frames", () => {
 	test("prompt defaults to queueing behind a busy run", () => {
 		const { watched, ws } = wire();
 		ws.open();
-		watched.send("do the thing", "michiel");
+		watched.send("do the thing", "alex");
 		const prompt = ws.sentOfType("prompt")[0]!;
 		expect(prompt).toMatchObject({
 			sessionId: "bks-1",
 			content: "do the thing",
-			user: "michiel",
+			user: "alex",
 			busyMode: "queue",
 		});
 	});
@@ -96,7 +96,7 @@ describe("outbound frames", () => {
 	test("steer is opt-in", () => {
 		const { watched, ws } = wire();
 		ws.open();
-		watched.send("actually, stop", "michiel", "steer");
+		watched.send("actually, stop", "alex", "steer");
 		expect(ws.sentOfType("prompt")[0]!.busyMode).toBe("steer");
 	});
 
@@ -141,7 +141,7 @@ describe("outbound frames", () => {
 
 	test("frames sent before the handshake are queued, not dropped", () => {
 		const { watched, ws } = wire();
-		watched.send("early", "michiel");
+		watched.send("early", "alex");
 		expect(ws.sent).toHaveLength(0);
 		ws.open();
 		expect(ws.sentOfType("prompt")).toHaveLength(1);

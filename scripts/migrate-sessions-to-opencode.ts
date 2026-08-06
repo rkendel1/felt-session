@@ -23,7 +23,7 @@
  * aren't touched either — this script only operates on the opensession store.
  */
 import { existsSync, readdirSync, readFileSync } from "fs";
-import { OPENSESSION_CHATS_DIR } from "../src/server/paths";
+import { OPENSESSION_SESSIONS_DIR } from "../src/server/paths";
 import { providerFor } from "../src/server/models";
 import { getEngineTranscriptPath } from "../src/server/sessions";
 import { isOpencodeSessionId, hasOpencodeTranscript } from "../src/server/opencode-transcript";
@@ -83,11 +83,11 @@ const SKIP_FILES = new Set([
 ]);
 
 const rows: Row[] = [];
-for (const file of readdirSync(OPENSESSION_CHATS_DIR)) {
+for (const file of readdirSync(OPENSESSION_SESSIONS_DIR)) {
   if (!file.endsWith(".json") || SKIP_FILES.has(file)) continue;
   let data: NativeSessionFile;
   try {
-    data = JSON.parse(readFileSync(`${OPENSESSION_CHATS_DIR}/${file}`, "utf-8"));
+    data = JSON.parse(readFileSync(`${OPENSESSION_SESSIONS_DIR}/${file}`, "utf-8"));
   } catch {
     continue;
   }
@@ -146,7 +146,7 @@ const fmt = (r: Row) =>
   (r.skip ? `  (SKIP: ${r.skip})` : "") +
   (r.title ? `\n      ${r.title}` : "");
 
-console.log(`Open Session session store: ${OPENSESSION_CHATS_DIR}`);
+console.log(`Open Session session store: ${OPENSESSION_SESSIONS_DIR}`);
 console.log(`\n${candidates.length} session(s) would migrate:\n`);
 for (const r of candidates) console.log(fmt(r));
 console.log(`\n${skipped.length} skipped:\n`);

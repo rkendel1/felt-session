@@ -8,7 +8,7 @@ import { $ } from "bun";
  * createWorktree branch-collision tolerance: a create attempt killed
  * mid-flight (restart drain) can leave the BRANCH created with no worktree;
  * the retry used to die on `fatal: a branch named '…' already exists`
- * (Michiel's bks-019f467a, 2026-07-09). An orphan branch with zero unique
+ * (seen live on a real session). An orphan branch with zero unique
  * commits and no registered worktree is adopted; a branch with real commits
  * still fails loudly.
  *

@@ -17,7 +17,7 @@
  * schema drift after an opencode upgrade, corrupt rows) degrades to [] so a
  * transcript read can never take a prompt path down.
  */
-import { homeDir, OPENSESSION_CHATS_DIR } from "./paths";
+import { homeDir, OPENSESSION_SESSIONS_DIR } from "./paths";
 import {
   existsSync,
   mkdirSync,
@@ -49,7 +49,7 @@ export let OPENCODE_DB_PATH =
 
 /**
  * Test seam (bun tests only): repoint the sqlite store AFTER this module has
- * been evaluated — mirrors paths.ts's __setChatsDirForTest. ES module
+ * been evaluated — mirrors paths.ts's __setSessionsDirForTest. ES module
  * bindings are live, so consumers that reference OPENCODE_DB_PATH (including
  * ones that bare-imported this module before the test set env vars) pick the
  * new value up regardless of import order. Returns the previous value so
@@ -75,10 +75,10 @@ export function __setOpencodeDbPathForTest(path: string): string {
 /** ocSessionId → absolute DB path, written by the runner, read by resolvers. */
 const OPENCODE_DB_MAP_PATH =
   process.env.OPENSESSION_OPENCODE_DB_MAP ||
-  `${OPENSESSION_CHATS_DIR}/opencode/db-map.json`;
+  `${OPENSESSION_SESSIONS_DIR}/opencode/db-map.json`;
 
 const OPENAI_DATA_ROOT = `${HOME}/.opensession-opencode/openai-data`;
-const SHARD_DB_DIR = `${OPENSESSION_CHATS_DIR}/opencode/db`;
+const SHARD_DB_DIR = `${OPENSESSION_SESSIONS_DIR}/opencode/db`;
 
 function readDbMap(): Record<string, string> {
   try {
@@ -186,7 +186,7 @@ export function resolveOpencodeDbFor(ocSessionId: string | null | undefined): st
 /** ocSessionId → unified session id, written by the runner call sites. */
 let OPENCODE_SESSION_MAP_PATH =
   process.env.OPENSESSION_OPENCODE_SESSION_MAP ||
-  `${OPENSESSION_CHATS_DIR}/opencode/session-map.json`;
+  `${OPENSESSION_SESSIONS_DIR}/opencode/session-map.json`;
 
 /**
  * Test seam (bun tests only): same contract as __setOpencodeDbPathForTest —

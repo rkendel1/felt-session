@@ -80,11 +80,11 @@ export class Api {
 		return this.request<Session[]>("/api/sessions");
 	}
 
-	async projects(): Promise<{ id: string; name: string }[]> {
-		const body = await this.request<{ projects?: { id: string; name: string }[] }>(
-			"/api/projects",
+	async workspaces(): Promise<{ id: string; name: string }[]> {
+		const body = await this.request<{ workspaces?: { id: string; name: string }[] }>(
+			"/api/workspaces",
 		);
-		return body.projects ?? [];
+		return body.workspaces ?? [];
 	}
 
 	transcript(sessionId: string): Promise<TranscriptEntry[]> {

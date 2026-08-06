@@ -1,0 +1,44 @@
+import Foundation
+
+/// The key a sidebar ROW is stored under in the per-user overlays both clients
+/// share — hides (`src/server/hides.ts`) and pins (`src/server/pins.ts`).
+///
+/// A row is keyed `workspace:<id>` when it's a real workspace, `wt:<dir>` for a
+/// legacy isolated-worktree row, and by the bare session id for a solo session. Only
+/// these forms may be persisted: the iOS-internal `worktree:` / `session:`
+/// prefixes on `SidebarWorkspace.id` would be invisible to the web sidebar,
+/// which writes the same files.
+enum SidebarRowKeys {
+    static func rowKey(for workspace: SidebarWorkspace) -> String {
+        let id = workspace.id
+        if let dir = id.dropPrefix("worktree:") { return "wt:\(dir)" }
+        if let sessionId = id.dropPrefix("session:") { return sessionId }
+        return id
+    }
+
+    /// Every row key a session can sit under. Used to clear an overlay entry
+    /// (over-clearing is safe — it only ever restores a row) and to spot the
+    /// hidden rows a blocked session should resurface.
+    static func candidateKeys(for session: Session) -> [String] {
+        var keys = [session.id]
+        if let workspaceId = session.workspaceId, !workspaceId.isEmpty {
+            keys.append("workspace:\(workspaceId)")
+        }
+        if let dir = session.worktreeDir, !dir.isEmpty {
+            keys.append("wt:\(dir)")
+        }
+        return keys
+    }
+
+    /// The server drops over-long keys (`clean` in hides.ts / pins.ts), which
+    /// would look like a write that survives until the next hydrate.
+    static func isPersistable(_ key: String) -> Bool {
+        !key.isEmpty && key.count <= 128
+    }
+}
+
+private extension String {
+    func dropPrefix(_ prefix: String) -> String? {
+        hasPrefix(prefix) ? String(dropFirst(prefix.count)) : nil
+    }
+}

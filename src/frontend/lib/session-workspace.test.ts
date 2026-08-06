@@ -11,7 +11,7 @@ describe("sessionHasWorkspace", () => {
 		).toBe(true);
 	});
 
-	test("ordinary ask chats without code context have no workspace", () => {
+	test("ordinary ask sessions without code context have no workspace", () => {
 		expect(sessionHasWorkspace({ branch: null, worktreeDir: null })).toBe(false);
 	});
 });

@@ -1,8 +1,13 @@
 import { describe, expect, it } from "bun:test";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import {
 	buildChildSessionPrompt,
 	cancelTaskImpl,
+	createSessionsMcpServer,
+	formatSessionLine,
 	resolveSpawnDepth,
+	sessionMatchesCreatedBy,
 	sessionNoticePayload,
 	spawnTaskImpl,
 	taskStateOf,
@@ -12,7 +17,11 @@ import {
 	type SpawnTaskDeps,
 	type SessionsToolContext,
 } from "./sessions-tools";
-import type { SessionControl, SessionSummary } from "../../server/session-control";
+import {
+	registerSessionControl,
+	type SessionControl,
+	type SessionSummary,
+} from "../../server/session-control";
 
 describe("buildChildSessionPrompt", () => {
 	it("adds parent report-back instructions for visible worker sessions", () => {
@@ -23,7 +32,7 @@ describe("buildChildSessionPrompt", () => {
 		});
 
 		expect(prompt).toContain("Inspect the failing tests");
-		expect(prompt).toContain("worker session delegated by another Michael session");
+		expect(prompt).toContain("worker session delegated by another");
 		expect(prompt).toContain("report back to the parent/orchestrator session `bks-parent`");
 		expect(prompt).toContain("send_to_session");
 	});
@@ -95,7 +104,7 @@ function makeHarness(childId?: string): Harness {
 	const cancelled: string[] = [];
 	const id = childId ?? `bks-test-child-${++uniq}`;
 	const control = {
-		listSessions: () => [],
+		listSessions: () => [...sessions.values()] as SessionSummary[],
 		getSession: (sid: string) => sessions.get(sid) as SessionSummary | undefined,
 		transcriptTail: () => [],
 		answerQuestion: () => false,
@@ -106,7 +115,11 @@ function makeHarness(childId?: string): Harness {
 		},
 		createSession: async (opts: Harness["created"][0]) => {
 			created.push(opts);
-			return { id };
+			return {
+				id,
+				createdBy: opts.user || "Open Session",
+				createdAt: "2026-08-06T10:00:00.000Z",
+			};
 		},
 	} satisfies SessionControl;
 	return {
@@ -126,7 +139,7 @@ function makeHarness(childId?: string): Harness {
 }
 
 const ctx = (currentSessionId?: string): SessionsToolContext => ({
-	createdBy: "Michiel",
+	createdBy: "Alex",
 	isAdmin: true,
 	currentSessionId,
 });
@@ -156,11 +169,13 @@ describe("spawnTaskImpl", () => {
 		// linked to the parent, user inherited.
 		expect(h.created).toHaveLength(1);
 		expect(h.created[0].prompt).toContain("Investigate the flaky test.");
-		expect(h.created[0].prompt).toContain("worker session delegated by another Michael session");
+		expect(h.created[0].prompt).toContain("worker session delegated by another");
 		expect(h.created[0].prompt).toContain(`report back to the parent/orchestrator session \`${parent}\``);
 		expect(h.created[0].parentSessionId).toBe(parent);
-		expect(h.created[0].user).toBe("Michiel");
+		expect(h.created[0].user).toBe("Alex");
 		expect(h.created[0].mode).toBe("ask");
+		expect(res.createdBy).toBe("Alex");
+		expect(res.createdAt).toBe("2026-08-06T10:00:00.000Z");
 	});
 
 	it("tags the child with spawnDepth = parent depth + 1", async () => {
@@ -289,6 +304,127 @@ describe("spawnTaskImpl", () => {
 	});
 });
 
+describe("session creator metadata", () => {
+	const session = {
+		id: "bks-test-session",
+		title: "Creator metadata",
+		state: "idle",
+		queuedCount: 0,
+		controllable: true,
+		createdBy: "Alex Rivera",
+		createdByLogin: "arivera",
+		startedBy: "legacy-alias",
+		createdAt: "2026-08-06T09:30:00.000Z",
+		lastActivity: new Date().toISOString(),
+	} as SessionSummary;
+
+	it("renders explicit persisted identity and creation timestamp fields", () => {
+		const line = formatSessionLine(session);
+		expect(line).toContain('createdBy="Alex Rivera"');
+		expect(line).toContain('createdByLogin="arivera"');
+		expect(line).toContain("createdAt=2026-08-06T09:30:00.000Z");
+		expect(line).not.toContain("legacy-alias");
+	});
+
+	it("matches display identity or verified login exactly and case-insensitively", () => {
+		expect(sessionMatchesCreatedBy(session, "alex rivera")).toBe(true);
+		expect(sessionMatchesCreatedBy(session, "ARIVERA")).toBe(true);
+		expect(sessionMatchesCreatedBy(session, "Alex")).toBe(false);
+	});
+
+	it("falls back to the legacy alias but never guesses from title", () => {
+		const legacy = {
+			...session,
+			createdBy: null,
+			createdByLogin: undefined,
+			startedBy: "Kent",
+			title: "Michiel's session",
+		} as SessionSummary;
+		expect(sessionMatchesCreatedBy(legacy, "Kent")).toBe(true);
+		expect(sessionMatchesCreatedBy(legacy, "Michiel")).toBe(false);
+		expect(formatSessionLine({ ...legacy, startedBy: null } as SessionSummary)).toContain(
+			"createdBy=null",
+		);
+	});
+
+	it("exposes and applies createdBy on the shared interactive MCP surface", async () => {
+		const h = makeHarness();
+		h.sessions.set(session.id, session);
+		h.sessions.set("bks-other", {
+			...session,
+			id: "bks-other",
+			createdBy: "Other Person",
+			createdByLogin: "other",
+		});
+		registerSessionControl(h.deps.control);
+		const server = createSessionsMcpServer(ctx());
+		const client = new Client({ name: "sessions-tools-test", version: "1.0.0" });
+		const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+		await server.instance.connect(serverTransport);
+		await client.connect(clientTransport);
+		try {
+			const listedTools = await client.listTools();
+			const listTool = listedTools.tools.find((tool) => tool.name === "list_sessions");
+			expect(listTool?.inputSchema.properties).toHaveProperty("createdBy");
+
+			const result = await client.callTool({
+				name: "list_sessions",
+				arguments: { createdBy: "ARIVERA" },
+			});
+			const output = (
+				result as { content: Array<{ type: string; text: string }> }
+			).content[0].text;
+			expect(output).toContain("bks-test-session");
+			expect(output).toContain('createdBy="Alex Rivera"');
+			expect(output).toContain('createdByLogin="arivera"');
+			expect(output).toContain("createdAt=2026-08-06T09:30:00.000Z");
+			expect(output).not.toContain("bks-other");
+		} finally {
+			await client.close();
+			await server.instance.close();
+		}
+	});
+
+	it("generates a branch when create_session code mode cannot inherit one", async () => {
+		const h = makeHarness();
+		registerSessionControl(h.deps.control);
+		const server = createSessionsMcpServer(ctx("bks-parent"), {
+			branchNameFromPrompt: async () => "fix-session-branch-ux",
+		});
+		const client = new Client({ name: "sessions-tools-test", version: "1.0.0" });
+		const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+		await server.instance.connect(serverTransport);
+		await client.connect(clientTransport);
+		try {
+			const listedTools = await client.listTools();
+			const createTool = listedTools.tools.find((tool) => tool.name === "create_session");
+			const branchSchema = createTool?.inputSchema.properties?.branch as
+				| { description?: string }
+				| undefined;
+			expect(branchSchema?.description).toContain(
+				"generated from the prompt",
+			);
+
+			const result = await client.callTool({
+				name: "create_session",
+				arguments: {
+					prompt: "Fix branch generation for Desk child sessions",
+					mode: "code",
+					repo: "tella-fusion",
+				},
+			});
+			const output = (
+				result as { content: Array<{ type: string; text: string }> }
+			).content[0].text;
+			expect(h.created[0].branch).toBe("fix-session-branch-ux");
+			expect(output).toContain("code on fix-session-branch-ux");
+		} finally {
+			await client.close();
+			await server.instance.close();
+		}
+	});
+});
+
 describe("task_status / cancel_task", () => {
 	const summary = (over: Partial<SessionSummary>): Partial<SessionSummary> => ({
 		id: "bks-test-task",
@@ -337,7 +473,7 @@ describe("task_status / cancel_task", () => {
 // ---------------------------------------------------------------------------
 
 describe("workerReportPayload", () => {
-	const ctx = { createdBy: "Michiel", currentSessionId: "bks-child" };
+	const ctx = { createdBy: "Alex", currentSessionId: "bks-child" };
 	const deps = {
 		parentOf: (id: string) => (id === "bks-child" ? "bks-parent" : undefined),
 		evidence: async () => "— evidence —\nfiles changed: 1 file(s)",
@@ -351,7 +487,7 @@ describe("workerReportPayload", () => {
 	});
 
 	it("attributes the report to the worker, not to the human it inherited", async () => {
-		// "[Michiel] ..." reads to the parent model like a human instruction.
+		// "[Alex] ..." reads to the parent model like a human instruction.
 		const out = await workerReportPayload("bks-parent", "Done.", ctx, deps);
 		expect(out.user).toBe("worker bks-child");
 	});
@@ -367,17 +503,17 @@ describe("workerReportPayload", () => {
 
 	it("leaves messages to any other session untouched", async () => {
 		const out = await workerReportPayload("bks-someone-else", "ping", ctx, deps);
-		expect(out).toEqual({ content: "ping", user: "Michiel" });
+		expect(out).toEqual({ content: "ping", user: "Alex" });
 	});
 
 	it("leaves a non-worker session's messages untouched", async () => {
 		const out = await workerReportPayload(
 			"bks-parent",
 			"ping",
-			{ createdBy: "Michiel", currentSessionId: "bks-root" },
+			{ createdBy: "Alex", currentSessionId: "bks-root" },
 			deps,
 		);
-		expect(out).toEqual({ content: "ping", user: "Michiel" });
+		expect(out).toEqual({ content: "ping", user: "Alex" });
 	});
 
 	it("still delivers the prose when evidence can't be computed", async () => {
@@ -388,7 +524,7 @@ describe("workerReportPayload", () => {
 			},
 		});
 		expect(out.content).toBe("Done.");
-		expect(out.user).toBe("Michiel");
+		expect(out.user).toBe("Alex");
 	});
 
 	it("caps the appended block so a handoff can't refill the parent's context", async () => {

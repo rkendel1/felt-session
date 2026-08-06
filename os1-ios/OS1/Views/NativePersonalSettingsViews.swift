@@ -90,7 +90,7 @@ struct ComposerSettingsView: View {
                     Text("New sessions use this model when available. No preference uses the workspace default.")
                 }
 
-                Section("Sending") {
+                Section {
                     #if os(macOS)
                     Picker("Send messages with", selection: $sendKey) {
                         Text("Enter").tag("enter")
@@ -110,6 +110,17 @@ struct ComposerSettingsView: View {
                             Text("Steer the current run").tag("steer")
                         }
                     }
+                    #endif
+                } header: {
+                    Text("Sending")
+                } footer: {
+                    // The setting is only the default: the other verb is
+                    // always one gesture away, and this is the only place
+                    // that says so.
+                    #if os(macOS)
+                    Text("Queued messages wait until the agent has fully finished; steering folds them into the running turn at its next step. Hold the send button to use the other one for a single message.")
+                    #else
+                    Text("Queued messages wait until the agent has fully finished; steering folds them into the running turn at its next step. Touch and hold the send button to use the other one for a single message.")
                     #endif
                 }
 
@@ -212,6 +223,7 @@ struct ComposerSettingsView: View {
 struct AppearanceSettingsView: View {
     @AppStorage("os1.appearance") private var appearance = "system"
     @AppStorage("os1.appearance.turnActivity") private var nativeTurnActivity = "collapsed"
+    @AppStorage("os1.desk.voice") private var deskVoice = "off"
 
     @State private var turnActivity = "collapsed"
     @State private var loading = true
@@ -237,22 +249,34 @@ struct AppearanceSettingsView: View {
 
             Section {
                 if loading {
-                    ProgressView("Loading chat preferences…")
+                    ProgressView("Loading session preferences…")
                 } else {
                     Picker("Tool calls and messages", selection: $turnActivity) {
                         Text("Expand while running").tag("auto")
                         Text("Always expanded").tag("expanded")
                         Text("Always collapsed").tag("collapsed")
                     }
-                    Button(saving ? "Saving…" : "Save chat preference") {
+                    Button(saving ? "Saving…" : "Save session preference") {
                         Task { await saveTurnActivity() }
                     }
                     .disabled(!prefsLoaded || saving || turnActivity == savedTurnActivity)
                 }
             } header: {
-                Text("Chat")
+                Text("Session")
             } footer: {
-                Text("Controls how a turn's working activity is folded in chat. Sidebar settings are not shown because the native app has no web sidebar.")
+                Text("Controls how a turn's working activity is folded in a session. Sidebar settings are not shown because the native app has no web sidebar.")
+            }
+
+            Section {
+                Toggle("Desk voice", isOn: Binding(
+                    get: { deskVoice == "on" },
+                    set: { enabled in
+                        deskVoice = enabled ? "on" : "off"
+                        pushDeskVoice(enabled)
+                    }
+                ))
+            } footer: {
+                Text("Talk to your Desk with a live voice call. Uses the server's OpenAI key.")
             }
 
             if let error {
@@ -268,6 +292,18 @@ struct AppearanceSettingsView: View {
         .navigationTitle("Appearance")
         .task { await load() }
         .disabled(saving)
+    }
+
+    /// Fire-and-forget: the toggle is already reflected locally via
+    /// `@AppStorage`, this just lets other devices pick it up.
+    private func pushDeskVoice(_ enabled: Bool) {
+        let user = NativePreferences.context().user
+        Task {
+            _ = try? await SettingsAPI.updateUiPrefs(
+                user: user,
+                prefs: ["desk-voice": enabled ? "on" : "off"]
+            )
+        }
     }
 
     private func load() async {
@@ -313,7 +349,7 @@ struct AppearanceSettingsView: View {
             turnActivity = confirmed["turn-activity"] ?? selected
             nativeTurnActivity = turnActivity
             savedTurnActivity = turnActivity
-            savedMessage = "Chat preference saved."
+            savedMessage = "Session preference saved."
         } catch {
             self.error = error.localizedDescription
         }

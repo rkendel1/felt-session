@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import type { Project, UnifiedSession } from "../lib/types";
+import type { Workspace, UnifiedSession } from "../lib/types";
 import { fetchHomeStats, fetchRecentPrs, type HomeStats, type RecentPr } from "../lib/api";
 import { prStatusMark, type PrStatusInput } from "../lib/pr-status";
 import { Button } from "../ui/button";
@@ -25,7 +25,7 @@ import {
 
 interface Props {
   sessions: UnifiedSession[];
-  projects: Project[];
+  workspaces: Workspace[];
   onSelect: (session: UnifiedSession) => void;
   onNewSession: () => void;
   onOpenAnalytics?: () => void;
@@ -45,7 +45,7 @@ interface WorktreeRow extends PrStatusInput {
   additions?: number;
   deletions?: number;
   updatedAt: string;
-  projectId?: string | null;
+  workspaceId?: string | null;
   archived: boolean;
   person: string | null;
   author?: string;
@@ -60,7 +60,7 @@ function cleanTitle(title: string): string {
 }
 
 function worktreesForSession(session: UnifiedSession): WorktreeRow[] {
-  if (session.sideChatOf || session.desk) return [];
+  if (session.desk) return [];
 
   if (session.prs?.some((pr) => pr.url)) {
     return session.prs
@@ -84,7 +84,7 @@ function worktreesForSession(session: UnifiedSession): WorktreeRow[] {
           additions: primary ? session.prAdditions : undefined,
           deletions: primary ? session.prDeletions : undefined,
           updatedAt: primary ? session.prUpdatedAt || session.lastActivity : session.lastActivity,
-          projectId: session.projectId,
+          workspaceId: session.workspaceId,
           archived: !!session.archived,
           person: session.startedBy?.toLowerCase() || null,
           author: primary ? session.prAuthor : undefined,
@@ -110,7 +110,7 @@ function worktreesForSession(session: UnifiedSession): WorktreeRow[] {
       additions: session.prAdditions,
       deletions: session.prDeletions,
       updatedAt: session.prUpdatedAt || session.lastActivity,
-      projectId: session.projectId,
+      workspaceId: session.workspaceId,
       archived: !!session.archived,
       person: session.startedBy?.toLowerCase() || null,
       author: session.prAuthor,
@@ -350,7 +350,7 @@ export function buildWorktreeRows(recentPrs: RecentPr[], sessions: UnifiedSessio
       additions: pr.additions,
       deletions: pr.deletions,
       updatedAt: pr.updatedAt,
-      projectId: null,
+      workspaceId: null,
       archived: false,
       person: pr.person,
       author: pr.author,
@@ -387,12 +387,12 @@ export function buildWorktreeRows(recentPrs: RecentPr[], sessions: UnifiedSessio
   );
 }
 
-export function Home({ sessions, projects, onSelect, onNewSession, onOpenAnalytics, teamViewing }: Props) {
+export function Home({ sessions, workspaces, onSelect, onNewSession, onOpenAnalytics, teamViewing }: Props) {
   const currentUser = useCurrentUser();
   const isPhone = useIsPhone();
   const team = useTeamPresence({ sessions, teamViewing, currentUser });
   const [query, setQuery] = useState("");
-  const [projectId, setProjectId] = useState("all");
+  const [workspaceId, setWorkspaceId] = useState("all");
   const [repo, setRepo] = useState("all");
   const [person, setPerson] = useState(() =>
     currentUser === "Anonymous" ? "all" : currentUser.toLowerCase(),
@@ -460,8 +460,8 @@ export function Home({ sessions, projects, onSelect, onNewSession, onOpenAnalyti
     return allWorktrees
       .filter((row) => {
         if (!showArchived && row.archived) return false;
-        if (projectId === "standalone" && row.projectId) return false;
-        if (projectId !== "all" && projectId !== "standalone" && row.projectId !== projectId)
+        if (workspaceId === "standalone" && row.workspaceId) return false;
+        if (workspaceId !== "all" && workspaceId !== "standalone" && row.workspaceId !== workspaceId)
           return false;
         if (repo !== "all" && row.repo !== repo) return false;
         if (person !== "all" && row.person !== person) return false;
@@ -471,7 +471,7 @@ export function Home({ sessions, projects, onSelect, onNewSession, onOpenAnalyti
           .toLowerCase()
           .includes(needle);
       });
-  }, [allWorktrees, person, projectId, query, repo, showArchived]);
+  }, [allWorktrees, person, workspaceId, query, repo, showArchived]);
 
   const sections = useMemo(() => {
     const definitions: Array<{ state: WorktreeRow["state"]; label: string }> = [
@@ -491,10 +491,10 @@ export function Home({ sessions, projects, onSelect, onNewSession, onOpenAnalyti
     });
   }, [worktrees]);
 
-  const projectOptions = useMemo(() => {
-    const represented = new Set(sessions.filter((s) => s.prUrl || s.prs?.some((pr) => pr.url)).map((s) => s.projectId));
-    return projects.filter((project) => represented.has(project.id));
-  }, [projects, sessions]);
+  const workspaceOptions = useMemo(() => {
+    const represented = new Set(sessions.filter((s) => s.prUrl || s.prs?.some((pr) => pr.url)).map((s) => s.workspaceId));
+    return workspaces.filter((workspace) => represented.has(workspace.id));
+  }, [workspaces, sessions]);
 
   const repoOptions = useMemo(
     () => [...new Set(allWorktrees.map((row) => row.repo).filter(Boolean))].sort(),
@@ -567,13 +567,13 @@ export function Home({ sessions, projects, onSelect, onNewSession, onOpenAnalyti
             <IconFolder size={20} />
             <select
               className="max-w-[190px] cursor-pointer appearance-none border-0 bg-transparent py-1 pl-0 pr-6 text-inherit outline-none"
-              value={projectId}
-              onChange={(event) => setProjectId(event.target.value)}
+              value={workspaceId}
+              onChange={(event) => setWorkspaceId(event.target.value)}
             >
-              <option value="all">In all projects</option>
-              {projectOptions.map((project) => (
-                <option key={project.id} value={project.id}>
-                  In {project.name}
+              <option value="all">In all workspaces</option>
+              {workspaceOptions.map((workspace) => (
+                <option key={workspace.id} value={workspace.id}>
+                  In {workspace.name}
                 </option>
               ))}
               <option value="standalone">Standalone</option>
@@ -647,7 +647,7 @@ export function Home({ sessions, projects, onSelect, onNewSession, onOpenAnalyti
             </div>
             <div className="mt-1 text-body text-faint">
               {query
-                ? "Try another search or project."
+                ? "Try another search or workspace."
                 : person === "all"
                   ? "Workspaces with pull requests will appear here."
                   : "Pick another face, or clear the filter to see everyone."}

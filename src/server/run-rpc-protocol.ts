@@ -1,8 +1,8 @@
 import { resolve } from "path";
 
 /** The server-side RPC socket the MCP proxy talks to. Stable path. */
-export function rpcSocketPath(chatsDir: string): string {
-	return `${chatsDir}/opensession-rpc.sock`;
+export function rpcSocketPath(sessionsDir: string): string {
+	return `${sessionsDir}/opensession-rpc.sock`;
 }
 
 /** Absolute paths used by Codex MCP stdio proxy config. */

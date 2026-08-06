@@ -118,7 +118,7 @@ export function SupportPreview({
 			user: currentUser,
 			plainThreadId: threadId,
 			// Title hint for a first-time workspace resolve (the server files the
-			// chat under the ticket's ONE workspace — see workspace-resolve.ts).
+			// session under the ticket's ONE workspace — see workspace-resolve.ts).
 			createWorkspace: {
 				name: (ticketName ? `Support: ${ticketName}` : "Support ticket").slice(0, 80),
 			},

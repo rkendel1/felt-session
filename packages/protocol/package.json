@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Open Session protocol — the wire and record contracts for cloud agent sessions: bring your own runner, bring your own UI",
-  "license": "Apache-2.0",
+  "license": "MIT",
   "type": "module",
   "exports": {
     ".": "./src/index.ts",

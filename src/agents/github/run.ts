@@ -1,11 +1,11 @@
 /**
  * Shared headless-run helper for the github agent. Composes `runAgent` like
  * automations.ts does, but persists its own visible NativeSessionFile so each
- * PR review/fix/simplify shows up as a Michael session in the web UI, and resumes
+ * PR review/fix/simplify shows up as a session in the web UI, and resumes
  * the engine conversation across rounds via the deterministic per-PR session file.
  */
 import { existsSync, readFileSync } from "fs";
-import { OPENSESSION_CHATS_DIR } from "../../server/paths";
+import { OPENSESSION_SESSIONS_DIR } from "../../server/paths";
 import { recordRunOutcome, updateSessionFile } from "../../server/session-cache";
 import { runAgent } from "../../server/agent-runner";
 import { listAutomations } from "../../server/automations";
@@ -20,7 +20,7 @@ import type { NativeSessionFile } from "../../server/types";
 import { configuredServer } from "../../server/config";
 import { shouldPersistModelSwitch } from "../../server/run-events";
 
-const SESSIONS_DIR = OPENSESSION_CHATS_DIR;
+const SESSIONS_DIR = OPENSESSION_SESSIONS_DIR;
 
 /**
  * Default external MCP servers for a PR flow, used when the review automation
@@ -61,13 +61,13 @@ export function githubFlowMcpServers(): string[] {
 }
 
 /**
- * All chats for one PR (its review/autofix/simplify/adversarial/mention runs,
+ * All sessions for one PR (its review/autofix/simplify/adversarial/mention runs,
  * plus whatever session originally opened the PR) belong in one Project folder.
  * Delegates to the shared adopt-don't-duplicate resolver (workspace-resolve.ts)
  * so the sidebar's PR clicks and these headless runs can never mint diverging
  * workspaces for the same PR. Best-effort: never block a run on this.
  */
-async function projectIdForPr(prNumber: number, branch: string, title: string, cwd: string, ghRepo?: string): Promise<string | null> {
+async function workspaceIdForPr(prNumber: number, branch: string, title: string, cwd: string, ghRepo?: string): Promise<string | null> {
   try {
     const repo = repoForPath(cwd).id;
     // opts.title is per-kind ("Review · PR #123 <PR title>"). The folder groups
@@ -189,8 +189,8 @@ export async function runGithubAgent(opts: GithubRunOpts): Promise<GithubRunResu
   const bksId = bksIdFor(opts.prNumber, opts.kind, opts.ghRepo);
   const startedAt = new Date();
 
-  // Group this and the PR's other chats under one Project folder.
-  const projectId = await projectIdForPr(opts.prNumber, opts.branch, opts.title, opts.cwd, opts.ghRepo);
+  // Group this and the PR's other sessions under one Project folder.
+  const workspaceId = await workspaceIdForPr(opts.prNumber, opts.branch, opts.title, opts.cwd, opts.ghRepo);
 
   const existingSessionFile = readSessionFile(bksId);
   // Engine sessions are scoped to their directory; a session started under a
@@ -212,7 +212,7 @@ export async function runGithubAgent(opts: GithubRunOpts): Promise<GithubRunResu
   // shape as the six W3 conversions): creation fields are create-if-absent
   // defaults (an existing file wins), and each call overlays only the fields
   // this run owns — engine ids, effective model + history, and the per-round
-  // PR shape (branch/cwd/title/mode/projectId). Prior engine ids (e.g. a
+  // PR shape (branch/cwd/title/mode/workspaceId). Prior engine ids (e.g. a
   // codexThreadId from an earlier round) and any concurrent writer's fields
   // survive via the fresh-read spread instead of being rebuilt from closures.
   const persist = (engineSessionId: string) =>
@@ -238,7 +238,7 @@ export async function runGithubAgent(opts: GithubRunOpts): Promise<GithubRunResu
         title: opts.title,
         mode: opts.mode,
         automation: "github-pr-review",
-        ...(projectId ? { projectId } : {}),
+        ...(workspaceId ? { workspaceId } : {}),
       };
     }).catch((e) => {
       console.error(`[github-run] failed to persist session ${bksId}:`, e);

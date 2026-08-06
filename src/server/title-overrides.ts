@@ -7,10 +7,10 @@
  */
 import { readFileSync, existsSync } from "fs";
 import { writeJsonAtomic } from "./shared/atomic-write";
-import { homeDir, OPENSESSION_CHATS_DIR } from "./paths";
+import { homeDir, OPENSESSION_SESSIONS_DIR } from "./paths";
 
 const HOME = homeDir();
-const REGISTRY_PATH = `${OPENSESSION_CHATS_DIR}/title-overrides.json`;
+const REGISTRY_PATH = `${OPENSESSION_SESSIONS_DIR}/title-overrides.json`;
 
 let cache: Record<string, string> | null = null;
 

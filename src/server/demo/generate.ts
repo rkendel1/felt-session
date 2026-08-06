@@ -1,12 +1,12 @@
 /**
  * Synthetic demo dataset generator — pure disk writes, no server graph, no
  * network. Everything resolves through the SAME resolvers the server reads
- * with (paths.ts OPENSESSION_CHATS_DIR live binding, rename-compat stateDir(),
+ * with (paths.ts OPENSESSION_SESSIONS_DIR live binding, rename-compat stateDir(),
  * opencode-transcript OPENCODE_TRANSCRIPTS_DIR live binding, statePath() for the
  * PR snapshot caches), so the dataset lands in whatever scratch state the
  * instance is pointed at — never a hardcoded home path.
  *
- * Idempotent via a marker file in the chats dir (written LAST, so a failed
+ * Idempotent via a marker file in the sessions dir (written LAST, so a failed
  * partial run regenerates on the next attempt). Callers: startDemo() at boot
  * under OPENSESSION_DEMO=1, and scripts/demo-data.ts standalone.
  *
@@ -17,7 +17,7 @@
 
 import { mkdirSync, existsSync, readFileSync, writeFileSync } from "fs";
 import { dirname, join } from "path";
-import { OPENSESSION_CHATS_DIR } from "../paths";
+import { OPENSESSION_SESSIONS_DIR } from "../paths";
 import { stateDir, statePath } from "../paths";
 import { OPENCODE_TRANSCRIPTS_DIR, getOpencodeTranscriptPath } from "../opencode-transcript";
 import { configPath } from "../config";
@@ -45,7 +45,7 @@ export interface DemoGenerateOpts {
    * Also seed the HOME-rooted stores (automations/audit/notes/goals via
    * stateDir(), plus the two PR snapshot caches). Default true — demo
    * instances run with their state root (HOME) redirected. The standalone
-   * CLI passes false when only the chats dir was redirected, so nothing ever
+   * CLI passes false when only the sessions dir was redirected, so nothing ever
    * lands in the invoking user's real ~/.opensession-* stores.
    */
   homeStores?: boolean;
@@ -54,7 +54,7 @@ export interface DemoGenerateOpts {
 export interface DemoGenerateResult {
   /** false = the marker was already present; nothing was written. */
   created: boolean;
-  chatsDir: string;
+  sessionsDir: string;
   transcriptsDir: string;
   markerPath: string;
   worktreeDir: string;
@@ -135,7 +135,7 @@ function buildDemoRepo(repoDir: string, worktreeDir: string): void {
 }
 
 export function demoMarkerPath(): string {
-  return join(OPENSESSION_CHATS_DIR, DEMO_MARKER_FILE);
+  return join(OPENSESSION_SESSIONS_DIR, DEMO_MARKER_FILE);
 }
 
 /**
@@ -183,10 +183,10 @@ export function generateDemoData(
   opts: DemoGenerateOpts = {},
 ): DemoGenerateResult {
   const homeStores = opts.homeStores !== false;
-  const chatsDir = OPENSESSION_CHATS_DIR;
+  const sessionsDir = OPENSESSION_SESSIONS_DIR;
   const transcriptsDir = OPENCODE_TRANSCRIPTS_DIR;
   const markerPath = demoMarkerPath();
-  const demoRoot = join(chatsDir, "demo");
+  const demoRoot = join(sessionsDir, "demo");
   const repoDir = join(demoRoot, "repo");
   // Worktrees live under a demo-owned worktrees dir named the way the registry
   // expects (`<worktreesDir>/<wtPrefix>-<branch>`), which is what lets
@@ -198,7 +198,7 @@ export function generateDemoData(
   if (existsSync(markerPath)) {
     return {
       created: false,
-      chatsDir,
+      sessionsDir,
       transcriptsDir,
       markerPath,
       worktreeDir,
@@ -206,7 +206,7 @@ export function generateDemoData(
     };
   }
 
-  mkdirSync(chatsDir, { recursive: true });
+  mkdirSync(sessionsDir, { recursive: true });
   mkdirSync(transcriptsDir, { recursive: true });
 
   buildDemoRepo(repoDir, worktreeDir);
@@ -215,7 +215,7 @@ export function generateDemoData(
   // lazily imports these into transcripts.db on first watch).
   const sessions = demoSessions({ now, worktreeDir, repoDir });
   for (const s of sessions) {
-    writeJson(join(chatsDir, `${s.id}.json`), s.file);
+    writeJson(join(sessionsDir, `${s.id}.json`), s.file);
     if (s.ocSessionId && s.lines.length) {
       writeText(
         getOpencodeTranscriptPath(s.ocSessionId),
@@ -288,7 +288,7 @@ export function generateDemoData(
 
   return {
     created: true,
-    chatsDir,
+    sessionsDir,
     transcriptsDir,
     markerPath,
     worktreeDir,

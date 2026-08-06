@@ -140,11 +140,11 @@ describe("runPi pi/openai account wiring (no engine, no network)", () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  const collect = async (model: string) => {
+  const collect = async (model: string, extra: Record<string, unknown> = {}) => {
     const events: Array<Record<string, unknown>> = [];
     for await (const ev of runPi(
       // No osSessionId: journal/store writes are skipped — pure wiring test.
-      { prompt: "hi", cwd: dir, mode: "ask", mcpServers: [], journal: { kind: "prompt" } },
+      { prompt: "hi", cwd: dir, mode: "ask", mcpServers: [], journal: { kind: "prompt" }, ...extra },
       model
     )) {
       events.push(ev as unknown as Record<string, unknown>);
@@ -188,9 +188,79 @@ describe("runPi pi/openai account wiring (no engine, no network)", () => {
     const events = await collect("pi/openai/gpt-5.6-sol");
     const err = events.find((e) => e.type === "error")!;
     expect(err).toBeDefined();
-    expect(String(err.content)).toMatch(/API-key account/);
+    expect(String(err.content)).toMatch(/only API-key codex accounts are currently eligible/);
     // Wrong account kind is a configuration wall, not an exhausted pool — it
     // must not trigger the fallback walk.
+    expect(err.usageLimitExhausted).toBeUndefined();
+  });
+
+  test("mixed pool: an api_key pick is excluded and the home account is retried", async () => {
+    // Two accounts; whichever the HRW hash ranks first, the run must end up
+    // on the home account's path — never the api_key configuration wall.
+    // The home account here has no CODEX_HOME auth.json, so reaching
+    // buildSeededOpenaiAuth's distinct error IS the proof the re-pick landed
+    // on it.
+    const codexHome = join(dir, "codex-home-mixed");
+    mkdirSync(codexHome, { recursive: true });
+    writeFileSync(
+      storePath,
+      JSON.stringify({
+        accounts: [
+          {
+            id: "k1",
+            name: "org-key",
+            kind: "api_key",
+            value: "sk-test",
+            createdAt: new Date().toISOString(),
+          },
+          {
+            id: "h1",
+            name: "home-acct",
+            kind: "home",
+            value: codexHome,
+            createdAt: new Date().toISOString(),
+          },
+        ],
+      })
+    );
+    const events = await collect("pi/openai/gpt-5.6-sol");
+    const err = events.find((e) => e.type === "error")!;
+    expect(err).toBeDefined();
+    // The home account's failure mode (unreadable seed), not the api_key wall.
+    expect(String(err.content)).not.toMatch(/API-key/);
+    expect(err.usageLimitExhausted).toBe(true);
+  });
+
+  test("explicitly pinned api_key account errors clearly instead of re-picking", async () => {
+    const codexHome = join(dir, "codex-home-pin");
+    mkdirSync(codexHome, { recursive: true });
+    writeFileSync(
+      storePath,
+      JSON.stringify({
+        accounts: [
+          {
+            id: "k1",
+            name: "org-key",
+            kind: "api_key",
+            value: "sk-test",
+            createdAt: new Date().toISOString(),
+          },
+          {
+            id: "h1",
+            name: "home-acct",
+            kind: "home",
+            value: codexHome,
+            createdAt: new Date().toISOString(),
+          },
+        ],
+      })
+    );
+    const events = await collect("pi/openai/gpt-5.6-sol", { accountId: "k1" });
+    const err = events.find((e) => e.type === "error")!;
+    expect(err).toBeDefined();
+    // A pin is an explicit choice — surface the configuration error, never
+    // silently hop to another account.
+    expect(String(err.content)).toMatch(/pinned codex account .* is an API-key account/);
     expect(err.usageLimitExhausted).toBeUndefined();
   });
 

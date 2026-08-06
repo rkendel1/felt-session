@@ -24,7 +24,7 @@ A dev instance is `bun run opensession.ts` with:
   show without real history. (Forthcoming; until the generator lands a demo
   instance simply starts empty.)
 - `OPENSESSION_STATE_DIR=<dir>` — root for all instance state. Everything
-  that defaults to `~/.opensession-*` (chats, config, automations, sandbox
+  that defaults to `~/.opensession-*` (sessions, config, automations, sandbox
   config, the run-rpc unix socket, …) resolves under this dir instead, so a
   dev instance never reads or writes the operator's live stores.
 
@@ -34,7 +34,7 @@ byte-identical to today's behavior.
 ## Previewing your own change
 
 The Preview button uses the repo's own lifecycle scripts, the same convention
-every other repo uses:
+every other repo uses ([repo-lifecycle.md](repo-lifecycle.md)):
 
 - `.opensession/setup.sh` — one-shot per worktree: `bun install
   --frozen-lockfile`. Safe to re-run.

@@ -1,33 +1,33 @@
-export interface ChatPerfSample {
+export interface SessionPerfSample {
 	name: string;
 	value: number;
 	at: number;
 	meta?: Record<string, string | number | boolean>;
 }
 
-const samples: ChatPerfSample[] = [];
+const samples: SessionPerfSample[] = [];
 const counters = new Map<string, number>();
 const MAX_SAMPLES = 2_000;
 let observersStarted = false;
 
-export function recordChatPerf(
+export function recordSessionPerf(
 	name: string,
 	value: number,
-	meta?: ChatPerfSample["meta"],
+	meta?: SessionPerfSample["meta"],
 ) {
 	samples.push({ name, value, at: performance.now(), meta });
 	if (samples.length > MAX_SAMPLES) samples.splice(0, samples.length - MAX_SAMPLES);
 }
 
-export function countChatPerf(name: string, by = 1) {
+export function countSessionPerf(name: string, by = 1) {
 	counters.set(name, (counters.get(name) ?? 0) + by);
 }
 
-export function measureChatPerf(name: string, start: number) {
-	recordChatPerf(name, performance.now() - start);
+export function measureSessionPerf(name: string, start: number) {
+	recordSessionPerf(name, performance.now() - start);
 }
 
-export function chatPerfSnapshot() {
+export function sessionPerfSnapshot() {
 	const grouped = new Map<string, number[]>();
 	for (const sample of samples) {
 		const list = grouped.get(sample.name) ?? [];
@@ -57,7 +57,7 @@ export function chatPerfSnapshot() {
 	};
 }
 
-export function startChatPerfObservers() {
+export function startSessionPerfObservers() {
 	if (
 		observersStarted ||
 		typeof window === "undefined" ||
@@ -68,7 +68,7 @@ export function startChatPerfObservers() {
 	try {
 		const observer = new PerformanceObserver((list) => {
 			for (const entry of list.getEntries()) {
-				recordChatPerf("long_task_ms", entry.duration);
+				recordSessionPerf("long_task_ms", entry.duration);
 			}
 		});
 		observer.observe({ type: "longtask", buffered: true });
@@ -78,13 +78,13 @@ export function startChatPerfObservers() {
 	try {
 		const events = new PerformanceObserver((list) => {
 			for (const entry of list.getEntries()) {
-				if (entry.duration >= 16) recordChatPerf("input_event_ms", entry.duration);
+				if (entry.duration >= 16) recordSessionPerf("input_event_ms", entry.duration);
 			}
 		});
 		events.observe({ type: "event", buffered: true });
 	} catch {
 		// Event Timing is progressive telemetry.
 	}
-	(window as typeof window & { __chatPerf?: typeof chatPerfSnapshot }).__chatPerf =
-		chatPerfSnapshot;
+	(window as typeof window & { __sessionPerf?: typeof sessionPerfSnapshot }).__sessionPerf =
+		sessionPerfSnapshot;
 }

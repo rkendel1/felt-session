@@ -6,7 +6,7 @@
  */
 import type { McpScope } from "./runner-shared";
 import { existsSync, readFileSync } from "fs";
-import { OPENSESSION_CHATS_DIR } from "./paths";
+import { OPENSESSION_SESSIONS_DIR } from "./paths";
 import { } from "./paths";
 import { transitionRunState } from "./run-state";
 import { writeJsonAtomic } from "./shared/atomic-write";
@@ -16,11 +16,11 @@ import { writeJsonAtomic } from "./shared/atomic-write";
 // multiple processes concurrently.
 let ACTIVE_RUNS_PATH =
   process.env.OPENSESSION_RUN_JOURNAL ||
-  `${OPENSESSION_CHATS_DIR}/active-runs.json`;
+  `${OPENSESSION_SESSIONS_DIR}/active-runs.json`;
 
 /**
  * Test seam (bun tests only): repoint the journal file AFTER this module has
- * been evaluated — mirrors paths.ts's __setChatsDirForTest. ES module
+ * been evaluated — mirrors paths.ts's __setSessionsDirForTest. ES module
  * bindings are live, so callers that reach this module's functions through
  * ANOTHER already-cached module (e.g. agent-runner.ts's bare import of this
  * file) pick the new value up regardless of which file imported it first.

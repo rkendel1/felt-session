@@ -6,8 +6,8 @@
  * attached repos + linked PRs) — so resolution never relies on the `ghpr-` /
  * `plain-` dedupe key alone: it also matches member sessions' PR refs and
  * worktree ownership before minting anything. The key marks provenance of
- * workspaces minted chat-less from a PR/ticket (and hides them from the
- * Workspaces band until they gain a chat); an adopted user workspace is
+ * workspaces minted session-less from a PR/ticket (and hides them from the
+ * Workspaces band until they gain a session); an adopted user workspace is
  * key-stamped only if it has no key yet.
  *
  * Used by the HTTP resolve endpoint (routes/workspace.ts), create_session /
@@ -56,7 +56,7 @@ function newestFirst(sessions: UnifiedSession[]): UnifiedSession[] {
 }
 
 /**
- * Backfill `projectId` onto matching sessions that aren't filed under any
+ * Backfill `workspaceId` onto matching sessions that aren't filed under any
  * workspace yet (serialized field-scoped writes — a concurrent filing wins;
  * see the transcript-v2 §6 note in session-cache). Best-effort, never throws.
  */
@@ -65,12 +65,10 @@ function adoptSiblingSessions(
   predicate: (s: UnifiedSession) => boolean,
 ): void {
   for (const s of getCachedSessions()) {
-    if (!isNativeSessionId(s.id) || s.projectId || s.archived) continue;
+    if (!isNativeSessionId(s.id) || s.workspaceId || s.archived) continue;
     if (!predicate(s)) continue;
     void updateSessionFile(s.id, (data) =>
-      data.projectId || data.workspaceId
-        ? data
-        : { ...data, projectId: workspaceId, workspaceId },
+      data.workspaceId ? data : { ...data, workspaceId },
     ).catch(() => {});
   }
 }
@@ -97,7 +95,7 @@ export interface ResolvedWorkspace {
 /**
  * Resolve the one workspace for a PR. Lookup order (adopt before create):
  * dedupe key → newest PR-matching session's workspace → worktree owner →
- * mint a chat-less `ghpr-` workspace. Returns null when the PR can't be
+ * mint a session-less `ghpr-` workspace. Returns null when the PR can't be
  * normalized (unknown to the PR cache and the caller gave no branch).
  */
 export async function resolvePrWorkspace(input: {
@@ -146,8 +144,8 @@ export async function resolvePrWorkspace(input: {
     // 2. A session already carrying this PR that's filed under a workspace.
     if (branch) {
       for (const s of newestFirst(getCachedSessions().filter((x) => !x.archived))) {
-        if (!s.projectId || !matches(s)) continue;
-        const ws = getWorkspace(s.projectId);
+        if (!s.workspaceId || !matches(s)) continue;
+        const ws = getWorkspace(s.workspaceId);
         if (!ws) continue;
         const stamped = stampWorkspaceIdentity(ws.id, stamp) || ws;
         adoptSiblingSessions(stamped.id, matches);
@@ -163,7 +161,7 @@ export async function resolvePrWorkspace(input: {
       }
     }
 
-    // 4. Mint a chat-less PR workspace (no worktreeDir — the first chat
+    // 4. Mint a session-less PR workspace (no worktreeDir — the first session
     // materializes it via the create_session fromPr path).
     const name =
       number !== undefined
@@ -209,8 +207,8 @@ export function resolvePlainWorkspace(input: {
     ...all.filter((x) => !x.archived),
     ...all.filter((x) => x.archived),
   ])) {
-    if (!s.projectId) continue;
-    const ws = getWorkspace(s.projectId);
+    if (!s.workspaceId) continue;
+    const ws = getWorkspace(s.workspaceId);
     if (!ws) continue;
     const stamped =
       stampWorkspaceIdentity(ws.id, { key, plainThreadId: threadId }) || ws;
@@ -233,7 +231,7 @@ export function resolvePlainWorkspace(input: {
  * Resolve the one workspace for a generic feed item (Tella video, …) by its
  * ExternalRef. The generic sibling of resolvePlainWorkspace: dedupe key
  * `<kind>-<id>`, adopt a filed session already carrying the ref, else mint a
- * chat-less workspace stamped with the ref (the feeds design).
+ * session-less workspace stamped with the ref (the feeds design).
  */
 export function resolveExternalWorkspace(input: {
   ref: ExternalRef;
@@ -255,8 +253,8 @@ export function resolveExternalWorkspace(input: {
     ...all.filter((x) => !x.archived),
     ...all.filter((x) => x.archived),
   ])) {
-    if (!s.projectId) continue;
-    const ws = getWorkspace(s.projectId);
+    if (!s.workspaceId) continue;
+    const ws = getWorkspace(s.workspaceId);
     if (!ws) continue;
     const stamped =
       stampWorkspaceIdentity(ws.id, { key, externalRef: ref }) || ws;
@@ -264,7 +262,7 @@ export function resolveExternalWorkspace(input: {
     return { workspace: stamped, created: false };
   }
 
-  // Deliberately repo-less: feed-item workspaces start their chats in
+  // Deliberately repo-less: feed-item workspaces start their sessions in
   // scratch mode (repo-less scratch dir), not in a repo checkout.
   const workspace = createWorkspace({
     name: (ref.title || "").trim().slice(0, 120) || `${ref.kind} ${ref.id}`,

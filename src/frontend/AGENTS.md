@@ -11,7 +11,7 @@ language instead of introducing a new local style for each feature.
   established acronyms keep their normal capitalization.
 - Keep copy short, direct, and specific. Buttons describe the action (`Create
   session`, `Try again`); headings name the place or object (`Model providers`).
-- Reuse the product's existing terms. Do not casually rename chats, sessions,
+- Reuse the product's existing terms. Do not casually rename projects, sessions,
   workspaces, automations, runs, reviews, or other established concepts.
 - Prefer plain language over implementation details. Errors should say what
   happened and, when useful, what the person can do next.

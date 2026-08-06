@@ -16,7 +16,7 @@ export type { Repo } from "./config";
 const worktreesDir = () => configuredPaths().worktreesDir;
 
 /**
- * Repos a chat can run against — the merged registry, read fresh from config
+ * Repos a session can run against — the merged registry, read fresh from config
  * per access. Kept as a `Record`-shaped Proxy (not a plain snapshot) so the
  * many existing `REPOS[id]` / `Object.values(REPOS)` call sites — including
  * ones this module can't touch — stay correct when config adds or overrides
@@ -69,7 +69,7 @@ export function repoForPath(p: string): Repo {
 
 /** Is this dir a shared checkout no single session owns — a repo's live main
  *  checkout or its pinned ask checkout? Worktree "ownership" is meaningless
- *  there: the tree is shared by every ask/legacy chat, and its parked branch
+ *  there: the tree is shared by every ask/legacy session, and its parked branch
  *  says nothing about the sessions running in it. */
 export function isSharedCheckoutDir(dir: string | null | undefined): boolean {
   if (!dir) return false;
@@ -170,7 +170,9 @@ async function seedAndInstallWorktree(
 
 export async function installWorktreeDeps(repo: Repo, wtPath: string, branchLabel: string): Promise<void> {
   try {
-    const repoSetup = ["opensession", "opensession"]
+    // `.opensession/setup.sh`, with `.backstage/` as the pre-rename name repos
+    // may still ship (same pair as preview.ts's LIFECYCLE_DIRS).
+    const repoSetup = ["opensession", "backstage"]
       .map((dir) => `${wtPath}/.${dir}/setup.sh`)
       .find((path) => existsSync(path));
     if (repoSetup) {
@@ -222,7 +224,7 @@ export async function listWorktrees(repoId?: string): Promise<WorktreeInfo[]> {
  * Repo-less scratch directory for "scratch" sessions (feed-item workspaces —
  * the feeds design): media/MCP work like downloading a Tella video and
  * running ffmpeg, with full write access but no repo, branch, or PR flow.
- * Keyed by workspace id so a workspace's sibling chats share downloads
+ * Keyed by workspace id so a workspace's sibling sessions share downloads
  * (falls back to the session id for workspace-less creates). Never a git
  * repo — repo-derivation call sites must treat scratch sessions as repoless.
  */
@@ -553,7 +555,7 @@ export async function createReviewWorktreeForPrHead(
 
 /**
  * Worktree for a FOLLOW-UP branch cut fresh off `baseRef` (a PR's base, e.g.
- * `main`). Used when someone @-mentions Michael asking for a change on a PR that
+ * `main`). Used when someone @-mentions the bot asking for a change on a PR that
  * is already merged/closed — you can't push to the old PR, so the work goes on a
  * new branch that opens its own PR. Idempotent: reuses an existing worktree/branch
  * (so a webhook-redelivery replay doesn't fork a second branch) rather than
@@ -667,7 +669,7 @@ async function defaultStartPoint(repo: Repo): Promise<string> {
 /**
  * The path `createWorktree(branch, repoId)` will produce, without doing any
  * git work. Lets the create-session flow announce a session (and drop the UI
- * into its empty chat) before the slow worktree setup actually runs.
+ * into its empty session) before the slow worktree setup actually runs.
  * `isolated` forces the per-branch worktree path even for shared-checkout
  * repos — the from-PR flow checks out PR branches in isolation, never the
  * live main checkout (matches `createWorktreeForExistingBranch`).
@@ -739,7 +741,7 @@ export async function resolveUniqueBranch(
  * Create a worktree for `branch`. By default it branches from
  * `origin/<defaultBranch>`. Pass `opts.base` (e.g. a workspace's branch) to
  * create a *stacked* worktree branched off that ref instead — this is what lets
- * chats in a workspace stack PRs on top of the workspace's branch.
+ * sessions in a workspace stack PRs on top of the workspace's branch.
  */
 export async function createWorktree(
   branch: string,

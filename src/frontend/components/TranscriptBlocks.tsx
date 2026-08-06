@@ -1,7 +1,6 @@
 import React from "react";
-import type { ChatMessage, SessionWalkthrough, TranscriptEntry } from "../lib/types";
+import type { SessionWalkthrough, TranscriptEntry } from "../lib/types";
 import { MessageBubble } from "./MessageBubble";
-import { NoteBubble } from "./NoteBubble";
 import { TurnBlock } from "./TurnBlock";
 import { TurnFooter, collectTouchedFiles, type TouchedFile } from "./TurnFooter";
 import { VirtualTranscriptBlock } from "./VirtualTranscriptBlock";
@@ -17,8 +16,7 @@ type RenderBlock =
 			durationMs: number;
 			files: TouchedFile[];
 	  }
-	| { kind: "walkthrough"; walkthrough: SessionWalkthrough }
-	| { kind: "note"; note: ChatMessage };
+	| { kind: "walkthrough"; walkthrough: SessionWalkthrough };
 
 interface Props {
 	entries: TranscriptEntry[];
@@ -35,16 +33,13 @@ interface Props {
 	/** Agent-published walkthrough — rendered inline where it was published.
 	 *  Pass a referentially stable object (see SessionViewer) so the memo holds. */
 	walkthrough?: SessionWalkthrough;
-	/** Team notes (the session's chat channel) interleaved into the timeline
-	 *  by timestamp. Agent-invisible; rendered as NoteBubbles. */
-	notes?: ChatMessage[];
 }
 
 /**
  * Groups a flat transcript into per-turn fold blocks and message bubbles, then
  * renders them. A turn's working (tool calls + intermediate assistant notes)
  * folds into one collapsed TurnBlock; only the turn's final answer stays out
- * as a normal bubble — so the chat reads question → answer, calm by default.
+ * as a normal bubble — so the session reads question → answer, calm by default.
  * Shared by the main session view and the sub-agent sidebar so both render
  * identically.
  */
@@ -62,7 +57,6 @@ export const TranscriptBlocks = React.memo(function TranscriptBlocks({
 	owner,
 	sessionId,
 	walkthrough,
-	notes,
 }: Props) {
 	// Build tool_use → tool_result map
 	const toolResults = new Map<string, TranscriptEntry>();
@@ -124,33 +118,6 @@ export const TranscriptBlocks = React.memo(function TranscriptBlocks({
 			walkthrough,
 		});
 
-	// Interleave team notes by timestamp: each note lands after the last block
-	// whose time is at or before it (footers share their answer's time, so a
-	// note never splits an answer from its footer). Notes newer than the whole
-	// window append at the end.
-	if (notes?.length) {
-		const blockTime = (b: RenderBlock): number => {
-			const entry =
-				b.kind === "entry" || b.kind === "footer"
-					? b.entry
-					: b.kind === "turn"
-						? b.items[b.items.length - 1]
-						: null;
-			return b.kind === "walkthrough"
-				? new Date(b.walkthrough.publishedAt).getTime()
-				: entry
-					? new Date(entry.timestamp).getTime()
-					: 0;
-		};
-		const sorted = [...notes].sort((a, b) => a.ts - b.ts);
-		let at = 0;
-		for (const note of sorted) {
-			while (at < blocks.length && blockTime(blocks[at]) <= note.ts) at++;
-			blocks.splice(at, 0, { kind: "note", note });
-			at++;
-		}
-	}
-
 	return (
 		<>
 			{blocks.map((block, i) => {
@@ -159,11 +126,9 @@ export const TranscriptBlocks = React.memo(function TranscriptBlocks({
 						? block.items[0].id
 						: block.kind === "walkthrough"
 							? "walkthrough"
-							: block.kind === "note"
-								? `note:${block.note.id}`
-								: block.kind === "footer"
-									? `${block.entry.id}:footer`
-									: block.entry.id;
+							: block.kind === "footer"
+								? `${block.entry.id}:footer`
+								: block.entry.id;
 				const anchorId =
 					block.kind === "turn"
 						? `${block.items[block.items.length - 1].id}#turn`
@@ -186,9 +151,7 @@ export const TranscriptBlocks = React.memo(function TranscriptBlocks({
 						sessionId={sessionId}
 					/>
 				) : block.kind === "walkthrough" ? (
-					<WalkthroughCard walkthrough={block.walkthrough} variant="chat" />
-				) : block.kind === "note" ? (
-					<NoteBubble note={block.note} />
+					<WalkthroughCard walkthrough={block.walkthrough} variant="session" />
 				) : block.kind === "footer" ? (
 					<TurnFooter
 						entry={block.entry}

@@ -91,7 +91,7 @@ describe("publish bookkeeping", () => {
       // registry without leaving a server bound to a port in CI.
       entrypoint: "true",
       name: "tool",
-      owner: "Michiel",
+      owner: "Alex",
       ...over,
     });
 

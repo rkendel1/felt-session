@@ -7,7 +7,7 @@
 
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "path";
-import { OPENSESSION_CHATS_DIR } from "./paths";
+import { OPENSESSION_SESSIONS_DIR } from "./paths";
 import { activeRunRecords } from "./run-journal";
 import { writeFileAtomic } from "./shared/atomic-write";
 import { broadcastToAll } from "./ws-hub";
@@ -329,7 +329,7 @@ export const spaEntry = frontend
 function sessionTitle(id: string | undefined): string | undefined {
 	if (!id) return undefined;
 	try {
-		const raw = readFileSync(join(OPENSESSION_CHATS_DIR, `${id}.json`), "utf8");
+		const raw = readFileSync(join(OPENSESSION_SESSIONS_DIR, `${id}.json`), "utf8");
 		const title = JSON.parse(raw)?.title;
 		return typeof title === "string" && title.trim()
 			? title.trim().slice(0, 60)
@@ -463,10 +463,9 @@ export function scheduleFrontendRebuild(reason: string, debounceMs = 300): void 
 			const fail = buildFailureSummary(e);
 			if (fail.key !== lastBuildErrorKey) {
 				lastBuildErrorKey = fail.key;
-				const by = sharedCheckoutEditors(true);
 				broadcastToAll({
 					type: "notice",
-					message: `Frontend rebuild failed — still serving the last good bundle. ${fail.summary}${by ? ` (likely mid-edit: ${by})` : ""}`,
+					message: "App update paused. No action needed.",
 				});
 			}
 			if (fail.needsInstall && Date.now() - lastAutoInstallAt > AUTO_INSTALL_COOLDOWN_MS) {

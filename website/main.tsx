@@ -125,7 +125,7 @@ function LandingPage() {
 							</a>
 						</div>
 						<div className="proof-line">
-							<span>Apache-2.0</span>
+							<span>MIT</span>
 							<i />
 							<span>Use your existing subscriptions</span>
 							<i />

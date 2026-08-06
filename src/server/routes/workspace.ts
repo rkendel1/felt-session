@@ -1,5 +1,5 @@
 /**
- * Worktrees, file/skill autocomplete, repo registry, Projects (chat folders), sibling chats, promote-to-code, and attach/switch/detach repos.
+ * Worktrees, file/skill autocomplete, repo registry, workspaces, sibling sessions, promote-to-code, and attach/switch/detach repos.
  *
  * Extracted verbatim from the opensession.ts fetch chain. Every handler
  * returns a Response for a matched route or undefined to fall through to the
@@ -15,7 +15,6 @@ import {
 	SESSIONS_DIR,
 	findSession,
 	invalidateSessionsCache,
-	isLegacySideChat,
 	peekCachedSessions,
 	touchNativeSession,
 } from "../session-cache";
@@ -99,7 +98,7 @@ export async function handleWorkspaceRoutes(
 			}
 		}
 		if (!repos.length) {
-			// Sessions with a repo but no worktree (chat-only, the Desk) search
+			// Sessions with a repo but no worktree (session-only, the Desk) search
 			// their repo's main checkout rather than the global default.
 			const proj = getRepo(
 				url.searchParams.get("repo") || session?.repo || undefined,
@@ -159,7 +158,7 @@ export async function handleWorkspaceRoutes(
 				? peekCachedSessions()
 						.filter(
 							(s) =>
-								!s.archived && !isLegacySideChat(s) && s.id !== sessionId,
+								!s.archived && s.id !== sessionId,
 						)
 						.filter(
 							(s) =>
@@ -231,7 +230,7 @@ export async function handleWorkspaceRoutes(
 		});
 	}
 
-	// Repos available to attach / start a chat against.
+	// Repos available to attach / start a session against.
 	if (path === "/api/repos" && req.method === "GET") {
 		return Response.json({
 			repos: Object.values(REPOS).map((p) => ({
@@ -246,13 +245,13 @@ export async function handleWorkspaceRoutes(
 		});
 	}
 
-	// ── Projects (folders that group chats) ──
-	// A Project is just metadata; membership lives on each chat's `projectId`.
-	if (path === "/api/projects" && req.method === "GET") {
-		return Response.json({ projects: listWorkspaces() });
+	// ── Workspaces (containers that group sessions) ──
+	// A workspace is just metadata; membership lives on each session's `workspaceId`.
+	if (path === "/api/workspaces" && req.method === "GET") {
+		return Response.json({ workspaces: listWorkspaces() });
 	}
 
-	if (path === "/api/projects" && req.method === "POST") {
+	if (path === "/api/workspaces" && req.method === "POST") {
 		const body = (await req.json().catch(() => ({}))) as {
 			name?: string;
 			repo?: string;
@@ -261,13 +260,13 @@ export async function handleWorkspaceRoutes(
 		};
 		if (!body.name || !body.name.trim())
 			return Response.json({ error: "name required" }, { status: 400 });
-		const project = createWorkspace({
+		const workspace = createWorkspace({
 			name: body.name,
 			repo: body.repo,
 			color: body.color,
 			createdBy: requestUser(ctx, body.user) || "Anonymous",
 		});
-		return Response.json({ project });
+		return Response.json({ workspace });
 	}
 
 	// Resolve-or-create the ONE workspace for a PR or a Plain support ticket
@@ -325,49 +324,49 @@ export async function handleWorkspaceRoutes(
 		);
 	}
 
-	const projectMatch = path.match(/^\/api\/projects\/(.+)$/);
-	if (projectMatch && req.method === "PATCH") {
-		const id = decodeURIComponent(projectMatch[1]);
+	const workspaceMatch = path.match(/^\/api\/workspaces\/(.+)$/);
+	if (workspaceMatch && req.method === "PATCH") {
+		const id = decodeURIComponent(workspaceMatch[1]);
 		const body = (await req.json().catch(() => ({}))) as {
 			name?: string;
 			repo?: string;
 			color?: string;
 			order?: number;
 		};
-		const project = updateWorkspace(id, body);
-		if (!project)
-			return Response.json({ error: "Project not found" }, { status: 404 });
-		return Response.json({ project });
+		const workspace = updateWorkspace(id, body);
+		if (!workspace)
+			return Response.json({ error: "Workspace not found" }, { status: 404 });
+		return Response.json({ workspace });
 	}
 
-	if (projectMatch && req.method === "DELETE") {
-		const id = decodeURIComponent(projectMatch[1]);
-		// Membership is derived from each chat's projectId — clear it so member
-		// chats fall back to standalone rather than pointing at a dead folder.
+	if (workspaceMatch && req.method === "DELETE") {
+		const id = decodeURIComponent(workspaceMatch[1]);
+		// Membership is derived from each session's workspaceId — clear it so member
+		// sessions fall back to standalone rather than pointing at a dead folder.
 		for (const s of getAllSessions()) {
-			if (s.projectId === id)
-				touchNativeSession(s.id, { projectId: null });
+			if (s.workspaceId === id)
+				touchNativeSession(s.id, { workspaceId: null });
 		}
 		const ok = deleteWorkspace(id);
 		return Response.json({ ok });
 	}
 
-	// Start a new sibling chat: an empty chat that shares the source chat's
+	// Start a new sibling session: an empty session that shares the source session's
 	// worktree, branch, repo, and project. It has no engine session yet — its
 	// first prompt starts a fresh run (see runSessionPrompt). Powers the tab
-	// strip's + button ("new chat in this project").
+	// strip's + button ("new session in this project").
 	//
-	// Workspace membership is adopt-don't-duplicate: when a chat/create lands
+	// Workspace membership is adopt-don't-duplicate: when a session/create lands
 	// on a worktree an existing workspace already owns, it joins that
 	// workspace — a second workspace over the same worktree is always the
 	// "clicked + and got a whole new workspace" bug. Main checkouts are
-	// excluded (shared by every backstage/ask chat, so ownership is
+	// excluded (shared by every backstage/ask session, so ownership is
 	// meaningless there); see workspaceOwningWorktree.
-	const newChatMatch = path.match(
-		/^\/api\/sessions\/(.+)\/new-chat$/,
+	const newSessionMatch = path.match(
+		/^\/api\/sessions\/(.+)\/new-session$/,
 	);
-	if (newChatMatch && req.method === "POST") {
-		const sourceId = decodeURIComponent(newChatMatch[1]);
+	if (newSessionMatch && req.method === "POST") {
+		const sourceId = decodeURIComponent(newSessionMatch[1]);
 		const src = findSession(sourceId);
 		if (!src)
 			return Response.json({ error: "Session not found" }, { status: 404 });
@@ -383,18 +382,18 @@ export async function handleWorkspaceRoutes(
 			 *  the default model, like every other create. */
 			model?: string;
 		};
-		// share (default): reuse the workspace's worktree/branch (parallel chats,
+		// share (default): reuse the workspace's worktree/branch (parallel sessions,
 		// one branch). stack: a new worktree branched off it (stacked PRs). ask:
-		// no worktree, read-only on main. Empty chat — first prompt starts the run.
-		const chatMode = body.mode || "share";
+		// no worktree, read-only on main. Empty session — first prompt starts the run.
+		const worktreeMode = body.mode || "share";
 		// Volume-mode sandbox workspaces live inside ONE session's container —
 		// share/stack siblings would either mint a divergent second clone at
 		// the same path or ENOENT on the host. Not supported yet.
-		if (hasRemoteWorkspace(src) && chatMode !== "ask")
+		if (hasRemoteWorkspace(src) && worktreeMode !== "ask")
 			return Response.json(
 				{
 					error:
-						"This chat's workspace lives inside its sandbox volume — sibling chats aren't supported for volume-mode sandboxes yet (open an Ask chat instead)",
+						"This session's workspace lives inside its sandbox volume — sibling sessions aren't supported for volume-mode sandboxes yet (open an Ask session instead)",
 				},
 				{ status: 400 },
 			);
@@ -409,31 +408,31 @@ export async function handleWorkspaceRoutes(
 		// not run on a scratch dir (they'd throw).
 		const srcScratch = src.mode === "scratch";
 		// A shared checkout (main or ask) recorded on the source isn't a real
-		// workspace worktree — legacy ask/review chats point at the main
+		// workspace worktree — legacy ask/review sessions point at the main
 		// checkout, and copying it hands the sibling whatever branch happens to
-		// be parked in that live tree (bks-019f97ec, 2026-07-25: a "+" chat in a
+		// be parked in that live tree (bks-019f97ec, 2026-07-25: a "+" session in a
 		// PR workspace landed on the main checkout's parked branch instead of
 		// the PR's). Treat it as bare so share siblings resolve through the
 		// workspace below. Shared-checkout repos (opensession) are exempt — their
-		// code chats live on the main checkout by design.
+		// code sessions live on the main checkout by design.
 		if (
 			!srcScratch &&
-			chatMode === "share" &&
+			worktreeMode === "share" &&
 			isSharedCheckoutDir(worktreeDir) &&
 			!repoForPath(worktreeDir).sharedCheckout
 		) {
 			branch = "";
 			worktreeDir = "";
 		}
-		if (srcScratch && chatMode !== "ask") {
+		if (srcScratch && worktreeMode !== "ask") {
 			branch = "";
 			mode = "scratch";
 			repoId = undefined;
-		} else if (chatMode === "ask") {
+		} else if (worktreeMode === "ask") {
 			branch = "";
 			worktreeDir = "";
 			mode = "ask";
-		} else if (chatMode === "stack" && src.branch && src.repo) {
+		} else if (worktreeMode === "stack" && src.branch && src.repo) {
 			const repo = getRepo(src.repo);
 			if (!repo.sharedCheckout) {
 				branch = `${src.branch}-stack-${bksId.slice(4, 10)}`;
@@ -441,7 +440,7 @@ export async function handleWorkspaceRoutes(
 					base: src.branch,
 				});
 				mode = "code";
-				// Remember the layer underneath so this chat's PR bases on it and
+				// Remember the layer underneath so this session's PR bases on it and
 				// the pair can be linked into a GitHub stack (see pr-stack.ts).
 				stackedOn = {
 					repo: repo.id,
@@ -449,18 +448,18 @@ export async function handleWorkspaceRoutes(
 					...(src.source === "opensession" ? { sessionId: src.id } : {}),
 				};
 			}
-		} else if (chatMode === "share" && !worktreeDir && src.projectId) {
-			// Same workspace ⇒ same worktree: even when the source chat has no
+		} else if (worktreeMode === "share" && !worktreeDir && src.workspaceId) {
+			// Same workspace ⇒ same worktree: even when the source session has no
 			// worktree of its own (e.g. + from an ask tab), a share sibling
 			// joins the workspace's owned worktree instead of starting bare.
-			const ws = getWorkspace(src.projectId);
+			const ws = getWorkspace(src.workspaceId);
 			if (ws?.worktreeDir && existsSync(ws.worktreeDir)) {
 				branch = ws.branch || "";
 				worktreeDir = ws.worktreeDir;
 				mode = "code";
 				repoId = repoForPath(ws.worktreeDir).id;
 			} else if (ws?.branch && !getRepo(ws.repo).sharedCheckout) {
-				// A workspace minted chat-less from a PR/ticket knows its branch
+				// A workspace minted session-less from a PR/ticket knows its branch
 				// but owns no worktree yet: materialize one on that existing
 				// branch so the sibling lands on the PR's code (mirrors
 				// create_session's fromPr path), and stamp it as the workspace's
@@ -479,13 +478,13 @@ export async function handleWorkspaceRoutes(
 		// in it too, so the pair actually links up in the tab strip and
 		// sidebar. Read-only sources (slack/linear files) can join an adopted
 		// workspace but can't be stamped themselves.
-		let workspaceId = src.projectId || null;
+		let workspaceId = src.workspaceId || null;
 		if (!workspaceId) {
 			const owned = workspaceOwningWorktree(src.worktreeDir);
 			if (owned) {
 				workspaceId = owned.id;
 				if (src.source === "opensession")
-					touchNativeSession(src.id, { projectId: owned.id });
+					touchNativeSession(src.id, { workspaceId: owned.id });
 			} else if (src.source === "opensession") {
 				const ws = createWorkspace({
 					name: src.title || src.branch || "Workspace",
@@ -494,12 +493,12 @@ export async function handleWorkspaceRoutes(
 					...(src.branch ? { branch: src.branch } : {}),
 					...(src.worktreeDir ? { worktreeDir: src.worktreeDir } : {}),
 				});
-				touchNativeSession(src.id, { projectId: ws.id });
+				touchNativeSession(src.id, { workspaceId: ws.id });
 				workspaceId = ws.id;
 			}
 		}
 		// Sandbox opt-in: boolean true = config default provider; a string
-		// must name a configured provider. A sibling chat's first prompt
+		// must name a configured provider. A sibling session's first prompt
 		// launches the sandbox through the normal prompt path. The requested
 		// model (unset = the default) is checked against the capability matrix
 		// so an unsupported model × environment combo fails at create, matching
@@ -514,7 +513,7 @@ export async function handleWorkspaceRoutes(
 		);
 		if (!sandboxResolved.ok)
 			return Response.json({ error: sandboxResolved.error }, { status: 400 });
-		// A sibling in a ticket-linked chat/workspace stays linked to the ticket
+		// A sibling in a ticket-linked session/workspace stays linked to the ticket
 		// (conversation tab + ticket→session mapping follow the workspace).
 		const plainThreadId =
 			src.plainThreadId ||
@@ -531,16 +530,16 @@ export async function handleWorkspaceRoutes(
 			worktreeDir,
 			...(repoId ? { repo: repoId } : {}),
 			...(stackedOn ? { stackedOn } : {}),
-			...(workspaceId ? { projectId: workspaceId } : {}),
+			...(workspaceId ? { workspaceId: workspaceId } : {}),
 			...(plainThreadId ? { plainThreadId } : {}),
 			...(siblingRefs?.length ? { externalRefs: siblingRefs } : {}),
-			// Siblings keep the source chat's MCP scoping (least privilege —
-			// a sibling of a tella-scoped chat must not regain every server).
+			// Siblings keep the source session's MCP scoping (least privilege —
+			// a sibling of a tella-scoped session must not regain every server).
 			...(src.mcpServers?.length ? { mcpServers: src.mcpServers } : {}),
 			createdBy: requestUser(ctx, body.user) || "Anonymous",
 			createdAt: new Date().toISOString(),
 			lastActivity: new Date().toISOString(),
-			title: "New chat",
+			title: "New session",
 			mode,
 			// Stamp the validated model so the sibling actually runs what the
 			// sandbox check vetted (validating one model and running another
@@ -561,18 +560,18 @@ export async function handleWorkspaceRoutes(
 		writeJsonAtomic(`${SESSIONS_DIR}/${bksId}.json`, data);
 		invalidateSessionsCache();
 		// Also return the full unified session so the client can drop it into
-		// its session list and render the new chat instantly, instead of
+		// its session list and render the new session instantly, instead of
 		// flashing a loading screen until the next sessions poll lands.
 		return Response.json({ id: bksId, session: findSession(bksId) ?? null });
 	}
 
-	// Promote an ask chat to code. Three shapes, because "ask" says nothing
-	// about where the chat is actually parked:
+	// Promote an ask session to code. Three shapes, because "ask" says nothing
+	// about where the session is actually parked:
 	//   - it already owns a real worktree (a review spin-off shares its
 	//     parent's tree so it can read the diff) ⇒ ADOPT that tree. Cutting a
-	//     second worktree would move the chat off the very branch it's about.
+	//     second worktree would move the session off the very branch it's about.
 	//   - shared-checkout repo (opensession) ⇒ no worktree exists for either
-	//     mode; code chats edit the live checkout, so only `mode` changes.
+	//     mode; code sessions edit the live checkout, so only `mode` changes.
 	//   - parked on a repo's pinned ask checkout ⇒ cut a worktree, the
 	//     original behavior. That moves the cwd, so the ask transcript is
 	//     copied into the new cwd's project dir to keep engine resume working.
@@ -586,7 +585,7 @@ export async function handleWorkspaceRoutes(
 			return Response.json({ error: "Session not found" }, { status: 404 });
 		if (session.source !== "opensession")
 			return Response.json(
-				{ error: "Only opensession chats can be promoted" },
+				{ error: "Only opensession sessions can be promoted" },
 				{ status: 400 },
 			);
 		const body = (await req.json().catch(() => ({}))) as {
@@ -617,8 +616,8 @@ export async function handleWorkspaceRoutes(
 		} else {
 			branch = (
 				body.branch ||
-				(await suggestBranchName(session.title || "chat")) ||
-				`chat-${sessionId.slice(4, 10)}`
+				(await suggestBranchName(session.title || "session")) ||
+				`session-${sessionId.slice(4, 10)}`
 			).trim();
 			const oldCwd = current || repo.repo;
 			worktreeDir = await createWorktree(branch, repo.id);
@@ -645,33 +644,33 @@ export async function handleWorkspaceRoutes(
 		});
 		// Materialize the workspace's worktree if it doesn't own one yet. A
 		// shared checkout is owned by nobody, so it never becomes a
-		// workspace's tree (that's what keeps every opensession chat from
-		// collapsing into one workspace — see chat-workspace.ts).
-		if (session.projectId && worktreeDir && !isSharedCheckoutDir(worktreeDir)) {
-			const ws = getWorkspace(session.projectId);
+		// workspace's tree (that's what keeps every opensession session from
+		// collapsing into one workspace — see session-workspace.ts).
+		if (session.workspaceId && worktreeDir && !isSharedCheckoutDir(worktreeDir)) {
+			const ws = getWorkspace(session.workspaceId);
 			if (ws && !ws.worktreeDir)
 				updateWorkspace(ws.id, { worktreeDir, branch });
 		}
 		return Response.json({ ok: true, branch, worktreeDir });
 	}
 
-	// Move a chat in/out of a Project (folder). `{ projectId: null }` detaches.
-	const setProjectMatch = path.match(
-		/^\/api\/sessions\/(.+)\/project$/,
+	// Move a session in/out of a workspace. `{ workspaceId: null }` detaches.
+	const setWorkspaceMatch = path.match(
+		/^\/api\/sessions\/(.+)\/workspace$/,
 	);
-	if (setProjectMatch && req.method === "POST") {
-		const sessionId = decodeURIComponent(setProjectMatch[1]);
+	if (setWorkspaceMatch && req.method === "POST") {
+		const sessionId = decodeURIComponent(setWorkspaceMatch[1]);
 		const session = findSession(sessionId);
 		if (!session)
 			return Response.json({ error: "Session not found" }, { status: 404 });
 		const body = (await req.json().catch(() => ({}))) as {
-			projectId?: string | null;
+			workspaceId?: string | null;
 		};
-		const projectId = body.projectId ?? null;
-		if (projectId && !getWorkspace(projectId))
-			return Response.json({ error: "Project not found" }, { status: 404 });
-		touchNativeSession(sessionId, { projectId });
-		return Response.json({ ok: true, projectId });
+		const workspaceId = body.workspaceId ?? null;
+		if (workspaceId && !getWorkspace(workspaceId))
+			return Response.json({ error: "Workspace not found" }, { status: 404 });
+		touchNativeSession(sessionId, { workspaceId });
+		return Response.json({ ok: true, workspaceId });
 	}
 
 	// Attach a secondary repo to a session (cross-repo work): creates/reuses an

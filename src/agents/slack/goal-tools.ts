@@ -3,7 +3,7 @@
  *
  * - opensession-goals — management surface, a sibling of opensession-admin. Wired into
  *   interactive runs only (never automation runs), gated to the trusted user for
- *   mutations. Lets Michael create/list/steer long-running goals conversationally.
+ *   mutations. Lets the agent create/list/steer long-running goals conversationally.
  *
  * - opensession-goal-self — the *running goal's own* control surface, bound to one
  *   goal id. Attached only to that goal's session run (see goalMcpServers in

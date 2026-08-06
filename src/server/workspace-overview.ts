@@ -1,9 +1,9 @@
 /**
  * Workspace overview — the data behind the floating "what is this workspace
  * about" panel in the session viewer: the opening prompt (the first thing a
- * human typed into the workspace's oldest chat) plus every piece of media
+ * human typed into the workspace's oldest session) plus every piece of media
  * (screenshots from tool results, pasted images, recorded videos) across all
- * member chats.
+ * member sessions.
  *
  * Media is returned as *references*, not bytes: transcript images are base64
  * data URLs that would balloon the JSON to many MB, so each one becomes a
@@ -15,7 +15,7 @@
 import { parseTranscriptAsync } from "./jsonl-parser";
 import type { TranscriptEntry } from "./types";
 
-export interface OverviewChat {
+export interface OverviewSession {
   id: string;
   title?: string;
   createdAt?: string;
@@ -26,13 +26,13 @@ export interface WorkspaceMediaItem {
   kind: "image" | "video";
   src: string;
   sessionId: string;
-  chatTitle?: string;
+  sessionTitle?: string;
   at: string;
 }
 
 export interface WorkspaceOverview {
   prompt: { content: string; sessionId: string; at: string } | null;
-  /** Latest assistant text across all member chats — the "where things stand"
+  /** Latest assistant text across all member sessions — the "where things stand"
    *  one-liner for the sidebar hover card. */
   lastMessage: { content: string; sessionId: string; at: string } | null;
   media: WorkspaceMediaItem[];
@@ -55,9 +55,9 @@ function imageSrcFor(sessionId: string, entry: TranscriptEntry, idx: number, raw
 }
 
 export async function buildWorkspaceOverview(
-  chats: OverviewChat[],
+  sessions: OverviewSession[],
 ): Promise<WorkspaceOverview> {
-  const ordered = [...chats].sort((a, b) =>
+  const ordered = [...sessions].sort((a, b) =>
     (a.createdAt || "").localeCompare(b.createdAt || ""),
   );
 
@@ -65,15 +65,15 @@ export async function buildWorkspaceOverview(
   let lastMessage: WorkspaceOverview["lastMessage"] = null;
   const media: WorkspaceMediaItem[] = [];
 
-  for (const chat of ordered) {
-    if (!chat.transcriptPath) continue;
-    // Async: this loops over EVERY chat in the workspace — back-to-back sync
+  for (const session of ordered) {
+    if (!session.transcriptPath) continue;
+    // Async: this loops over EVERY session in the workspace — back-to-back sync
     // parses of fat transcripts wedged the event loop for the whole sweep.
-    const entries = await parseTranscriptAsync(chat.transcriptPath);
+    const entries = await parseTranscriptAsync(session.transcriptPath);
     if (!prompt) {
       const first = entries.find(isOpeningPrompt);
       if (first)
-        prompt = { content: first.content, sessionId: chat.id, at: first.timestamp };
+        prompt = { content: first.content, sessionId: session.id, at: first.timestamp };
     }
     for (const e of entries) {
       if (
@@ -81,15 +81,15 @@ export async function buildWorkspaceOverview(
         (e.content?.trim().length || 0) > 0 &&
         (!lastMessage || e.timestamp > lastMessage.at)
       )
-        lastMessage = { content: e.content, sessionId: chat.id, at: e.timestamp };
+        lastMessage = { content: e.content, sessionId: session.id, at: e.timestamp };
     }
     for (const e of entries) {
       for (let i = 0; i < (e.images?.length || 0); i++) {
         media.push({
           kind: "image",
-          src: imageSrcFor(chat.id, e, i, e.images![i]),
-          sessionId: chat.id,
-          chatTitle: chat.title,
+          src: imageSrcFor(session.id, e, i, e.images![i]),
+          sessionId: session.id,
+          sessionTitle: session.title,
           at: e.timestamp,
         });
       }
@@ -97,8 +97,8 @@ export async function buildWorkspaceOverview(
         media.push({
           kind: "video",
           src: v,
-          sessionId: chat.id,
-          chatTitle: chat.title,
+          sessionId: session.id,
+          sessionTitle: session.title,
           at: e.timestamp,
         });
       }

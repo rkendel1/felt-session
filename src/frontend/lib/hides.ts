@@ -2,20 +2,20 @@
 // like pins and snoozes, so they follow you across devices.
 //
 // Hiding is the personal counterpart to archiving: archiving is global, so it
-// removes a chat for the whole team — wrong when a teammate is still working
+// removes a session for the whole team — wrong when a teammate is still working
 // in it. A hide is an overlay on a sidebar row key (`workspace:<id>` or a solo
-// chat id) that only ever affects you; the chat keeps running and stays in
+// session id) that only ever affects you; the session keeps running and stays in
 // everyone else's sidebar.
 //
 // There is deliberately no "Hidden" band: hiding means the row is off your
-// sidebar, not filed into a drawer you'd never open. A hidden chat stays
+// sidebar, not filed into a drawer you'd never open. A hidden session stays
 // findable in the ⌘K palette (which ignores hides), and the Sidebar always
-// shows the OPEN chat's row — so opening one brings its row back and its menu
-// offers "Restore to my sidebar". Prompting in a chat clears its hide outright
-// (`unhideForChat`): you can't be done with work you're actively doing.
+// shows the OPEN session's row — so opening one brings its row back and its menu
+// offers "Restore to my sidebar". Prompting in a session clears its hide outright
+// (`unhideForSession`): you can't be done with work you're actively doing.
 //
 // A hide is otherwise sticky (unlike a snooze, it has no expiry), with one
-// exception the Sidebar applies: a hidden row resurfaces while any of its chats
+// exception the Sidebar applies: a hidden row resurfaces while any of its sessions
 // is blocked on a question, and the entry is consumed when that happens — so a
 // hide can never swallow work that needs you. The public API stays synchronous (an in-memory
 // cache) mirroring snoozes.ts: hydrated on load and on user switch, writes are
@@ -51,7 +51,7 @@ async function load(user: string) {
 }
 
 // Guarded so the module stays importable outside a browser — `partitionHidden`
-// below carries the rule that keeps a hide from swallowing a blocked chat, and
+// below carries the rule that keeps a hide from swallowing a blocked session, and
 // it's worth unit-testing without standing up a DOM.
 if (typeof window !== "undefined") {
 	void load(getCurrentUser());
@@ -84,21 +84,21 @@ export function clearHides(keys: string[]): void {
 }
 
 /**
- * Clear the hide covering a chat, whichever row key its row uses (a chat can
+ * Clear the hide covering a session, whichever row key its row uses (a session can
  * sit under `workspace:<id>`, `wt:<dir>` or its own id — the Sidebar picks).
- * Called when the user PROMPTS in a chat: you can't be done with a chat you're
+ * Called when the user PROMPTS in a session: you can't be done with a session you're
  * actively working in, and "I replied but it's still gone from my sidebar"
- * reads as a bug. Opening a hidden chat deliberately does NOT unhide it.
+ * reads as a bug. Opening a hidden session deliberately does NOT unhide it.
  */
-export function unhideForChat(chat: {
+export function unhideForSession(session: {
 	id: string;
-	projectId?: string | null;
+	workspaceId?: string | null;
 	worktreeDir?: string | null;
 }): void {
 	clearHides([
-		chat.id,
-		...(chat.projectId ? [`workspace:${chat.projectId}`] : []),
-		...(chat.worktreeDir ? [`wt:${chat.worktreeDir}`] : []),
+		session.id,
+		...(session.workspaceId ? [`workspace:${session.workspaceId}`] : []),
+		...(session.worktreeDir ? [`wt:${session.worktreeDir}`] : []),
 	]);
 }
 

@@ -519,7 +519,7 @@ export function PlainThreadActions({
 
 /**
  * Human reply box for a Plain thread — a customer-facing reply (sent via
- * Plain as the Michael machine user) or an internal note for the team.
+ * Plain as the bot machine user) or an internal note for the team.
  * Shared by the session viewer's Plain tab and the Support ticket preview.
  * ⌘/Ctrl+Enter sends; the draft persists per thread.
  */

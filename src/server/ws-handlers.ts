@@ -1,6 +1,6 @@
 /**
  * The UI WebSocket: watch/unwatch sessions, live prompts and queue control,
- * question answers, terminals, collaborative notes, chat typing — plus the
+ * question answers, terminals, collaborative notes — plus the
  * create_session flow. Extracted verbatim from opensession.ts; sandbox
  * transport sockets are delegated to run-ws.ts before any of this runs.
  */
@@ -11,7 +11,7 @@ import { type StreamEvent, cancelAgentRun, interruptAndSteerAgentRun, isAgentSes
 import { isLocalSessionUpgradeInProgress } from "./session-transfer-state";
 import { audit } from "./audit";
 import { makeAskHandler, pendingAsks } from "./asks";
-import { mentionedUsers } from "./chat";
+import { mentionedUsers } from "./people";
 import { sendPushToUser } from "./push";
 import { getAccountById } from "./claude-accounts";
 import { getCodexAccountById } from "./codex-accounts";
@@ -47,7 +47,7 @@ import { type NativeSessionFile, type SessionUsage } from "./types";
 import { shouldPersistModelSwitch } from "./run-events";
 import { MAX_UPLOAD_BYTES, WS_MAX_PAYLOAD_BYTES, asDataUrlList, parseImageDataUrls, stageFileAttachments, withUploadsNote } from "./uploads";
 import { type Workspace, createWorkspace, getWorkspace, updateWorkspace } from "./workspaces";
-import { ownedWorktree } from "./chat-workspace";
+import { ownedWorktree } from "./session-workspace";
 import { resolvePlainWorkspace } from "./workspace-resolve";
 import { createWorktree, createWorktreeForExistingBranch, ensureAskCheckout, ensureScratchDir, getRepo, listWorktrees, repoForPath, resolveUniqueBranch, sharedCheckoutForNewSessions, worktreeHeadBranch, worktreePathFor } from "./worktree";
 import { sanitizeBranchSlug } from "./suggest-branch";
@@ -829,9 +829,9 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 					break;
 				}
 
-				// @People-mentions in a prompt ping the tagged teammates (same
-				// matcher as chat notes: roster from the identity config, never the
-				// sender). Fires at send time on every path — direct, queued, steer.
+				// @People-mentions in a prompt ping the tagged teammates (roster
+				// from the identity config, never the sender). Fires at send time
+				// on every path — direct, queued, steer.
 				{
 					const promptText = String(content || "");
 					if (promptText.includes("@")) {
@@ -908,7 +908,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 				}
 
 				// Codex sessions start a fresh thread on first prompt. Open Session
-				// chats with no engine id are *fresh* chats (a new sibling from the
+				// sessions with no engine id are *fresh* sessions (a new sibling from the
 				// tab strip's +): runSessionPrompt starts a new conversation. Only
 				// non-opensession sources genuinely need an id to resume.
 				if (
@@ -925,9 +925,9 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 					return;
 				}
 
-				// Sibling-chat transcripts attached via the fresh-chat chips.
-				const contextChats = Array.isArray(msg.contextChats)
-					? msg.contextChats.filter(
+				// Sibling-session transcripts attached via the fresh-session chips.
+				const contextSessions = Array.isArray(msg.contextSessions)
+					? msg.contextSessions.filter(
 							(id: unknown): id is string => typeof id === "string",
 						)
 					: undefined;
@@ -937,7 +937,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 					user,
 					images,
 					msg.files,
-					contextChats,
+					contextSessions,
 				);
 				break;
 			}
@@ -1129,7 +1129,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 						// Durable trace in the transcript too: a stopped turn otherwise
 						// just goes silent mid-tool-call, and readers can't tell a
 						// deliberate stop from a crash (the audit line answers it for
-						// Michael, this chip answers it for everyone reading the UI).
+						// the agent, this chip answers it for everyone reading the UI).
 						if (session.claudeSessionId) {
 							try {
 								appendOpencodeTranscript(session.claudeSessionId, [
@@ -1317,13 +1317,13 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 				const createSandboxProvider = sandboxResolved.provider;
 				// Remote providers have no host mounts — always volume-style.
 				const remoteSandbox = isRemoteSandboxProvider(createSandboxProvider);
-				// Workspace linkage. The New modal creates a Workspace + first Chat
-				// together (createWorkspace); the tab/sidebar + adds a Chat to an
+				// Workspace linkage. The New modal creates a Workspace + first Session
+				// together (createWorkspace); the tab/sidebar + adds a Session to an
 				// existing workspace (workspaceId) that either shares the workspace's
 				// worktree (default) or stacks a new one branched off it.
-				const chatMode: "share" | "stack" | "ask" = isAsk
+				const worktreeMode: "share" | "stack" | "ask" = isAsk
 					? "ask"
-					: msg.chatMode === "stack"
+					: msg.worktreeMode === "stack"
 						? "stack"
 						: "share";
 				let workspace =
@@ -1351,7 +1351,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 						}).workspace;
 					} catch {}
 				}
-				// Whether this create made a brand-new workspace (vs. adding a chat
+				// Whether this create made a brand-new workspace (vs. adding a session
 				// to an existing one) — echoed on session_created so the client can
 				// word its brief pending state accordingly.
 				let createdWorkspaceNow = false;
@@ -1375,7 +1375,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 									msg.createWorkspace.name) ||
 								prompt.trim().split("\n")[0].slice(0, 80) ||
 								"Workspace",
-							repo: repo.id,
+							...(isScratch ? {} : { repo: repo.id }),
 							createdBy: user || "Anonymous",
 						});
 					}
@@ -1392,7 +1392,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 				// between session_created and their watch landing. Once they watch
 				// this session, the room broadcast reaches them; once they've
 				// navigated to a DIFFERENT session, they get nothing — the old
-				// unconditional ws.send kept streaming this run into whatever chat
+				// unconditional ws.send kept streaming this run into whatever session
 				// that socket had open (until a refresh replaced the socket).
 				const emit = (m: Record<string, unknown>) => {
 					if (!announcedId) return;
@@ -1433,7 +1433,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 						}
 					} else if (isScratch) {
 						// Scratch sessions run in a plain per-workspace scratch dir
-						// (shared by the workspace's chats so downloads persist across
+						// (shared by the workspace's sessions so downloads persist across
 						// them) — never a repo checkout (the feeds design).
 						wtPath = ensureScratchDir(workspace?.id || randomUUIDv7());
 					} else if (isAsk) {
@@ -1447,8 +1447,8 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 						// Open Session: code sessions edit the live main checkout on the
 						// default branch (hot-reloads in the running server). No worktree.
 						wtPath = repo.repo;
-					} else if (workspace?.worktreeDir && chatMode === "share") {
-						// Share the workspace's owned worktree (parallel chats, one branch).
+					} else if (workspace?.worktreeDir && worktreeMode === "share") {
+						// Share the workspace's owned worktree (parallel sessions, one branch).
 						wtPath = workspace.worktreeDir;
 					} else {
 						// selfDev:"worktree" only: the client may omit a branch for a
@@ -1489,16 +1489,16 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 							}
 						}
 					}
-					// The layer this chat stacks on, captured BEFORE the adoption
-					// block below can rewrite workspace.branch to this chat's own
-					// branch — reading it afterwards would make a stacked chat try
+					// The layer this session stacks on, captured BEFORE the adoption
+					// block below can rewrite workspace.branch to this session's own
+					// branch — reading it afterwards would make a stacked session try
 					// to base on itself.
 					const stackBase =
-						chatMode === "stack" && !isAsk && !isScratch
+						worktreeMode === "stack" && !isAsk && !isScratch
 							? workspace?.branch || ""
 							: "";
-					// First code chat materializes the workspace's owned worktree so
-					// later share-mode chats inherit it. Stacked chats keep their own —
+					// First code session materializes the workspace's owned worktree so
+					// later share-mode sessions inherit it. Stacked sessions keep their own —
 					// except a "stack" in a workspace with no branch yet, which has no
 					// base to stack on and is really the workspace's first worktree.
 					// fromPr is exempt from the shared-checkout exclusion: PR-branch
@@ -1510,7 +1510,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 						!isAsk &&
 						!isScratch &&
 						(!sharedCheckoutForNewSessions(repo) || fromPr) &&
-						(chatMode !== "stack" || !workspace.branch)
+						(worktreeMode !== "stack" || !workspace.branch)
 					) {
 						updateWorkspace(workspace.id, {
 							worktreeDir: wtPath,
@@ -1533,38 +1533,38 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 
 					const bksId = newSessionId();
 					const title = prompt.trim().split("\n")[0].slice(0, 80);
-					// Every chat lives in a workspace (chat-workspace.ts). A create
+					// Every session lives in a workspace (session-workspace.ts). A create
 					// that resolved none — no picker choice, no fork parent, no
 					// explicit id — mints its own here rather than surfacing as an
 					// orphan the read-side sweep has to adopt a moment later: only a
 					// workspace minted on this path can be auto-named from the
 					// generated title below.
-					let mintedForChat = false;
+					let mintedForSession = false;
 					if (
 						!workspace &&
-						!forkSource?.projectId &&
-						!(typeof msg.projectId === "string" && msg.projectId)
+						!forkSource?.workspaceId &&
+						!(typeof msg.workspaceId === "string" && msg.workspaceId)
 					) {
 						workspace = createWorkspace({
 							name: title || "Workspace",
-							repo: repo.id,
+							...(isScratch ? {} : { repo: repo.id }),
 							createdBy: user || "Anonymous",
 							...(sessionBranch ? { branch: sessionBranch } : {}),
 							// Only an isolated worktree is owned — a shared main/ask
-							// checkout is used by every other chat there too.
+							// checkout is used by every other session there too.
 							...(ownedWorktree(wtPath) ? { worktreeDir: wtPath } : {}),
 						});
-						mintedForChat = true;
+						mintedForSession = true;
 					}
 					// Replace the raw first-line title with a short summary in the
 					// background; next sessions poll (≤5s) picks it up. An
 					// auto-created workspace is named ONCE from the same generated
 					// summary (it provisionally wore the raw first line) and keeps
-					// that name for life — later chats never rename it.
+					// that name for life — later sessions never rename it.
 					// Only a workspace minted by THIS create gets auto-named — an
 					// adopted pre-existing workspace keeps its own name.
 					const wsAutoNamed =
-						mintedForChat ||
+						mintedForSession ||
 						(createdWorkspaceNow &&
 							!!workspace &&
 							!!msg.createWorkspace &&
@@ -1587,7 +1587,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 						stageFileAttachments(bksId, msg.files),
 					);
 					// @session:<id> mentions from the New-session box get the same
-					// resolving footer as prompts on existing chats (see
+					// resolving footer as prompts on existing sessions (see
 					// runSessionPromptInner) — this create path bypasses it.
 					{
 						const mentionsNote = sessionMentionsNote(openingPrompt);
@@ -1596,17 +1596,17 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 					// Session opened from the Support view: link it to its Plain
 					// thread (conversation tab + the sidebar's ticket→session
 					// mapping) and hand the agent the ticket conversation so the
-					// first message is self-contained. A chat created inside a
+					// first message is self-contained. A session created inside a
 					// ticket workspace (tab-strip "+") inherits the thread too.
-					// A chat created inside a feed-item workspace (PostHog dashboard, …)
+					// A session created inside a feed-item workspace (PostHog dashboard, …)
 					// inherits the workspace's externalRefs — that's what keeps the
-					// Video tab on its chats and joins the sidebar feed row to the
+					// Video tab on its sessions and joins the sidebar feed row to the
 					// session — and gets the item named in its opening context.
 					const inheritedRefs = workspace?.externalRefs;
-					// Least privilege for feed-workspace chats: unless the creator
+					// Least privilege for feed-workspace sessions: unless the creator
 					// explicitly picked servers, the session's MCP allowlist is the
 					// feed's declared list (e.g. posthog → ["posthog"]) — never the full
-					// mcp-config (a feed chat must not see Plain/Stripe/WorkOS).
+					// mcp-config (a feed session must not see Plain/Stripe/WorkOS).
 					const feedMcpServers =
 						!createMcpServers?.length && inheritedRefs?.length
 							? await (
@@ -1632,7 +1632,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 								await import("../agents/plain/api");
 							const thread = await getThreadWithMessages(plainThreadId);
 							openingPrompt += `\n\n${wrapContext(
-								`This chat was opened from a Plain support ticket. Ticket context:\n\n${formatThreadContext(thread, true)}`,
+								`This session was opened from a Plain support ticket. Ticket context:\n\n${formatThreadContext(thread, true)}`,
 							)}`;
 						} catch (e) {
 							console.error(
@@ -1640,7 +1640,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 								e,
 							);
 							openingPrompt += `\n\n${wrapContext(
-								`This chat was opened from Plain support ticket ${plainThreadId} (the context lookup failed — use the plain MCP tools to fetch the thread).`,
+								`This session was opened from Plain support ticket ${plainThreadId} (the context lookup failed — use the plain MCP tools to fetch the thread).`,
 							)}`;
 						}
 					}
@@ -1698,12 +1698,12 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 								// scratch dir repoForPath would throw on.
 								...(isScratch ? {} : { repo: repoForPath(wtPath).id }),
 								...(workspace
-									? { projectId: workspace.id }
-									: forkSource?.projectId
+									? { workspaceId: workspace.id }
+									: forkSource?.workspaceId
 										? // A fork lands next to its source in the same workspace.
-											{ projectId: forkSource.projectId }
-										: typeof msg.projectId === "string" && msg.projectId
-											? { projectId: msg.projectId }
+											{ workspaceId: forkSource.workspaceId }
+										: typeof msg.workspaceId === "string" && msg.workspaceId
+											? { workspaceId: msg.workspaceId }
 											: {}),
 								createdBy: user || "Anonymous",
 								...(ws.data?.authLogin
@@ -1771,7 +1771,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 
 					// Persist + announce BEFORE the slow parts (worktree git work,
 					// engine boot with its MCP connects) so the client drops into
-					// the empty chat immediately — the title fills in from the
+					// the empty session immediately — the title fills in from the
 					// background summary and the opening turn streams in when the
 					// engine is up. The starting mark keeps a prompt typed in that
 					// window from double-starting a run (same race as
@@ -1913,7 +1913,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 								},
 							);
 							// The transcript file didn't exist when viewers sent their
-							// watch (fresh chat) — attach them now so this first turn
+							// watch (fresh session) — attach them now so this first turn
 							// streams live instead of only appearing after a re-watch.
 							if (engineSessionId) {
 								attachSessionWatchersToEngineTranscript(
@@ -2088,7 +2088,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 						// events above are gone on reload, and a setup-failed session
 						// (e.g. `git worktree add` refusing a branch name that
 						// collides with an existing `name/...` ref) otherwise shows
-						// as an inexplicably empty chat (bks-019f472f, 2026-07-09).
+						// as an inexplicably empty session (bks-019f472f, 2026-07-09).
 						recordRunOutcome(
 							announcedId,
 							`Session setup failed: ${e.message || String(e)}`,
@@ -2160,31 +2160,6 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 					{ type: "note_awareness", noteId, update: msg.update },
 					ws,
 				);
-				break;
-			}
-
-			// ── Team chat: typing indicator (ephemeral — relay only, never
-			// persisted; mirrors note_awareness). Fanned out to every client
-			// except the typist; only chat views on this channel render it. ──
-			case "chat_typing": {
-				const typer =
-					typeof msg.user === "string" && msg.user.trim()
-						? msg.user.trim()
-						: ws.data?.user;
-				const channel =
-					typeof msg.channel === "string" ? msg.channel : "watercooler";
-				if (!typer) return;
-				const payload = JSON.stringify({
-					type: "chat_typing",
-					channel,
-					user: typer,
-				});
-				for (const client of allClients) {
-					if (client === ws) continue;
-					try {
-						client.send(payload);
-					} catch {}
-				}
 				break;
 			}
 		}

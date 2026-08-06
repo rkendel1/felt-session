@@ -84,7 +84,7 @@ interface FileMentions {
 /**
  * Shared "@"-mention file-path autocomplete for textareas. Manages the popup
  * state, debounced fetching, keyboard navigation and insertion, and returns a
- * popup node plus handlers to wire into a host textarea. Used by both the chat
+ * popup node plus handlers to wire into a host textarea. Used by both the session
  * Composer and the New-session prompt field so they behave identically.
  */
 export function useFileMentions({ value, onChange, textareaRef, mentionFetch, skillsFetch }: Options): FileMentions {

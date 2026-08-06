@@ -31,7 +31,6 @@ import { handleAutomationsRoutes } from "./automations";
 import { handleHumanAsksRoutes } from "./human-asks";
 import { handleKeychainRoutes } from "./keychain";
 import { handleDeployRoutes } from "./deploys";
-import { handleChatRoutes } from "./chat";
 import { handlePeopleRoutes } from "./people";
 import { handlePrefsRoutes } from "./prefs";
 import { handleSecurityRoutes } from "./security";
@@ -44,12 +43,14 @@ import { handleNodesRoutes } from "./nodes";
 import { handleNotesRoutes } from "./notes";
 import { handlePapercutsRoutes } from "./papercuts";
 import { handleTodosRoutes } from "./todos";
+import { handleDeskVoiceRoutes } from "./desk-voice";
 import { handleWorkflowsRoutes } from "./workflows";
 import { handleReportsRoutes } from "./reports";
 import { handleAnalyticsRoutes } from "./analytics";
 import { handleSearchRoutes } from "./search";
 import { handleSetupRoutes } from "./setup";
 import { handleOs1UpdateRoutes } from "./os1-update";
+import { handleInstanceSettingsRoutes } from "./instance-settings";
 
 export type { RouteContext, RouteHandler } from "./context";
 
@@ -87,7 +88,6 @@ export const routeHandlers: RouteHandler[] = [
 	handleHumanAsksRoutes,
 	handleKeychainRoutes,
 	handleDeployRoutes,
-	handleChatRoutes,
 	handlePeopleRoutes,
 	handlePrefsRoutes,
 	handleSecurityRoutes,
@@ -100,9 +100,11 @@ export const routeHandlers: RouteHandler[] = [
 	handleNotesRoutes,
 	handlePapercutsRoutes,
 	handleTodosRoutes,
+	handleDeskVoiceRoutes,
 	handleWorkflowsRoutes,
 	handleReportsRoutes,
 	handleAnalyticsRoutes,
 	handleSearchRoutes,
 	handleSetupRoutes,
+	handleInstanceSettingsRoutes,
 ];

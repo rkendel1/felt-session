@@ -482,7 +482,7 @@ describe("fallback graph (nextFallbackModel)", () => {
   const fable = toOpencodeModel("claude-fable-5")!;
   const sonnet = toOpencodeModel("claude-sonnet-5")!;
 
-  it("keeps equal-or-smarter switches automatic, downgrades ask (Michiel's policy)", () => {
+  it("keeps equal-or-smarter switches automatic, downgrades ask (configured policy)", () => {
     // Fable → Sol: equal tier, automatic.
     expect(nextFallbackModel(fable, new Set([fable]), "claude-opus-5")).toEqual({
       id: sol,
@@ -566,7 +566,7 @@ describe("sameBridgeDialOracle", () => {
 describe("alias table (pinned)", () => {
   // PINNED: what users get when they type these. A change here silently
   // redirects /model shortcuts and default-codex dispatch — deliberate only
-  // (last deliberate change: codex/gpt → 5.6-sol, 2026-07-17 per Michiel).
+  // (last deliberate change: codex/gpt → 5.6-sol).
   it("resolves the load-bearing aliases", () => {
     expect(resolveModel("codex")?.id).toBe("gpt-5.6-sol");
     expect(resolveModel("gpt")?.id).toBe("gpt-5.6-sol");

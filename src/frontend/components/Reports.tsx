@@ -40,7 +40,7 @@ function supportIdFromHref(href: string | undefined): string | null {
 	try {
 		const url = new URL(href, location.href);
 		if (url.origin !== location.origin) return null;
-		const match = url.pathname.match(/^\/(?:opensession\/|opensession\/)?support\/([^/?#]+)/);
+		const match = url.pathname.match(/^\/(?:opensession\/|backstage\/)?support\/([^/?#]+)/);
 		return match ? decodeURIComponent(match[1]) : null;
 	} catch {
 		return null;

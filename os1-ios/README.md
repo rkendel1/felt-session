@@ -16,14 +16,23 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   ticker, larger mobile type, and the web client's warm dark palette, plus
   grouping with the web sidebar's shared, drag-to-reorder repository order,
   compact toolbar search/filter, iOS long-press worktree actions (details,
-  rename, sharing, pull request, hide from my sidebar, and archive),
-  swipe-to-archive, restore from the archived list, a floating create button,
-  and pull to refresh. Hiding is the personal counterpart to archiving (which
+  rename, sharing, pull request, pin, hide from my sidebar, and archive),
+  swipe right to pin and left to archive, restore from the archived list, a
+  floating create button, and pull to refresh. Pinned rows are lifted into a
+  Pinned band at the top of the list in the user's own pin order, sharing
+  `/api/pins` with the web sidebar; pinning is quick access rather than a
+  status, so a pinned row also stays in its normal band below, and archiving
+  a row drops its pin. Hiding is the personal counterpart to archiving (which
   is global): it drops the row from THIS user's sidebar — here and in the web
-  one, sharing `/api/hides` — while the chat keeps running for everyone else.
-  A hidden row comes back while one of its chats is blocked on a question,
-  prompting in a chat clears its hide, and search ignores hides, so a hidden
-  row stays findable and its menu offers "Restore to my sidebar".
+  one, sharing `/api/hides` — while the session keeps running for everyone else.
+  A hidden row comes back while one of its sessions is blocked on a question,
+  prompting in a session clears its hide, and search ignores hides, so a hidden
+  row stays findable and its menu offers "Restore to my sidebar". Unread rows
+  read like the web sidebar's, off the same shared store (`/api/reads`): a row
+  whose sessions carry activity past your last read goes semibold at full label
+  strength instead of the usual dimmed medium, and reading a session here clears
+  it in the browser too. Only sessions you have opened can be unread — the mark
+  means "new since you read it", not "never seen".
 - **Session view** — live transcript over the `/ws` WebSocket, grouped into
   turns the way the web viewer groups them: **question → folded work → answer →
   footer**. A turn's tool calls and the narration between them collapse behind
@@ -38,23 +47,25 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   for an edit, the command for a shell call, file content for a write.
   A `Task` row opens the sub-agent's own transcript in a sheet (polled while
   the worker runs, via `GET /api/sessions/:id/subagent/:agentId`), and a
-  footer's file chip opens that file's diff for the turn. Team notes (the
-  session's chat channel, `session:<id>`) interleave into the transcript by
-  the time they were written — the same human-to-human asides the web viewer
-  shows, which the agent never sees. A published walkthrough (demo recording,
-  writeup, before/after stills) renders as a card under the turn that
-  published it. `bks-…` session ids in agent output become links labelled with
-  the referenced session's title, and tapping one opens that session in the
-  app (falling back to the web app for a session this client hasn't polled).
+  footer's file chip opens that file's diff for the turn. A published
+  walkthrough (demo recording, writeup, before/after stills) renders as a card
+  under the turn that published it. `bks-…` session ids in agent output become
+  links labelled with the referenced session's title, and tapping one opens
+  that session in the app (falling back to the web app for a session this
+  client hasn't polled).
   Long answers clamp with `Show full message · 12 KB` (wire-clamped entries
   refetch on demand), system events are toned by severity, and a floating pill
   offers the way back down — reading `New messages` when output arrived while
   you were scrolled up. Token-level streaming via `stream_text`, and a
-  horizontally scrollable chat tab strip when a workspace/worktree contains
-  multiple sessions. A bounded cache keeps recently visited conversations
-  loaded while their off-screen sockets remain disconnected, so returning to a
-  page does not show a loading screen.
-- **Workspace details** — tapping the chat title opens a native worktree sheet
+  horizontally scrollable session tab strip when a workspace/worktree contains
+  multiple sessions. On iOS the trailing nav-bar control is a native overflow
+  menu carrying this worktree's actions — new session, worktree details, its pull
+  request panel, rename, share link, hide/restore, and archive (which pops back
+  to the list) — the same set the sidebar row offers under long press. A
+  bounded cache keeps recently visited conversations loaded while their
+  off-screen sockets remain disconnected, so returning to a page does not show
+  a loading screen.
+- **Workspace details** — tapping the session title opens a native worktree sheet
   with repository and branch metadata, local git status, changed files, pull
   request status, workspace context, and model/reasoning controls, matching
   mobile web's info page without embedding the web client.
@@ -76,7 +87,29 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   optimistic local echo of your prompts until the server's copy arrives.
 - **Settings** — native SwiftUI Tools, Personal, and Workspace administration,
   plus server/GitHub/token configuration and a connection test. Cross-device
-  composer and chat preferences refresh at launch and when the app foregrounds.
+  composer and session preferences refresh at launch and when the app foregrounds.
+- **Desk** — a standing per-user concierge session (`POST /api/desk/ensure`
+  get-or-creates it), summoned as a sheet from a toolbar button next to the
+  sessions list (iOS: `lamp.desk` toolbar item; macOS: the same button in the
+  sidebar header). It's an ordinary `SessionView` under a compact header, so
+  everything the session view already does — streaming, tool folds, questions
+  — works there too. Voice mode is opt-in per device via the "Desk voice"
+  toggle in Appearance settings (cross-device `desk-voice` ui-pref); when on,
+  a mic button in the Desk header starts a live call brokered by the
+  server over a raw WebSocket to OpenAI's Realtime API (`DeskVoiceEngine`) —
+  the app never holds an OpenAI key, and the call is torn down whenever the
+  app leaves the foreground.
+- **Voice call** — the call itself is a full-screen surface
+  (`DeskVoiceCallView`): one orb that scales with real metered loudness — the
+  mic while you talk, the model's own output while it answers — the spoken
+  line as live captions under it, and mute / captions / hang-up controls.
+  Barge-in is server-side VAD, so talking over the model just interrupts it.
+  Minimizing (the chevron) leaves the call running and returns you to the Desk
+  transcript, which fills in as turns finalize; the header's lit mic button
+  comes back to the call, and hanging up is the only thing that ends it.
+  Mute is local — capture and metering continue, frames stop leaving the
+  device. The orb's level is sampled off the realtime audio threads at ~15Hz
+  rather than pushed per buffer, and honors Reduce Motion.
 
 ## Signing in
 
@@ -117,7 +150,6 @@ OS1/
     ModelCatalog.swift       Model/reasoning options from /api/models
     ToolPresentation.swift   Canonical tool names, families, summaries, ±lines
     SubagentTranscript.swift A Task call's sub-agent conversation payload
-    SessionNote.swift        A team note on the session's chat channel
     SessionWalkthrough.swift The published demo carried on the session row
     SessionLinks.swift       `bks-…` ids in output -> in-app links + titles
     PrDetails.swift          PR panel payload
@@ -136,7 +168,7 @@ OS1/
     TranscriptBlocks.swift       Turn grouping (fold/answer/footer) + fold state
     SessionViewModelCache.swift  Bounded recently visited conversation cache
   Views/
-    OS1VisualStyle.swift      Shared web palette, chat width, and repo tile
+    OS1VisualStyle.swift      Shared web palette, session width, and repo tile
     SessionsListView.swift   List + status rows + settings sheet
     SessionView.swift        Transcript, streaming bubble, ask card, input bar
     NewSessionView.swift     Full-height create-session editor
@@ -144,12 +176,13 @@ OS1/
     TurnBlockView.swift      Work fold header + turn footer + file chips
     ToolCallRow.swift        Tool rows, bespoke bodies, unified-diff rendering
     SubagentView.swift       A Task call's sub-agent transcript, in a sheet
-    NoteBubble.swift         Team note (text, @mentions, images) in the transcript
     WalkthroughCard.swift    Published walkthrough: demo video, writeup, stills
     MarkdownBody.swift       Streaming/durable markdown rendering
     AskQuestionCard.swift    Options + free text answer
     PrPanel.swift            Read-only pull-request panel
     WorktreeInfoView.swift   Workspace details sheet
+    DeskSheet.swift          Desk sheet: header + voice controls over SessionView
+    DeskVoiceCallView.swift  Full-screen voice call: orb, captions, call controls
     SettingsView.swift       Native settings index + connection controls
     Native*SettingsViews.swift  Native Tools, Personal, Workspace panels
     MacSettings.swift        macOS settings window

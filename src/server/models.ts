@@ -111,7 +111,7 @@ export const KNOWN_MODELS: ModelInfo[] = [
   { id: "gpt-5.6-sol", provider: "codex", label: "GPT-5.6 Sol", aliases: ["sol", "gpt5.6", "codex", "gpt"] },
   { id: "gpt-5.6-terra", provider: "codex", label: "GPT-5.6 Terra", aliases: ["terra"] },
   { id: "gpt-5.6-luna", provider: "codex", label: "GPT-5.6 Luna", aliases: ["luna"] },
-  // Retired 2026-07-25 (Michiel: "no 5.5 and 5.4", "also remove spark") but
+  // Retired (operator decision: drop 5.5/5.4 and spark) but
   // kept resolvable for old sessions' labels/pricing — toOpencodeModel
   // reroutes any dispatch of them to a 5.6 model (see RETIRED_CODEX_REROUTE
   // for why: 272k backend window − 128k output reservation leaves a 144k
@@ -618,7 +618,7 @@ const CODEX_MODEL_ORDER = [
 
 /**
  * Fallback ROUTING tiers (higher = smarter). NOT an absolute capability
- * ranking — it encodes the policy Michiel set (2026-07-11): keep a run going on
+ * ranking — it encodes the configured rotation policy: keep a run going on
  * an equal-or-smarter model automatically, but ASK a human before dropping to a
  * dumber one. "smart→smart / medium→smart = fine (auto); smart→dumb /
  * medium→dumb = ask." Concrete edges that policy yields: Fable→Sol auto,
@@ -895,8 +895,8 @@ export function interactiveFallbackModel(_primaryModel?: string): string | undef
  * still run on the Claude/Codex SDK when the direct agent loops (Slack, Linear,
  * github, Plain) dispatch them — those loops are not migrated in this pass.
  */
-/** Codex models retired 2026-07-25 (Michiel: "no 5.5 and 5.4", then "also
- *  remove spark, there are cheap 5.6 models instead, terra and luna"). Their
+/** Codex models retired (operator decision: drop 5.5/5.4 and spark — the
+ *  cheap 5.6 models terra and luna replace them). Their
  *  real ChatGPT-backend window is 272k, and the backend reserves the 128k
  *  output ceiling out of it → a 144k input cap. Open Session sessions carry a
  *  ~125k fixed per-turn payload (MCP tool schemas + system prompt +

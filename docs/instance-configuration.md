@@ -65,7 +65,5 @@ those files without changing application behavior.
 ## Compatibility literals
 
 Several old names are protocol or persisted-data compatibility, not instance
-branding. Do not rename the `bks-`/`prj-` id prefixes,
-`===MICHAEL-SUMMARY===`, `OPENSESSION_VIDEO:`, legacy `michael-*` MCP aliases,
-old environment aliases, or old state-directory fallbacks. Running and
-historical sessions depend on them.
+branding. Do not rename the `bks-` session-id prefix or `OPENSESSION_VIDEO:` —
+running and historical sessions depend on them.

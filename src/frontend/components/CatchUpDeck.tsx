@@ -8,7 +8,7 @@ import {
 } from "motion/react";
 import type {
 	UnifiedSession,
-	Project,
+	Workspace,
 	TranscriptEntry,
 	WSClientMessage,
 } from "../lib/types";
@@ -52,27 +52,27 @@ interface CatchupCard {
 	key: string;
 	workspaceId: string | null;
 	name: string;
-	chats: UnifiedSession[]; // createdAt asc
+	sessions: UnifiedSession[]; // createdAt asc
 	repo: string;
 	owner: string;
 	lastActivity: string;
 }
 
-/** The chat a read/reply lands on: the freshest one in the workspace. */
+/** The session a read/reply lands on: the freshest one in the workspace. */
 function replyTarget(card: CatchupCard): UnifiedSession {
-	return card.chats.reduce((best, c) =>
+	return card.sessions.reduce((best, c) =>
 		c.lastActivity > best.lastActivity ? c : best,
 	);
 }
 
 interface Props {
 	sessions: UnifiedSession[];
-	projects: Project[];
+	workspaces: Workspace[];
 	/** WebSocket sender — used to post a reply into a session. */
 	send: (msg: WSClientMessage) => void;
 	connected: boolean;
-	/** Archive every chat in a workspace (reuses App's archive handler). */
-	onArchive: (chats: UnifiedSession[]) => void;
+	/** Archive every session in a workspace (reuses App's archive handler). */
+	onArchive: (sessions: UnifiedSession[]) => void;
 	/** Open the real session behind a card. */
 	onOpenSession: (id: string) => void;
 	/** Start a fresh workspace (opens the new-session palette). */
@@ -83,7 +83,7 @@ interface Props {
 
 export function CatchUpDeck({
 	sessions,
-	projects,
+	workspaces,
 	send,
 	connected,
 	onArchive,
@@ -132,7 +132,7 @@ export function CatchUpDeck({
 		const groups = new Map<string, UnifiedSession[]>();
 		const order: string[] = [];
 		for (const s of unread) {
-			const key = s.projectId ? `ws:${s.projectId}` : `chat:${s.id}`;
+			const key = s.workspaceId ? `ws:${s.workspaceId}` : `session:${s.id}`;
 			if (!groups.has(key)) {
 				groups.set(key, []);
 				order.push(key);
@@ -140,20 +140,20 @@ export function CatchUpDeck({
 			groups.get(key)!.push(s);
 		}
 		const out = order.map((key): CatchupCard => {
-			const chats = groups
+			const sessions = groups
 				.get(key)!
 				.slice()
 				.sort((a, b) => (a.createdAt || "").localeCompare(b.createdAt || ""));
 			const wsId = key.startsWith("ws:") ? key.slice(3) : null;
-			const ws = wsId ? projects.find((p) => p.id === wsId) : null;
+			const ws = wsId ? workspaces.find((p) => p.id === wsId) : null;
 			return {
 				key,
 				workspaceId: wsId,
-				name: ws?.name || chats[0].title,
-				chats,
-				repo: chats[0].repo || DEFAULT_REPO,
-				owner: chats[0].startedBy || "",
-				lastActivity: chats.reduce(
+				name: ws?.name || sessions[0].title,
+				sessions,
+				repo: sessions[0].repo || DEFAULT_REPO,
+				owner: sessions[0].startedBy || "",
+				lastActivity: sessions.reduce(
 					(m, c) => (c.lastActivity > m ? c.lastActivity : m),
 					"",
 				),
@@ -164,7 +164,7 @@ export function CatchUpDeck({
 		// genuine "all caught up"). While it's still empty we keep recomputing.
 		if (sessions.length > 0) frozen.current = out;
 		return out;
-	}, [sessions, currentUser, projects]);
+	}, [sessions, currentUser, workspaces]);
 
 	const [index, setIndex] = useState(0);
 	const [dir, setDir] = useState<Action | null>(null);
@@ -175,15 +175,15 @@ export function CatchUpDeck({
 	function act(action: Action) {
 		if (!card) return;
 		if (action === "read") {
-			for (const c of card.chats) markRead(c.id, c.lastActivity);
+			for (const c of card.sessions) markRead(c.id, c.lastActivity);
 		} else if (action === "archive") {
-			onArchive(card.chats);
+			onArchive(card.sessions);
 		}
 		setDir(action);
 		setIndex((i) => i + 1);
 	}
 
-	// After a reply is sent (by the card's composer, into the freshest chat),
+	// After a reply is sent (by the card's composer, into the freshest session),
 	// mark the workspace read and advance — same as a right-swipe.
 	function onReplied() {
 		if (card) act("read");
@@ -487,7 +487,7 @@ function CardBody({
 
 	const meta = [
 		card.repo,
-		card.chats.length > 1 ? `${card.chats.length} chats` : null,
+		card.sessions.length > 1 ? `${card.sessions.length} sessions` : null,
 		card.lastActivity ? shortTime(card.lastActivity) : null,
 	]
 		.filter(Boolean)
@@ -524,7 +524,7 @@ function CardBody({
 				) : (
 					<TranscriptBlocks entries={entries} owner={card.owner} />
 				)}
-				{/* Live "still working" ticker: while the chat we're reading is mid-run,
+				{/* Live "still working" ticker: while the session we're reading is mid-run,
 				    show a pulsing dot + elapsed clock at the bottom of the transcript so
 				    the card reads as in-progress (mirrors SessionViewer's busy row). */}
 				{target.isRunning && <CatchupWorking target={target} />}
@@ -574,10 +574,10 @@ function CatchUpComposer({
 	currentUser: string;
 	onReplied: () => void;
 }) {
-	// Share the session's draft with the main chat view (same key), so a reply
+	// Share the session's draft with the main session view (same key), so a reply
 	// half-typed here shows up there and vice-versa. Images/files are parked in
 	// the same draft record (Composer only owns the text).
-	const draftKey = `chat:${target.id}`;
+	const draftKey = `session:${target.id}`;
 	const [images, setImages] = useState<string[]>(() => loadDraft(draftKey).images);
 	const [files, setFiles] = useState<FileAttachment[]>(
 		() => loadDraft(draftKey).files,
@@ -702,7 +702,7 @@ function CatchUpComposer({
 
 /**
  * Live "still working" ticker shown at the tail of a card's transcript while the
- * chat is mid-run. Self-ticks once a second so the re-render stays inside this
+ * session is mid-run. Self-ticks once a second so the re-render stays inside this
  * tiny node. Anchors to the run's start (runStartedAt, which survives a refresh),
  * falling back to lastActivity for external runs that never stamped one.
  */

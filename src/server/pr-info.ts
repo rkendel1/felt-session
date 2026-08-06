@@ -109,7 +109,7 @@ export interface PrDetails {
    *  best-effort (see pr-stack.ts) — null covers both "not stacked" and "the
    *  stack read failed", which the UI treats identically. */
   stack?: PrStack | null;
-  /** The latest automated Michael review, enriched by the session PR route. */
+  /** The latest automated agent review, enriched by the session PR route. */
   osReview?: OsReviewSummary;
   /** An automated review is currently running for this PR. */
   reviewActive?: boolean;
@@ -704,7 +704,7 @@ export async function closePr(
 
 /**
  * Merge a branch's PR via the gh CLI — human-triggered from the Reviews view
- * (Michael never merges on its own; this is a UI affordance for the operator).
+ * (the agent never merges on its own; this is a UI affordance for the operator).
  * Defaults to squash. Audited as `reviews/pr_merge` since it mutates the repo.
  */
 export async function mergePr(

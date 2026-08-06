@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import type { UnifiedSession, WSServerMessage } from "../lib/types";
 import { relativeTime } from "../lib/api";
-import { chatPath } from "../lib/share-link";
+import { sessionPath } from "../lib/share-link";
 import { Button } from "../ui/button";
 import { getCurrentUser } from "./UserPicker";
 
@@ -10,7 +10,7 @@ import { getCurrentUser } from "./UserPicker";
  * (primary + attached + linked), with primary-branch/number fallbacks for
  * sessions the enrichment hasn't reached. Matching also uses the loaded PR's
  * number and head branch, so number-keyed callers link the same sessions as
- * branch-keyed ones. Legacy hidden chats are excluded; running sessions sort first,
+ * branch-keyed ones. Legacy hidden sessions are excluded; running sessions sort first,
  * then most recent activity.
  */
 export function prRelatedSessions(
@@ -27,7 +27,6 @@ export function prRelatedSessions(
 			(!!branch && r.branch === branch) ||
 			(!!head && r.branch === head));
 	const matched = sessions.filter((s) => {
-		if (s.sideChatOf) return false;
 		if ((s.prs || []).some(refMatch)) return true;
 		if ((s.linkedPrs || []).some(refMatch)) return true;
 		const sRepo = s.repo || "repository";
@@ -69,7 +68,7 @@ interface Props {
 /**
  * The sessions linked to a PR, with an optional one-line composer that starts
  * a NEW session on the PR's head branch (`create_session` with `fromPr` — an
- * isolated worktree checking out the existing branch). The new chat joins the
+ * isolated worktree checking out the existing branch). The new session joins the
  * PR's existing workspace when a related session carries one; otherwise a
  * fresh workspace named after the PR is minted (the PrPreview pattern). App
  * navigates into the session on `session_created`.
@@ -123,10 +122,10 @@ export function PrSessionsList({
 			setStarting(false);
 			setError("No response — check your connection and try again.");
 		}, 15_000);
-		// Join the PR's existing workspace when a related chat carries one so
-		// the new chat lands as a sibling tab, not a duplicate workspace.
+		// Join the PR's existing workspace when a related session carries one so
+		// the new session lands as a sibling tab, not a duplicate workspace.
 		const workspaceId =
-			sessions.find((s) => s.projectId)?.projectId || undefined;
+			sessions.find((s) => s.workspaceId)?.workspaceId || undefined;
 		send({
 			type: "create_session",
 			mode: "code",
@@ -158,7 +157,7 @@ export function PrSessionsList({
 			{sessions.map((s) => (
 				<a
 					key={s.id}
-					href={chatPath(s)}
+					href={sessionPath(s)}
 					onClick={(e) => {
 						// Plain click navigates in-app; modified clicks keep native
 						// new-tab behavior.

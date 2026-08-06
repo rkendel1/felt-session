@@ -10,8 +10,8 @@ import type { RouteContext } from "./context";
 import { getAgents } from "../agents-registry";
 import { addMcpServer, getConnections, removeMcpServer, setMcpAllowedUsers } from "../connections";
 import { refreshOpencodePickerModels, refreshPiPickerModels } from "../models";
-import { BRIDGE_PROVIDER_IDS, PROVIDER_ID_RE, addPickerModel, defaultPickerModelsForProvider, maskProviderKey, opencodeProviders, readOpencodeBridgeConfig, removeOpencodeProvider, removePickerModel, setOpencodeProvider } from "../opencode-config";
-import { addPiPickerModel, isPiModelId, readPiEngineConfig, removePiPickerModel, setPiBridgeAccounts, setPiEnabled } from "../pi-config";
+import { BRIDGE_PROVIDER_IDS, PROVIDER_ID_RE, addPickerModel, defaultPickerModelsForProvider, maskProviderKey, opencodeProviders, readOpencodeBridgeConfig, removeOpencodeProvider, removePickerModel, setBridgeEnabled, setOpencodeProvider } from "../opencode-config";
+import { isPiModelId, readPiEngineConfig, setPiEnabled, setPiPickerModels } from "../pi-config";
 
 export async function handleConnectionsRoutes(
 	ctx: RouteContext,
@@ -316,11 +316,74 @@ export async function handleConnectionsRoutes(
 		}
 	}
 
+	// ── OpenCode engine on/off (Settings → Setup "Engine" checklist row) ──
+	// The `enabled` flag in ~/.opensession-opencode.json gates the Anthropic
+	// bridge AND whether third-party provider models reach the picker. Nothing
+	// wrote it before this route, so a fresh install had it absent and every
+	// default-model turn failed pointing at a file the operator had never seen.
+	if (path === "/api/settings/opencode-engine" && req.method === "GET") {
+		const { engineStatus } = await import("../engine-status");
+		return Response.json(engineStatus());
+	}
+
+	if (path === "/api/settings/opencode-engine" && req.method === "PUT") {
+		const body = await req.json().catch(() => null);
+		if (!body || typeof body !== "object" || typeof body.enabled !== "boolean") {
+			return Response.json(
+				{ error: "enabled must be a boolean" },
+				{ status: 400 },
+			);
+		}
+		try {
+			const { setBridgeEnabled } = await import("../opencode-config");
+			const { engineStatus } = await import("../engine-status");
+			setBridgeEnabled(body.enabled);
+			// Enabling is what makes a configured provider's models resolvable,
+			// so refresh the picker rather than making the user re-save a provider.
+			refreshOpencodePickerModels();
+			return Response.json(engineStatus());
+		} catch (e: any) {
+			return Response.json(
+				{ error: e?.message || "Failed to update the engine config" },
+				{ status: 500 },
+			);
+		}
+	}
+
 	// ── Pi engine (Settings → Accounts "Pi engine" card) ──
 	// The pi engine's on/off switch, picker model ids and designated bridge
 	// accounts in ~/.opensession-pi.json. GET returns the raw-file view (not the
 	// enabled-gated getters — an editor needs to see the ids while the engine is
 	// off); no secrets in this file, so nothing to mask.
+	// ── OpenCode engine (the default engine's on/off switch) ──
+	if (path === "/api/settings/opencode-engine" && req.method === "GET") {
+		return Response.json({
+			enabled: readOpencodeBridgeConfig()?.enabled === true,
+		});
+	}
+	if (path === "/api/settings/opencode-engine" && req.method === "PUT") {
+		const body = await req.json().catch(() => null);
+		if (!body || typeof body.enabled !== "boolean") {
+			return Response.json(
+				{ error: "enabled must be a boolean" },
+				{ status: 400 },
+			);
+		}
+		try {
+			setBridgeEnabled(body.enabled);
+			// The picker fold gates opencode/* entries on `enabled`.
+			refreshOpencodePickerModels();
+			return Response.json({
+				enabled: readOpencodeBridgeConfig()?.enabled === true,
+			});
+		} catch (e: any) {
+			return Response.json(
+				{ error: e?.message || "Failed to save opencode engine config" },
+				{ status: 400 },
+			);
+		}
+	}
+
 	if (path === "/api/settings/pi-engine" && req.method === "GET") {
 		return Response.json(
 			readPiEngineConfig() ?? { enabled: false, pickerModels: [] },
@@ -372,28 +435,9 @@ export async function handleConnectionsRoutes(
 				if (!pickerModels.includes(id)) pickerModels.push(id);
 			}
 		}
-		let bridgeAccounts: string[] | undefined;
-		if ("bridgeAccounts" in body) {
-			if (
-				!Array.isArray(body.bridgeAccounts) ||
-				body.bridgeAccounts.some((x: unknown) => typeof x !== "string" || !x)
-			) {
-				return Response.json(
-					{ error: "bridgeAccounts must be an array of account ids" },
-					{ status: 400 },
-				);
-			}
-			bridgeAccounts = body.bridgeAccounts;
-		}
 		try {
 			if (typeof body.enabled === "boolean") setPiEnabled(body.enabled);
-			if (pickerModels) {
-				for (const m of readPiEngineConfig()?.pickerModels || []) {
-					if (!pickerModels.includes(m)) removePiPickerModel(m);
-				}
-				for (const m of pickerModels) addPiPickerModel(m);
-			}
-			if (bridgeAccounts) setPiBridgeAccounts(bridgeAccounts);
+			if (pickerModels) setPiPickerModels(pickerModels);
 			refreshPiPickerModels();
 			return Response.json(
 				readPiEngineConfig() ?? { enabled: false, pickerModels: [] },

@@ -4,7 +4,7 @@
  *
  * Unlike SlackStreamer.setStatus (which uses the Assistant typing indicator and
  * is therefore DM-only), this edits a real channel message via chat.update, so
- * it works in shared channels too — that's where Michael previously showed *no*
+ * it works in shared channels too — that's where the bot previously showed *no*
  * progress at all between the :eyes: reaction and the final answer.
  *
  * Design (mirrors Claude Tag's Slack UX):

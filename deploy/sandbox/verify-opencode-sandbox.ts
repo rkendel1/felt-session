@@ -43,7 +43,7 @@ const { OPENCODE_TRANSCRIPTS_DIR, getOpencodeTranscriptPath } = await import(
   "../../src/server/opencode-transcript"
 );
 const { readOpencodeBridgeConfig } = await import("../../src/server/opencode-config");
-const { OPENSESSION_CHATS_DIR } = await import("../../src/server/paths");
+const { OPENSESSION_SESSIONS_DIR } = await import("../../src/server/paths");
 const { stateDir, statePath } = await import("../../src/server/paths");
 type RunHostSpec = import("../../src/runner-host/protocol").RunHostSpec;
 type StreamEvent = import("../../src/server/run-events").StreamEvent;
@@ -107,8 +107,8 @@ async function cleanup(): Promise<void> {
   await sh(["docker", "rm", "-f", CONTAINER]);
   await sh(["docker", "volume", "rm", "-f", `${CONTAINER}-claude`, `${CONTAINER}-codex`, `${CONTAINER}-ws`]);
   try {
-    rmSync(`${OPENSESSION_CHATS_DIR}/sandboxes/${CONTAINER}.json`, { force: true });
-    rmSync(`${OPENSESSION_CHATS_DIR}/sandbox-runs/${SESSION_ID}`, { recursive: true, force: true });
+    rmSync(`${OPENSESSION_SESSIONS_DIR}/sandboxes/${CONTAINER}.json`, { force: true });
+    rmSync(`${OPENSESSION_SESSIONS_DIR}/sandbox-runs/${SESSION_ID}`, { recursive: true, force: true });
     // The octest transcript lands in the REAL -opencode-engine dir (that's the
     // point — host visibility); remove only our file.
     if (ocSessionId) rmSync(getOpencodeTranscriptPath(ocSessionId), { force: true });

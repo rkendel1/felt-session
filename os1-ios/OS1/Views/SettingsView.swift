@@ -55,7 +55,39 @@ struct SettingsView: View {
 
     private var settingsHome: some View {
         List {
-            Section("Tools") {
+            // Groups mirror the web nav (src/frontend/components/Settings.tsx):
+            // what one person owns first, then what the whole instance does.
+            Section("Personal") {
+                settingsLink("Personal prompt", icon: "text.bubble") {
+                    PersonalPromptSettingsView()
+                }
+                settingsLink("Composer", icon: "keyboard") {
+                    ComposerSettingsView()
+                }
+                settingsLink("Notifications", icon: "bell") {
+                    NotificationsSettingsView()
+                }
+                settingsLink("Appearance", icon: "circle.lefthalf.filled") {
+                    AppearanceSettingsView()
+                }
+            }
+
+            Section("Workspace") {
+                settingsLink("General", icon: "person") {
+                    WorkspaceGeneralSettingsView()
+                }
+                settingsLink("Models", icon: "square.grid.2x2") {
+                    ModelsSettingsView()
+                }
+                settingsLink("Connections", icon: "point.3.connected.trianglepath.dotted") {
+                    ConnectionsSettingsView()
+                }
+                settingsLink("Memory", icon: "brain") {
+                    MemorySettingsView()
+                }
+            }
+
+            Section("Automation") {
                 settingsLink("Automations", icon: "clock.arrow.circlepath") {
                     AutomationSettingsView()
                 }
@@ -70,43 +102,13 @@ struct SettingsView: View {
                 }
             }
 
-            Section("Personal") {
-                settingsLink("Notifications", icon: "bell") {
-                    NotificationsSettingsView()
-                }
-                settingsLink("Composer", icon: "keyboard") {
-                    ComposerSettingsView()
-                }
-                settingsLink("Appearance", icon: "circle.lefthalf.filled") {
-                    AppearanceSettingsView()
-                }
-                settingsLink("Personal prompt", icon: "text.bubble") {
-                    PersonalPromptSettingsView()
+            Section("Infrastructure") {
+                settingsLink("Prewarming", icon: "flame") {
+                    PrewarmingSettingsView()
                 }
             }
 
-            Section("Workspace") {
-                settingsLink("General", icon: "person") {
-                    WorkspaceGeneralSettingsView()
-                }
-                settingsLink("Accounts", icon: "person.text.rectangle") {
-                    AccountsSettingsView()
-                }
-                settingsLink("Model providers", icon: "square.grid.2x2") {
-                    ModelProvidersSettingsView()
-                }
-                settingsLink("Connections", icon: "point.3.connected.trianglepath.dotted") {
-                    ConnectionsSettingsView()
-                }
-                settingsLink("Memory", icon: "brain") {
-                    MemorySettingsView()
-                }
-                settingsLink("Warm dependencies", icon: "flame") {
-                    WarmDepsSettingsView()
-                }
-                settingsLink("Preview pool", icon: "rectangle.stack") {
-                    PreviewPoolSettingsView()
-                }
+            Section("Activity") {
                 settingsLink("Papercuts", icon: "bandage") {
                     PapercutsSettingsView()
                 }
@@ -130,14 +132,17 @@ struct SettingsView: View {
                 Text(title)
                     .foregroundStyle(OS1VisualStyle.text)
             } icon: {
+                // Without the tile the glyph carries the row on its own, so it
+                // takes a colour of its own rather than secondary-label gray
+                // or the title's black-on-white, and trades size for weight:
+                // smaller than the title beside it, heavier than it, which
+                // keeps the icon column reading as a column instead of as
+                // dimmer text.
                 Image(systemName: icon)
                     .symbolRenderingMode(.monochrome)
-                    .foregroundStyle(OS1VisualStyle.textDim)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(OS1VisualStyle.link)
                     .frame(width: 28, height: 28)
-                    .background(
-                        OS1VisualStyle.hover,
-                        in: RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    )
             }
         }
     }
@@ -326,7 +331,7 @@ struct SettingsView: View {
             _ = try await OS1API.sessions()
             checkResult = "Connected — auth OK."
         } catch {
-            checkResult = error.localizedDescription
+            checkResult = await Reachability.describe(error)
         }
     }
 }

@@ -1,6 +1,14 @@
 /**
  * Feed registry: external-object feeds (Tella videos; eventually Plain
- * tickets, any MCP/API) rendered as sidebar bands. A feed contributes a
+ * tickets, any MCP/API) rendered as sidebar bands.
+ *
+ * A feed is a *project* in product terms — the non-git kind. A registered repo
+ * (worktree.ts REPOS) is the other kind. Both are sources of work that own a
+ * sidebar band and whose contents resolve to workspaces, which is why feed
+ * items adopt a workspace rather than inventing a parallel container. See
+ * CONCEPTS.md.
+ *
+ * A feed contributes a
  * descriptor (band identity + lanes) and a provider (listItems). Items
  * resolve into workspaces via resolveExternalWorkspace (workspace-resolve.ts)
  * keyed `<refKind>-<itemId>`, and the linkage is stamped as a generic
@@ -94,7 +102,7 @@ export interface FeedDescriptor {
   /**
    * External MCP servers (mcp-config.json names) sessions in this feed's
    * workspaces get — their session allowlist defaults to exactly this list,
-   * so a feed-item chat never sees Plain/Stripe/WorkOS tools. Names not
+   * so a feed-item session never sees Plain/Stripe/WorkOS tools. Names not
    * (yet) in mcp-config are skipped by filterMcpServers, so declaring a
    * future server is safe and lights up when it's added.
    */
@@ -348,7 +356,7 @@ export async function feedMcpServersForRefs(
  * names the linked objects, adds the scratch-dir note for scratch sessions,
  * and for Tella refs appends the video's metadata + chapters + transcript
  * excerpt (the Plain ticket-context analogue). Used by BOTH create paths and
- * the first prompt of prompt-less creates (tab-strip "+" siblings) — a chat
+ * the first prompt of prompt-less creates (tab-strip "+" siblings) — a session
  * in a feed workspace must get this no matter how it was born. Returns null
  * when there's nothing to say. Callers wrap it (wrapContext) themselves.
  */
@@ -363,10 +371,10 @@ export async function externalRefsOpeningContext(
         `- ${r.kind} ${r.id}${r.title ? ` — "${r.title}"` : ""}${r.url ? ` (${r.url})` : ""}`,
     )
     .join("\n");
-  let out = `This chat belongs to a workspace linked to external object(s):\n${lines}`;
+  let out = `This session belongs to a workspace linked to external object(s):\n${lines}`;
   if (opts.scratch)
     out +=
-      "\n\nYour working directory is a scratch space (not a git repo) — download media, run ffmpeg, write files there freely. Use the available MCP tools for the linked service when the task concerns the object itself. IMPORTANT — showing media: when your work produces a video or image, make sure its ABSOLUTE local path (or a direct media URL) appears in your output — recognized media paths/URLs render inline in the chat automatically (local files must exist on disk). To force it explicitly, print `OPENSESSION_VIDEO: /abs/path.mp4` or `OPENSESSION_IMAGE: /abs/path.png` on its own line. Media that never appears as a path/URL/marker in output is invisible to the user.";
+      "\n\nYour working directory is a scratch space (not a git repo) — download media, run ffmpeg, write files there freely. Use the available MCP tools for the linked service when the task concerns the object itself. IMPORTANT — showing media: when your work produces a video or image, make sure its ABSOLUTE local path (or a direct media URL) appears in your output — recognized media paths/URLs render inline in the session automatically (local files must exist on disk). To force it explicitly, print `OPENSESSION_VIDEO: /abs/path.mp4` or `OPENSESSION_IMAGE: /abs/path.png` on its own line. Media that never appears as a path/URL/marker in output is invisible to the user.";
   // Generic per-feed context (the feeds design — posthog dashboards
   // etc.): the descriptor's context tool called with the item id, result
   // injected as a JSON excerpt. Declarative — no per-feed code.

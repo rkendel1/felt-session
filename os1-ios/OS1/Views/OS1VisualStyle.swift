@@ -40,7 +40,31 @@ enum OS1VisualStyle {
             : NSColor(white: 0.949, alpha: 1)
     })
     #endif
-    static let accent = Color(red: 1.0, green: 0.231, blue: 0.231)
+    /// The brand mark: black on light, white on dark. It is a FILL colour —
+    /// the send disc, the app tint, an active icon — and deliberately not a
+    /// text colour: at label contrast, words wearing it are indistinguishable
+    /// from body copy, so inline affordances (links, fold toggles) take
+    /// `link` instead.
+    #if os(iOS)
+    static let accent = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark ? .white : .black
+    })
+    /// What sits on top of an `accent` fill — its inverse, so the glyph in the
+    /// send disc stays legible in either appearance.
+    static let onAccent = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark ? .black : .white
+    })
+    /// Links and other tappable words in running text.
+    static let link = Color(uiColor: .link)
+    #else
+    static let accent = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? .white : .black
+    })
+    static let onAccent = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? .black : .white
+    })
+    static let link = Color(nsColor: .linkColor)
+    #endif
     // One status palette on both platforms — the Mac previously used stock
     // Color.green/.yellow/… which rendered different hues than iOS.
     static let green = Color(red: 0.247, green: 0.725, blue: 0.314)
@@ -49,10 +73,10 @@ enum OS1VisualStyle {
     static let red = Color(red: 0.973, green: 0.318, blue: 0.286)
     static let purple = Color(red: 0.639, green: 0.443, blue: 0.969)
     #if os(iOS)
-    static let chatMaxWidth: CGFloat = 780
+    static let sessionMaxWidth: CGFloat = 780
     #else
     /// Keep 13pt desktop body copy near the comfortable 65-75 character range.
-    static let chatMaxWidth: CGFloat = 720
+    static let sessionMaxWidth: CGFloat = 720
     #endif
 }
 
@@ -89,10 +113,37 @@ struct RepoTile: View {
         return palette[Int(hash.magnitude) % palette.count]
     }
 
-    private var iconURL: URL? {
-        ServerConfig.shared.baseURL?
+    private var iconURL: URL? { Self.iconURL(for: name) }
+
+    /// Bumped when the icons behind /repo-icon are redrawn — keep it in step
+    /// with ICON_VERSION in the web tile. The response is cacheable and
+    /// URLCache survives an app update, so without a new URL a freshly
+    /// installed build would keep painting the art the old one cached.
+    private static let iconVersion = 2
+
+    private static func iconURL(for name: String) -> URL? {
+        var url = ServerConfig.shared.baseURL?
             .appendingPathComponent("repo-icon")
             .appendingPathComponent("\(name).png")
+        url?.append(queryItems: [URLQueryItem(name: "v", value: "\(iconVersion)")])
+        return url
+    }
+
+    /// The icon on its own, for the one place that can't host the tile: a menu
+    /// row, whose label is handed to UIKit and survives only as an image.
+    /// Reads the cache without touching it — a getter that started a load
+    /// would be mutating observed state from inside a view's body — so pair it
+    /// with `prefetchIcon` where the rows are known ahead of time.
+    @MainActor
+    static func cachedIcon(for name: String) -> Image? {
+        guard let url = iconURL(for: name) else { return nil }
+        return RepoImageCache.shared.images[url.absoluteString]
+    }
+
+    @MainActor
+    static func prefetchIcon(for name: String) {
+        guard let url = iconURL(for: name) else { return }
+        RepoImageCache.shared.ensureLoaded(url)
     }
 
     var body: some View {
@@ -171,8 +222,18 @@ final class RepoImageCache {
         // from it. Reading the store directly rather than through URLSession
         // keeps a relaunch off the network stack entirely — the same bytes
         // `.returnCacheDataElseLoad` would have handed back.
-        if let cached = await Self.decodeCached(request) {
+        if let cachedData = await Self.cachedData(request),
+           let cached = await Self.decode(cachedData) {
             images[key] = cached
+            // That read never expires, so a repo whose icon is redrawn on the
+            // server would keep the old one for the life of the install. Look
+            // for a newer one behind the paint — while the stored response is
+            // fresh that costs no network at all, and once it goes stale the
+            // tile updates itself.
+            if let newer = await Self.changedBytes(url, since: cachedData),
+               let redrawn = await Self.decode(newer) {
+                images[key] = redrawn
+            }
             return
         }
 
@@ -206,8 +267,28 @@ final class RepoImageCache {
         }
     }
 
-    private static func decodeCached(_ request: URLRequest) async -> Image? {
-        await detachedDecode { URLCache.shared.cachedResponse(for: request)?.data }
+    private static func cachedData(_ request: URLRequest) async -> Data? {
+        await Task.detached(priority: .userInitiated) {
+            URLCache.shared.cachedResponse(for: request)?.data
+        }.value
+    }
+
+    /// Re-fetches an icon that was painted from the disk cache, on the
+    /// protocol's own cache policy, and hands back its bytes only when the
+    /// server has a different image than the one already on screen.
+    private static func changedBytes(_ url: URL, since cached: Data) async -> Data? {
+        var request = ServerConfig.shared.authorizedRequest(url)
+        request.cachePolicy = .useProtocolCachePolicy
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse,
+                  (200..<300).contains(http.statusCode),
+                  data != cached
+            else { return nil }
+            return data
+        } catch {
+            return nil
+        }
     }
 
     private static func decode(_ data: Data) async -> Image? {

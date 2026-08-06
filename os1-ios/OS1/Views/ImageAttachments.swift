@@ -281,12 +281,23 @@ private struct FullScreenImagePreview: View {
                 .ignoresSafeArea()
 
             if let image {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFit()
-                    .offset(x: dragOffset.width * 0.08, y: dragOffset.height)
-                    .scaleEffect(1 - dismissalProgress * 0.08)
-                    .padding(.horizontal, 8)
+                ZoomableImage(
+                    image: image,
+                    onDragChanged: { dragOffset = $0 },
+                    onDragEnded: { translation, projected in
+                        if abs(translation.height) > 100 || abs(projected.height) > 220 {
+                            dismiss()
+                        } else {
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                dragOffset = .zero
+                            }
+                        }
+                    },
+                    onEscape: { dismiss() }
+                )
+                .offset(x: dragOffset.width * 0.08, y: dragOffset.height)
+                .scaleEffect(1 - dismissalProgress * 0.08)
+                .ignoresSafeArea()
             }
 
             Button {
@@ -302,27 +313,231 @@ private struct FullScreenImagePreview: View {
             .accessibilityLabel("Close image")
             .padding(16)
         }
-        .contentShape(Rectangle())
-        .gesture(
-            DragGesture(minimumDistance: 5)
-                .onChanged { value in
-                    guard abs(value.translation.height) > abs(value.translation.width) else {
-                        return
-                    }
-                    dragOffset = value.translation
-                }
-                .onEnded { value in
-                    let projected = value.predictedEndTranslation.height
-                    if abs(value.translation.height) > 100 || abs(projected) > 220 {
-                        dismiss()
-                    } else {
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                            dragOffset = .zero
-                        }
-                    }
-                }
-        )
         .statusBarHidden()
+    }
+}
+
+/// Pinch-, double-tap- and pan-to-zoom, on a `UIScrollView`.
+///
+/// SwiftUI has no zooming container even on iOS 26, and composed
+/// `MagnifyGesture`/`DragGesture` can't reach the feel people expect from
+/// Photos: rubber-banding past the zoom limits, pan deceleration, and panning
+/// with two fingers still down mid-pinch (a `DragGesture` ends the moment a
+/// second finger lands). UIKit gives all of that for free.
+///
+/// Drag-to-dismiss lives in here too rather than as a SwiftUI gesture on the
+/// parent: the scroll view's own pan recognizer begins whether or not there is
+/// anywhere to scroll and wins the arbitration, so a parent `DragGesture`
+/// would simply never fire. The dismissal pan is a UIKit recognizer that only
+/// begins while fully zoomed out (zoomed in, a swipe pans the image instead)
+/// and never with a second finger down, so a sloppy pinch can't dismiss the
+/// viewer. Its translation is reported back so SwiftUI keeps owning the
+/// backdrop fade and the dismiss/spring-back decision.
+private struct ZoomableImage: UIViewRepresentable {
+    let image: UIImage
+    let onDragChanged: (CGSize) -> Void
+    let onDragEnded: (_ translation: CGSize, _ projected: CGSize) -> Void
+    let onEscape: () -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeUIView(context: Context) -> ZoomScrollView {
+        let scrollView = ZoomScrollView()
+        scrollView.delegate = context.coordinator
+        scrollView.contentInsetAdjustmentBehavior = .never
+        scrollView.showsHorizontalScrollIndicator = false
+        scrollView.showsVerticalScrollIndicator = false
+        scrollView.backgroundColor = .clear
+        scrollView.imageView.image = image
+        context.coordinator.scrollView = scrollView
+
+        let doubleTap = UITapGestureRecognizer(
+            target: context.coordinator,
+            action: #selector(Coordinator.handleDoubleTap(_:))
+        )
+        doubleTap.numberOfTapsRequired = 2
+        scrollView.addGestureRecognizer(doubleTap)
+
+        let dismissPan = UIPanGestureRecognizer(
+            target: context.coordinator,
+            action: #selector(Coordinator.handleDismissPan(_:))
+        )
+        // A pinch is two fingers: capping the touch count is what keeps one
+        // from ever being read as a dismissal drag.
+        dismissPan.maximumNumberOfTouches = 1
+        dismissPan.delegate = context.coordinator
+        scrollView.addGestureRecognizer(dismissPan)
+
+        return scrollView
+    }
+
+    func updateUIView(_ scrollView: ZoomScrollView, context: Context) {
+        context.coordinator.onDragChanged = onDragChanged
+        context.coordinator.onDragEnded = onDragEnded
+        scrollView.onEscape = onEscape
+        if scrollView.imageView.image !== image {
+            scrollView.imageView.image = image
+            scrollView.setNeedsLayout()
+        }
+    }
+
+    final class Coordinator: NSObject, UIScrollViewDelegate, UIGestureRecognizerDelegate {
+        weak var scrollView: ZoomScrollView?
+        var onDragChanged: ((CGSize) -> Void)?
+        var onDragEnded: ((CGSize, CGSize) -> Void)?
+
+        func viewForZooming(in scrollView: UIScrollView) -> UIView? {
+            (scrollView as? ZoomScrollView)?.imageView
+        }
+
+        func scrollViewDidZoom(_ scrollView: UIScrollView) {
+            (scrollView as? ZoomScrollView)?.zoomDidChange()
+        }
+
+        @objc func handleDoubleTap(_ gesture: UITapGestureRecognizer) {
+            guard let scrollView else { return }
+            guard scrollView.isZoomedOut else {
+                scrollView.setZoomScale(scrollView.minimumZoomScale, animated: true)
+                return
+            }
+            let target = scrollView.doubleTapZoomScale
+            let point = gesture.location(in: scrollView.imageView)
+            let size = CGSize(
+                width: scrollView.bounds.width / target,
+                height: scrollView.bounds.height / target
+            )
+            scrollView.zoom(
+                to: CGRect(
+                    x: point.x - size.width / 2,
+                    y: point.y - size.height / 2,
+                    width: size.width,
+                    height: size.height
+                ),
+                animated: true
+            )
+        }
+
+        @objc func handleDismissPan(_ gesture: UIPanGestureRecognizer) {
+            guard let scrollView else { return }
+            let translation = gesture.translation(in: scrollView)
+            switch gesture.state {
+            case .changed:
+                onDragChanged?(CGSize(width: translation.x, height: translation.y))
+            case .ended:
+                // Stand-in for SwiftUI's `predictedEndTranslation`, which the
+                // dismissal thresholds were tuned against.
+                let velocity = gesture.velocity(in: scrollView)
+                onDragEnded?(
+                    CGSize(width: translation.x, height: translation.y),
+                    CGSize(
+                        width: translation.x + velocity.x * 0.25,
+                        height: translation.y + velocity.y * 0.25
+                    )
+                )
+            case .cancelled, .failed:
+                onDragEnded?(.zero, .zero)
+            default:
+                break
+            }
+        }
+
+        /// Dismissal only from the fit scale, and only for a vertical drag —
+        /// zoomed in, the scroll view's own pan owns every direction.
+        func gestureRecognizerShouldBegin(_ gesture: UIGestureRecognizer) -> Bool {
+            guard let pan = gesture as? UIPanGestureRecognizer,
+                  let scrollView,
+                  scrollView.isZoomedOut
+            else { return false }
+            let velocity = pan.velocity(in: scrollView)
+            return abs(velocity.y) > abs(velocity.x)
+        }
+
+        func gestureRecognizer(
+            _ gesture: UIGestureRecognizer,
+            shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer
+        ) -> Bool {
+            true
+        }
+    }
+}
+
+/// Scroll view that keeps its zoom limits in step with its bounds and the
+/// image, and keeps the image centered while it is smaller than the screen.
+final class ZoomScrollView: UIScrollView {
+    let imageView = UIImageView()
+    var onEscape: (() -> Void)?
+    private(set) var doubleTapZoomScale: CGFloat = 1
+
+    private var laidOutBounds: CGSize = .zero
+    private var laidOutImage: CGSize = .zero
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        imageView.contentMode = .scaleAspectFit
+        imageView.isAccessibilityElement = true
+        imageView.accessibilityTraits = .image
+        imageView.accessibilityLabel = "Image"
+        addSubview(imageView)
+        bouncesZoom = true
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+    var isZoomedOut: Bool { zoomScale <= minimumZoomScale + 0.01 }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        guard bounds.width > 0, bounds.height > 0,
+              let size = imageView.image?.size, size.width > 0, size.height > 0
+        else { return }
+        // Rebuilding on every pass would fight `zoom(to:)`; only a genuinely
+        // new box or image invalidates the scales. The first pass inside a
+        // `fullScreenCover` can be zero-sized, which is why it is guarded.
+        if bounds.size != laidOutBounds || size != laidOutImage {
+            laidOutBounds = bounds.size
+            laidOutImage = size
+            configureZoom(for: size)
+        }
+        centerContent()
+    }
+
+    private func configureZoom(for size: CGSize) {
+        imageView.frame = CGRect(origin: .zero, size: size)
+        contentSize = size
+
+        let fit = min(bounds.width / size.width, bounds.height / size.height)
+        // Zooming to one image pixel per device pixel is what makes the dense
+        // UI screenshots this viewer mostly shows readable; the 4x floor keeps
+        // small images zoomable at all.
+        let displayScale = traitCollection.displayScale > 0 ? traitCollection.displayScale : 2
+        let pixelPerfect = (imageView.image?.scale ?? 1) / displayScale
+        minimumZoomScale = fit
+        maximumZoomScale = max(fit * 4, pixelPerfect)
+        doubleTapZoomScale = min(maximumZoomScale, max(fit * 2, pixelPerfect))
+        zoomScale = fit
+        zoomDidChange()
+    }
+
+    /// Called on every zoom change: the image only bounces once there is
+    /// somewhere to pan, so at the fit scale a vertical drag belongs entirely
+    /// to the dismissal gesture.
+    func zoomDidChange() {
+        bounces = !isZoomedOut
+        centerContent()
+    }
+
+    private func centerContent() {
+        let insetX = max(0, (bounds.width - imageView.frame.width) / 2)
+        let insetY = max(0, (bounds.height - imageView.frame.height) / 2)
+        contentInset = UIEdgeInsets(top: insetY, left: insetX, bottom: insetY, right: insetX)
+    }
+
+    /// VoiceOver's two-finger scrub, which users expect to close a full-screen
+    /// cover.
+    override func accessibilityPerformEscape() -> Bool {
+        onEscape?()
+        return true
     }
 }
 #endif
@@ -431,9 +646,11 @@ extension View {
     /// Long-press → Paste on the composer accepts images. SwiftUI text
     /// fields on iOS reject image pastes outright, so a background probe
     /// finds the UIKit text input backing the field, gives it a paste
-    /// configuration that accepts images, and a paste delegate that routes
+    /// configuration that accepts images, a paste delegate that routes
     /// image flavors into the attachments — text pastes flow through
-    /// untouched. No extra button; the system edit menu is the affordance.
+    /// untouched — and, via `ImagePasteMenu`, the Paste item the edit menu
+    /// otherwise withholds. No extra button; the system edit menu is the
+    /// affordance.
     func pastesImages(
         into images: Binding<[AttachedImage]>, maxCount: Int = 6
     ) -> some View {
@@ -514,6 +731,7 @@ private struct TextInputPasteAugmenter: UIViewRepresentable {
                         forAccepting: UIImage.self
                     )
                     input.pasteDelegate = coordinator
+                    ImagePasteMenu.enable(on: input)
                     return
                 }
             }
@@ -530,6 +748,71 @@ private struct TextInputPasteAugmenter: UIViewRepresentable {
             }
             return nil
         }
+    }
+}
+
+/// Puts Paste back in the edit menu when the clipboard holds only an image.
+///
+/// SwiftUI's text views answer the menu's "does Paste apply here?" from the
+/// text flavors alone and ignore the paste configuration set above, so an
+/// image-only clipboard offers no Paste at all — even though the paste
+/// pipeline underneath works (measured on iOS 26: configuration and delegate
+/// both installed, `paste(nil)` attaches the image, `canPerformAction(paste:)`
+/// false, long-press shows only AutoFill).
+///
+/// So the one broken link gets patched and nothing else: the augmented view
+/// moves to a subclass that overrides `canPerformAction` alone, additively —
+/// whatever the original answered yes to still wins, so no text paste can
+/// regress — and adds Paste while an image is on the clipboard. Choosing it
+/// runs the view's own paste, through the delegate installed above.
+private enum ImagePasteMenu {
+    private static let namePrefix = "OS1ImagePaste_"
+    private static var subclasses: [ObjectIdentifier: AnyClass] = [:]
+
+    static func enable(on input: UIView & UITextPasteConfigurationSupporting) {
+        guard let current = object_getClass(input),
+              !NSStringFromClass(current).hasPrefix(namePrefix),
+              let patched = subclass(of: current)
+        else { return }
+        object_setClass(input, patched)
+    }
+
+    /// One subclass per base class, derived from the class the instance is
+    /// actually wearing rather than one looked up by name: KVO plays the same
+    /// trick, and layering on top of whatever is there keeps its behavior.
+    private static func subclass(of base: AnyClass) -> AnyClass? {
+        if let made = subclasses[ObjectIdentifier(base)] { return made }
+        let selector = #selector(UIResponder.canPerformAction(_:withSender:))
+        guard let method = class_getInstanceMethod(base, selector),
+              let made = objc_allocateClassPair(
+                  base, namePrefix + NSStringFromClass(base), 0
+              )
+        else { return nil }
+        typealias Original =
+            @convention(c) (AnyObject, Selector, Selector, AnyObject?) -> Bool
+        let original = unsafeBitCast(
+            method_getImplementation(method), to: Original.self
+        )
+        let override: @convention(block) (AnyObject, Selector, AnyObject?) -> Bool = {
+            view, action, sender in
+            if original(view, selector, action, sender) { return true }
+            guard action == #selector(UIResponder.paste(_:)),
+                  let input = view as? UITextPasteConfigurationSupporting,
+                  input.pasteDelegate != nil
+            else { return false }
+            // Metadata only: asking whether the clipboard holds images never
+            // trips the paste-permission alert, where reading them would.
+            return UIPasteboard.general.hasImages
+        }
+        class_addMethod(
+            made,
+            selector,
+            imp_implementationWithBlock(override),
+            method_getTypeEncoding(method)
+        )
+        objc_registerClassPair(made)
+        subclasses[ObjectIdentifier(base)] = made
+        return made
     }
 }
 #endif

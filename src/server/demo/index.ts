@@ -4,7 +4,7 @@
  * a boot down, so every stage is try/caught and only logs.
  *
  * Three stages:
- *  1. Generator (disk, idempotent via the chats-dir marker) — sessions,
+ *  1. Generator (disk, idempotent via the sessions-dir marker) — sessions,
  *     transcripts, git repo/worktree, PR caches, automations, audit, notes,
  *     goal. See generate.ts.
  *  2. The in-memory bits disk can't fake (asks.ts pendingAsks is a
@@ -82,9 +82,9 @@ function offerDemoAsk(state: DemoState): void {
  */
 export async function startDemo(): Promise<void> {
   // Isolation precondition — refuse, don't trust the caller. Demo writes fan
-  // out beyond the chats dir (PR caches, automations, audit, notes, goals via
+  // out beyond the sessions dir (PR caches, automations, audit, notes, goals via
   // stateDir(); opencode maps/transcripts via their own resolvers), so the
-  // strict OPENSESSION_STATE_DIR master knob is required — a chats-dir-only
+  // strict OPENSESSION_STATE_DIR master knob is required — a sessions-dir-only
   // redirect would leak the stateDir() stores into the operator's live state.
   // The engine-transcripts dir must ALSO resolve inside the state root (it has
   // an independent default under ~/.claude): .opensession/start.sh sets it;
@@ -118,8 +118,8 @@ export async function startDemo(): Promise<void> {
     const result = generateDemoData();
     console.log(
       result.created
-        ? `[demo] dataset generated into ${result.chatsDir} (${result.sessionIds.length} sessions)`
-        : `[demo] dataset already present in ${result.chatsDir} (marker found)`,
+        ? `[demo] dataset generated into ${result.sessionsDir} (${result.sessionIds.length} sessions)`
+        : `[demo] dataset already present in ${result.sessionsDir} (marker found)`,
     );
   } catch (e) {
     console.error("[demo] dataset generation failed:", e);

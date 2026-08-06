@@ -22,7 +22,7 @@ describe("partitionHidden", () => {
 		expect(resurfaced).toEqual([]);
 	});
 
-	// The safety net: hiding must never swallow a chat that is waiting on a
+	// The safety net: hiding must never swallow a session that is waiting on a
 	// human, so a blocked row comes back and its entry is handed to the caller
 	// to consume.
 	test("resurfaces a hidden row that is blocked on a question", () => {
@@ -50,8 +50,8 @@ describe("partitionHidden", () => {
 		expect(resurfaced.map((r) => r.key)).toEqual(["workspace:a"]);
 	});
 
-	// A hide entry whose row no longer exists (the chat moved workspace, or a
-	// solo chat got absorbed into one) must not hide anything by accident.
+	// A hide entry whose row no longer exists (the session moved workspace, or a
+	// solo session got absorbed into one) must not hide anything by accident.
 	test("ignores stale entries that match no row", () => {
 		const { hiddenKeys, resurfaced } = partitionHidden([row("workspace:a", "pending")], {
 			"workspace:gone": "2026-07-31T10:00:00.000Z",

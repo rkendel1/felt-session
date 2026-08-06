@@ -59,7 +59,7 @@ function journalEntry(seq: number, prompt = `prompt ${seq}`): WorkflowJournalEnt
 
 describe("workflow store", () => {
 	test("createWorkflowRun persists run.json + script.mjs and is readable back", () => {
-		const snapshot = makeRun({ description: "a test", user: "michiel" });
+		const snapshot = makeRun({ description: "a test", user: "alex" });
 		const dir = join(process.env.OPENSESSION_WORKFLOWS_DIR!, snapshot.runId);
 		expect(existsSync(join(dir, "run.json"))).toBe(true);
 		expect(readFileSync(join(dir, "script.mjs"), "utf-8")).toContain("test-workflow");
@@ -68,7 +68,7 @@ describe("workflow store", () => {
 		expect(live?.name).toBe("test-workflow");
 		expect(live?.status).toBe("running");
 		expect(live?.description).toBe("a test");
-		expect(live?.user).toBe("michiel");
+		expect(live?.user).toBe("alex");
 		expect(live?.phases).toEqual(["Phase 1"]);
 		expect(live?.totals).toEqual({ agents: 0, tokensIn: 0, tokensOut: 0 });
 

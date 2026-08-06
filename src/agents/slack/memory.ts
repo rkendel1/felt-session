@@ -1,5 +1,5 @@
 /**
- * Channel-scoped memory for the Slack agent (Michael), modelled on Claude Tag.
+ * Channel-scoped memory for the Slack agent, modelled on Claude Tag.
  *
  * Scopes (mirrors Slack's visibility model):
  *   - Public channel  -> the shared `workspace` store (read + write). Anything
@@ -9,7 +9,7 @@
  *   - DM              -> an isolated `user-<id>` store (read + write), PLUS
  *     read-only visibility of the workspace store.
  *
- * Memory is both (a) auto-injected into the system prompt each run so Michael
+ * Memory is both (a) auto-injected into the system prompt each run so the agent
  * "just knows" the channel's facts, and (b) managed conversationally via the
  * remember / list_memory / forget admin tools.
  */
@@ -91,7 +91,7 @@ export async function addMemory(
 }
 
 export interface MemoryView {
-  /** Entries Michael can edit here. */
+  /** Entries the agent can edit here. */
   local: MemoryEntry[];
   /** Workspace entries visible but read-only in this scope (private/DM only). */
   shared: MemoryEntry[];

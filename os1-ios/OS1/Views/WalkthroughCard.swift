@@ -8,7 +8,7 @@ import AppKit
 
 /// The agent's demo of a user-visible change, inline in the transcript where
 /// it was published: a short screen recording, the writeup, and before/after
-/// stills. The web viewer renders the same card in the chat — until now the
+/// stills. The web viewer renders the same card in the session — until now the
 /// walkthroughs an agent published from the phone were only visible from a
 /// browser, which is a strange thing for the app the work was done in.
 ///

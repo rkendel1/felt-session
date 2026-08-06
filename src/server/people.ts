@@ -5,7 +5,7 @@
  * (configuredIdentity() → ~/.backstage/config.json identity.team), so adding a
  * teammate to the config updates every people surface at once instead of the
  * historical trio of hardcoded arrays (UserPicker TEAM, UserAvatar login map,
- * chat.ts CHAT_TEAM).
+ * a mention roster of its own).
  */
 
 import { configuredIdentity } from "./config";
@@ -38,4 +38,21 @@ export function teamDirectory(): DirectoryPerson[] {
 /** Picker first names — the mention-matching + push-key roster. */
 export function teamFirstNames(): string[] {
 	return teamDirectory().map((p) => p.name);
+}
+
+/**
+ * Distinct teammates `@`-mentioned in `text` — never the sender themself.
+ * Matched against the picker first names, which are also the keys push
+ * subscriptions are stored under (push.ts matches exact names).
+ * `@session:<id>` tags don't collide: "session" is not a teammate name.
+ */
+export function mentionedUsers(text: string, sender: string): string[] {
+	const team = teamFirstNames();
+	const found = new Set<string>();
+	for (const m of text.matchAll(/@([A-Za-z][\w.-]*)/g)) {
+		const name = team.find((n) => n.toLowerCase() === m[1].toLowerCase());
+		if (name && name.toLowerCase() !== sender.trim().toLowerCase())
+			found.add(name);
+	}
+	return [...found];
 }

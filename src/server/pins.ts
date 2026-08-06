@@ -38,9 +38,9 @@ export function getPins(user: string): string[] {
 
 /**
  * Drop the given pin keys from EVERY user's pins. Used when a session (or a
- * workspace's last live chat) is archived — a pin to archived work is stale
+ * workspace's last live session) is archived — a pin to archived work is stale
  * for everyone, and would silently resurface the row on unarchive or when a
- * new chat joins the pinned workspace.
+ * new session joins the pinned workspace.
  */
 export function unpinEverywhere(keys: string[]): void {
   const drop = new Set(keys.filter(Boolean));

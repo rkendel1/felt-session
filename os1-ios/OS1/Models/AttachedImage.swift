@@ -21,6 +21,20 @@ struct AttachedImage: Identifiable, Equatable {
         self.jpegData = jpegData
     }
 
+    /// The inverse of `dataURL` — re-stage an image that has already been
+    /// normalized (an unsent outbox message pulled back into the composer),
+    /// without paying for a decode/re-encode round trip.
+    init?(dataURL: String) {
+        guard dataURL.hasPrefix("data:"),
+              let comma = dataURL.firstIndex(of: ","),
+              let data = Data(
+                  base64Encoded: String(dataURL[dataURL.index(after: comma)...])
+              )
+        else { return nil }
+        self.id = UUID().uuidString
+        self.jpegData = data
+    }
+
     init?(rawData: Data) {
         guard let jpeg = AttachedImage.normalizedJPEG(from: rawData) else {
             return nil

@@ -338,7 +338,7 @@ export async function handlePrefsRoutes(
 
 	// ── Per-user sidebar hides ──
 	// The personal counterpart to archiving (which is global, see archive.ts):
-	// hiding a row drops it from THIS user's sidebar while the chat keeps
+	// hiding a row drops it from THIS user's sidebar while the session keeps
 	// running for everyone else. Same per-user model as pins: GET reads a
 	// user's hide map; PUT replaces it wholesale.
 	if (path === "/api/hides" && req.method === "GET") {

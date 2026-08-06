@@ -1,6 +1,6 @@
 {
   "id": "ops-channel-noise",
-  "description": "A Michael-style ops conversation: deploy chatter, transient failures, and bot noise around two genuinely durable facts (a standing convention and an ownership change).",
+  "description": "An agent ops-channel conversation: deploy chatter, transient failures, and bot noise around two genuinely durable facts (a standing convention and an ownership change).",
   "turns": [
     {
       "input": "deploy of the webapp is stuck again, CI says the og-image step timed out. can you retry it?",

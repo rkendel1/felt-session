@@ -3,8 +3,13 @@ import { BASE_PATH } from "../lib/base";
 import { getCurrentUser } from "./UserPicker";
 import { DeskConversation } from "./DeskConversation";
 import { ResponsiveDialog } from "../ui/sheet";
-import { IconDesk, IconExpand, IconX } from "./icons";
+import { IconDesk, IconExpand, IconMic, IconX } from "./icons";
 import { Button } from "../ui/button";
+import {
+	DeskVoiceClient,
+	type DeskVoiceState,
+} from "../lib/desk-voice-client";
+import { getDeskVoicePref, onDeskVoiceChanged } from "../lib/desk-voice-pref";
 
 /**
  * The Desk — a summonable overlay (⌘J / the floating desk button) on top of
@@ -12,12 +17,12 @@ import { Button } from "../ui/button";
  * and kicking off work without leaving the current view.
  *
  * Persistence is the point: after the first summon the body STAYS MOUNTED
- * (hidden, not unmounted) — the chat's scoped socket keeps watching, so every
+ * (hidden, not unmounted) — the session's scoped socket keeps watching, so every
  * later ⌘J is instant with the transcript already in place. No enter/exit
  * animations
  * either; summon-dismiss-summon should feel like toggling a HUD.
  *
- * The chat is a normal durable session (desk: true, hidden from the session
+ * The Desk is a normal durable session (desk: true, hidden from the session
  * lists) pinned to a fast model+effort server-side; "Clear" sets a display
  * marker (server-stored) so the modal starts visually fresh while the full
  * transcript stays in the expanded session view.
@@ -42,6 +47,47 @@ function DeskBody({
 	const [clearedAt, setClearedAt] = useState<string | undefined>(undefined);
 	const [ensureError, setEnsureError] = useState<string | null>(null);
 	const rootRef = useRef<HTMLDivElement | null>(null);
+
+	// Voice mode (Settings → Desk voice): a live GPT Realtime call layered on
+	// this same Desk session. The call mirrors its transcript into the session,
+	// so the conversation below updates live while you talk.
+	const [voiceEnabled, setVoiceEnabled] = useState(getDeskVoicePref);
+	const [voiceState, setVoiceState] = useState<DeskVoiceState>("idle");
+	const [voiceError, setVoiceError] = useState<string | null>(null);
+	const voiceRef = useRef<DeskVoiceClient | null>(null);
+	useEffect(
+		() => onDeskVoiceChanged(() => setVoiceEnabled(getDeskVoicePref())),
+		[],
+	);
+	// Never leave a mic running past the overlay body's lifetime.
+	useEffect(
+		() => () => {
+			voiceRef.current?.stop();
+		},
+		[],
+	);
+
+	const voiceActive = voiceState !== "idle" && voiceState !== "error";
+
+	function toggleVoice() {
+		if (voiceRef.current?.active) {
+			voiceRef.current.stop();
+			return;
+		}
+		setVoiceError(null);
+		const client = new DeskVoiceClient({
+			user,
+			onState: (s, detail) => {
+				setVoiceState(s);
+				if (s === "error") setVoiceError(detail || "Voice call failed");
+			},
+		});
+		voiceRef.current = client;
+		void client.start().catch((e: any) => {
+			setVoiceState("error");
+			setVoiceError(e?.message || String(e));
+		});
+	}
 
 	// One-time boot (the body stays mounted after the first summon): resolve
 	// the standing Desk session + the clear marker.
@@ -79,7 +125,7 @@ function DeskBody({
 		(ta as HTMLTextAreaElement | null)?.focus();
 	}, [active, phone]);
 
-	async function clearChat() {
+	async function clearSession() {
 		try {
 			const res = await fetch(`${BASE_PATH}/api/desk/clear`, {
 				method: "POST",
@@ -101,12 +147,37 @@ function DeskBody({
 				<span className="min-w-0 flex-1 truncate text-item-title font-semibold text-fg">
 					Desk
 				</span>
+				{voiceEnabled && voiceState !== "idle" && (
+					<span
+						className="max-w-[160px] shrink-0 truncate text-[11px] font-medium text-dim"
+						title={voiceError ?? undefined}
+					>
+						{voiceState === "error"
+							? (voiceError ?? "Voice call failed")
+							: { connecting: "Connecting…", listening: "Listening", thinking: "Thinking…", speaking: "Speaking", action: "Working…" }[voiceState]}
+					</span>
+				)}
+				{voiceEnabled && (
+					<Button
+						variant="ghost"
+						size="xs"
+						className={`shrink-0 ${voiceActive ? "text-fg" : "text-faint"}`}
+						icon={<IconMic size={20} />}
+						onClick={toggleVoice}
+						title={
+							voiceActive
+								? "End the voice call"
+								: "Talk to your Desk (GPT Realtime)"
+						}
+						aria-label={voiceActive ? "End voice call" : "Start voice call"}
+					/>
+				)}
 				<Button
 					variant="ghost"
 					size="xs"
 					className="shrink-0 text-faint"
-					onClick={clearChat}
-					title="Clear the chat here — the full transcript stays in the expanded session"
+					onClick={clearSession}
+					title="Clear the session here — the full transcript stays in the expanded session"
 				>
 					Clear
 				</Button>
@@ -134,7 +205,7 @@ function DeskBody({
 				/>
 			</div>
 
-			{/* Concierge chat */}
+			{/* Concierge session */}
 			<div className="min-h-0 flex-1">
 				{ensureError ? (
 					<div className="px-4 py-6 text-center text-[13px] font-medium text-dim">
@@ -145,6 +216,11 @@ function DeskBody({
 						sessionId={sessionId}
 						effort="low"
 						hideBefore={clearedAt}
+						voiceSend={(text) =>
+							voiceRef.current?.active
+								? voiceRef.current.sendText(text)
+								: false
+						}
 						placeholder="Ask your Desk…"
 						emptyState={
 							<>

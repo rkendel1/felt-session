@@ -8,6 +8,7 @@
 
 import type { RouteContext } from "./context";
 import { isWithinUploads } from "../uploads";
+import { resolveLegacySessionsPath } from "../paths";
 const HOME = process.env.HOME || "";
 
 export async function handleMediaRoutes(
@@ -21,7 +22,13 @@ export async function handleMediaRoutes(
 	// /tmp or the service user's home, no traversal, known media extension. Range-enabled
 	// so the <video> scrubber can seek.
 	if (path === "/media" && req.method === "GET") {
-		const mediaPath = url.searchParams.get("path") || "";
+		// Records written before the session store was renamed carry absolute
+		// paths under its old name, and the URLs built from them outlive the
+		// rename in PR descriptions and old transcripts — so resolve those onto
+		// the active store before anything else looks at the path.
+		const mediaPath = resolveLegacySessionsPath(
+			url.searchParams.get("path") || "",
+		);
 		const mediaTypes: Record<string, string> = {
 			".mp4": "video/mp4",
 			".webm": "video/webm",

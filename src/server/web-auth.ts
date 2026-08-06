@@ -30,7 +30,7 @@ import { randomBytes, timingSafeEqual } from "crypto";
 import { audit } from "./audit";
 import { configuredIdentity } from "./config";
 import { githubUserAuthActive } from "./github-auth";
-import { homeDir, OPENSESSION_CHATS_DIR } from "./paths";
+import { homeDir, isNativeSessionId, OPENSESSION_SESSIONS_DIR } from "./paths";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import { githubLoginFor } from "./shared/user-mappings";
 import { isLocalProfile } from "./profile";
@@ -247,7 +247,7 @@ export function crossSiteViolation(req: Request): string | null {
 
 /**
  * Backfill `createdByLogin` on existing session files by resolving their
- * `createdBy` (historical picker first names like "Michiel") through the SAME
+ * `createdBy` (historical picker first names) through the SAME
  * identity table the sign-in uses — so sessions created before GitHub auth
  * belong to the same verified person afterwards. Runs once at boot when
  * sign-in is active (marker file), atomic per-file, and only ADDS the login
@@ -255,14 +255,15 @@ export function crossSiteViolation(req: Request): string | null {
  */
 export function migrateSessionsToGithubUser(): void {
   if (!webAuthRequired()) return;
-  const marker = `${OPENSESSION_CHATS_DIR}/.github-user-migration.json`;
+  const marker = `${OPENSESSION_SESSIONS_DIR}/.github-user-migration.json`;
   if (existsSync(marker)) return;
   let scanned = 0;
   let stamped = 0;
   try {
-    for (const file of readdirSync(OPENSESSION_CHATS_DIR)) {
-      if (!/^bks-.*\.json$/.test(file)) continue;
-      const path = `${OPENSESSION_CHATS_DIR}/${file}`;
+    for (const file of readdirSync(OPENSESSION_SESSIONS_DIR)) {
+      // Both id prefixes: `os-` is minted today, `bks-` predates the rename.
+      if (!file.endsWith(".json") || !isNativeSessionId(file)) continue;
+      const path = `${OPENSESSION_SESSIONS_DIR}/${file}`;
       scanned++;
       try {
         const data = JSON.parse(readFileSync(path, "utf-8"));

@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { resolvePreviewBoot } from "./preview";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { repoLifecycle, resolvePreviewBoot } from "./preview";
 
 // The resolver is the ONE bring-up chain shared by host and sandbox previews:
 // repo-committed .opensession/start.sh (.backstage/ pre-rename fallback) →
@@ -95,5 +98,65 @@ describe("resolvePreviewBoot", () => {
   test("no mechanism at all resolves to null (UI: disabled Start)", async () => {
     const boot = await resolvePreviewBoot(WT, { id: "widget" }, existsIn([]));
     expect(boot).toBeNull();
+  });
+});
+
+// repoLifecycle reads a real checkout (Settings → Setup asks "can sessions in
+// this repo boot themselves?"), so these drive it against temp trees.
+describe("repoLifecycle", () => {
+  function repoWith(files: string[]): string {
+    const root = mkdtempSync(join(tmpdir(), "lifecycle-"));
+    for (const f of files) {
+      mkdirSync(dirname(join(root, f)), { recursive: true });
+      writeFileSync(join(root, f), "");
+    }
+    return root;
+  }
+
+  test("reports each committed lifecycle file", () => {
+    expect(
+      repoLifecycle(
+        repoWith([
+          ".opensession/setup.sh",
+          ".opensession/start.sh",
+          ".opensession/preview.json",
+        ]),
+      ),
+    ).toEqual({
+      dir: ".opensession",
+      setup: true,
+      start: true,
+      previewJson: true,
+    });
+  });
+
+  test("a repo with no lifecycle dir reports nothing", () => {
+    expect(repoLifecycle(repoWith(["package.json"]))).toEqual({
+      dir: null,
+      setup: false,
+      start: false,
+      previewJson: false,
+    });
+  });
+
+  test("the winning dir is exclusive — .backstage/ never fills gaps in .opensession/", () => {
+    // Same rule as resolvePreviewBoot: mixing dirs would pair files that
+    // never shipped together.
+    expect(
+      repoLifecycle(repoWith([".opensession/start.sh", ".backstage/setup.sh"])),
+    ).toEqual({
+      dir: ".opensession",
+      setup: false,
+      start: true,
+      previewJson: false,
+    });
+  });
+
+  test("falls back to the pre-rename .backstage/ dir", () => {
+    expect(repoLifecycle(repoWith([".backstage/start.sh"]))).toMatchObject({
+      dir: ".backstage",
+      start: true,
+      setup: false,
+    });
   });
 });

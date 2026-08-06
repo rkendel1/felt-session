@@ -351,7 +351,7 @@ describe("workflowExecutor", () => {
 		const calls = mockRunAgent([reply("the answer")]);
 		const outcome = await workflowExecutor.execute(
 			{ prompt: "list the files", opts: {}, seq: 0 },
-			makeCtx({ user: "michiel", defaultModel: "gpt-5.5" }),
+			makeCtx({ user: "alex", defaultModel: "gpt-5.5" }),
 		);
 		expect(outcome.ok).toBe(true);
 		expect(outcome.text).toBe("the answer");
@@ -361,7 +361,7 @@ describe("workflowExecutor", () => {
 		expect(calls[0].prompt).toContain("focused worker agent inside a scripted workflow");
 		expect(calls[0].mode).toBe("ask");
 		expect(calls[0].cwd).toBe("/tmp/wf-test");
-		expect(calls[0].user).toBe("michiel");
+		expect(calls[0].user).toBe("alex");
 		expect(calls[0].journal).toEqual({ kind: "workflow" });
 		// Workflow workers keep the full connector set, now spelled out rather
 		// than inherited from an omitted field (McpScope).

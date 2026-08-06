@@ -12,8 +12,7 @@
  * spoken to; the pull is the persistent todo list.
  */
 import { existsSync, readFileSync } from "node:fs";
-import { randomUUIDv7 } from "bun";
-import { stateDir } from "./paths";
+import { newSessionId, stateDir } from "./paths";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import {
 	findSession,
@@ -46,7 +45,7 @@ const DESK_MODEL = "opencode/anthropic/claude-sonnet-5";
 const DESK_EFFORT = "low";
 
 /** Get-or-create the user's Desk session (same direct-mint shape as side
- *  chats: ask mode, no worktree; repo opensession so it reads the Open Session
+ *  sessions: ask mode, no worktree; repo opensession so it reads the Open Session
  *  checkout when it needs context). */
 export function ensureDeskSession(user: string): {
 	sessionId: string;
@@ -65,16 +64,16 @@ export function ensureDeskSession(user: string): {
 			});
 		return { sessionId: st.sessionId, clearedAt: st.clearedAt };
 	}
-	const bksId = `bks-${randomUUIDv7()}`;
+	const id = newSessionId();
 	const now = new Date().toISOString();
 	// Field-scoped create via the serialized session-file writer — this site
 	// owns every creation field (the fresh id means the file never pre-exists,
 	// so the create-if-absent overlay is just belt-and-braces). Uncontended
 	// writes run synchronously, so the caller can open the session immediately.
-	updateSessionFile(bksId, (data) => {
+	updateSessionFile(id, (data) => {
 		const existing: Partial<NativeSessionFile> = data;
 		return {
-			id: bksId,
+			id,
 			claudeSessionId: "",
 			branch: "",
 			worktreeDir: "",
@@ -90,16 +89,16 @@ export function ensureDeskSession(user: string): {
 			...existing,
 		};
 	}).catch((e) =>
-		console.error(`[desk] failed to write Desk session ${bksId}:`, e),
+		console.error(`[desk] failed to write Desk session ${id}:`, e),
 	);
-	st.sessionId = bksId;
+	st.sessionId = id;
 	writeJsonAtomic(CONFIG_PATH, store);
-	console.log(`[desk] created Desk session ${bksId} for ${user}`);
-	return { sessionId: bksId, clearedAt: st.clearedAt };
+	console.log(`[desk] created Desk session ${id} for ${user}`);
+	return { sessionId: id, clearedAt: st.clearedAt };
 }
 
 /** "Clear" in the Desk overlay: hide everything before now from the modal's
- *  chat view. A display marker only — the transcript itself is untouched and
+ *  transcript view. A display marker only — the transcript itself is untouched and
  *  fully visible in the expanded session view. */
 export function clearDesk(user: string): { clearedAt: string } {
 	const store = readStore();

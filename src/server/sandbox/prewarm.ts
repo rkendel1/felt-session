@@ -24,7 +24,7 @@
  *    sweep periodically audits the provider BY LABEL for orphans this
  *    process doesn't know about
  *  - state lives on globalThis (hot-reload safe) plus one JSON file per
- *    entry under <chats>/sandbox-prewarm/ so a restarted process can reap
+ *    entry under <sessions>/sandbox-prewarm/ so a restarted process can reap
  *    (a restart can't resume the bootstrap promise, so on-disk entries that
  *    aren't in memory are destroyed, not adopted)
  *
@@ -50,7 +50,7 @@ import {
   statSync,
   unlinkSync,
 } from "fs";
-import { OPENSESSION_CHATS_DIR } from "../paths";
+import { OPENSESSION_SESSIONS_DIR } from "../paths";
 import { isDevInstance } from "../dev-mode";
 import { isLocalProfile } from "../profile";
 import { REPOS } from "../worktree";
@@ -148,7 +148,7 @@ function bootstrapDone(): Map<string, Promise<void>> {
 }
 
 function prewarmDir(): string {
-  return `${OPENSESSION_CHATS_DIR}/sandbox-prewarm`;
+  return `${OPENSESSION_SESSIONS_DIR}/sandbox-prewarm`;
 }
 
 function sanitize(s: string): string {

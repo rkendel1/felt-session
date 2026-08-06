@@ -13,7 +13,7 @@
  *     repo; "unknown" resolves to the default too.
  *
  * Fail-open: any error or unparseable output returns null and the caller falls
- * back to the default worktree (code) flow, so a hiccup never blocks Michael.
+ * back to the default worktree (code) flow, so a hiccup never blocks the agent.
  */
 import { opencodeOneShot } from "../../server/opencode-oneshot";
 import { configuredRepos, defaultRepo, personaCompany, personaName } from "../../server/config";

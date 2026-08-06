@@ -26,13 +26,13 @@ import { dirname } from "path";
 import { timingSafeEqual } from "crypto";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { OPENSESSION_CHATS_DIR } from "./paths";
+import { OPENSESSION_SESSIONS_DIR } from "./paths";
 import { audit } from "./audit";
 import { devInstanceBootError, isDevInstance } from "./dev-mode";
 import { MCP_HTTP_PORT, rpcSocketPath } from "./run-rpc-protocol";
 
 /**
- * In-process MCP server ids renamed michael-* → opensession-* (2026-07-09).
+ * In-process MCP server ids renamed michael-* → opensession-*.
  * Legacy ids still arrive at runtime from persisted state: journaled runs
  * resumed after a restart (RunHostSpec.proxyMcpServers, per-run proxy env)
  * and engine sessions whose context still names old tool ids. Normalize at
@@ -343,14 +343,14 @@ export function startRunRpcServer(): void {
   // opensession.ts: module side effects (this call, via interactive-mcp.ts)
   // run BEFORE the entry file's check, so an unisolated dev instance must be
   // stopped HERE from unlinking the live socket. With isolation set
-  // (OPENSESSION_STATE_DIR / OPENSESSION_CHATS_DIR), the socket path derives
-  // from the isolated chats dir and binding is safe.
+  // (OPENSESSION_STATE_DIR / OPENSESSION_SESSIONS_DIR), the socket path derives
+  // from the isolated sessions dir and binding is safe.
   if (devInstanceBootError()) return;
   if (g.__runRpcServer) {
     startRunRpcSocketHeal();
     return;
   }
-  const sock = rpcSocketPath(OPENSESSION_CHATS_DIR);
+  const sock = rpcSocketPath(OPENSESSION_SESSIONS_DIR);
   mkdirSync(dirname(sock), { recursive: true });
   try {
     if (existsSync(sock)) unlinkSync(sock);
@@ -594,7 +594,7 @@ function startRunRpcSocketHeal(): void {
   g.__runRpcHealTicker = setInterval(() => {
     void (async () => {
       if (!g.__runRpcServer) return;
-      const sock = rpcSocketPath(OPENSESSION_CHATS_DIR);
+      const sock = rpcSocketPath(OPENSESSION_SESSIONS_DIR);
       if (await rpcSocketPathAlive(sock)) return;
       console.warn(`[run-rpc] socket path dead or stolen — rebinding ${sock}`);
       audit({ msg: "run_rpc_socket_heal", socket: sock });

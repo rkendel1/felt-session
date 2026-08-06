@@ -1,8 +1,8 @@
 import {
-	countChatPerf,
-	recordChatPerf,
-	startChatPerfObservers,
-} from "./chat-performance";
+	countSessionPerf,
+	recordSessionPerf,
+	startSessionPerfObservers,
+} from "./session-performance";
 
 export interface LiveTurnSnapshot {
 	text: string;
@@ -42,7 +42,7 @@ export class LiveTurnStore {
 	private firstDeltaAt: number | null = null;
 
 	constructor() {
-		startChatPerfObservers();
+		startSessionPerfObservers();
 	}
 
 	subscribe = (listener: () => void) => {
@@ -80,7 +80,7 @@ export class LiveTurnStore {
 			return;
 		}
 		if (!text) return;
-		countChatPerf("stream_frames_received");
+		countSessionPerf("stream_frames_received");
 		if (this.firstDeltaAt === null) this.firstDeltaAt = performance.now();
 		this.pending += text;
 		if (this.frame === null) {
@@ -156,9 +156,9 @@ export class LiveTurnStore {
 			revision: this.snapshot.revision + 1,
 		};
 		this.pending = "";
-		countChatPerf("stream_paints");
+		countSessionPerf("stream_paints");
 		if (receivedAt !== null) {
-			recordChatPerf("first_delta_to_paint_ms", performance.now() - receivedAt);
+			recordSessionPerf("first_delta_to_paint_ms", performance.now() - receivedAt);
 		}
 		this.emit();
 	}

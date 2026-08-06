@@ -1,8 +1,14 @@
 /**
- * Feed routes: the sidebar's generic external-object bands (Tella videos;
- * eventually every feed — see the feeds design). Read-only surface: the
- * descriptors say which bands exist, the items endpoint feeds one band.
- * Mutations stay on each source's own routes (e.g. /api/plain/*).
+ * Project and feed routes.
+ *
+ * `/api/projects` is the union view — every source of work, repo-backed and
+ * feed-backed alike (see projects.ts and CONCEPTS.md). `/api/feeds` is the
+ * feed registry underneath it, which the feed-authoring UI still needs
+ * because only feeds are declarable as config.
+ *
+ * Read-only surface: the descriptors say which bands exist, the items
+ * endpoint feeds one band. Mutations stay on each source's own routes
+ * (e.g. /api/plain/*).
  */
 import type { RouteContext } from "./context";
 import {
@@ -10,11 +16,19 @@ import {
 	getFeedItems,
 	listFeedDescriptors,
 } from "../feeds";
+import { listProjects } from "../projects";
 
 export async function handleFeedsRoutes(
 	ctx: RouteContext,
 ): Promise<Response | undefined> {
 	const { req, url, path } = ctx;
+
+	// Every project, both kinds. Feeds register lazily, so ensure that first
+	// or a cold server reports repos only.
+	if (path === "/api/projects" && req.method === "GET") {
+		await ensureFeedsRegistered();
+		return Response.json({ projects: listProjects() });
+	}
 
 	if (path === "/api/feeds" && req.method === "GET") {
 		await ensureFeedsRegistered();

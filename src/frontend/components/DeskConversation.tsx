@@ -15,6 +15,9 @@ interface DeskConversationProps {
 	placeholder?: string;
 	effort?: string;
 	hideBefore?: string;
+	/** While a voice call is live, typed messages go into it instead of
+	 *  starting a text run. Return false to fall through to the normal send. */
+	voiceSend?: (text: string) => boolean;
 }
 
 /**
@@ -27,6 +30,7 @@ export function DeskConversation({
 	placeholder,
 	effort,
 	hideBefore,
+	voiceSend,
 }: DeskConversationProps) {
 	const { connected, send, addHandler } = useWebSocket();
 	const [entries, setEntries] = useState<TranscriptEntry[]>([]);
@@ -196,6 +200,13 @@ export function DeskConversation({
 				},
 			]);
 			setDraft("");
+			return;
+		}
+		// Live voice call: inject the typed message into it (the call mirrors its
+		// transcript back, so no optimistic bubble — the entry lands via append).
+		if (voiceSend?.(content)) {
+			setDraft("");
+			followRef.current = true;
 			return;
 		}
 		send({

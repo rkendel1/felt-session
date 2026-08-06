@@ -15,7 +15,7 @@ import { tmpdir } from "os";
 import { join } from "path";
 
 // Deferred imports: public-ingress → run-ws → run-rpc → paths resolves
-// OPENSESSION_CHATS_DIR/HOME at module load (see zz-run-ws.test.ts).
+// OPENSESSION_SESSIONS_DIR/HOME at module load (see zz-run-ws.test.ts).
 let ingress: typeof import("./public-ingress");
 let runWs: typeof import("./run-ws");
 

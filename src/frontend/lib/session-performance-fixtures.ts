@@ -1,7 +1,7 @@
 import type { TranscriptEntry } from "./types";
 
 /** Deterministic transcript fixtures for profiling without production data. */
-export function makeChatFixture(count: 200 | 2_000 | 10_000): TranscriptEntry[] {
+export function makeSessionFixture(count: 200 | 2_000 | 10_000): TranscriptEntry[] {
 	const entries: TranscriptEntry[] = [];
 	const base = Date.parse("2026-01-01T00:00:00.000Z");
 	for (let index = 0; index < count; index++) {

@@ -1,7 +1,7 @@
 /**
  * Transcript v2 store (docs/transcripts.md §1, §1a) — the owned
  * per-session sequence-numbered event log in ONE SQLite (WAL) DB:
- * `<OPENSESSION_CHATS_DIR>/transcripts.db`.
+ * `<OPENSESSION_SESSIONS_DIR>/transcripts.db`.
  *
  * Row unit is the parsed TranscriptEntry; `uuid` = `entry.id` (§1a — NOT the
  * mirror line uuid). seq is 1-based and dense per session, assigned ONLY to
@@ -49,7 +49,7 @@
 import { Database } from "bun:sqlite";
 import { existsSync, mkdirSync } from "fs";
 import { dirname } from "path";
-import { OPENSESSION_CHATS_DIR } from "./paths";
+import { OPENSESSION_SESSIONS_DIR } from "./paths";
 import {
   publishTranscript,
   type SeqEntry,
@@ -123,9 +123,9 @@ export function setAppendHook(fn: TranscriptAppendHook | null): void {
   g.__osTranscriptAppendHook = fn;
 }
 
-/** Default DB path, derived from the active chats dir. */
+/** Default DB path, derived from the active sessions dir. */
 export function transcriptDbPath(): string {
-  return `${OPENSESSION_CHATS_DIR}/transcripts.db`;
+  return `${OPENSESSION_SESSIONS_DIR}/transcripts.db`;
 }
 
 /**

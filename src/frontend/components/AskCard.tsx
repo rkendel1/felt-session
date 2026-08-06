@@ -65,7 +65,7 @@ export function AskCard({ questions, onAnswer }: Props) {
   }
 
   return (
-    <div className="mx-auto mb-6 mt-2 flex w-full max-w-[var(--chat-col)] flex-col gap-5 rounded-[calc(20px*var(--rf))] bg-raised p-4 [corner-shape:var(--cs)]">
+    <div className="mx-auto mb-6 mt-2 flex w-full max-w-[var(--session-col)] flex-col gap-5 rounded-[calc(20px*var(--rf))] bg-raised p-4 [corner-shape:var(--cs)]">
       <div className="flex items-center gap-2">
         <span
           aria-hidden="true"

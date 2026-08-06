@@ -9,7 +9,7 @@
  * bootstrap path makes (dial-back curl check → "no curl" skip; bootstrap
  * marker read → the current signature, short-circuiting the install).
  * Config goes through a scratch OPENSESSION_SANDBOX_CONFIG; state files land
- * under a scratch chats dir via __setChatsDirForTest.
+ * under a scratch sessions dir via __setSessionsDirForTest.
  */
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import {
@@ -23,7 +23,7 @@ import {
 } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { __setChatsDirForTest } from "../paths";
+import { __setSessionsDirForTest } from "../paths";
 import { sandboxesEnabled } from "./config";
 import {
   claimPrewarm,
@@ -40,21 +40,21 @@ import {
 } from "./prewarm";
 
 let scratch: string;
-let prevChatsDir: string;
+let prevSessionsDir: string;
 let prevEnvConfig: string | undefined;
 let prevDaytonaKey: string | undefined;
 const cfgPath = () => join(scratch, "sandbox.json");
-const prewarmDir = () => join(scratch, "chats", "sandbox-prewarm");
+const prewarmDir = () => join(scratch, "sessions", "sandbox-prewarm");
 
-// The kill-switch file lives under the LIVE chats dir (module-load constant
+// The kill-switch file lives under the LIVE sessions dir (module-load constant
 // in config.ts) — on a box with the switch on, requestPrewarm legitimately
 // answers "disabled"; skip the behavioral tests rather than fight it.
 const killSwitch = !sandboxesEnabled();
 
 beforeAll(() => {
   scratch = mkdtempSync(join(tmpdir(), "bks-prewarm-"));
-  mkdirSync(join(scratch, "chats"), { recursive: true });
-  prevChatsDir = __setChatsDirForTest(join(scratch, "chats"));
+  mkdirSync(join(scratch, "sessions"), { recursive: true });
+  prevSessionsDir = __setSessionsDirForTest(join(scratch, "sessions"));
   prevEnvConfig = process.env.OPENSESSION_SANDBOX_CONFIG;
   prevDaytonaKey = process.env.DAYTONA_API_KEY;
   process.env.OPENSESSION_SANDBOX_CONFIG = cfgPath();
@@ -64,7 +64,7 @@ beforeAll(() => {
 afterAll(() => {
   _stopPrewarmSweepForTest();
   _resetPrewarmForTest();
-  __setChatsDirForTest(prevChatsDir);
+  __setSessionsDirForTest(prevSessionsDir);
   if (prevEnvConfig === undefined) delete process.env.OPENSESSION_SANDBOX_CONFIG;
   else process.env.OPENSESSION_SANDBOX_CONFIG = prevEnvConfig;
   if (prevDaytonaKey !== undefined) process.env.DAYTONA_API_KEY = prevDaytonaKey;
@@ -152,14 +152,14 @@ describe("requestPrewarm", () => {
 
   test.skipIf(killSwitch)("starts one bootstrap, reuses it, reaches ready", async () => {
     const fake = makeFakeAdapter();
-    const first = await requestPrewarm("daytona", "tella-fusion", "michiel");
+    const first = await requestPrewarm("daytona", "tella-fusion", "alex");
     expect(first.state).toBe("bootstrapping");
     // Idempotent while in flight — no second create.
-    const again = await requestPrewarm("daytona", "tella-fusion", "michiel");
+    const again = await requestPrewarm("daytona", "tella-fusion", "alex");
     expect(["bootstrapping", "ready"]).toContain(again.state);
     await until(() => readyEntry()?.state === "ready");
     expect(fake.created.length).toBe(1);
-    const done = await requestPrewarm("daytona", "tella-fusion", "michiel");
+    const done = await requestPrewarm("daytona", "tella-fusion", "alex");
     expect(done.state).toBe("ready");
     expect(done.sandboxId).toBe(fake.created[0]);
     // State file persisted for restart reaping.

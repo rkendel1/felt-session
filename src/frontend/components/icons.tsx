@@ -3,12 +3,11 @@ import React from "react";
 /**
  * Icon set lifted from tella-fusion's `iconic-pro` library
  * (packages/core/webapp/src/frontend/assets/icons/iconic-pro) so Open Session's
- * chat UI uses the same quality stroke icons as the product instead of emoji.
+ * session UI uses the same quality stroke icons as the product instead of emoji.
  * All are 24×24, `currentColor`, stroke-width 1.5 — size via the `size` prop.
  *
  * Size scale — stick to these three steps so icons feel consistent (bumped
- * one step 2026-07: the old 18/20 read too small — Kent + Michiel both asked
- * for bigger icons):
+ * one step 2026-07: the old 18/20 read too small):
  *   20 = inline/meta glyphs riding along with text (draft pencil, trailing
  *        chevrons, tool-status check/x, disclosure carets in rows)
  *   22 = standard standalone icons (the default — search, list rows, menus)
@@ -371,17 +370,6 @@ export function IconFile(p: IconProps) {
   );
 }
 
-export function IconNote(p: IconProps) {
-  return (
-    <Svg {...p}>
-      <path
-        {...stroke}
-        d="M13.75 19.25H6.75C5.64543 19.25 4.75 18.3546 4.75 17.25V6.75C4.75 5.64543 5.64543 4.75 6.75 4.75H17.25C18.3546 4.75 19.25 5.64543 19.25 6.75V13.75M13.75 19.25L19.25 13.75M13.75 19.25V14.75C13.75 14.1977 14.1977 13.75 14.75 13.75H19.25"
-      />
-    </Svg>
-  );
-}
-
 export function IconPencil(p: IconProps) {
   return (
     <Svg {...p}>
@@ -659,41 +647,6 @@ export function IconMessage(p: IconProps) {
   );
 }
 
-/** Smiley for the add-reaction affordance in team chat. */
-export function IconEmoji(p: IconProps) {
-  return (
-    <Svg {...p}>
-      <circle {...stroke} cx="12" cy="12" r="7.25" />
-      <path {...stroke} d="M9.25 13.25C9.25 13.25 10 15 12 15C14 15 14.75 13.25 14.75 13.25" />
-      <path {...stroke} d="M9.5 9.75V9.25" />
-      <path {...stroke} d="M14.5 9.75V9.25" />
-    </Svg>
-  );
-}
-
-/** Curved reply arrow for the quote-reply affordance in team chat. */
-export function IconReply(p: IconProps) {
-  return (
-    <Svg {...p}>
-      <path {...stroke} d="M9.25 4.75L4.75 9L9.25 13.25" />
-      <path {...stroke} d="M4.75 9H14.25C17.0114 9 19.25 11.2386 19.25 14V19.25" />
-    </Svg>
-  );
-}
-
-/** Water-cup icon for the Watercooler team chat (a cup with a ripple). */
-export function IconWatercooler(p: IconProps) {
-  return (
-    <Svg {...p}>
-      <path
-        {...stroke}
-        d="M6.25 4.75H17.75L16.4 19.25H7.6L6.25 4.75Z"
-      />
-      <path {...stroke} d="M7 9.25C8.5 10.25 10 8.5 11.5 9.25C13 10 14.5 8.5 17 9.25" />
-    </Svg>
-  );
-}
-
 export function IconMessageQuestion(p: IconProps) {
   return (
     <Svg {...p}>
@@ -816,7 +769,7 @@ export function IconRestore(p: IconProps) {
   );
 }
 
-// The restore arc plus clock hands: chat history.
+// The restore arc plus clock hands: session history.
 export function IconHistory(p: IconProps) {
   return (
     <Svg {...p}>

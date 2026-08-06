@@ -17,6 +17,7 @@
 #   --no-modify-path      NO_MODIFY_PATH=1     do not touch shell profiles
 #   --no-onboard          NO_ONBOARD=1         install only, skip the wizard
 #   --no-engine           NO_ENGINE=1          do not install the OpenCode engine
+#                                              or the claude/codex model CLIs
 #   --no-tailscale        NO_TAILSCALE=1       do not install Tailscale
 #   --yes                 NO_PROMPT=1          accept defaults, never prompt
 #   --uninstall                                remove the install
@@ -98,7 +99,7 @@ if [ "$DO_UNINSTALL" = "1" ]; then
   muted "  $DIR            the checkout"
   muted "  $OPENSESSION_HOME/config.json   your configuration"
   muted "  $HOME/.opensession.env          your secrets"
-  muted "  $HOME/.opensession-chats        your sessions"
+  muted "  $HOME/.opensession-sessions     your sessions"
   # Tailscale is a system daemon that may now be carrying your SSH access.
   # Removing it as a side effect of uninstalling Open Session would be hostile.
   if command -v tailscale >/dev/null 2>&1; then
@@ -305,27 +306,62 @@ good "installed"
 
 # ── engine ──────────────────────────────────────────────────────────────────
 #
-# OpenCode is the engine that actually runs agent turns. Without it the server
-# starts, the UI loads, and every session fails — so install it by default
-# rather than leaving a fresh box in that state.
+# Three binaries, all needed before a session can run a turn:
+#
+#   opencode  the engine that executes agent turns. Without it the server
+#             starts, the UI loads, and every session fails.
+#   claude    the bundled Anthropic bridge execs it, and `claude setup-token`
+#             is how you mint the account token for the default model.
+#   codex     `codex login --device-auth` backs the ChatGPT sign-in in the UI
+#             (codex-device-login.ts) — the one credential flow a user can
+#             complete entirely in the browser, which silently did nothing
+#             when the binary was missing.
+#
+# Installed by default because leaving them out produces the failure this
+# installer exists to prevent: a box that looks installed and cannot work.
+# Each is skipped when already present, so re-runs are free.
+
+# First line of `<bin> --version`, or $2 when it prints nothing usable. Kept
+# separate so the `||` fallback isn't swallowed by a pipeline's exit status.
+cli_version() {
+  cli_v="$("$1" --version 2>/dev/null | head -1)" || cli_v=""
+  printf '%s' "${cli_v:-$2}"
+}
+
+# $1 binary, $2 label, $3 install command, $4 PATH dir to add on success.
+install_cli() {
+  cli_bin="$1"; cli_label="$2"; cli_cmd="$3"; cli_path="${4:-}"
+  if command -v "$cli_bin" >/dev/null 2>&1; then
+    good "$cli_label $(cli_version "$cli_bin" present)"
+    return 0
+  fi
+  muted "installing $cli_label ..."
+  cli_log="$(mktemp)"
+  if sh -c "$cli_cmd" >"$cli_log" 2>&1; then
+    # A plain `[ -n "$x" ] && export …` here would make the function return
+    # non-zero when no PATH dir is passed, which `set -e` turns into an exit.
+    if [ -n "$cli_path" ]; then export PATH="$cli_path:$PATH"; fi
+    good "$cli_label $(cli_version "$cli_bin" installed)"
+  else
+    # Never fatal: a box with the server and no CLI is recoverable, and
+    # `opensession doctor` names whichever one is missing.
+    warn "could not install $cli_label automatically:"
+    sed 's/^/    /' "$cli_log" | tail -10
+    muted "install it later: $cli_cmd"
+  fi
+  rm -f "$cli_log"
+}
 
 step "Engine"
-if command -v opencode >/dev/null 2>&1; then
-  good "opencode $(opencode --version 2>/dev/null || echo present)"
-elif [ "$NO_ENGINE" = "1" ]; then
+if [ "$NO_ENGINE" = "1" ]; then
   muted "skipped (--no-engine)"
 else
-  muted "installing OpenCode ..."
-  engine_log="$(mktemp)"
-  if curl -fsSL https://opencode.ai/install | bash >"$engine_log" 2>&1; then
-    export PATH="$HOME/.opencode/bin:$PATH"
-    good "opencode $(opencode --version 2>/dev/null || echo installed)"
-  else
-    warn "could not install OpenCode automatically:"
-    sed 's/^/    /' "$engine_log" | tail -10
-    muted "install it later: curl -fsSL https://opencode.ai/install | bash"
-  fi
-  rm -f "$engine_log"
+  install_cli opencode "opencode" \
+    "curl -fsSL https://opencode.ai/install | bash" "$HOME/.opencode/bin"
+  install_cli claude "Claude Code" \
+    "curl -fsSL https://claude.ai/install.sh | bash" "$HOME/.local/bin"
+  install_cli codex "Codex" \
+    "curl -fsSL https://chatgpt.com/codex/install.sh | sh" "$HOME/.local/bin"
 fi
 
 # ── network ─────────────────────────────────────────────────────────────────

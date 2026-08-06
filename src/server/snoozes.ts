@@ -3,7 +3,7 @@
  * `backstage-user` name from the UserPicker — not an auth identity) gets one
  * JSON file `~/.opensession-snoozes/<user>.json` of shape
  * `{ snoozes: { [rowKey]: isoUntil } }`, where `rowKey` is a sidebar row key
- * (`workspace:<id>` or a solo chat id) and `isoUntil` is when the snooze
+ * (`workspace:<id>` or a solo session id) and `isoUntil` is when the snooze
  * lapses. Snoozing is attention management (an overlay, like a pin, not a
  * workspace state), so it lives per-user and syncs across devices; the lane
  * derivation is untouched — the frontend parks actively-snoozed rows in the

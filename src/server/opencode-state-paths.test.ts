@@ -6,10 +6,10 @@
  * the SAME rename-compat dual-read resolution — never a hardcoded
  * `~/.opensession-*` or `~/.opensession-*` literal. When one module hardcodes a
  * name while another resolves, the two disagree exactly when it hurts: the
- * docker adapter mounts `<chats>/sandbox-runs/<id>` by the resolved name, and
+ * docker adapter mounts `<sessions>/sandbox-runs/<id>` by the resolved name, and
  * an in-container runner resolving differently (or the image only pre-seeding
  * the other name, leaving docker to create the mount parent ROOT-owned)
- * EACCESes on `mkdir <chats>/opencode` (live failure bks-019f4742-e65c,
+ * EACCESes on `mkdir <sessions>/opencode` (live failure bks-019f4742-e65c,
  * 2026-07-09, right after the state migration renamed ~/.opensession-* to
  * ~/.opensession-*).
  *
@@ -22,7 +22,7 @@ import { afterAll, describe, expect, it } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { dirname, join } from "path";
-import { homeDir, OPENSESSION_CHATS_DIR } from "./paths";
+import { homeDir, OPENSESSION_SESSIONS_DIR } from "./paths";
 import { stateDir } from "./paths";
 import {
   MERIDIAN_CFG_ROOT,
@@ -50,8 +50,8 @@ import { REMOTE_HOME, REMOTE_OPENAI_SEED_DIR } from "./sandbox/adapters/bootstra
 const HOME = homeDir();
 
 describe("opencode engine state paths (rename-compat consistency)", () => {
-  it("instructions/state dir lives under the resolved chat store", () => {
-    expect(OPENCODE_STATE_DIR).toBe(`${OPENSESSION_CHATS_DIR}/opencode`);
+  it("instructions/state dir lives under the resolved session store", () => {
+    expect(OPENCODE_STATE_DIR).toBe(`${OPENSESSION_SESSIONS_DIR}/opencode`);
   });
 
   it("meridian cfg, bridge cwd and openai data share one resolved engine dir", () => {
@@ -93,15 +93,15 @@ describe("opencode engine state paths (rename-compat consistency)", () => {
     );
   });
 
-  it("docker re-owns exactly the chats-dir mount parents the runner writes under", () => {
+  it("docker re-owns exactly the sessions-dir mount parents the runner writes under", () => {
     // The EACCES regression: these dirs are docker-created (root) when the
     // image predates the rename — setupContainer must chown them, and they
     // must be the SAME dirs the engine derives its state paths from.
     expect(containerStateDirFixups()).toEqual([
-      OPENSESSION_CHATS_DIR,
-      `${OPENSESSION_CHATS_DIR}/sandbox-runs`,
+      OPENSESSION_SESSIONS_DIR,
+      `${OPENSESSION_SESSIONS_DIR}/sandbox-runs`,
     ]);
-    expect(OPENCODE_STATE_DIR.startsWith(`${OPENSESSION_CHATS_DIR}/`)).toBe(true);
+    expect(OPENCODE_STATE_DIR.startsWith(`${OPENSESSION_SESSIONS_DIR}/`)).toBe(true);
   });
 });
 
@@ -120,10 +120,10 @@ describe("shard DB path derivation (pinned)", () => {
   it("derives stable paths from pool keys", () => {
     const home = homeDir();
     expect(shardDbPathForKey("bks-ghpr-5024-review")).toBe(
-      `${home}/.opensession-chats/opencode/db/bks-ghpr-5024-review.db`,
+      `${home}/.opensession-sessions/opencode/db/bks-ghpr-5024-review.db`,
     );
-    expect(shardDbPathForKey("shared:openai-13fde4f9:michiel")).toBe(
-      `${home}/.opensession-chats/opencode/db/shared_openai-13fde4f9_michiel.db`,
+    expect(shardDbPathForKey("shared:openai-13fde4f9:alex")).toBe(
+      `${home}/.opensession-sessions/opencode/db/shared_openai-13fde4f9_alex.db`,
     );
   });
 });

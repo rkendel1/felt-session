@@ -17,7 +17,7 @@
  * not be steerable from a ticket. The fail-closed gate in interactive-mcp.ts
  * still withholds the interactive builder from automation-owned sessions;
  * flagged automations only get the instance automations.ts explicitly
- * registers (Michiel-authorized 2026-07-12).
+ * registers (human-authorized).
  */
 
 import { createSdkMcpServer, tool } from "../../server/inprocess-mcp";

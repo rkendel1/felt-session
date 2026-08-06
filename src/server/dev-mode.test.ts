@@ -9,8 +9,8 @@ const SAVED_KEYS = [
 	"OPENSESSION_DEV",
 	"OPENSESSION_DEV",
 	"OPENSESSION_STATE_DIR",
-	"OPENSESSION_CHATS_DIR",
-	"OPENSESSION_CHATS_DIR",
+	"OPENSESSION_SESSIONS_DIR",
+	"OPENSESSION_SESSIONS_DIR",
 	"OPENSESSION_PROFILE",
 	"HOME",
 ] as const;
@@ -73,15 +73,15 @@ describe("devInstanceBootError", () => {
 		).not.toBeNull();
 	});
 
-	test("accepts OPENSESSION_STATE_DIR or a chats-dir override", () => {
+	test("accepts OPENSESSION_STATE_DIR or a sessions-dir override", () => {
 		expect(
 			devInstanceBootError({ OPENSESSION_DEV: "1", OPENSESSION_STATE_DIR: "/x" }),
 		).toBeNull();
 		expect(
-			devInstanceBootError({ OPENSESSION_DEV: "1", OPENSESSION_CHATS_DIR: "/x" }),
+			devInstanceBootError({ OPENSESSION_DEV: "1", OPENSESSION_SESSIONS_DIR: "/x" }),
 		).toBeNull();
 		expect(
-			devInstanceBootError({ OPENSESSION_DEV: "1", OPENSESSION_CHATS_DIR: "/x" }),
+			devInstanceBootError({ OPENSESSION_DEV: "1", OPENSESSION_SESSIONS_DIR: "/x" }),
 		).toBeNull();
 	});
 
@@ -119,32 +119,32 @@ describe("statePath with OPENSESSION_STATE_DIR", () => {
 	});
 });
 
-describe("chats-dir resolution with OPENSESSION_STATE_DIR", () => {
+describe("sessions-dir resolution with OPENSESSION_STATE_DIR", () => {
 	// paths.ts resolves its dir once at module load — re-import cache-busted.
 	let n = 0;
-	async function freshChatsDir(): Promise<string> {
+	async function freshSessionsDir(): Promise<string> {
 		const spec = `./paths?dev-mode-test=${++n}`;
 		const mod = (await import(spec as string)) as {
-			OPENSESSION_CHATS_DIR: string;
+			OPENSESSION_SESSIONS_DIR: string;
 		};
-		return mod.OPENSESSION_CHATS_DIR;
+		return mod.OPENSESSION_SESSIONS_DIR;
 	}
 
-	test("uses <stateRoot>/.opensession-chats when set", async () => {
+	test("uses <stateRoot>/.opensession-sessions when set", async () => {
 		const stateRoot = join(scratch, "state");
 		process.env.OPENSESSION_STATE_DIR = stateRoot;
-		expect(await freshChatsDir()).toBe(join(stateRoot, ".opensession-chats"));
+		expect(await freshSessionsDir()).toBe(join(stateRoot, ".opensession-sessions"));
 	});
 
-	test("OPENSESSION_CHATS_DIR still wins over the state root", async () => {
+	test("OPENSESSION_SESSIONS_DIR still wins over the state root", async () => {
 		process.env.OPENSESSION_STATE_DIR = join(scratch, "state");
-		process.env.OPENSESSION_CHATS_DIR = join(scratch, "chats-override");
-		expect(await freshChatsDir()).toBe(join(scratch, "chats-override"));
+		process.env.OPENSESSION_SESSIONS_DIR = join(scratch, "sessions-override");
+		expect(await freshSessionsDir()).toBe(join(scratch, "sessions-override"));
 	});
 
 	test("default resolution is unchanged without the knob", async () => {
-		expect(await freshChatsDir()).toBe(
-			join(process.env.HOME!, ".opensession-chats"),
+		expect(await freshSessionsDir()).toBe(
+			join(process.env.HOME!, ".opensession-sessions"),
 		);
 	});
 });

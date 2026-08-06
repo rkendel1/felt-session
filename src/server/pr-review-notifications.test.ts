@@ -39,7 +39,7 @@ function harness(initial: OpenPrEntry[] = []) {
 			return freshRepos;
 		},
 		getPrs: () => prs,
-		resolveUser: (key) => (key === "michiel" ? "Michiel" : null),
+		resolveUser: (key) => (key === "alex" ? "Alex" : null),
 		sendPush: async (user, payload) => {
 			pushes.push({ user, title: payload.title, url: payload.url });
 		},
@@ -61,15 +61,15 @@ function harness(initial: OpenPrEntry[] = []) {
 
 describe("GitHub review request push notifications", () => {
 	test("seeds existing requests silently and alerts on a new assignment", async () => {
-		const h = harness([pr(1, ["michiel"])]);
+		const h = harness([pr(1, ["alex"])]);
 		await h.notifier.pollOnce();
 		expect(h.pushes).toEqual([]);
 
-		h.setPrs([pr(1, ["michiel"]), pr(2, ["michiel"])]);
+		h.setPrs([pr(1, ["alex"]), pr(2, ["alex"])]);
 		await h.notifier.pollOnce();
 		expect(h.pushes).toEqual([
 			{
-				user: "Michiel",
+				user: "Alex",
 				title: "GitHub review requested",
 				url: "/pr/tella-fusion/review-2",
 			},
@@ -79,23 +79,23 @@ describe("GitHub review request push notifications", () => {
 	test("alerts again after a request is removed and re-added", async () => {
 		const h = harness([]);
 		await h.notifier.pollOnce();
-		h.setPrs([pr(1, ["michiel"])]);
+		h.setPrs([pr(1, ["alex"])]);
 		await h.notifier.pollOnce();
 		h.setPrs([pr(1, [])]);
 		await h.notifier.pollOnce();
-		h.setPrs([pr(1, ["michiel"])]);
+		h.setPrs([pr(1, ["alex"])]);
 		await h.notifier.pollOnce();
 		expect(h.pushes).toHaveLength(2);
 	});
 
 	test("does not replace the baseline for an untrusted repository snapshot", async () => {
-		const h = harness([pr(1, ["michiel"])]);
+		const h = harness([pr(1, ["alex"])]);
 		await h.notifier.pollOnce();
 		h.setFresh([]);
 		h.setPrs([]);
 		await h.notifier.pollOnce();
 		h.setFresh(["tella-fusion"]);
-		h.setPrs([pr(1, ["michiel"])]);
+		h.setPrs([pr(1, ["alex"])]);
 		await h.notifier.pollOnce();
 		expect(h.pushes).toEqual([]);
 	});
@@ -129,14 +129,14 @@ describe("GitHub review request push notifications", () => {
 		const notifier = createPrReviewNotifier({
 			refresh: async () => new Set(["tella-fusion"]),
 			getPrs: () => prs,
-			resolveUser: () => "Michiel",
-			shouldSuppress: (_pr, reviewer) => reviewer === "michiel",
+			resolveUser: () => "Alex",
+			shouldSuppress: (_pr, reviewer) => reviewer === "alex",
 			sendPush: async (user) => {
 				pushes.push(user);
 			},
 		});
 		await notifier.pollOnce();
-		prs = [pr(1, ["michiel"])];
+		prs = [pr(1, ["alex"])];
 		await notifier.pollOnce();
 		expect(pushes).toEqual([]);
 	});

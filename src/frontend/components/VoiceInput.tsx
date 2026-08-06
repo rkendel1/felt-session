@@ -6,12 +6,12 @@ import { PRODUCT_NAME } from "../lib/brand";
 
 type Phase = "idle" | "recording" | "transcribing";
 
-/** Dictation is capped — this is a chat input, not a memo recorder. */
+/** Dictation is capped — this is a session input, not a memo recorder. */
 const MAX_SECONDS = 120;
 const BAR_COUNT = 72;
 
 /**
- * Wispr-Flow-style dictation control shared by the chat Composer and the
+ * Wispr-Flow-style dictation control shared by the session Composer and the
  * New-session palette. Idle it's just a mic button; tapping it swaps the whole
  * input surface for a compact recording bar (+ lead, live waveform, cancel ×,
  * accept ↑), then a "Transcribing…" bar while the clip runs through

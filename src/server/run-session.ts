@@ -36,7 +36,7 @@ import { defaultRepo } from "./config";
 import { isDevInstance } from "./dev-mode";
 import { isLocalProfile } from "./profile";
 import {
-	buildChatContextNote,
+	buildSessionContextNote,
 	buildEngineSwitchHandoffNote,
 } from "./fork-handoff";
 import { getGitStatus, gitPush } from "./git-status";
@@ -54,6 +54,7 @@ import {
 	transcriptLineUser,
 } from "./opencode-transcript";
 import { wrapContext, stripContext, isContextOnly } from "./prompt-context";
+import { takeVoiceHandoff } from "./desk-voice";
 import { activeRunRecords, type ActiveRunRecord } from "./run-journal";
 import { registerRunToken, unregisterRunToken } from "./run-rpc";
 import { createSlackPostScanner, linkThreadInIndex } from "./slack-links";
@@ -682,7 +683,7 @@ export function recordRecoveredRunEvent(osSessionId: string, event: StreamEvent)
 
 /**
  * Attach every socket viewing `sessionId` to a transcript file that only came
- * into existence after they started watching — a fresh chat's first run (no
+ * into existence after they started watching — a fresh session's first run (no
  * transcriptPath existed at watch time), or an engine-id rotation forking to a
  * new file mid-conversation. Without this the whole run is silent for viewers:
  * the sent message sticks at "sending…" and the reply vanishes at stream_done,
@@ -836,10 +837,10 @@ export async function runSessionPromptAndDrain(
 	user?: string,
 	images?: ImageInput[],
 	rawFiles?: unknown,
-	contextChats?: string[],
+	contextSessions?: string[],
 	slackReplyTo?: { channel: string; threadTs: string },
 ): Promise<void> {
-	await runSessionPrompt(sessionId, content, user, images, rawFiles, contextChats, slackReplyTo);
+	await runSessionPrompt(sessionId, content, user, images, rawFiles, contextSessions, slackReplyTo);
 	await drainQueue(sessionId);
 }
 
@@ -1287,7 +1288,7 @@ export async function maybeLaunchSandboxedRun(
  * needs; without a queue, the budget remains one nudge per human prompt so a
  * model cannot loop indefinitely by using one tool before each announcement.
  *
- * Shared with the session-creation path: a chat's OPENING turn runs its own
+ * Shared with the session-creation path: a session's OPENING turn runs its own
  * event loop (session-control-wiring.ts, run kind "create") and bypasses
  * runSessionPromptInner entirely, so a first turn that announced and stopped
  * just parked — the guard only existed on follow-up turns (2026-08-03
@@ -1460,7 +1461,7 @@ export async function runSessionPrompt(
 	user?: string,
 	images?: ImageInput[],
 	rawFiles?: unknown,
-	contextChats?: string[],
+	contextSessions?: string[],
 	slackReplyTo?: { channel: string; threadTs: string },
 ): Promise<void> {
 	// Any explicit new run lifts a user stop — the queue may drain again.
@@ -1471,7 +1472,7 @@ export async function runSessionPrompt(
 	// dropped as a "Session is busy" error toast.
 	markSessionStarting(sessionId);
 	try {
-		await runSessionPromptInner(sessionId, content, user, images, rawFiles, contextChats, slackReplyTo);
+		await runSessionPromptInner(sessionId, content, user, images, rawFiles, contextSessions, slackReplyTo);
 	} catch (e) {
 		// A throw before the run registered (workspace revive, session-note
 		// build, …) would strand the FSM in "starting" forever — the wedge the
@@ -1494,7 +1495,7 @@ async function runSessionPromptInner(
 	user?: string,
 	images?: ImageInput[],
 	rawFiles?: unknown,
-	contextChats?: string[],
+	contextSessions?: string[],
 	slackReplyTo?: { channel: string; threadTs: string },
 ): Promise<void> {
 	const session = findSession(sessionId);
@@ -1552,8 +1553,8 @@ async function runSessionPromptInner(
 					: isOpencodeSessionId(session.claudeSessionId)
 						? undefined
 						: session.claudeSessionId);
-	// A claude session with no engine id yet is a *fresh* chat (e.g. a new sibling
-	// chat opened from the tab strip's +): its first prompt starts a new claude
+	// A claude session with no engine id yet is a *fresh* session (e.g. a new sibling
+	// session opened from the tab strip's +): its first prompt starts a new claude
 	// conversation, and finalSessionId is persisted below — same as codex, which
 	// already runs fresh with no thread id. (Previously this hard-errored, which
 	// blocked never-run sessions from ever receiving their first message.)
@@ -1686,14 +1687,14 @@ async function runSessionPromptInner(
 	// sandbox workspaces are exempt: their dir never exists host-side — the
 	// sandbox provider materializes it in-container, so reviving a host
 	// worktree at the same path would shadow (and fork) the real workspace.
-	// Ask chats can be minted without a worktree (sibling "+ → Ask", legacy
+	// Ask sessions can be minted without a worktree (sibling "+ → Ask", legacy
 	// files): resolve them to the pinned ask checkout, never the mutable main
 	// checkout, whose parked branch is a false context clue (ensureAskCheckout —
 	// 82a296a6 covered the create paths but missed this prompt-path fallback).
 	let cwd =
 		session.worktreeDir ||
 		(session.mode === "scratch"
-			? ensureScratchDir(session.projectId || session.id)
+			? ensureScratchDir(session.workspaceId || session.id)
 			: session.mode === "ask"
 				? await ensureAskCheckout(session.repo)
 				: defaultRepo().repo);
@@ -1754,38 +1755,47 @@ async function runSessionPromptInner(
 	// transcript shows only the human's message — the model-switch divider already
 	// marks the engine change; the handoff itself is plumbing (see prompt-context).
 	if (switchHandoff) prompt = `${wrapContext(switchHandoff)}\n\n${prompt}`;
-	// Sibling-chat transcripts attached from the fresh-chat "Add chat
+	// Bridge a Desk voice call into this text turn: the GPT Realtime turns are
+	// mirrored into the visible transcript, but the text engine's own
+	// conversation state never saw them — without this note the first text
+	// message after a call gets a Desk that's amnesiac about the conversation
+	// it apparently just had (see desk-voice.ts).
+	if (session.desk) {
+		const voiceHandoff = takeVoiceHandoff(sessionId);
+		if (voiceHandoff) prompt = `${wrapContext(voiceHandoff)}\n\n${prompt}`;
+	}
+	// Sibling-session transcripts attached from the fresh-session "Add session
 	// transcripts" chips: inline a bounded digest of each, fenced so the rendered
 	// transcript shows only the human's message. Skip automation sessions because
 	// their prompts are untrusted text.
-	const inlinedChatIds = new Set<string>();
+	const inlinedSessionIds = new Set<string>();
 	if (!session.automation) {
-		const chatIds = [...new Set(contextChats ?? [])];
-		const attachedSessions = chatIds
+		const attachedIds = [...new Set(contextSessions ?? [])];
+		const attachedSessions = attachedIds
 			.filter((id) => id !== sessionId)
 			.map((id) => findSession(id))
 			.filter((s): s is UnifiedSession => !!s);
-		const attachedChats: {
+		const attachedDigests: {
 			id: string;
 			title: string | undefined;
 			model: string | undefined;
 			entries: TranscriptEntry[];
 		}[] = [];
 		for (const s of attachedSessions) {
-			attachedChats.push({
+			attachedDigests.push({
 				id: s.id,
 				title: s.title,
 				model: s.model,
-				// Async: an attached chat's transcript can be multi-MB — the
+				// Async: an attached session's transcript can be multi-MB — the
 				// sync parse held the event loop for the whole read.
 				entries: s.transcriptPath
 					? await parseTranscriptAsync(s.transcriptPath)
 					: [],
 			});
 		}
-		for (const c of attachedChats) inlinedChatIds.add(c.id);
-		if (attachedChats.length)
-			prompt = `${wrapContext(buildChatContextNote(attachedChats))}\n\n${prompt}`;
+		for (const c of attachedDigests) inlinedSessionIds.add(c.id);
+		if (attachedDigests.length)
+			prompt = `${wrapContext(buildSessionContextNote(attachedDigests))}\n\n${prompt}`;
 	}
 	// Non-image attachments: stage to disk and tell the agent where they landed.
 	prompt = withUploadsNote(prompt, stageFileAttachments(sessionId, rawFiles));
@@ -1807,7 +1817,7 @@ async function runSessionPromptInner(
 		: (session.mcpServers && session.mcpServers.length)
 			? session.mcpServers
 			: session.externalRefs?.length
-				? // Feed-workspace chats are scoped to their feed's declared MCP
+				? // Feed-workspace sessions are scoped to their feed's declared MCP
 					// servers even when the session file predates the stamping
 					// (least privilege — the feeds design).
 					await (await import("./feeds")).feedMcpServersForRefs(session.externalRefs)
@@ -1817,14 +1827,14 @@ async function runSessionPromptInner(
 	// @session:<id> mentions → footer resolving them for the agent's
 	// opensession-sessions tools. Interactive sessions only (same gate as the tools).
 	if (!isAutomationSession) {
-		const mentionsNote = sessionMentionsNote(prompt, inlinedChatIds);
+		const mentionsNote = sessionMentionsNote(prompt, inlinedSessionIds);
 		if (mentionsNote) prompt += `\n\n${mentionsNote}`;
 	}
 
-	// First engine turn of a feed-workspace chat that was born prompt-less
+	// First engine turn of a feed-workspace session that was born prompt-less
 	// (tab-strip "+" siblings): inject the workspace's external-object context
 	// (Tella video metadata + transcript excerpt, scratch-dir note) exactly
-	// like the create_session paths do — a chat must get this context no
+	// like the create_session paths do — a session must get this context no
 	// matter how it was created (the feeds design).
 	if (
 		!isAutomationSession &&
@@ -1849,9 +1859,9 @@ async function runSessionPromptInner(
 		}
 	}
 
-	// Sidebar name: make sure this chat has a short generated summary title.
-	// Covers tab-strip "New chat" chats (never named at creation — this is
-	// their first prompt) and retries chats whose creation-time Haiku call
+	// Sidebar name: make sure this session has a short generated summary title.
+	// Covers tab-strip "New session" sessions (never named at creation — this is
+	// their first prompt) and retries sessions whose creation-time Haiku call
 	// failed (e.g. account exhaustion), which otherwise wear the raw first
 	// line of the prompt forever. Retries summarize the stored provisional
 	// title (the opening prompt's first line), not this turn's message, so a
@@ -1863,7 +1873,8 @@ async function runSessionPromptInner(
 		!session.goalId &&
 		!getTitleOverride(session.id)
 	) {
-		const provisional = !session.title || session.title === "New chat";
+		const provisional =
+			!session.title || session.title === "New session";
 		const firstLine = content.trim().split("\n")[0].slice(0, 80);
 		if (provisional && firstLine)
 			touchNativeSession(session.id, { title: firstLine });
@@ -2011,7 +2022,7 @@ async function runSessionPromptInner(
 				if (event.model) effectiveModel = event.model;
 				if (event.sessionId && event.sessionId !== finalSessionId) {
 					finalSessionId = event.sessionId;
-					// The engine session id just changed (first run of a fresh chat, or
+					// The engine session id just changed (first run of a fresh session, or
 					// a rotation fork): the run writes to a transcript file nobody is
 					// watching yet. Persist + attach NOW — waiting for the run to end
 					// (the old behavior) left the entire turn invisible to viewers.
@@ -2293,7 +2304,7 @@ async function runSessionPromptInner(
 		isRunning: false,
 	});
 
-	// Mirror Michael's reply back to Slack: a turn that came from a Slack thread
+	// Mirror the agent's reply back to Slack: a turn that came from a Slack thread
 	// (a reply under a message this session posted — see slackReplyTo plumbing)
 	// answers in that thread.
 	if (!endedWithError && assistantText.trim() && slackReplyTo) {
@@ -2331,7 +2342,7 @@ async function runSessionPromptInner(
 }
 
 /**
- * Expand `@session:bks-…` mentions in a prompt into a footer the agent can act
+ * Expand `@session:os-…` mentions in a prompt into a footer the agent can act
  * on with its opensession-sessions tools. The mention token itself stays in place
  * (it carries the id); the footer resolves each id to a title/state and points
  * at the tools — including slash commands over send_to_session (e.g. "/loop").
@@ -2342,17 +2353,21 @@ export function sessionMentionsNote(
 	excludeIds?: Iterable<string>,
 ): string | null {
 	// Only the human's visible message counts: fenced <opensession:context> blocks
-	// (attached chat transcripts, handoffs) name sessions as @session:<id> too,
+	// (attached session transcripts, handoffs) name sessions as @session:<id> too,
 	// and those must not grow a redundant — and unfenced, so user-visible —
 	// mentions footer. `|| ""` because a non-string reaching here crashed the
 	// whole process on 2026-07-27 (stripContext passes falsy input through).
 	content = stripContext(content || "");
-	// A chat attached as a digest above already carries its context; skip it here
+	// A session attached as a digest above already carries its context; skip it here
 	// so it doesn't also get a pointer footer for the same id.
 	const skip = new Set(excludeIds ?? []);
 	const ids = [
 		...new Set(
-			[...content.matchAll(/@session:(bks-[0-9a-f-]+)/g)].map((m) => m[1]),
+			// `os-` is the minted prefix; `bks-` is the pre-rename one, which
+			// every session started before 2026-08-05 still carries.
+			[...content.matchAll(/@session:((?:os|bks)-[0-9a-f-]+)/g)].map(
+				(m) => m[1],
+			),
 		),
 	].filter((id) => !skip.has(id));
 	if (!ids.length) return null;

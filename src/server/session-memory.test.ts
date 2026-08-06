@@ -1,6 +1,7 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { rmSync } from "fs";
 import { MEMORY_DIR } from "../agents/slack/memory";
+import { SLACK_ID_TO_NAME } from "./shared/user-mappings";
 import {
   addSessionMemory,
   forgetSessionMemory,
@@ -39,9 +40,13 @@ describe("sessionMemoryScopes", () => {
   });
 
   test("teammate user unifies with their Slack DM store (user-<slackId>)", () => {
-    const scopes = sessionMemoryScopes({ user: "michiel", repos: [] });
+    // Instance-independent: pick any teammate from the configured identity
+    // table; with no team configured there is nothing to unify — skip.
+    const [slackId, name] = Object.entries(SLACK_ID_TO_NAME)[0] ?? [];
+    if (!slackId) return;
+    const scopes = sessionMemoryScopes({ user: name, repos: [] });
     const user = scopes.find((s) => s.kind === "user");
-    expect(user?.key).toMatch(/^user-U[A-Z0-9]+$/);
+    expect(user?.key).toBe(`user-${slackId}`);
   });
 
   test("no user → no user scope; includeTeam:false drops workspace", () => {

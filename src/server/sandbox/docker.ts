@@ -36,7 +36,7 @@
  *    viewer's transcript tail, parseTranscript handoffs, and resume-continuity
  *    with host runs of the same worktree all keep working. Narrow on purpose:
  *    only this worktree's transcript dir, not the host's whole ~/.claude.
- *  - The run-rpc socket (~/.opensession-chats/opensession-rpc.sock) is
+ *  - The run-rpc socket (~/.opensession-sessions/opensession-rpc.sock) is
  *    bind-mounted (a socket can't be mounted ro) so the opensession-* stdio
  *    proxies work from inside. Caveat: if opensession rebinds the socket (real
  *    restart), the bind still points at the old inode until the CONTAINER is
@@ -111,7 +111,7 @@
 
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, unlinkSync } from "fs";
 import { dirname, resolve as resolvePath } from "path";
-import { homeDir, OPENSESSION_CHATS_DIR } from "../paths";
+import { homeDir, OPENSESSION_SESSIONS_DIR } from "../paths";
 import { stateDir, } from "../paths";
 import { journalSet, journalClear, type ActiveRunRecord } from "../run-journal";
 import { shouldPersistModelSwitch, type StreamEvent } from "../run-events";
@@ -175,10 +175,10 @@ const SETUP_TIMEOUT_MS = 10 * 60_000;
 
 /** Provider-owned state, one file per sandbox — lets get() reattach (or fully
  *  recreate a removed container with identical mounts) after any restart. */
-const STATE_DIR = `${OPENSESSION_CHATS_DIR}/sandboxes`;
+const STATE_DIR = `${OPENSESSION_SESSIONS_DIR}/sandboxes`;
 /** Per-session run dirs (spec/meta/journal/socket/log per run), bind-mounted
  *  into the session's container at the identical path. */
-const RUNS_BASE = `${OPENSESSION_CHATS_DIR}/sandbox-runs`;
+const RUNS_BASE = `${OPENSESSION_SESSIONS_DIR}/sandbox-runs`;
 
 interface DockerSandboxState {
   sandboxId: string;
@@ -433,7 +433,7 @@ async function sweepOrphanSnapshots(): Promise<void> {
       const container = containerNameFor(sessionId);
       if (readState(container)) continue; // still tracked → destroy() cleans
       if ((await containerStatus(container)) !== "gone") continue;
-      if (existsSync(`${OPENSESSION_CHATS_DIR}/${sessionId}.json`)) continue; // session alive — keep
+      if (existsSync(`${OPENSESSION_SESSIONS_DIR}/${sessionId}.json`)) continue; // session alive — keep
       console.log(`[sandbox] removing orphaned snapshot images ${repo} (session ${sessionId} deleted, sandbox gone)`);
       await removeSnapshotImages(container);
     } catch (e) {
@@ -443,7 +443,7 @@ async function sweepOrphanSnapshots(): Promise<void> {
 }
 
 /** Paths that end up inside a `sh -c` log-redirect line must be boring. They
- *  are always provider-constructed (OPENSESSION_CHATS_DIR + sanitized ids), so
+ *  are always provider-constructed (OPENSESSION_SESSIONS_DIR + sanitized ids), so
  *  this is an assertion, not an escape. */
 function assertSafePath(p: string): string {
   if (!/^[A-Za-z0-9_\/.@:-]+$/.test(p)) {
@@ -604,7 +604,7 @@ async function createContainer(
   // mounting a MISSING host path would make docker create a directory there
   // and break run-rpc's bind.
   if (opts.transport !== "ws") {
-    const rpcSock = rpcSocketPath(OPENSESSION_CHATS_DIR);
+    const rpcSock = rpcSocketPath(OPENSESSION_SESSIONS_DIR);
     try {
       if (statSync(rpcSock).isSocket()) mounts.push(...vol(rpcSock, rpcSock));
       else console.warn(`[sandbox] ${rpcSock} exists but is not a socket — opensession-* proxies disabled`);
@@ -742,16 +742,15 @@ async function setupVolumeWorkspace(
 /**
  * In-container dirs that must be ubuntu-owned for the runner to work, but that
  * docker materializes ROOT-owned when it creates missing parents of bind-mount
- * targets. The chats dir is the canonical case: the per-session run dir is
- * mounted at `<chats>/sandbox-runs/<id>`, and when the image doesn't pre-seed
- * `<chats>` under the CURRENT name (the rename moved it from ~/.opensession-chats
- * to ~/.opensession-chats — an image built before that only seeds the old
- * name), docker creates `<chats>` + `<chats>/sandbox-runs` as root and the
- * in-container opencode runner then EACCESes on `mkdir <chats>/opencode`
+ * targets. The session store is the canonical case: the per-session run dir is
+ * mounted at `<sessions>/sandbox-runs/<id>`, and when the image doesn't
+ * pre-seed `<sessions>`, docker creates `<sessions>` +
+ * `<sessions>/sandbox-runs` as root and the in-container opencode runner then
+ * EACCESes on `mkdir <sessions>/opencode`
  * (regressed 2026-07-09, bks-019f4742-e65c). Exported for the regression test.
  */
 export function containerStateDirFixups(): string[] {
-  return [OPENSESSION_CHATS_DIR, `${OPENSESSION_CHATS_DIR}/sandbox-runs`];
+  return [OPENSESSION_SESSIONS_DIR, `${OPENSESSION_SESSIONS_DIR}/sandbox-runs`];
 }
 
 /** One-time in-container setup after (re)start. Idempotent. */

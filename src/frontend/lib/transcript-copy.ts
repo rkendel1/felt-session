@@ -1,6 +1,6 @@
-// Turn a chat's transcript into clipboard text — used by the tab context menu
+// Turn a session's transcript into clipboard text — used by the tab context menu
 // ("Copy concise/full transcript") and the ⌘⌥C shortcut. Entries are fetched
-// fresh from the server, so this works for any tab, not just the open chat.
+// fresh from the server, so this works for any tab, not just the open session.
 import { fetchTranscript } from "./api";
 import { copyToClipboard } from "./share-link";
 import type { TranscriptEntry, UnifiedSession } from "./types";
@@ -41,7 +41,7 @@ export function formatTranscript(
 	return parts.join("\n\n");
 }
 
-/** Fetch, format, and copy a chat's transcript; reports the outcome via onToast. */
+/** Fetch, format, and copy a session's transcript; reports the outcome via onToast. */
 export async function copySessionTranscript(
 	session: Pick<UnifiedSession, "id" | "title">,
 	mode: "concise" | "full",

@@ -12,8 +12,8 @@ const mediaUrl = (path: string) => `/media?path=${encodeURIComponent(path)}`;
 /**
  * The agent-published walkthrough (opensession-walkthrough): demo video +
  * before/after screenshot pairs + writeup. Rendered at the top of the PR info
- * column in the Review tab (`panel`), and inline in the chat where the agent
- * published it (`chat`) — the video plays right there instead of only living
+ * column in the Review tab (`panel`), and inline in the session where the agent
+ * published it (`session`) — the video plays right there instead of only living
  * behind a tab. Both are the inline counterpart of the link-only section
  * mirrored into the GitHub PR description.
  */
@@ -22,7 +22,7 @@ export function WalkthroughCard({
 	variant = "panel",
 }: {
 	walkthrough: SessionWalkthrough;
-	variant?: "panel" | "chat";
+	variant?: "panel" | "session";
 }) {
 	const summaryHtml = useMemo(
 		() => renderMarkdown(walkthrough.summary),
@@ -42,7 +42,7 @@ export function WalkthroughCard({
 				items.push({
 					kind: "image",
 					src: mediaUrl(path),
-					chatTitle: [shot.caption, side === "before" ? "Before" : "After"]
+					sessionTitle: [shot.caption, side === "before" ? "Before" : "After"]
 						.filter(Boolean)
 						.join(" — "),
 				});
@@ -50,7 +50,7 @@ export function WalkthroughCard({
 		});
 		return { items, at };
 	}, [walkthrough.shots]);
-	const chat = variant === "chat";
+	const session = variant === "session";
 
 	return (
 		<div
@@ -60,20 +60,20 @@ export function WalkthroughCard({
 				// screenshot looks like it runs out of the card rather than sitting
 				// in it.
 				"rounded-lg bg-raised p-4",
-				// In the chat the card is a transcript block like any other, so it
+				// In the session the card is a transcript block like any other, so it
 				// takes the same centered reading column the turns and footers use
-				// (mx-auto + --chat-col) instead of spanning the whole pane. It
+				// (mx-auto + --session-col) instead of spanning the whole pane. It
 				// trails more space than it leads: unlike the neighbouring blocks
 				// it ends in media, which otherwise butts straight into the next
 				// message.
-				chat ? "mx-auto mb-6 mt-2 w-full max-w-[var(--chat-col)]" : "mb-4",
+				session ? "mx-auto mb-6 mt-2 w-full max-w-[var(--session-col)]" : "mb-4",
 			)}
 		>
 			<div className="mb-2 flex items-baseline gap-2">
 				<span className="text-xs font-semibold text-dim">
 					Walkthrough
 				</span>
-				{chat && walkthrough.publishedAt && (
+				{session && walkthrough.publishedAt && (
 					<span className="text-[11px] text-faint">
 						{relativeTime(walkthrough.publishedAt)}
 					</span>
@@ -84,14 +84,14 @@ export function WalkthroughCard({
 					<video
 						className={cn(
 							"w-full rounded-md border border-line bg-black",
-							chat ? "max-h-[60vh] object-contain" : "",
+							session ? "max-h-[60vh] object-contain" : "",
 						)}
 						src={mediaUrl(walkthrough.video)}
 						controls
 						preload="metadata"
 						title={walkthrough.videoTitle || "Demo video"}
 					/>
-					{chat && walkthrough.videoTitle ? (
+					{session && walkthrough.videoTitle ? (
 						<div className="mb-2 mt-1 text-[11px] text-faint">
 							{walkthrough.videoTitle}
 						</div>
@@ -132,11 +132,11 @@ export function WalkthroughCard({
 										<img
 											className={cn(
 												"w-full rounded-md border border-line",
-												// In the chat the card sits in the message flow, so
+												// In the session the card sits in the message flow, so
 												// cap the stills (full size lives one click away in
 												// the lightbox) instead of pushing the conversation
 												// down by a screenful per pair.
-												chat && "max-h-52 object-contain object-top",
+												session && "max-h-52 object-contain object-top",
 											)}
 											src={mediaUrl(shot[side]!)}
 											alt={`${shot.caption || "change"} — ${side}`}

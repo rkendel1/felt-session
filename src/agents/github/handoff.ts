@@ -17,7 +17,7 @@ import { audit } from "../../server/audit";
 import { tryGetSessionControl } from "../../server/session-control";
 import { editIssueComment, fetchReviewFindings, getComment } from "./github-rest";
 import { getOrInitPrState, isLockHeld, readPrState, writePrState, type GithubPrState } from "./state";
-import { matchSessions, projectIdForRepo } from "./session-notify";
+import { matchSessions, workspaceIdForRepo } from "./session-notify";
 import { handoffActive, handoffDecision, reviewSatisfied } from "./handoff-gates";
 import { buildHandoffMessage } from "./prompts";
 import { uiSessionUrl } from "./run";
@@ -68,12 +68,12 @@ export async function maybeHandoffFindings(pr: PrRef, review: ReviewResult | nul
     const control = tryGetSessionControl();
     if (!control) return;
     const repoFull = pr.ghRepo || defaultRepo().ghRepo;
-    const projectId = projectIdForRepo(repoFull);
-    if (!projectId) return;
+    const workspaceId = workspaceIdForRepo(repoFull);
+    if (!workspaceId) return;
 
     // The PR's own review/fix runs also sit on this branch — never hand off to
     // those; deliver to the most recently active real session.
-    const owners = matchSessions(control, projectId, pr.headRef)
+    const owners = matchSessions(control, workspaceId, pr.headRef)
       .filter((s) => !s.id.startsWith("bks-ghpr-"))
       .sort((a, b) => Date.parse(b.lastActivity || "0") - Date.parse(a.lastActivity || "0"));
     const target = owners[0];

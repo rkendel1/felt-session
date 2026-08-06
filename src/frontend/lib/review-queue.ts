@@ -64,7 +64,7 @@ function sessionMatchesPr(
 	primaryOnly = false,
 ): boolean {
 	if (sessionRepo(session) === pr.repo && session.branch === pr.branch) return true;
-	// A `github-pr-review` chat checks the PR out on a derived `<head>-os-review`
+	// A `github-pr-review` session checks the PR out on a derived `<head>-os-review`
 	// branch, so its own branch never equals the PR's head and the comparison
 	// above can't see it. The server resolves the real head (sessionPrBranch) and
 	// records it as this session's `primary` PR ref — so that ref, and only that

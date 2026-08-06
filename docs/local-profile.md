@@ -1,5 +1,14 @@
 # Local profile (macOS)
 
+> **This is a companion to a hosted instance, not a first install.** Local mode
+> refuses to boot without a valid hosted web-session token — `OPENSESSION_CLOUD_TOKEN`,
+> or `cloud.token` in `~/os1/config.json` — which it verifies against an upstream
+> Open Session instance at startup and every 15 seconds after. So it requires a
+> hosted instance that is already running with GitHub sign-in configured, and an
+> account on it. Without one the server exits with "Local profile requires a
+> valid hosted GitHub session" and nothing else happens. Installing Open Session
+> for the first time? Go to [setup/install.md](setup/install.md) instead.
+
 The local profile runs Open Session as a single-user, interactive coding tool on
 your own machine. It is opt-in: only the exact environment value
 `OPENSESSION_PROFILE=local` enables it. An unset variable, or any other value,
@@ -21,7 +30,11 @@ The profile is deliberately smaller than a hosted installation:
 
 ## Prerequisites
 
-Install [Bun](https://bun.sh), Git, [OpenCode](https://opencode.ai/docs) 1.3.8
+A hosted Open Session instance you can sign in to, and a web-session token from
+it (see the callout above and [Cloud sessions](#cloud-sessions) for where the
+token comes from). The server will not start without one.
+
+Then install [Bun](https://bun.sh), Git, [OpenCode](https://opencode.ai/docs) 1.3.8
 or newer, and at least one of the Claude Code or Codex CLIs. OpenCode 1.3.8 is
 the oldest source-verified release that can load the bundled bridge from its
 absolute path. Update OpenCode, or set `OPENSESSION_OPENCODE_BIN` to a newer
@@ -287,7 +300,7 @@ Defaults are isolated from a hosted Open Session installation:
 | OpenAI access-only seeds | `~/os1/auth/opencode-openai/` |
 
 Existing path, port, and binary overrides still win, including `OPENSESSION_CONFIG`,
-`OPENSESSION_CHATS_DIR`, `OPENSESSION_WORKTREES_DIR`,
+`OPENSESSION_SESSIONS_DIR`, `OPENSESSION_WORKTREES_DIR`,
 `OPENSESSION_MCP_CONFIG`, `OPENSESSION_OPENCODE_BIN`, and `PORT`. `HOST` is
 restricted to `127.0.0.1`, `::1`, or `localhost` in local mode.
 
@@ -313,7 +326,7 @@ session on a new branch. Verify that:
 - Only providers logged into through Claude Code or Codex appear in the picker.
 - A model turn runs on that CLI subscription without an OpenCode login prompt.
 - The code session's checkout appears under `~/os1/worktrees`.
-- No files are created in the hosted profile's `~/.opensession-chats` store.
+- No files are created in the hosted profile's `~/.opensession-sessions` store.
 
 Stop the server with `Ctrl-C`. The profile is selected per process and does not
 write a persistent mode setting.

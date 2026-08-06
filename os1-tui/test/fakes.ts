@@ -12,7 +12,7 @@ export function fakeSession(over: Partial<Session> = {}): Session {
 		title: "wire the socket",
 		repo: "opensession",
 		branch: "tui",
-		projectId: "prj-1",
+		workspaceId: "ws-1",
 		mode: "code",
 		model: "claude-opus-5",
 		isRunning: false,
@@ -27,16 +27,16 @@ export function fakeEntry(over: Partial<TranscriptEntry> = {}): TranscriptEntry 
 
 export type FakeServer = {
 	sessions: Session[];
-	projects: { id: string; name: string }[];
+	workspaces: { id: string; name: string }[];
 	/** Every request path this fake saw, for assertions. */
 	calls: string[];
 	fetch: typeof fetch;
 };
 
-export function fakeServer(init?: Partial<Pick<FakeServer, "sessions" | "projects">>): FakeServer {
+export function fakeServer(init?: Partial<Pick<FakeServer, "sessions" | "workspaces">>): FakeServer {
 	const server: FakeServer = {
 		sessions: init?.sessions ?? [fakeSession()],
-		projects: init?.projects ?? [{ id: "prj-1", name: "opensession" }],
+		workspaces: init?.workspaces ?? [{ id: "ws-1", name: "opensession" }],
 		calls: [],
 		fetch: (async (input: RequestInfo | URL) => {
 			const url = typeof input === "string" ? input : input.toString();
@@ -48,7 +48,7 @@ export function fakeServer(init?: Partial<Pick<FakeServer, "sessions" | "project
 					headers: { "content-type": "application/json" },
 				});
 			if (path === "/api/sessions") return json(server.sessions);
-			if (path === "/api/projects") return json({ projects: server.projects });
+			if (path === "/api/workspaces") return json({ workspaces: server.workspaces });
 			if (path === "/api/health") return json({ ok: true });
 			if (path.startsWith("/api/auth/status")) return json({ authenticated: true, login: "tester" });
 			return json({});

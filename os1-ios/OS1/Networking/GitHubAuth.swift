@@ -240,7 +240,9 @@ final class GitHubSignIn {
             } catch is CancellationError {
                 return // superseded by a newer start/nudge — state stays
             } catch {
-                self.error = error.localizedDescription
+                // Signing in is often the first thing a new device does, so
+                // this is where an off-the-tailnet server first shows up.
+                self.error = await Reachability.describe(error)
                 diag("failed: \(error.localizedDescription)")
             }
             starting = false

@@ -26,8 +26,10 @@ import {
 	CopyableCode,
 	LinkChips,
 	StateChip,
+	repoLifecycleState,
 	setupRequest,
 	type ChipTone,
+	type SetupEngine,
 	type SetupGithub,
 	type SetupIntegration,
 	type SetupStatus,
@@ -64,11 +66,14 @@ function ChecklistRow({
 	description,
 	tone,
 	label,
+	action,
 }: {
 	title: React.ReactNode;
 	description: React.ReactNode;
 	tone: ChipTone;
 	label: string;
+	/** Optional inline fix — only for problems this page can actually solve. */
+	action?: React.ReactNode;
 }) {
 	return (
 		<SettingRow>
@@ -76,8 +81,67 @@ function ChecklistRow({
 				<SettingRowTitle>{title}</SettingRowTitle>
 				<SettingRowDescription>{description}</SettingRowDescription>
 			</SettingRowText>
+			{action}
 			<StateChip tone={tone} label={label} />
 		</SettingRow>
+	);
+}
+
+/** Getting-started row for model capacity. Everything else on this page is
+ *  optional; without this, no session runs a single turn. */
+function EngineRow({
+	engine,
+	onChanged,
+}: {
+	engine: SetupEngine;
+	onChanged: () => void | Promise<void>;
+}) {
+	const [enabling, setEnabling] = useState(false);
+
+	async function enable() {
+		setEnabling(true);
+		try {
+			await setupRequest("/api/settings/opencode-engine", {
+				method: "PUT",
+				json: { enabled: true },
+			});
+			await onChanged();
+			toast("Engine enabled");
+		} catch (e: any) {
+			toast(e?.message || "Couldn't enable the engine");
+		} finally {
+			setEnabling(false);
+		}
+	}
+
+	const pool =
+		engine.claudeAccounts + engine.codexAccounts === 0
+			? "no accounts"
+			: [
+					engine.claudeAccounts && `${engine.claudeAccounts} Claude`,
+					engine.codexAccounts && `${engine.codexAccounts} ChatGPT`,
+				]
+					.filter(Boolean)
+					.join(", ");
+
+	return (
+		<ChecklistRow
+			title="Engine"
+			description={
+				engine.ready
+					? `Ready to run turns on ${engine.defaultModel} (${pool}).`
+					: `${engine.blocker} ${engine.fix}`
+			}
+			tone={engine.ready ? "on" : "warn"}
+			label={engine.ready ? "Ready" : "Can't run turns"}
+			action={
+				!engine.ready && engine.fixableInApp ? (
+					<Button size="sm" onClick={enable} disabled={enabling}>
+						{enabling ? "Enabling…" : "Enable"}
+					</Button>
+				) : undefined
+			}
+		/>
 	);
 }
 
@@ -553,7 +617,17 @@ export function SetupPanel() {
 		setRestartState("working");
 		if (post) {
 			try {
-				await fetch(`${BASE_PATH}/api/setup/restart`, { method: "POST" });
+				const res = await fetch(`${BASE_PATH}/api/setup/restart`, {
+					method: "POST",
+				});
+				// 409 = nothing would revive this process, so it refused. Say so
+				// rather than polling a server that was never going to go down.
+				if (res.status === 409) {
+					const body = await res.json().catch(() => null);
+					setRestartState("idle");
+					toast(body?.error || "This server can't restart itself.");
+					return;
+				}
 			} catch {
 				// The connection can drop as the server goes down — that's fine,
 				// the health poll below is the real signal.
@@ -591,6 +665,7 @@ export function SetupPanel() {
 				<>
 					<SettingsGroupLabel className="mt-0">Getting started</SettingsGroupLabel>
 					<SettingCard>
+						<EngineRow engine={status.engine} onChanged={refetch} />
 						<ChecklistRow
 							title="Repositories"
 							description={
@@ -605,6 +680,38 @@ export function SetupPanel() {
 									: "None registered"
 							}
 						/>
+						{status.repos.length > 0 &&
+							(() => {
+								const bootable = status.repos.filter(
+									(r) => repoLifecycleState(r).tone === "on",
+								);
+								const missing = status.repos.filter(
+									(r) => repoLifecycleState(r).tone !== "on",
+								);
+								const named = missing
+									.slice(0, 3)
+									.map((r) => r.label)
+									.join(", ");
+								const rest = missing.length - 3;
+								return (
+									<ChecklistRow
+										title="Local dev setup"
+										description={
+											missing.length === 0
+												? "Every repo commits lifecycle scripts — sessions provision themselves, previews boot, and agents can check their own UI changes in a browser."
+												: `No boot script in ${named}${rest > 0 ? ` and ${rest} more` : ""} — the Preview button stays disabled there. Add .opensession/start.sh to the repo (docs/repo-lifecycle.md).`
+										}
+										tone={
+											bootable.length === status.repos.length
+												? "on"
+												: bootable.length > 0
+													? "warn"
+													: "off"
+										}
+										label={`${bootable.length}/${status.repos.length} bootable`}
+									/>
+								);
+							})()}
 						<ChecklistRow
 							title="Team roster"
 							description={

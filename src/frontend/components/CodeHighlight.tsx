@@ -77,7 +77,7 @@ function getWorker(): Worker | null {
 		const url = URL.createObjectURL(
 			new Blob([source], { type: "text/javascript" }),
 		);
-		worker = new Worker(url, { type: "module", name: "chat-shiki" });
+		worker = new Worker(url, { type: "module", name: "session-shiki" });
 		URL.revokeObjectURL(url);
 		worker.onmessage = ({ data }) => {
 			const job = pending.get(data.id);

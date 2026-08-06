@@ -3,9 +3,13 @@ import { PRODUCT_NAME, sessionSourceLabel } from "./brand";
 
 describe("sessionSourceLabel", () => {
 	test("shows the product's own UI under the product name", () => {
-		// `opensession` is the pre-rename id for "started here", and leaked into
-		// the archived list as a literal chip.
 		expect(sessionSourceLabel("opensession")).toBe(PRODUCT_NAME.toLowerCase());
+	});
+
+	test("still recognises the pre-rename id for 'started here'", () => {
+		// `backstage` leaked into the archived list as a literal chip; older
+		// servers and archived sessions still send it.
+		expect(sessionSourceLabel("backstage")).toBe(PRODUCT_NAME.toLowerCase());
 	});
 
 	test("leaves every other origin alone", () => {

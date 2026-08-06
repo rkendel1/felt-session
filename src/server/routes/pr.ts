@@ -271,9 +271,9 @@ export async function handlePrRoutes(
 		const repoId =
 			url.searchParams.get("repo") || session.repo || defaultRepo().id;
 		const fallback = cachedPrDetailsForSession(session, repoId, target.branch);
-		// The branch this chat stacked on, for the panel's "link this stack"
-		// action. Only for the chat's OWN branch — an attached or linked PR is
-		// not what this chat was stacked on top of.
+		// The branch this session stacked on, for the panel's "link this stack"
+		// action. Only for the session's OWN branch — an attached or linked PR is
+		// not what this session was stacked on top of.
 		const stackBase =
 			session.stackedOn?.branch && target.branch === session.branch
 				? session.stackedOn.branch
@@ -461,7 +461,7 @@ export async function handlePrRoutes(
 		});
 	}
 
-	// Session-less PR preview (sidebar PR rows with no chat yet): PR details
+	// Session-less PR preview (sidebar PR rows with no session yet): PR details
 	// and diff straight from repo+branch — same pr-info helpers as the
 	// session routes, minus the session lookup.
 	if (path === "/api/pr-preview" && req.method === "GET") {
@@ -752,7 +752,7 @@ export async function handlePrRoutes(
 		}
 	}
 
-	// Register this chat's PR and the one it was stacked on as a GitHub stack.
+	// Register this session's PR and the one it was stacked on as a GitHub stack.
 	// The agent is told to do this itself (buildStackNote), but it skips or
 	// fails often enough — and the pairing is knowable server-side — that the
 	// PR panel offers it as a button.
@@ -771,19 +771,19 @@ export async function handlePrRoutes(
 		const stackedOn = session.stackedOn;
 		if (!stackedOn?.branch)
 			return Response.json(
-				{ error: "This chat isn't stacked on another branch" },
+				{ error: "This session isn't stacked on another branch" },
 				{ status: 400 },
 			);
 		if (!session.branch || !session.worktreeDir)
 			return Response.json(
-				{ error: "This chat has no branch to stack" },
+				{ error: "This session has no branch to stack" },
 				{ status: 400 },
 			);
 		// `gh stack link` reads its remote from the working directory and has no
 		// --repo flag, so it must run inside the session's own worktree.
 		if (!existsSync(session.worktreeDir))
 			return Response.json(
-				{ error: "This chat's worktree is gone — nothing to link from" },
+				{ error: "This session's worktree is gone — nothing to link from" },
 				{ status: 400 },
 			);
 		const ghRepo = getRepo(stackedOn.repo || session.repo).ghRepo;
@@ -801,7 +801,7 @@ export async function handlePrRoutes(
 				);
 			if (!own)
 				return Response.json(
-					{ error: `No PR on \`${session.branch}\` yet — open this chat's PR first` },
+					{ error: `No PR on \`${session.branch}\` yet — open this session's PR first` },
 					{ status: 400 },
 				);
 			const result = await linkPrStack(
@@ -897,7 +897,7 @@ export async function handlePrRoutes(
 			);
 
 		// Auto-fix is code-writing work, not a review pass to post on the PR —
-		// so it opens a live chat right in this workspace (shares the worktree +
+		// so it opens a live session right in this workspace (shares the worktree +
 		// branch) and fixes everything there, where you can watch and steer it,
 		// instead of firing a headless GitHub-labeled run. The other actions
 		// (review / simplify / adversarial) stay headless and post on the PR.
@@ -919,13 +919,13 @@ export async function handlePrRoutes(
 				user: requestUser(ctx, body?.user) || "Someone",
 			});
 			// Hand back the session itself, not just its id: createSession awaits
-			// the file write, so the UI can drop the fresh chat straight into its
+			// the file write, so the UI can drop the fresh session straight into its
 			// list and open the real viewer instead of sitting on a "Starting a
-			// new chat…" placeholder until the next sessions poll catches up.
+			// new session…" placeholder until the next sessions poll catches up.
 			return Response.json({
 				ok: true,
 				bksId: id,
-				openChat: true,
+				openSession: true,
 				session: findSession(id) ?? null,
 			});
 		}

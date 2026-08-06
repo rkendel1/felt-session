@@ -16,7 +16,7 @@ interface Props {
 	threadId: string;
 	/** Navigate into a session (the triage button resolves to one over HTTP). */
 	onOpenSession: (id: string) => void;
-	/** Hide the "Triage this ticket" affordance (e.g. a triage chat already exists). */
+	/** Hide the "Triage this ticket" affordance (e.g. a triage session already exists). */
 	hideTriage?: boolean;
 	className?: string;
 }

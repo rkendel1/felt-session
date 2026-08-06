@@ -3,8 +3,8 @@
  * yc-software/qm's keychain (MIT) and built on our human-asks transport.
  *
  * Today a credential is either instance-wide (~/.opensession.env, mcp-config
- * `env`) or absent. There is no way for a session to say "I need Michiel's
- * Vercel token for this one task" and for Michiel to say "fine, once". This
+ * `env`) or absent. There is no way for a session to say "I need this teammate's
+ * Vercel token for this one task" and for its owner to say "fine, once". This
  * module adds exactly that:
  *
  *   credential — owned by a PERSON (identity roster name). The secret lives

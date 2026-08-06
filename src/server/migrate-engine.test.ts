@@ -2,12 +2,12 @@ import { describe, expect, test, beforeAll, afterAll } from "bun:test";
 import { mkdtempSync, rmSync, readFileSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { __setChatsDirForTest } from "./paths";
+import { __setSessionsDirForTest } from "./paths";
 
 const scratch = mkdtempSync(join(tmpdir(), "migrate-engine-test-"));
-const prevDir = __setChatsDirForTest(scratch);
+const prevDir = __setSessionsDirForTest(scratch);
 
-// Import AFTER repointing the chats dir isn't required (the module reads the
+// Import AFTER repointing the sessions dir isn't required (the module reads the
 // live binding per call), but cache-bust anyway for isolation.
 const { migrateSessionEngine, isAutomationOwnedSession, sessionHasJournaledRun } =
   await import(`./migrate-engine.ts?test=${crypto.randomUUID()}`);
@@ -20,7 +20,7 @@ function writeSession(id: string, extra: Record<string, unknown> = {}) {
       claudeSessionId: "11111111-2222-7000-8000-000000000000",
       branch: "",
       worktreeDir: "/tmp",
-      createdBy: "Michael",
+      createdBy: "Alex",
       createdAt: "2026-07-08T00:00:00.000Z",
       lastActivity: "2026-07-08T00:00:00.000Z",
       model: "claude-haiku-4-5",
@@ -43,7 +43,7 @@ beforeAll(() => {
 });
 
 afterAll(() => {
-  __setChatsDirForTest(prevDir);
+  __setSessionsDirForTest(prevDir);
   rmSync(scratch, { recursive: true, force: true });
 });
 
@@ -89,7 +89,7 @@ describe("migrateSessionEngine", () => {
       if (!res.ok) expect(res.error).toContain("automation-owned");
     }
     expect(isAutomationOwnedSession({ automation: "x", createdBy: "y" })).toBe(true);
-    expect(isAutomationOwnedSession({ createdBy: "Michael" })).toBe(false);
+    expect(isAutomationOwnedSession({ createdBy: "Alex" })).toBe(false);
   });
 
   test("rejects sessions with an in-flight journaled run", () => {

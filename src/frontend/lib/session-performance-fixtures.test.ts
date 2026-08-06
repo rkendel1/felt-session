@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { makeChatFixture, makeStreamDeltas } from "./chat-performance-fixtures";
+import { makeSessionFixture, makeStreamDeltas } from "./session-performance-fixtures";
 
-describe("chat performance fixtures", () => {
+describe("session performance fixtures", () => {
 	for (const size of [200, 2_000, 10_000] as const) {
 		test(`builds a stable ${size}-entry fixture`, () => {
-			const entries = makeChatFixture(size);
+			const entries = makeSessionFixture(size);
 			expect(entries).toHaveLength(size);
 			expect(entries[0].id).toBe("fixture-00000");
 			expect(entries.at(-1)?.id).toBe(

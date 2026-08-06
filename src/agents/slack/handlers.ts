@@ -686,7 +686,7 @@ export async function processMessage(
   if (createdSession) pinSlackSession(`slack-${sessionKey}`, msg.userId);
 
   // Auto-name the session from its opening prompt, exactly like a UI-created
-  // chat. Without this a Slack session wears its session key as a title
+  // session. Without this a Slack session wears its session key as a title
   // (scanSlackSessions falls back to `branch`, which for a thread/DM session is
   // the raw <channel>-<threadTs>), because the two other ensureGeneratedTitle
   // callers are UI-only: run-session.ts gates on source === "opensession" and
@@ -1180,9 +1180,9 @@ export async function handleMessageEvent(event: any): Promise<void> {
 
   if (!text) return;
 
-  // Human-in-the-loop: is this a teammate replying to a question Michael DM'd
+  // Human-in-the-loop: is this a teammate replying to a question the bot DM'd
   // them on behalf of a session? If so, route it back into that session and stop
-  // — do NOT treat it as a new request to Michael. This is the one path that
+  // — do NOT treat it as a new request to the bot. This is the one path that
   // deliberately accepts a message from someone other than the trusted user
   // (matchReply only matches the exact person asked, in that ask's DM). Runs
   // before the allow-list gate below for exactly that reason; it's tightly
@@ -1214,7 +1214,7 @@ export async function handleMessageEvent(event: any): Promise<void> {
   // the daily recap) drives that session, answered back in the same thread —
   // same rule as channel threads. Before the allow-list gate for the same
   // reason as the human-ask path above: the DM'd person must be able to follow
-  // up on a message Michael sent them, and the scope is just as tight (only
+  // up on a message the bot sent them, and the scope is just as tight (only
   // threads whose anchor message a session posted, only in that person's DM).
   if (thread_ts) {
     const threadSessionId = sessionForThread(channel, thread_ts);

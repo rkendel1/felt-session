@@ -32,6 +32,8 @@ targets:
         # "Take a photo" in the composer's + menu. The photo library needs no
         # string: PhotosPicker runs out of process.
         INFOPLIST_KEY_NSCameraUsageDescription: Attach a photo you take to a message.
+        # Desk voice mode: live mic capture for the Realtime voice call.
+        INFOPLIST_KEY_NSMicrophoneUsageDescription: Talk to your Desk — live voice conversations with your workspace.
         PRODUCT_BUNDLE_IDENTIFIER: dev.tella.os1
         DEVELOPMENT_TEAM: 6GUXT43C8B
         CODE_SIGN_STYLE: Automatic
@@ -65,12 +67,16 @@ targets:
         com.apple.security.network.client: true
         # Image attachments picked via the open panel (fileImporter).
         com.apple.security.files.user-selected.read-only: true
+        # Desk voice mode: live mic capture for the Realtime voice call.
+        com.apple.security.device.audio-input: true
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
         INFOPLIST_KEY_OS1DefaultServerURL: http://127.0.0.1:3850
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.developer-tools
+        # Desk voice mode: live mic capture for the Realtime voice call.
+        INFOPLIST_KEY_NSMicrophoneUsageDescription: Talk to your Desk — live voice conversations with your workspace.
         PRODUCT_NAME: OS1
         # Same id as the iOS target: one App Store Connect record (universal
         # purchase) hosts both platforms. The Electron shell (os1-mac) moved

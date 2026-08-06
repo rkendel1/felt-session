@@ -15,6 +15,7 @@
 import { chmodSync, existsSync, mkdirSync } from "fs";
 import { join } from "path";
 import { INTEGRATIONS } from "../../src/server/integrations/registry";
+import { configPath as engineConfigPath, setBridgeEnabled } from "../../src/server/opencode-config";
 import { backup, tailnetIp } from "./config-edit";
 import { CONFIG_PATH, ENV_PATH, HOME, OPENSESSION_HOME, REPO_ROOT, STAGED_UNIT_PATH } from "./paths";
 import { installRecipe, listRecipes } from "./recipes";
@@ -37,6 +38,8 @@ type Answers = {
   repoId: string;
   repoPath: string;
   repoBranch: string;
+  /** "owner/name", detected from the checkout's origin. */
+  repoGhRepo?: string;
   worktreesDir: string;
   enabled: string[];
 };
@@ -74,7 +77,10 @@ function collect(): Answers {
     repoPath === REPO_ROOT ? "opensession" : repoPath.split("/").pop() || "app",
   );
   const repoBranch = ask("Default branch", "main");
-  const worktreesDir = ask("Worktrees directory", join(HOME, "worktrees"));
+  // Same default the server falls back to when `paths.worktreesDir` is unset
+  // (config.ts) and the one the docs quote — offering ~/worktrees here meant a
+  // wizard-written config silently disagreed with both.
+  const worktreesDir = ask("Worktrees directory", join(OPENSESSION_HOME, "worktrees"));
 
   heading("Integrations");
   info(
@@ -100,9 +106,32 @@ function collect(): Answers {
     repoId,
     repoPath,
     repoBranch,
+    repoGhRepo: detectGhRepo(repoPath),
     worktreesDir,
     enabled,
   };
+}
+
+/**
+ * "owner/name" from the checkout's origin remote. Without it a repo has no
+ * `gh` target, so every PR feature is silently off — which is what the wizard
+ * used to produce for the very first repo an operator registers (`repos add`
+ * has always detected it).
+ */
+function detectGhRepo(dir: string): string | undefined {
+  try {
+    const { stdout, exitCode } = Bun.spawnSync(["git", "-C", dir, "remote", "get-url", "origin"], {
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    if (exitCode !== 0) return undefined;
+    return stdout
+      .toString()
+      .trim()
+      .match(/github\.com[:/]([^/]+\/[^/\s]+?)(?:\.git)?$/)?.[1];
+  } catch {
+    return undefined;
+  }
 }
 
 function buildConfig(a: Answers): Record<string, unknown> {
@@ -127,6 +156,7 @@ function buildConfig(a: Answers): Record<string, unknown> {
         repo: a.repoPath,
         wtPrefix: a.repoId,
         defaultBranch: a.repoBranch,
+        ...(a.repoGhRepo ? { ghRepo: a.repoGhRepo } : {}),
         default: true,
       },
     },
@@ -157,8 +187,8 @@ function buildEnv(a: Answers): string {
     `OPENSESSION_WORKTREES_DIR=${a.worktreesDir}`,
     "",
     "# --- integrations ---",
-    "# Flags default ON in code and only the literal string `false` disables them,",
-    "# so every integration is disabled explicitly here. Enable one only once its",
+    "# Flags default OFF in code and only the literal string `true` enables them,",
+    "# so every integration is written explicitly here. Enable one only once its",
     "# credentials are filled in below.",
   ];
 
@@ -219,6 +249,16 @@ export async function onboard(opts: OnboardOptions = {}): Promise<number> {
     await Bun.write(path, contents);
     chmodSync(path, 0o600);
     wrote(path, backedUp ? `(backed up to ${backedUp})` : undefined);
+  }
+
+  // Engine on. This flag gates the Anthropic bridge and whether third-party
+  // provider models reach the picker, and nothing used to write it: a fresh
+  // install booted "healthy" and then failed its first turn pointing at a file
+  // no code path created. Only seeded when absent — an operator who turned the
+  // engine off deliberately keeps that choice through a re-run.
+  if (!existsSync(engineConfigPath())) {
+    setBridgeEnabled(true);
+    wrote(engineConfigPath(), "(engine enabled)");
   }
 
   // Offered after the config exists, since installing one appends to it.
@@ -289,10 +329,16 @@ export async function onboard(opts: OnboardOptions = {}): Promise<number> {
   info(`1. ${bold("opensession start")}      start the server`);
   info(`2. ${bold("opensession doctor")}     check everything is wired up`);
   info(`   ${dim(`then open ${answers.publicBaseUrl}`)}`);
-  info(`3. ${bold("opencode auth login")}    give the engine model capacity`);
-  info(`4. ${bold("opensession team add")}   put yourself on the roster (attribution, sign-in)`);
+  // The engine is the only step that can't be skipped: without model capacity
+  // every session fails its first turn. Name the subscription path first —
+  // it's what the default model uses — with the API-key route as the alternative.
+  info(`3. ${bold("add model capacity")}     Settings → Accounts: paste a`);
+  info(`   ${dim("`claude setup-token` token, or sign in to ChatGPT by device code.")}`);
+  info(`   ${dim("Using API keys instead? `opencode auth login`, or Settings → Model providers.")}`);
+  info(`4. ${bold("create a session")}       a completed turn is the real proof`);
+  info(`5. ${bold("opensession team add")}   put yourself on the roster (attribution, sign-in)`);
   if (answers.enabled.length) {
-    info(`5. ${dim(`add credentials for ${answers.enabled.join(", ")} in ${ENV_PATH}`)}`);
+    info(`6. ${dim(`add credentials for ${answers.enabled.join(", ")} in ${ENV_PATH}`)}`);
   }
 
   console.log(

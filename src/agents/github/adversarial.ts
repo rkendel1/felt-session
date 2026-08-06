@@ -1,7 +1,7 @@
 /**
- * Behavior: the `os-adversarial` label (legacy `michael-adversarial`). Runs tella-fusion's adversarial-code-review
+ * Behavior: the `os-adversarial` label (legacy `michael-adversarial`). Runs the repo's adversarial-code-review
  * skill (two independent hostile review passes, adjudicated) in code mode, with
- * Michael responsible for implementing the accepted findings, then pushes any
+ * the agent responsible for implementing the accepted findings, then pushes any
  * resulting changes to the PR branch and posts a summary. One-shot.
  */
 import { personaName } from "../../server/config";

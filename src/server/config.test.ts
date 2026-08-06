@@ -1,5 +1,5 @@
 import { describe, test, expect, afterEach } from "bun:test";
-import { mkdtempSync, writeFileSync, rmSync } from "fs";
+import { mkdtempSync, writeFileSync, rmSync, readFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import {
@@ -14,6 +14,7 @@ import {
   personaName,
   productName,
   productMark,
+  updateIdentityConfig,
 } from "./config";
 
 // Each case writes its config to a fresh path (the loader caches by
@@ -252,5 +253,40 @@ describe("config loader", () => {
       { name: "Ada Lovelace", email: "ada@acme.dev", github: "ada", slackId: "U111", aliases: ["ada"] },
     ]);
     expect(identity.slackNames).toEqual({ U222: "Bot" });
+  });
+
+  test("updateIdentityConfig: writes names, preserves unknown keys, empty resets", () => {
+    withConfig(
+      JSON.stringify({
+        server: { port: 4000 },
+        persona: { name: "Old", company: "Acme" },
+        futureSection: { keep: true },
+      }),
+    );
+    updateIdentityConfig({ personaName: " Ava ", productName: "OS¹" });
+    expect(personaName()).toBe("Ava");
+    expect(productName()).toBe("OS¹");
+    const raw = JSON.parse(readFileSync(configPath(), "utf-8"));
+    // Untouched keys — modeled and unmodeled alike — survive the write.
+    expect(raw.server).toEqual({ port: 4000 });
+    expect(raw.persona.company).toBe("Acme");
+    expect(raw.futureSection).toEqual({ keep: true });
+
+    // Empty string deletes the key; an emptied section disappears entirely.
+    updateIdentityConfig({ personaName: "", productName: "" });
+    expect(personaName()).toBe("Assistant");
+    expect(productName()).toBe("Open Session");
+    expect(JSON.parse(readFileSync(configPath(), "utf-8")).branding).toBeUndefined();
+  });
+
+  test("updateIdentityConfig: creates a missing file, refuses a corrupt one", () => {
+    withConfig(null);
+    updateIdentityConfig({ productName: "Fresh" });
+    expect(productName()).toBe("Fresh");
+
+    withConfig("{ not json");
+    expect(() => updateIdentityConfig({ personaName: "X" })).toThrow();
+    // The broken hand-edited file is left untouched.
+    expect(readFileSync(configPath(), "utf-8")).toBe("{ not json");
   });
 });

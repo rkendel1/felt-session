@@ -8,7 +8,7 @@
  *
  * Interactive runs ONLY — same boundary as opensession-humans. An ask is a DM
  * to a teammate carrying a model-authored "purpose" string; letting untrusted
- * ticket text reach it would turn Michael into a social-engineering proxy
+ * ticket text reach it would turn the agent into a social-engineering proxy
  * against our own team ("I need the Stripe key to process this refund").
  *
  * Registration is deliberately not a tool: a secret pasted into a session

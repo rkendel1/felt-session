@@ -160,6 +160,19 @@ final class SessionViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.displayItems.map(\.id), ["e1", "e2"])
     }
 
+    /// A session opened as a new tab in a workspace is created empty: it has a
+    /// real server row and no run, so it opens on its (empty) conversation
+    /// rather than the loading spinner. An id-only stub looks the same to
+    /// `neverRan` but says nothing about the session, so it keeps waiting.
+    func testServerRowThatNeverRanSkipsTheLoadingState() {
+        let created = "2026-08-06T10:00:00.000Z"
+        let empty = SessionViewModel(
+            session: Session(id: "bks-new", createdAt: created, lastActivity: created)
+        )
+        XCTAssertFalse(empty.isLoadingConversation)
+        XCTAssertTrue(makeViewModel().isLoadingConversation)
+    }
+
     func testEventsForOtherSessionsAreIgnored() {
         let viewModel = makeViewModel()
         viewModel.handle(.transcriptInit(sessionId: "bks-other", entries: [entry("x", "user")], cursor: .empty))
@@ -390,15 +403,24 @@ final class SessionViewModelTests: XCTestCase {
     }
 }
 
-/// `sendDraft` composer semantics: an idle send echoes an optimistic bubble
-/// into the transcript; a send during a run is queued server-side (busyMode
-/// "queue") and must surface as a queue chip, never a thread bubble — the
-/// stranded out-of-order bubble is the bug these pin down.
+/// `sendDraft` composer semantics. Sending is a two-step now: the draft goes
+/// into the outbox (on disk, immediately) and the transcript bubble or queue
+/// chip appears when the SERVER acknowledges it — which is also what says
+/// where it landed. These pin down both halves: that nothing is lost when the
+/// server can't be reached, and that an acknowledged message is shown exactly
+/// once, in the right place.
 @MainActor
 final class SendDraftTests: XCTestCase {
     private var viewModel: SessionViewModel!
     private var socket: MockSocket!
+    private var outbox: Outbox!
+    private var outboxDirectory: URL!
     private var savedBusySend: String?
+
+    /// Stub for the fake server's answer. nil = behave like the real one:
+    /// queue a send that arrives mid-run, start a turn when idle.
+    private var stubbedOutcome: OS1API.PromptDelivery?
+    private var deliveries: [(item: Outbox.Item, images: [String])] = []
 
     override func setUp() async throws {
         // `sendDraft` reads the busy-send mode straight from UserDefaults, and
@@ -410,14 +432,31 @@ final class SendDraftTests: XCTestCase {
         savedBusySend = UserDefaults.standard.string(forKey: "os1.composer.busySend")
         UserDefaults.standard.set("queue", forKey: "os1.composer.busySend")
         socket = MockSocket()
+        // Its own scratch store: the real one is the person's undelivered mail.
+        outboxDirectory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("os1-outbox-tests-\(UUID().uuidString)", isDirectory: true)
+        outbox = Outbox(directory: outboxDirectory, monitorNetwork: false)
+        outbox.transport = { [weak self] item, images in
+            guard let self else { return .unavailable("test torn down") }
+            self.deliveries.append((item, images))
+            if let stubbedOutcome = self.stubbedOutcome { return stubbedOutcome }
+            return .delivered(
+                status: self.viewModel.isRunning ? "queued" : "started",
+                message: ""
+            )
+        }
         let mock = socket!
         viewModel = SessionViewModel(
-            session: Session(id: "bks-1"), socketFactory: { mock }
+            session: Session(id: "bks-1"), socketFactory: { mock }, outbox: outbox
         )
         viewModel.start()
     }
 
     override func tearDown() async throws {
+        viewModel?.stop()
+        if let outboxDirectory {
+            try? FileManager.default.removeItem(at: outboxDirectory)
+        }
         if let savedBusySend {
             UserDefaults.standard.set(savedBusySend, forKey: "os1.composer.busySend")
         } else {
@@ -433,11 +472,27 @@ final class SendDraftTests: XCTestCase {
         viewModel.handle(.sessionStatus(sessionId: "bks-1", isRunning: true))
     }
 
+    /// Type it, send it, and let the delivery round trip finish.
+    private func send(_ text: String) async {
+        viewModel.draft = text
+        viewModel.sendDraft()
+        await outbox.flushNow()
+    }
+
+    /// Signal is back: the app clears the backoff and retries (what
+    /// `appDidBecomeActive` and the socket handshake do for real).
+    private func comeBackOnline() async {
+        stubbedOutcome = nil
+        outbox.clearBackoff()
+        await outbox.flushNow()
+    }
+
+    private var unsent: [Outbox.Item] { outbox.items(for: "bks-1") }
+
     // MARK: - Idle sends
 
-    func testIdleSendEchoesOptimisticBubble() {
-        viewModel.draft = "hi there"
-        viewModel.sendDraft()
+    func testIdleSendEchoesOptimisticBubble() async {
+        await send("hi there")
         XCTAssertEqual(viewModel.entries.count, 1)
         XCTAssertEqual(viewModel.entries[0].text, "hi there")
         XCTAssertTrue(viewModel.entries[0].isUser)
@@ -445,41 +500,137 @@ final class SendDraftTests: XCTestCase {
         XCTAssertTrue(viewModel.queuedItems.isEmpty, "idle sends must not fabricate a queue chip")
         XCTAssertEqual(viewModel.queuedCount, 0)
         XCTAssertEqual(viewModel.draft, "")
-        XCTAssertEqual(socket.prompts.count, 1)
-        XCTAssertEqual(socket.prompts[0].content, "hi there")
+        XCTAssertEqual(deliveries.map(\.item.content), ["hi there"])
+        XCTAssertTrue(unsent.isEmpty, "a delivered message must leave the outbox")
     }
 
-    func testIdleEchoReplacedByServerCopyWithoutDuplication() {
-        viewModel.draft = "hi"
-        viewModel.sendDraft()
+    func testIdleEchoReplacedByServerCopyWithoutDuplication() async {
+        await send("hi")
         viewModel.handle(.transcriptAppend(sessionId: "bks-1", entries: [
             entry("u1", "user", text: "hi")
         ]))
         XCTAssertEqual(viewModel.entries.map(\.id), ["u1"], "optimistic bubble must be replaced, not doubled")
     }
 
-    func testWhitespaceOnlyDraftIsNotSent() {
-        viewModel.draft = "   \n  "
-        viewModel.sendDraft()
-        XCTAssertTrue(socket.prompts.isEmpty)
+    func testWhitespaceOnlyDraftIsNotSent() async {
+        await send("   \n  ")
+        XCTAssertTrue(deliveries.isEmpty)
+        XCTAssertTrue(unsent.isEmpty)
         XCTAssertTrue(viewModel.entries.isEmpty)
         XCTAssertTrue(viewModel.queuedItems.isEmpty)
     }
 
-    func testSendWithoutSocketKeepsDraft() {
-        let offline = SessionViewModel(session: Session(id: "bks-1"))
-        offline.draft = "hi"
-        offline.sendDraft()
-        XCTAssertEqual(offline.draft, "hi", "an unsent draft must not be discarded")
-        XCTAssertTrue(offline.entries.isEmpty)
+    // MARK: - Offline sends (the message that used to disappear)
+
+    /// The reported bug: sending with no connection cleared the composer,
+    /// showed a bubble, and delivered nothing. Now the message is held —
+    /// visibly — and goes out when the server is reachable again.
+    func testOfflineSendIsHeldThenDeliveredWhenBackOnline() async {
+        stubbedOutcome = .unavailable("offline")
+        await send("written in a tunnel")
+
+        XCTAssertEqual(viewModel.draft, "", "the composer accepted the message")
+        XCTAssertEqual(unsent.map(\.content), ["written in a tunnel"])
+        XCTAssertFalse(unsent[0].failed, "no connection is not a refusal")
+        XCTAssertTrue(
+            viewModel.entries.isEmpty,
+            "nothing enters the transcript until the server has it"
+        )
+
+        await comeBackOnline()
+        XCTAssertTrue(unsent.isEmpty, "the held message went out")
+        XCTAssertEqual(viewModel.entries.map(\.text), ["written in a tunnel"])
+        XCTAssertEqual(deliveries.count, 2, "one failed attempt, then the delivery")
+    }
+
+    /// It has to survive the app dying, not just the socket: the queue is on
+    /// disk, and a fresh Outbox over the same directory still owes the message.
+    func testHeldMessageSurvivesRelaunch() async {
+        stubbedOutcome = .unavailable("offline")
+        await send("still owed")
+
+        let relaunched = Outbox(directory: outboxDirectory, monitorNetwork: false)
+        XCTAssertEqual(relaunched.items(for: "bks-1").map(\.content), ["still owed"])
+    }
+
+    /// Order is meaning: message 2 must never overtake message 1, so a
+    /// session with a stuck head waits as a whole.
+    func testHeldMessagesKeepTheirOrder() async {
+        stubbedOutcome = .unavailable("offline")
+        await send("first")
+        await send("second")
+        XCTAssertEqual(unsent.map(\.content), ["first", "second"])
+
+        await comeBackOnline()
+        XCTAssertTrue(unsent.isEmpty)
+        XCTAssertEqual(viewModel.entries.map(\.text), ["first", "second"])
+    }
+
+    /// Retrying is only safe because the server can recognise a repeat: every
+    /// attempt carries the same client id.
+    func testRetriesReuseTheSameClientId() async {
+        stubbedOutcome = .unavailable("offline")
+        await send("say it once")
+        await comeBackOnline()
+        XCTAssertEqual(deliveries.count, 2)
+        XCTAssertEqual(
+            deliveries[0].item.id, deliveries[1].item.id,
+            "a retry must be recognisable as the same message, not a new one"
+        )
+    }
+
+    /// A refusal is not a connection problem: it stops, says so, and waits for
+    /// the person rather than retrying forever or silently vanishing.
+    func testRefusedMessageIsKeptAndMarkedFailed() async {
+        stubbedOutcome = .rejected("Session has no engine to resume yet.")
+        await send("nope")
+        XCTAssertEqual(unsent.map(\.content), ["nope"])
+        XCTAssertTrue(unsent[0].failed)
+        XCTAssertEqual(unsent[0].lastError, "Session has no engine to resume yet.")
+        XCTAssertTrue(viewModel.entries.isEmpty)
+
+        // Retry once the reason is gone.
+        stubbedOutcome = nil
+        outbox.retry(id: unsent[0].id)
+        await outbox.flushNow()
+        XCTAssertTrue(unsent.isEmpty)
+        XCTAssertEqual(viewModel.entries.map(\.text), ["nope"])
+    }
+
+    /// Discarding is the one way a message leaves unsent — and it has to be
+    /// the person's choice.
+    func testDiscardingAnUnsentMessageRemovesIt() async {
+        stubbedOutcome = .unavailable("offline")
+        await send("never mind")
+        outbox.delete(id: unsent[0].id)
+        XCTAssertTrue(unsent.isEmpty)
+
+        await comeBackOnline()
+        XCTAssertTrue(deliveries.map(\.item.content).filter { $0 == "never mind" }.count == 1,
+                      "a discarded message must not be delivered later")
+    }
+
+    /// One stuck conversation must not hold up the others.
+    func testAnotherSessionsBacklogDoesNotBlockThisOne() async {
+        stubbedOutcome = .unavailable("offline")
+        outbox.enqueue(
+            sessionId: "bks-other", content: "stuck elsewhere",
+            busyMode: "queue", user: "jaap"
+        )
+        await outbox.flushNow()
+        stubbedOutcome = nil
+        outbox.clearBackoff()
+        // Only this session's send is expected to land; the other one is
+        // simply not blocked BY it.
+        await send("mine")
+        XCTAssertEqual(viewModel.entries.map(\.text), ["mine"])
     }
 
     // MARK: - Busy sends (the queue-chip path)
 
-    func testBusySendShowsQueueChipNotTranscriptBubble() {
+    func testBusySendShowsQueueChipNotTranscriptBubble() async {
         markRunning()
-        viewModel.draft = "do this next"
-        viewModel.sendDraft()
+        await send("do this next")
         XCTAssertTrue(viewModel.entries.isEmpty, "a queued send must not enter the transcript")
         XCTAssertTrue(viewModel.displayItems.isEmpty)
         XCTAssertEqual(viewModel.queuedItems.count, 1)
@@ -488,25 +639,46 @@ final class SendDraftTests: XCTestCase {
         XCTAssertTrue(viewModel.queuedItems[0].id.hasPrefix("local-queued-"))
         XCTAssertEqual(viewModel.queuedCount, 1)
         // The frame still goes out — queueing is the server's job.
-        XCTAssertEqual(socket.prompts.count, 1)
-        XCTAssertEqual(socket.prompts[0].content, "do this next")
+        // The message still went out — queueing is the server's decision, and
+        // its answer is what put the chip there.
+        XCTAssertEqual(deliveries.map(\.item.content), ["do this next"])
+        XCTAssertEqual(deliveries[0].item.busyMode, "queue")
     }
 
-    func testTwoBusySendsStackTwoChips() {
+    func testTwoBusySendsStackTwoChips() async {
         markRunning()
-        viewModel.draft = "first"
-        viewModel.sendDraft()
-        viewModel.draft = "second"
-        viewModel.sendDraft()
+        await send("first")
+        await send("second")
         XCTAssertEqual(viewModel.queuedItems.map(\.content), ["first", "second"])
         XCTAssertEqual(viewModel.queuedCount, 2)
         XCTAssertTrue(viewModel.entries.isEmpty)
     }
 
-    func testServerQueueUpdateReplacesLocalChip() {
+    /// The socket usually beats the HTTP response: the server broadcasts the
+    /// new queue while the delivery answer is still travelling. The optimistic
+    /// chip must not double the entry that's already on screen.
+    func testQueueUpdateArrivingBeforeTheDeliveryAnswerShowsOneChip() async {
         markRunning()
-        viewModel.draft = "do this next"
-        viewModel.sendDraft()
+        outbox.transport = { [weak self] item, images in
+            guard let self else { return .unavailable("test torn down") }
+            self.deliveries.append((item, images))
+            let json = #"""
+            {"type":"queue_update","sessionId":"bks-1",
+             "queued":[{"id":"q1","content":"do this next","user":"ios"}],
+             "steered":[]}
+            """#
+            self.viewModel.handle(ServerEvent.parse(Data(json.utf8)))
+            return .delivered(status: "queued", message: "")
+        }
+        await send("do this next")
+        XCTAssertEqual(viewModel.queuedItems.map(\.id), ["q1"])
+        XCTAssertEqual(viewModel.queuedCount, 1)
+        XCTAssertTrue(viewModel.entries.isEmpty)
+    }
+
+    func testServerQueueUpdateReplacesLocalChip() async {
+        markRunning()
+        await send("do this next")
         let json = #"""
         {"type":"queue_update","sessionId":"bks-1",
          "queued":[{"id":"q1","content":"do this next","user":"ios"}],
@@ -517,10 +689,9 @@ final class SendDraftTests: XCTestCase {
         XCTAssertEqual(viewModel.queuedCount, 1)
     }
 
-    func testQueuedMessageEntersTranscriptOnlyOnDelivery() {
+    func testQueuedMessageEntersTranscriptOnlyOnDelivery() async {
         markRunning()
-        viewModel.draft = "do this next"
-        viewModel.sendDraft()
+        await send("do this next")
         // Run finishes, queue delivers: queue empties and the prompt lands as
         // a durable user entry — the thread shows it exactly once, in order.
         viewModel.handle(.sessionStatus(sessionId: "bks-1", isRunning: false))
@@ -540,10 +711,9 @@ final class SendDraftTests: XCTestCase {
     /// The race: the run ended in the gap, the server delivered the prompt
     /// straight to the engine, and no queue_update ever mentions it — the
     /// chip must retire when the durable user entry lands.
-    func testBusySendDeliveredImmediatelyRetiresChip() {
+    func testBusySendDeliveredImmediatelyRetiresChip() async {
         markRunning()
-        viewModel.draft = "do this next"
-        viewModel.sendDraft()
+        await send("do this next")
         viewModel.handle(.transcriptAppend(sessionId: "bks-1", entries: [
             entry("u1", "user", text: "do this next")
         ]))
@@ -552,10 +722,9 @@ final class SendDraftTests: XCTestCase {
         XCTAssertEqual(viewModel.entries.map(\.id), ["u1"])
     }
 
-    func testChipRetirementMatchesByContent() {
+    func testChipRetirementMatchesByContent() async {
         markRunning()
-        viewModel.draft = "mine"
-        viewModel.sendDraft()
+        await send("mine")
         // Someone else's prompt (web UI, another device) landing must not
         // retire our chip.
         viewModel.handle(.transcriptAppend(sessionId: "bks-1", entries: [
@@ -565,7 +734,7 @@ final class SendDraftTests: XCTestCase {
         XCTAssertEqual(viewModel.queuedCount, 1)
     }
 
-    func testServerChipsAreNeverRetiredByContentMatch() {
+    func testServerChipsAreNeverRetiredByContentMatch() async {
         // A server-issued queue item (real id) with the same text as a landing
         // user entry must stay — only local optimistic chips retire this way.
         let json = #"""
@@ -580,18 +749,30 @@ final class SendDraftTests: XCTestCase {
         XCTAssertEqual(viewModel.queuedItems.map(\.id), ["q1"])
     }
 
-    func testBusySendCarriesImagesOnTheWire() {
+    func testBusySendCarriesImagesOnTheWire() async {
         markRunning()
-        viewModel.draft = "with pic"
         viewModel.attachedImages = [AttachedImage(id: "img1", jpegData: Data([1, 2, 3]))]
-        viewModel.sendDraft()
+        await send("with pic")
         XCTAssertEqual(viewModel.queuedItems.map(\.content), ["with pic"])
         XCTAssertTrue(viewModel.attachedImages.isEmpty)
-        XCTAssertEqual(socket.prompts.count, 1)
-        XCTAssertEqual(socket.prompts[0].images?.count, 1)
+        XCTAssertEqual(deliveries.count, 1)
+        XCTAssertEqual(deliveries[0].images.count, 1)
     }
 
-    func testDeleteQueuedRemovesChipAndSendsFrame() {
+    /// Images have to survive the wait too — they're kept beside the queue on
+    /// disk, so an offline send with a screenshot still carries it later.
+    func testHeldMessageKeepsItsImages() async {
+        stubbedOutcome = .unavailable("offline")
+        viewModel.attachedImages = [AttachedImage(id: "img1", jpegData: Data([1, 2, 3]))]
+        await send("look at this")
+        XCTAssertEqual(unsent.count, 1)
+
+        await comeBackOnline()
+        XCTAssertEqual(deliveries.last?.images.count, 1)
+        XCTAssertEqual(viewModel.entries.last?.images?.count, 1)
+    }
+
+    func testDeleteQueuedRemovesChipAndSendsFrame() async {
         let json = #"""
         {"type":"queue_update","sessionId":"bks-1",
          "queued":[{"id":"q1","content":"next","user":"ios"}],
@@ -601,6 +782,81 @@ final class SendDraftTests: XCTestCase {
         viewModel.deleteQueued(viewModel.queuedItems[0])
         XCTAssertTrue(viewModel.queuedItems.isEmpty)
         XCTAssertEqual(socket.deletedQueueIds, ["q1"])
+    }
+
+    /// A dismissed steer receipt leaves the server queue without its message
+    /// ever landing in the transcript — the exact shape the delivering-hold
+    /// looks for. Without the optimistic removal it comes straight back as a
+    /// ghost "Delivering…" row.
+    func testDismissingSteerReceiptDoesNotResurrectItAsDelivering() {
+        let json = #"""
+        {"type":"queue_update","sessionId":"bks-1","queued":[],
+         "steered":[{"id":"s1","content":"while you're in there","user":"ios"}]}
+        """#
+        viewModel.handle(ServerEvent.parse(Data(json.utf8)))
+        viewModel.dismissSteered(viewModel.steeredItems[0])
+        XCTAssertTrue(viewModel.steeredItems.isEmpty)
+        XCTAssertEqual(socket.deletedQueueIds, ["s1"])
+
+        sendEmptyQueueUpdate()
+        XCTAssertTrue(viewModel.deliveringItems.isEmpty)
+    }
+
+    func testEditingQueuedMessageRewritesItInPlace() {
+        queueTwo()
+        viewModel.editQueued(viewModel.queuedItems[0], content: "  second thoughts  ")
+        XCTAssertEqual(socket.updatedQueued.map(\.id), ["q1"])
+        XCTAssertEqual(socket.updatedQueued.map(\.content), ["second thoughts"])
+        XCTAssertEqual(
+            viewModel.queuedItems.map(\.content), ["second thoughts", "then this"],
+            "an edit must keep the message where it was in the queue"
+        )
+    }
+
+    func testEditingQueuedMessageToNothingDiscardsIt() {
+        queueTwo()
+        viewModel.editQueued(viewModel.queuedItems[0], content: "   ")
+        XCTAssertTrue(socket.updatedQueued.isEmpty)
+        XCTAssertEqual(socket.deletedQueueIds, ["q1"])
+        XCTAssertEqual(viewModel.queuedItems.map(\.id), ["q2"])
+    }
+
+    /// A chip minted by the composer has an id the server has never seen, so
+    /// the id-addressed actions have to wait for the real queue_update.
+    func testLocalEchoChipIsNotEditableOrReorderable() async {
+        markRunning()
+        await send("do this next")
+        let chip = viewModel.queuedItems[0]
+        XCTAssertTrue(chip.isLocalEcho)
+        XCTAssertFalse(viewModel.canReorder(chip))
+        viewModel.editQueued(chip, content: "changed my mind")
+        XCTAssertTrue(socket.updatedQueued.isEmpty)
+        XCTAssertEqual(viewModel.queuedItems[0].content, "do this next")
+    }
+
+    func testMovingQueuedMessageReordersLocallyAndOnTheServer() {
+        queueTwo()
+        viewModel.moveQueued(viewModel.queuedItems[1], by: -1)
+        XCTAssertEqual(viewModel.queuedItems.map(\.id), ["q2", "q1"])
+        XCTAssertEqual(socket.reorders, [["q2", "q1"]])
+    }
+
+    func testMovingPastTheEndsOfTheQueueDoesNothing() {
+        queueTwo()
+        viewModel.moveQueued(viewModel.queuedItems[0], by: -1)
+        XCTAssertEqual(viewModel.queuedItems.map(\.id), ["q1", "q2"])
+        XCTAssertTrue(socket.reorders.isEmpty)
+    }
+
+    /// Two server-known messages waiting behind a run.
+    private func queueTwo() {
+        let json = #"""
+        {"type":"queue_update","sessionId":"bks-1",
+         "queued":[{"id":"q1","content":"first","user":"ios"},
+                   {"id":"q2","content":"then this","user":"ios"}],
+         "steered":[]}
+        """#
+        viewModel.handle(ServerEvent.parse(Data(json.utf8)))
     }
 
     // MARK: - Delivering hold state (the vanish-then-reappear bug)
@@ -616,10 +872,9 @@ final class SendDraftTests: XCTestCase {
     /// before the delivered prompt lands via the ~1s file watcher. The chip
     /// must hold as "delivering" across that gap — the message is never
     /// absent from the UI.
-    func testDrainedChipHoldsAsDeliveringUntilEchoLands() {
+    func testDrainedChipHoldsAsDeliveringUntilEchoLands() async {
         markRunning()
-        viewModel.draft = "do this next"
-        viewModel.sendDraft()
+        await send("do this next")
         // Server registers the queued item (replaces the local chip).
         let registered = #"""
         {"type":"queue_update","sessionId":"bks-1",
@@ -646,10 +901,9 @@ final class SendDraftTests: XCTestCase {
     /// Race: a queue_update computed before our prompt reached the server
     /// (run ended in the gap; the prompt went straight to the engine) must
     /// not wipe the local chip — it holds as delivering until the entry lands.
-    func testLocalChipSurvivesQueueUpdateThatOmitsIt() {
+    func testLocalChipSurvivesQueueUpdateThatOmitsIt() async {
         markRunning()
-        viewModel.draft = "do this next"
-        viewModel.sendDraft()
+        await send("do this next")
         sendEmptyQueueUpdate()
         XCTAssertEqual(viewModel.deliveringItems.map(\.content), ["do this next"])
         viewModel.handle(.transcriptAppend(sessionId: "bks-1", entries: [
@@ -663,12 +917,10 @@ final class SendDraftTests: XCTestCase {
     /// multi-message drain joins the batch into ONE user entry — containment
     /// must retire every chip the entry covers (mirrors the server's own
     /// steer-receipt reconciliation).
-    func testAttributedAndBatchedEchoRetiresDeliveringChips() {
+    func testAttributedAndBatchedEchoRetiresDeliveringChips() async {
         markRunning()
-        viewModel.draft = "first"
-        viewModel.sendDraft()
-        viewModel.draft = "second"
-        viewModel.sendDraft()
+        await send("first")
+        await send("second")
         sendEmptyQueueUpdate()
         XCTAssertEqual(viewModel.deliveringItems.map(\.content), ["first", "second"])
         viewModel.handle(.transcriptAppend(sessionId: "bks-1", entries: [
@@ -677,10 +929,9 @@ final class SendDraftTests: XCTestCase {
         XCTAssertTrue(viewModel.deliveringItems.isEmpty)
     }
 
-    func testDeliveringChipIgnoresUnrelatedUserEntry() {
+    func testDeliveringChipIgnoresUnrelatedUserEntry() async {
         markRunning()
-        viewModel.draft = "mine"
-        viewModel.sendDraft()
+        await send("mine")
         sendEmptyQueueUpdate()
         viewModel.handle(.transcriptAppend(sessionId: "bks-1", entries: [
             entry("u1", "user", text: "someone else's")
@@ -691,10 +942,9 @@ final class SendDraftTests: XCTestCase {
     /// A queue_update that re-lists a delivering chip's message (the prompt
     /// arrived after the drain frame was computed and got queued after all)
     /// moves it back to a live queue chip instead of duplicating it.
-    func testRequeuedMessageLeavesDeliveringState() {
+    func testRequeuedMessageLeavesDeliveringState() async {
         markRunning()
-        viewModel.draft = "do this next"
-        viewModel.sendDraft()
+        await send("do this next")
         sendEmptyQueueUpdate()
         XCTAssertEqual(viewModel.deliveringItems.count, 1)
         let requeued = #"""
@@ -710,10 +960,9 @@ final class SendDraftTests: XCTestCase {
     /// A resync's transcript_init is a full snapshot — no upsert runs on it,
     /// so a delivering chip whose message it already contains (attributed
     /// form here) must retire there instead of lingering.
-    func testResyncInitRetiresDeliveredChip() {
+    func testResyncInitRetiresDeliveredChip() async {
         markRunning()
-        viewModel.draft = "do this next"
-        viewModel.sendDraft()
+        await send("do this next")
         sendEmptyQueueUpdate()
         XCTAssertEqual(viewModel.deliveringItems.count, 1)
         viewModel.handle(.transcriptInit(sessionId: "bks-1", entries: [
@@ -726,10 +975,9 @@ final class SendDraftTests: XCTestCase {
     /// Ghost protection: a chip whose echo never comes (deleted from another
     /// device, server restart) drops once the grace window passes — but not
     /// a moment before.
-    func testDeliveringChipExpiresOnlyAfterGrace() {
+    func testDeliveringChipExpiresOnlyAfterGrace() async {
         markRunning()
-        viewModel.draft = "gone"
-        viewModel.sendDraft()
+        await send("gone")
         sendEmptyQueueUpdate()
         XCTAssertEqual(viewModel.deliveringItems.count, 1)
         viewModel.pruneExpiredDelivering(
@@ -746,14 +994,13 @@ final class SendDraftTests: XCTestCase {
     /// copy in history: the drain holds it as delivering until ITS echo
     /// lands. (The whole-history containment scan dropped it immediately and
     /// blinked the message out — the steering vanish-then-reappear.)
-    func testRepeatedSendHoldsAsDeliveringDespiteIdenticalOldMessage() {
+    func testRepeatedSendHoldsAsDeliveringDespiteIdenticalOldMessage() async {
         viewModel.handle(.transcriptInit(sessionId: "bks-1", entries: [
             entry("u1", "user", text: "continue"),
             entry("a1", "assistant", text: "done"),
         ], cursor: .empty))
         markRunning()
-        viewModel.draft = "continue"
-        viewModel.sendDraft()
+        await send("continue")
         sendEmptyQueueUpdate()
         XCTAssertEqual(
             viewModel.deliveringItems.map(\.content), ["continue"],
@@ -769,13 +1016,12 @@ final class SendDraftTests: XCTestCase {
     /// Same protection on the resync path: a snapshot that re-lists only
     /// entries we already hold must not retire a delivering chip — only a
     /// NEW entry (an id we didn't know) counts as its echo.
-    func testResyncInitKeepsDeliveringChipAgainstOldIdenticalMessage() {
+    func testResyncInitKeepsDeliveringChipAgainstOldIdenticalMessage() async {
         viewModel.handle(.transcriptInit(sessionId: "bks-1", entries: [
             entry("u1", "user", text: "continue")
         ], cursor: .empty))
         markRunning()
-        viewModel.draft = "continue"
-        viewModel.sendDraft()
+        await send("continue")
         sendEmptyQueueUpdate()
         XCTAssertEqual(viewModel.deliveringItems.count, 1)
         viewModel.handle(.transcriptInit(sessionId: "bks-1", entries: [
@@ -799,7 +1045,7 @@ final class SendDraftTests: XCTestCase {
     /// server still lists the chip as queued, the eventual drain drops the
     /// chip outright instead of resurrecting a delivered message as a
     /// "Delivering…" ghost.
-    func testDrainDropsChipWhoseEchoAlreadyLanded() {
+    func testDrainDropsChipWhoseEchoAlreadyLanded() async {
         markRunning()
         let registered = #"""
         {"type":"queue_update","sessionId":"bks-1",
@@ -818,7 +1064,7 @@ final class SendDraftTests: XCTestCase {
 
     /// The steer flow end-to-end: steered receipt → drain → attributed echo.
     /// The message must be visible at every step.
-    func testSteeredChipHoldsAcrossDrainUntilEchoLands() {
+    func testSteeredChipHoldsAcrossDrainUntilEchoLands() async {
         markRunning()
         let steered = #"""
         {"type":"queue_update","sessionId":"bks-1","queued":[],
@@ -839,9 +1085,8 @@ final class SendDraftTests: XCTestCase {
 
     /// A resync racing the ~1s persist of a just-delivered send must not wipe
     /// its optimistic bubble — the snapshot doesn't contain the message yet.
-    func testResyncInitKeepsUnlandedOptimisticBubble() {
-        viewModel.draft = "hi there"
-        viewModel.sendDraft()
+    func testResyncInitKeepsUnlandedOptimisticBubble() async {
+        await send("hi there")
         viewModel.handle(.transcriptInit(sessionId: "bks-1", entries: [
             entry("u0", "user", text: "earlier message")
         ], cursor: .empty))
@@ -856,9 +1101,8 @@ final class SendDraftTests: XCTestCase {
         XCTAssertEqual(viewModel.entries.map(\.id), ["u0", "u1"])
     }
 
-    func testResyncInitRetiresLandedOptimisticBubble() {
-        viewModel.draft = "hi there"
-        viewModel.sendDraft()
+    func testResyncInitRetiresLandedOptimisticBubble() async {
+        await send("hi there")
         viewModel.handle(.transcriptInit(sessionId: "bks-1", entries: [
             entry("u1", "user", text: "hi there")
         ], cursor: .empty))
@@ -873,9 +1117,8 @@ final class SendDraftTests: XCTestCase {
     /// converts to the server's queue chip — one representation, no thread
     /// copy for the next resync to wipe — and the message stays visible
     /// through drain and delivery.
-    func testStaleBusySendConvertsBubbleToChipWhenServerQueuesIt() {
-        viewModel.draft = "do this next"
-        viewModel.sendDraft()
+    func testStaleBusySendConvertsBubbleToChipWhenServerQueuesIt() async {
+        await send("do this next")
         XCTAssertEqual(viewModel.entries.map(\.text), ["do this next"])
         let registered = #"""
         {"type":"queue_update","sessionId":"bks-1",
@@ -921,6 +1164,8 @@ private final class MockSocket: SessionSocket {
     private(set) var prompts: [PromptCall] = []
     private(set) var steeredQueueIds: [String] = []
     private(set) var deletedQueueIds: [String] = []
+    private(set) var updatedQueued: [(id: String, content: String)] = []
+    private(set) var reorders: [[String]] = []
 
     func connect() { connectCount += 1 }
     func disconnect() { disconnectCount += 1 }
@@ -938,6 +1183,10 @@ private final class MockSocket: SessionSocket {
     }
     func steerQueued(sessionId: String, queueId: String) { steeredQueueIds.append(queueId) }
     func deleteQueued(sessionId: String, queueId: String) { deletedQueueIds.append(queueId) }
+    func updateQueued(sessionId: String, queueId: String, content: String) {
+        updatedQueued.append((id: queueId, content: content))
+    }
+    func reorderQueued(sessionId: String, order: [String]) { reorders.append(order) }
     func cancelWatchedRun() {}
     func answer(sessionId: String, questionId: String, answers: [String: String]?) {}
 }

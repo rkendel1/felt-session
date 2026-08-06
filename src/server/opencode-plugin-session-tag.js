@@ -22,7 +22,7 @@
  * of each run). Tagging a call with the child id made run-rpc fall back to
  * the shared token's most recent run — an UNRELATED session of the same
  * user: on 2026-07-24 a subagent's create_session calls parented review
- * sessions onto another workspace's chat and delivered their task
+ * sessions onto another workspace's session and delivered their task
  * notifications there. So resolve every session id to its root ancestor
  * (session.get → parentID walk, memoized) before tagging; on lookup failure
  * fall back to the raw id, which preserves the old behavior.

@@ -3,7 +3,7 @@
  * yc-software/qm (MIT), src/memory/bench.ts + the per-turn/consolidation
  * strategy prompts.
  *
- * Until now a change to how Michael remembers things could only be judged by
+ * Until now a change to how the agent remembers things could only be judged by
  * vibes: edit the tool description or the prompt guidance, watch the stores
  * for a week, argue. This module makes it a number. Canned conversations
  * (test/memory-bench/*.json) are replayed through each candidate strategy,

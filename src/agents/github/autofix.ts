@@ -4,7 +4,7 @@
  * polls CI, and re-fixes until green AND a fresh review of the pushed
  * code finds nothing blocking — bounded so it can never run away. The loop is
  * gated on that fresh review rather than the fixer's own self-report, so it can't
- * stop while Michael's review would still flag a P0/P1. Removes the label when it
+ * stop while the agent's review would still flag a P0/P1. Removes the label when it
  * finishes.
  */
 import { $ } from "bun";

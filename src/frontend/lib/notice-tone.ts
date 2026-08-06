@@ -25,6 +25,7 @@ const ERROR_PATTERNS: RegExp[] = [
 	/^turn stopped after \d+ minutes?\b/,
 	// A sandbox workspace that has no host checkout to fall back to.
 	/\bno host fallback\b/,
+	// Legacy frontend build wording, retained for older persisted notices.
 	/^frontend rebuild failed\b/,
 ];
 
@@ -33,6 +34,8 @@ const WARN_PATTERNS: RegExp[] = [
 	/^sandbox unavailable\b/,
 	/^couldn't\b/,
 	/^this session's worktree\b/,
+	// A recoverable background rebuild: clients keep using the prior bundle.
+	/^app update paused\b/,
 ];
 
 /** Leading glyph some notices already carry; the tone supplies its own. */

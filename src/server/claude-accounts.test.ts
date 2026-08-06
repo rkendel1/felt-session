@@ -22,7 +22,7 @@ writeFileSync(
     accounts: [
       mkAccount("fresh"),
       mkAccount("maxed"),
-      mkAccount("personal", "Michiel"),
+      mkAccount("personal", "Alex"),
       mkAccount("blind-personal", "Jaap"),
     ],
   })

@@ -1,4 +1,4 @@
-// The foregrounded non-chat tab in each workspace. This is a per-device
+// The foregrounded non-session tab in each workspace. This is a per-device
 // working preference, like tab order, so switching workspaces or reloading the
 // app returns each workspace to the surface that was last in front.
 const KEY = "opensession-active-view-tabs";
@@ -11,7 +11,7 @@ const VIEW_TABS = [
 	"staging",
 	"assets",
 	"preview",
-	// A sub-agent drill-in opened from a chat's transcript. Transient: its
+	// A sub-agent drill-in opened from a session's transcript. Transient: its
 	// breadcrumb stack only lives in memory, so this one is never persisted
 	// (saveActiveViewTab drops it) — a reload would restore an empty tab.
 	"subagent",

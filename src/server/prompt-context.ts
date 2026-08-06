@@ -15,7 +15,7 @@
  */
 export const CTX_OPEN = "<opensession:context>";
 export const CTX_CLOSE = "</opensession:context>";
-// Pre-rename fence pair. Old transcripts (and attached-chat inlines of them)
+// Pre-rename fence pair. Old transcripts (and attached-session inlines of them)
 // carry these forever: stripping and neutralization must keep handling both.
 const LEGACY_CTX_OPEN = "<backstage:context>";
 const LEGACY_CTX_CLOSE = "</backstage:context>";
@@ -23,7 +23,7 @@ const LEGACY_CTX_CLOSE = "</backstage:context>";
 /** Fence a block of injected context so it renders invisibly in the transcript. */
 export function wrapContext(body: string): string {
   // Neutralize any fence sentinels inside the body: a nested
-  // <opensession:context> marker in inlined content (e.g. an attached chat's
+  // <opensession:context> marker in inlined content (e.g. an attached session's
   // transcript that literally contains the string) would otherwise let that
   // content break out of the fence and inject unfenced instructions into the
   // agent — a prompt-injection vector. A sentinel inside a fenced block is

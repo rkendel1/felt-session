@@ -7,7 +7,7 @@
  *   are 10-20MB, so each day is parsed once into a compact rollup and disk-
  *   cached (keyed by source size — today's growing file recomputes, past days
  *   never do).
- * - The session store (~/.opensession-chats) for who created what: person,
+ * - The session store (~/.opensession-sessions) for who created what: person,
  *   automation, mode, branch, repo.
  * - `gh pr list` for PRs opened/merged in the range, attributed to Open Session
  *   by head-branch ∈ {branches of code-mode sessions} (review sessions are
@@ -17,7 +17,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { $ } from "bun";
 import { stateDir , isNativeSessionId} from "./paths";
-import { OPENSESSION_CHATS_DIR } from "./paths";
+import { OPENSESSION_SESSIONS_DIR } from "./paths";
 import { configuredRepos, defaultRepo, githubBotLogins } from "./config";
 import { ghRateLimited, isGhRateLimitMsg, noteGhRateLimited } from "./github-limit";
 import { readFeedback } from "../agents/github/feedback";
@@ -294,10 +294,10 @@ function loadSessionMeta(): Map<string, SessionMeta> {
 	if (sessionMetaCache && Date.now() - sessionMetaCache.at < 60_000) return sessionMetaCache.map;
 	const map = new Map<string, SessionMeta>();
 	try {
-		for (const file of readdirSync(OPENSESSION_CHATS_DIR)) {
+		for (const file of readdirSync(OPENSESSION_SESSIONS_DIR)) {
 			if (!isNativeSessionId(file) || !file.endsWith(".json")) continue;
 			try {
-				const s = JSON.parse(readFileSync(`${OPENSESSION_CHATS_DIR}/${file}`, "utf-8"));
+				const s = JSON.parse(readFileSync(`${OPENSESSION_SESSIONS_DIR}/${file}`, "utf-8"));
 				const id = String(s.id || file.slice(0, -5));
 				const createdBy = String(s.createdBy || "");
 				const autoMatch = createdBy.match(/^(.*) \(automation\)$/);

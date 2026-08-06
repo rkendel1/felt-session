@@ -10,7 +10,7 @@
  * ask_resolved for human-in-the-loop questions.
  *
  * The reference web UI multiplexes app extensions over the same socket —
- * collaborative notes, team chat, terminals, presence, PR/report/todo change
+ * collaborative notes, terminals, presence, PR/report/todo change
  * pings. Those are deliberately NOT here: they're the app, not the protocol.
  * The frontend composes its full unions as `ProtocolClientMessage | <app
  * variants>` (src/frontend/lib/types.ts), which keeps this file the single
@@ -155,7 +155,7 @@ export type ProtocolClientMessage =
       /** Reasoning effort — persisted on the session and enforced per run. */
       effort?: "low" | "medium" | "high" | string;
       fastMode?: boolean;
-      /** Sibling-chat ids whose transcripts ride along as context. */
+      /** Sibling-session ids whose transcripts ride along as context. */
       contextChats?: string[];
     }
   | {
@@ -210,17 +210,15 @@ export type ProtocolClientMessage =
       cloud?: boolean;
       mode?: "ask" | "code" | "scratch";
       repo?: string;
-      /** Existing workspace (folder) to add this new chat to. */
-      projectId?: string;
-      /** Existing workspace to add this chat to (alias of projectId, preferred). */
+      /** Existing workspace to add this new session to. */
       workspaceId?: string;
-      /** Create a new workspace for this chat. */
+      /** Create a new workspace for this session. */
       createWorkspace?: { name?: string };
       /**
-       * How the chat relates to its workspace's worktree: share it (default),
+       * How the session relates to its workspace's worktree: share it (default),
        * stack a new worktree off it, or ask (no worktree).
        */
-      chatMode?: "share" | "stack" | "ask";
+      worktreeMode?: "share" | "stack" | "ask";
       model?: string;
       /** Optional MCP server allowlist for the opening run. [] means none. */
       mcpServers?: string[];
@@ -351,7 +349,7 @@ export type ProtocolServerMessage =
       type: "session_created";
       id: string;
       workspaceId?: string;
-      /** True when this create made a brand-new workspace (vs. adding a chat). */
+      /** True when this create made a brand-new workspace (vs. adding a session). */
       newWorkspace?: boolean;
       /** True while the session's worktree is still being created. */
       preparingWorkspace?: boolean;

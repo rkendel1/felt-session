@@ -19,7 +19,7 @@ import { writeJsonAtomic } from "./shared/atomic-write";
 import { runAgent } from "./agent-runner";
 import { createWorktree, listWorktrees, REPOS, getRepo, type Repo } from "./worktree";
 import { personaName, productName } from "./config";
-import { OPENSESSION_CHATS_DIR , newSessionId} from "./paths";
+import { OPENSESSION_SESSIONS_DIR , newSessionId} from "./paths";
 import { providerFor, modelLabel } from "./models";
 import { engineSessionPatch } from "./sessions";
 import type { NativeSessionFile } from "./types";
@@ -314,7 +314,7 @@ export async function executeScan(
           mode: "code",
           repo: repo.id,
         };
-        writeJsonAtomic(`${OPENSESSION_CHATS_DIR}/${bksId}.json`, data);
+        writeJsonAtomic(`${OPENSESSION_SESSIONS_DIR}/${bksId}.json`, data);
       };
       persistSession();
 

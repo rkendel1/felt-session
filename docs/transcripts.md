@@ -6,7 +6,7 @@ is operator configuration.
 ## The store
 
 Open Session owns every transcript as a per-session, sequence-numbered event
-log in one SQLite database (WAL): `<chats dir>/transcripts.db`, managed by
+log in one SQLite database (WAL): `<sessions dir>/transcripts.db`, managed by
 `src/server/transcript-store.ts`.
 
 - A row is one parsed `TranscriptEntry`: `(session_id, seq)` primary key,

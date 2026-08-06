@@ -2,7 +2,7 @@
  * Manual status overrides for sessions of ALL sources. The sidebar's "My
  * sessions" lanes (Needs input / In progress / In review / Done / Backlog) are
  * normally *derived* from a session's PR + run state. This registry lets a human
- * pin a session into a chosen lane — e.g. shove an idle chat into Backlog, or
+ * pin a session into a chosen lane — e.g. shove an idle session into Backlog, or
  * drop something out of "In review" until later — overriding the derivation.
  *
  * Same shape as the archive / title-override registries: a backstage-owned JSON
@@ -12,7 +12,7 @@
  */
 import { readFileSync, existsSync } from "fs";
 import { writeJsonAtomic } from "./shared/atomic-write";
-import { OPENSESSION_CHATS_DIR } from "./paths";
+import { OPENSESSION_SESSIONS_DIR } from "./paths";
 
 /** The manual lanes a session can be pinned into — mirrors the frontend's MineStatus. */
 export type ManualStatus =
@@ -34,7 +34,7 @@ export function isManualStatus(v: unknown): v is ManualStatus {
 	return typeof v === "string" && VALID.has(v);
 }
 
-const REGISTRY_PATH = `${OPENSESSION_CHATS_DIR}/status-overrides.json`;
+const REGISTRY_PATH = `${OPENSESSION_SESSIONS_DIR}/status-overrides.json`;
 
 let cache: Record<string, ManualStatus> | null = null;
 

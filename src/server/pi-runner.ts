@@ -14,13 +14,19 @@
  *    (`pi_gate_denied`). The one escape is the module-internal smoke bypass
  *    (kind "pi-smoke", armed only inside runPiSmokeTurn — never reachable
  *    from request/automation data).
- *  - Auth/billing: Anthropic traffic goes through the loopback Anthropic
- *    bridge (`ensureAnthropicBridge`) — provider "anthropic" re-registered
- *    with the bridge baseUrl + per-boot key via setRuntimeApiKey; account
- *    selection stays INSIDE the bridge (designated accounts only — opencode's
- *    bridgeAccountIds, falling back to pi.json's bridgeAccounts). A
- *    stable `x-opencode-session` header gives the bridge session affinity +
- *    audit attribution. OpenAI traffic rides pi's native `openai-codex`
+ *  - Auth/billing: Anthropic traffic runs on the designated bridge accounts
+ *    (opencode's bridgeAccountIds, falling back to pi.json's bridgeAccounts —
+ *    never the pool) over one of two config-gated transports
+ *    (pi-config `anthropicTransport`): "inprocess" (the default) registers a
+ *    NATIVE pi-ai provider (pi-anthropic-provider.ts) that drives the Claude
+ *    Agent SDK in this process — token-level streaming, per-unified-session
+ *    SDK-session continuation, `pi_anthropic_request` audit, usage-limit
+ *    markExhausted — while "bridge" keeps the pre-2026-08 loopback path as
+ *    rollback: `ensureAnthropicBridge` + provider "anthropic" re-registered
+ *    with the bridge baseUrl + per-boot key via setRuntimeApiKey, account
+ *    selection inside the bridge, and a stable `x-opencode-session` header
+ *    for session affinity + audit attribution. OpenAI traffic rides pi's
+ *    native `openai-codex`
  *    provider (chatgpt.com backend, pi's own headers/transport — no custom
  *    headers) on the SAME ChatGPT-subscription codex pool as opencode/openai:
  *    pickOpenaiAccount → buildSeededOpenaiAuth (access-token-only + the
@@ -64,7 +70,7 @@
  *  - Isolation from ~/.pi: in-memory credential store, `modelsPath: null`,
  *    server-owned agentDir under stateDir("pi"), SettingsManager.inMemory,
  *    DefaultResourceLoader with extensions/skills/templates/themes disabled
- *    and the run instructions (`buildOpencodeInstructions` — engine-neutral
+ *    and the run instructions (`buildRunInstructions` — engine-neutral
  *    policy text) appended via systemPromptOverride. Context-file discovery
  *    is bounded to the workspace via agentsFilesOverride: pi's default walks
  *    every ancestor up to / (plus the agentDir global) — an out-of-workspace
@@ -172,9 +178,9 @@ import {
   isUnattendedKind,
   baseJournalKind,
   opencodeRunPolicy,
-  buildOpencodeInstructions,
   readLocalInstructions,
 } from "./opencode-runner";
+import { buildRunInstructions } from "./run-instructions";
 import { bashAskPolicyReply } from "./command-policy";
 import {
   appendOpencodeTranscript,
@@ -191,7 +197,8 @@ import { githubAuthEnv, githubUserLoginForRun } from "./github-auth";
 import { ensureAgentAwsCredsFile } from "./aws-creds";
 import { isLocalProfile } from "./profile";
 import { buildEngineSwitchHandoffNote } from "./fork-handoff";
-import { piEngineEnabled } from "./pi-config";
+import { piAnthropicTransport, piEngineEnabled } from "./pi-config";
+import { buildPiAnthropicProvider } from "./pi-anthropic-provider";
 import { createPiMcpBridge, type PiMcpBridge } from "./pi-mcp-bridge";
 import type { TranscriptEntry } from "./types";
 import type { RunAgentOpts } from "./agent-runner";
@@ -342,10 +349,17 @@ function contentToTextAndImages(content: unknown): { text: string; images: strin
 
 /** Raw codex error codes that can surface in a pi/openai error before pi's
  *  friendly "You have hit your ChatGPT usage limit…" message is built — cheap
- *  insurance on top of isCodexUsageLimitError's message matching (billing
- *  shapes like insufficient_quota ride the `quota` alternation). */
+ *  insurance on top of isCodexUsageLimitError's message matching. Quota
+ *  shapes are provider-spelled (insufficient_quota / "exceeded your current
+ *  quota"), never a bare `quota` alternation: this classifier also sees
+ *  non-provider throws in the catch, and infrastructure errors like
+ *  "EDQUOT: disk quota exceeded" must not read as account exhaustion. The
+ *  placeholder-refresh failure ("OAuth refresh failed for openai-codex")
+ *  is included: pi refreshes only inside the final 5 minutes of the access
+ *  token, so that failure means "this account can't serve until the codex
+ *  CLI refreshes it" — dry-pool semantics. */
 const CODEX_USAGE_LIMIT_CODE_SHAPES =
-  /usage_limit_reached|usage_not_included|rate_limit_exceeded|quota|GoUsageLimitError|FreeUsageLimitError/i;
+  /usage_limit_reached|usage_not_included|rate_limit_exceeded|insufficient_quota|usage_quota|exceeded your current quota|GoUsageLimitError|FreeUsageLimitError|OAuth refresh failed for openai-codex/i;
 
 /** Provider-aware usage-limit classification for terminal errors — "this
  *  model's pool can't serve right now", which is exactly what
@@ -368,7 +382,10 @@ export function isPiUsageLimitShape(message: string, providerID: string): boolea
     s.includes("overloaded_error") ||
     /\b529\b/.test(s) ||
     /\b429\b/.test(s) ||
-    s.includes("no designated bridge account")
+    s.includes("no designated bridge account") ||
+    // Pool-mode pickBridgeAccount: exhausted pool (not the empty-pool config
+    // error, which deliberately says "no Claude accounts configured").
+    s.includes("no usable claude account")
   );
 }
 
@@ -1115,32 +1132,53 @@ export async function* runPi(
     let openaiPickReason: string | undefined;
     if (parsed.providerID === "openai") {
       const pickOut: { reason?: string } = {};
-      const picked = pickOpenaiAccount(
-        parsed.modelID,
-        readOpencodeBridgeConfig()?.openaiAccounts,
-        journal?.osSessionId || cwd,
-        pickOut,
-        user,
-        opts.accountId,
-        opts.accountStrict
-      );
+      // pi can only seed ChatGPT-subscription (kind: home) accounts — pi's
+      // openai-codex provider is oauth-only, so API-key accounts have no
+      // injection path. Rather than dead-ending a session whose HRW hash (or
+      // designated-list order) ranks an api_key account first, re-pick with
+      // that account excluded until a home account (or a real dry pool)
+      // surfaces. An EXPLICIT api_key pin still errors: silently ignoring a
+      // pin would mask a configuration mistake.
+      const excludedApiKey = new Set<string>();
+      let picked: ReturnType<typeof pickOpenaiAccount>;
+      for (;;) {
+        picked = pickOpenaiAccount(
+          parsed.modelID,
+          readOpencodeBridgeConfig()?.openaiAccounts,
+          journal?.osSessionId || cwd,
+          pickOut,
+          user,
+          opts.accountId,
+          opts.accountStrict,
+          excludedApiKey
+        );
+        if ("error" in picked || picked.kind !== "api_key") break;
+        if (opts.accountId && picked.id === opts.accountId) {
+          throw new Error(
+            `pi/openai: pinned codex account "${picked.name}" is an API-key account, ` +
+              "which the pi engine does not support — ChatGPT-subscription (kind: home) " +
+              "accounts only. Use an opencode/openai/* model for API-key billing."
+          );
+        }
+        excludedApiKey.add(picked.id);
+      }
       if ("error" in picked) {
+        if (excludedApiKey.size) {
+          // The pool had accounts, but every eligible one was api_key: a
+          // configuration boundary, NOT exhaustion — hopping models wouldn't
+          // fix it, so no usageLimitExhausted.
+          throw new Error(
+            `pi/openai: only API-key codex accounts are currently eligible ` +
+              `(${excludedApiKey.size} skipped), which the pi engine does not support — ` +
+              "ChatGPT-subscription (kind: home) accounts only. Use an " +
+              "opencode/openai/* model for API-key billing."
+          );
+        }
         const err = new Error(`pi/openai: ${picked.error}`) as Error & {
           usageLimitExhausted?: boolean;
         };
         err.usageLimitExhausted = true;
         throw err;
-      }
-      if (picked.kind === "api_key") {
-        // pi's openai-codex provider is oauth-only (no auth.apiKey), so an
-        // API-key account has no legitimate injection path here — a clear
-        // error, NOT exhaustion-shaped: the pool isn't dry, it's the wrong
-        // account kind, and hopping models wouldn't fix the configuration.
-        throw new Error(
-          `pi/openai: codex account "${picked.name}" is an API-key account, which the ` +
-            "pi engine does not support yet — ChatGPT-subscription (kind: home) " +
-            "accounts only. Use an opencode/openai/* model for API-key billing."
-        );
       }
       const built = buildSeededOpenaiAuth(picked);
       if ("error" in built) {
@@ -1150,6 +1188,24 @@ export async function* runPi(
         const err = new Error(`pi/openai: ${built.error}`) as Error & {
           usageLimitExhausted?: boolean;
         };
+        err.usageLimitExhausted = true;
+        throw err;
+      }
+      // pi's oauth layer refreshes whenever <5 minutes of validity remain —
+      // and the refresh MUST fail (deliberate placeholder; CODEX_HOME owns
+      // the rotating refresh family). A token entering that window is
+      // therefore the same flagged condition as an expired one, just caught
+      // before the turn burns work; without this, the failure surfaces as an
+      // unflagged "OAuth refresh failed" and the fallback walk never engages
+      // (the classifier catches the mid-turn variant of the same window).
+      const msLeft = built.seeded.openai.expires - Date.now();
+      if (msLeft <= 6 * 60_000) {
+        const err = new Error(
+          `pi/openai: codex account "${picked.name}" access token expires in ` +
+            `${Math.max(1, Math.ceil(msLeft / 60_000))} min — inside pi's refresh window, ` +
+            "which the placeholder refresh deliberately fails. Treated as a dry pool " +
+            "until the codex CLI refreshes the token."
+        ) as Error & { usageLimitExhausted?: boolean };
         err.usageLimitExhausted = true;
         throw err;
       }
@@ -1249,11 +1305,37 @@ export async function* runPi(
           `Unknown OpenAI model "${parsed.modelID}" (could not register it with pi)`
         );
       }
+    } else if (piAnthropicTransport() === "inprocess") {
+      // In-process native provider (the default): drives the Claude Agent
+      // SDK directly inside this process — token-level streaming, no
+      // loopback HTTP hop, no per-boot bridge key. Designated-account pick,
+      // usage-limit sidelining, the rolling hourly cap and the
+      // pi_anthropic_request audit discipline all live in
+      // pi-anthropic-provider.ts; build throws the bridge's exact
+      // designation error when no config designates accounts — surfaced
+      // as-is by the catch below. The builtin catalog is read BEFORE
+      // registration (registerNativeProvider replaces the builtin provider)
+      // so ids/cost/contextWindow survive; an unknown model id gets the same
+      // zero-cost fallback entry the bridge path minted.
+      const provider = buildPiAnthropicProvider({
+        unifiedSessionId: unifiedSessionId || runKey,
+        user,
+        accountId: opts.accountId,
+        accountStrict: opts.accountStrict,
+        usageCredits: opts.usageCredits,
+        builtinModels: runtime.getModels("anthropic"),
+        ensureModelId: parsed.modelID,
+      });
+      runtime.registerNativeProvider(provider);
+      piModel = runtime.getModel("anthropic", parsed.modelID);
+      if (!piModel) {
+        throw new Error(`Unknown Anthropic model "${parsed.modelID}" (could not register it with pi)`);
+      }
     } else {
-      // Bridge + provider: the bridge owns account selection and audits every
-      // HTTP request itself; we only route to it legitimately. ensure* throws
-      // a clear config error when the bridge is off — surfaced as-is by the
-      // catch below.
+      // Rollback transport (anthropicTransport: "bridge"): the loopback HTTP
+      // bridge owns account selection and audits every request itself; we
+      // only route to it legitimately. ensure* throws a clear config error
+      // when the bridge is off — surfaced as-is by the catch below.
       const bridge = ensureAnthropicBridge();
       const sessionHeader = { "x-opencode-session": unifiedSessionId || runKey };
       runtime.registerProvider("anthropic", {
@@ -1398,7 +1480,7 @@ export async function* runPi(
       }
     }
 
-    const instructions = buildOpencodeInstructions({
+    const instructions = buildRunInstructions({
       isAsk,
       isScratch,
       reposNote: opts.reposNote,
@@ -1995,7 +2077,13 @@ export async function* runPi(
     const usageLimit =
       e?.usageLimitExhausted === true ||
       isPiUsageLimitShape(message, parsed.providerID);
-    if (usageLimit && pickedOpenai) {
+    // Sideline ONLY on provider-attributed exhaustion (the explicit flag).
+    // A classifier match alone is not enough here: this catch also sees
+    // non-provider throws from the run body (fs, journal, SDK init), and a
+    // stray shape in one of those must not sideline a healthy account for
+    // 60 min across both engines. The in-band terminal branches (provider
+    // messages only) keep classifier-driven sidelines.
+    if (e?.usageLimitExhausted === true && pickedOpenai) {
       markCodexExhausted(pickedOpenai.id, parsed.modelID);
     }
     reachedTerminal = true;
@@ -2084,10 +2172,26 @@ export async function runPiSmokeTurn(
   const prompt = opts.prompt || "Reply with exactly the single word: ok";
   const timeoutMs = Math.max(5_000, Math.min(opts.timeoutMs ?? 120_000, 600_000));
   // Optional model override so the smoke can exercise either provider path
-  // (pi/anthropic via the bridge, pi/openai via the codex pool). Anything
-  // that doesn't parse as a pi id falls back to the default.
-  const smokeModel =
-    opts.model && parsePiModel(opts.model) ? opts.model : SMOKE_MODEL;
+  // (pi/anthropic via the bridge, pi/openai via the codex pool). A provided
+  // id that doesn't parse is an explicit error, never a silent fallback —
+  // an operator probing pi/openai must not read a default-model turn as
+  // proof the openai path works.
+  if (opts.model && !parsePiModel(opts.model)) {
+    return {
+      ok: false,
+      enabled: piEngineEnabled(),
+      dryRun: !!opts.dryRun,
+      reason: `not a pi/<provider>/<model> id: ${opts.model}`,
+      sessionId: "",
+      model: opts.model,
+      eventTypes: [],
+      text: "",
+      timedOut: false,
+      durationMs: 0,
+      storeRows: 0,
+    };
+  }
+  const smokeModel = opts.model || SMOKE_MODEL;
   const enabled = piEngineEnabled();
   const sessionId = `os-test-pi-${Date.now().toString(36)}`;
   const started = Date.now();
@@ -2173,7 +2277,7 @@ export async function runPiSmokeTurn(
         : undefined,
     sessionId,
     engineSessionId,
-    model: SMOKE_MODEL,
+    model: smokeModel,
     eventTypes,
     text,
     error,

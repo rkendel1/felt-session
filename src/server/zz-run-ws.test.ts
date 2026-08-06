@@ -13,7 +13,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { ndjsonReader } from "../runner-host/protocol";
 import { WsFrameBuffer, replayStartFor } from "../runner-host/ws-buffer";
 
-// run-ws → run-rpc → paths resolves OPENSESSION_CHATS_DIR (and HOME) at module
+// run-ws → run-rpc → paths resolves OPENSESSION_SESSIONS_DIR (and HOME) at module
 // load. bun test evaluates every test file's module graph BEFORE running any
 // tests, so a static import here would pin the live paths under tests (like
 // sessions.test) that override HOME in their own beforeAll. Deferred imports

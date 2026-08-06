@@ -164,7 +164,7 @@ export function extractImageMarkers(text: string): string[] {
   return extractMarker(text, IMAGE_MARKER);
 }
 
-// Implicit media (Michiel 2026-07-29): tool results and assistant text that
+// Implicit media: tool results and assistant text that
 // mention media by path/URL render it inline WITHOUT needing the explicit
 // markers. Guardrails against code-session noise: local candidates must be
 // absolute paths that actually exist on disk (a diff's `b/logo.png` or a

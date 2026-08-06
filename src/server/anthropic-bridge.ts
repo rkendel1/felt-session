@@ -26,14 +26,14 @@
  *    starts a fresh SDK session with a full flat-text replay.
  *
  * Containment (all enforced here, not in prompts):
- *  - Never starts unless a config designates serving accounts: opencode's
- *    ~/.opensession-opencode.json (`enabled` + `bridgeAccountIds`) or — the
- *    pi engine's own designation, since pi/anthropic/* has no other path —
- *    ~/.opensession-pi.json (`enabled` + `bridgeAccounts`).
- *  - Only designated accounts ever serve traffic — never the pool. Per
- *    request, opencode's `bridgeAccountIds` list is walked first; only when
- *    that list is empty does pi's `bridgeAccounts` list serve, through the
- *    same usable-account gate.
+ *  - Never starts unless an engine that uses it is enabled (opencode's
+ *    ~/.opensession-opencode.json or pi's ~/.opensession-pi.json) and at
+ *    least one Claude account exists to serve on.
+ *  - Account pick per request (pickBridgeAccount): when opencode's
+ *    `bridgeAccountIds` designates accounts, ONLY those serve (legacy
+ *    containment override); otherwise the general claude-accounts pool
+ *    serves, picked exactly like opencode/meridian runs (personal-first by
+ *    user, utilization-gated).
  *  - Binds 127.0.0.1 only, and every request must present the per-boot bridge
  *    key (x-api-key) that only the opencode-runner hands out — so another
  *    local process can't quietly burn subscription capacity through it.
@@ -70,6 +70,13 @@
  *  - `max_tokens` / `temperature` from the request are ignored (the SDK does
  *    not expose them); thinking blocks are not round-tripped.
  *  - The SDK's own built-in tools are disallowed; only client tools exist.
+ *
+ * The pi engine's in-process sibling (pi-anthropic-provider.ts) reimplements
+ * this same SDK mapping without the HTTP hop; it imports the exported helpers
+ * here (flatten/replay, schema conversion, account pick, designation check,
+ * DISALLOWED_BUILTINS, the rolling admit counter) so the two stay one
+ * implementation of the trick. HTTP concerns (bridge key, SSE synthesis,
+ * body caps) remain bridge-only.
  */
 
 import { homeDir } from "./paths";
@@ -77,10 +84,16 @@ import { stateDir } from "./paths";
 import { query, createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import { audit, summarizeText } from "./audit";
-import { getAccountById, getUsableAccountById, type ClaudeAccount } from "./claude-accounts";
+import {
+  getAccountById,
+  getUsableAccountById,
+  hasAccounts,
+  pickAccount,
+  type ClaudeAccount,
+} from "./claude-accounts";
 import { CLAUDE_CODE_BIN } from "./runner-shared";
 import { bridgePort, bridgeMaxRequestsPerHour, readOpencodeBridgeConfig } from "./opencode-config";
-import { piBridgeAccounts, readPiEngineConfig } from "./pi-config";
+import { readPiEngineConfig } from "./pi-config";
 import { mkdirSync } from "fs";
 
 const HOME = homeDir();
@@ -112,31 +125,38 @@ export interface BridgeInfo {
   key: string;
 }
 
+/** Non-null = the reason no config designates serving accounts right now —
+ *  the same gate ensureAnthropicBridge throws on, exported so the in-process
+ *  pi provider can refuse with the identical message without starting the
+ *  HTTP listener. Serving is allowed when EITHER opencode is enabled with
+ *  bridgeAccountIds OR the pi engine is enabled with bridgeAccounts. */
+export function bridgeDesignationError(): string | null {
+  const cfg = readOpencodeBridgeConfig();
+  const piCfg = readPiEngineConfig();
+  if (!cfg?.enabled && !piCfg?.enabled) {
+    return (
+      "The Anthropic bridge is disabled. Enable it in ~/.opensession-opencode.json " +
+      '({"enabled": true}) or, for pi/anthropic/* models, in ~/.opensession-pi.json ' +
+      '({"enabled": true}) — or use an API-key provider configured via `opencode auth login` instead.'
+    );
+  }
+  const ocIds = cfg?.enabled ? cfg.bridgeAccountIds || [] : [];
+  if (ocIds.length || hasAccounts()) return null;
+  return (
+    "The Anthropic bridge has no accounts to serve on: add a Claude account in " +
+    "Settings → Models (or designate bridgeAccountIds in ~/.opensession-opencode.json)."
+  );
+}
+
 /**
  * Start the bridge (idempotent) and return its URL + access key. Throws when
  * no config designates serving accounts — callers surface that as a clear
- * model-level error. Serves when EITHER opencode is enabled with
- * bridgeAccountIds OR the pi engine is enabled with bridgeAccounts (see the
- * containment doc — pickBridgeAccount applies the same precedence per
- * request).
+ * model-level error (see bridgeDesignationError; pickBridgeAccount applies
+ * the same precedence per request).
  */
 export function ensureAnthropicBridge(): BridgeInfo {
-  const cfg = readOpencodeBridgeConfig();
-  const piCfg = readPiEngineConfig();
-  const ocIds = cfg?.enabled ? cfg.bridgeAccountIds || [] : [];
-  const piIds = piCfg?.enabled ? piCfg.bridgeAccounts || [] : [];
-  if (!ocIds.length && !piIds.length) {
-    throw new Error(
-      cfg?.enabled || piCfg?.enabled
-        ? "The Anthropic bridge has no designated accounts: set bridgeAccountIds in " +
-          "~/.opensession-opencode.json (or, for pi runs, bridgeAccounts in ~/.opensession-pi.json) " +
-          "to the claude-accounts id(s) that may serve bridge traffic (the general pool is never used)."
-        : "The Anthropic bridge is disabled. Enable it in ~/.opensession-opencode.json " +
-          '({"enabled": true, "bridgeAccountIds": ["<claude-accounts id>"]}) or, for pi/anthropic/* ' +
-          'models, in ~/.opensession-pi.json ({"enabled": true, "bridgeAccounts": [...]}) — or use an ' +
-          "API-key provider configured via `opencode auth login` instead."
-    );
-  }
+  const designationError = bridgeDesignationError();
+  if (designationError) throw new Error(designationError);
   const port = bridgePort();
   if (g.__anthropicBridgeServer) {
     return { url: `http://127.0.0.1:${g.__anthropicBridgeServer.port}`, key: bridgeKey() };
@@ -156,21 +176,95 @@ export function ensureAnthropicBridge(): BridgeInfo {
   return { url: `http://127.0.0.1:${port}`, key: bridgeKey() };
 }
 
-/** Pick the first usable designated account (utilization-gated). Opencode's
- *  bridgeAccountIds list first; when it names none, pi's bridgeAccounts (both
- *  gated on their own config's `enabled`). Never the general pool. */
-function pickBridgeAccount(model: string | undefined): ClaudeAccount | { error: string } {
+/** Optional account pin for pickBridgeAccount — only the in-process pi
+ *  provider passes it (the HTTP bridge has no channel for a pin); a pin never
+ *  widens serving beyond what the pick mode allows. */
+export interface BridgeAccountPin {
+  accountId?: string;
+  /** Strict pin: never fall back to the other eligible accounts. */
+  accountStrict?: boolean;
+  /** Run user, for the pool pick's personal-account preference (same identity
+   *  matching as pickAccount everywhere else). */
+  user?: string;
+  /** Allow extra-usage credits when judging the pin/walk usability. */
+  usageCredits?: boolean;
+}
+
+/** Pick the account to serve a bridge/pi request (utilization-gated).
+ *
+ *  Two modes:
+ *  - Designated: when opencode's `bridgeAccountIds` names accounts, ONLY
+ *    those may serve (walked in order) — the legacy containment for the
+ *    loopback bridge era, kept as an explicit override.
+ *  - Pool (the default, matching how opencode/meridian picks): no
+ *    designation → pickAccount over the general claude-accounts pool, with
+ *    the same personal-first/user routing as every other run. Pi traffic is
+ *    first-party Claude Agent SDK traffic billed to plan limits (verified
+ *    live on a credits-off account, 2026-08-06), so there is no billing
+ *    reason to fence it off from the pool.
+ *
+ *  A `pin` (in-process pi runs only) is tried first; with accountStrict the
+ *  walk never widens past it. The "no designated bridge account" / "no usable
+ *  Claude account" wordings are load-bearing: isPiUsageLimitShape's anthropic
+ *  arm keys on them. */
+export function pickBridgeAccount(
+  model: string | undefined,
+  pin?: BridgeAccountPin
+): ClaudeAccount | { error: string } {
   const cfg = readOpencodeBridgeConfig();
-  const ocIds = cfg?.enabled ? cfg.bridgeAccountIds || [] : [];
-  const ids = ocIds.length ? ocIds : piBridgeAccounts();
+  const ids = cfg?.enabled ? cfg.bridgeAccountIds || [] : [];
   if (!ids.length) {
-    return {
-      error:
-        "bridge has no designated accounts (opencode bridgeAccountIds / pi bridgeAccounts both empty or disabled)",
-    };
+    // Pool mode. Pin first (an id outside the pool's usable set behaves like
+    // the designated walk: strict refuses, non-strict falls through).
+    if (pin?.accountId) {
+      const pinned = getUsableAccountById(pin.accountId, model, pin.usageCredits);
+      if (pinned) return pinned;
+      if (pin.accountStrict) {
+        const pinName = getAccountById(pin.accountId)?.name || pin.accountId;
+        return {
+          error:
+            `no usable Claude account (pinned "${pinName}" is exhausted, disabled or ` +
+            "unknown; strict pin — not widening to the pool)",
+        };
+      }
+    }
+    const picked = pickAccount(undefined, pin?.user, model, pin?.usageCredits);
+    if (picked) return picked;
+    if (!hasAccounts()) {
+      // Deliberately NOT usage-limit-shaped: an empty pool is a config
+      // problem, and hopping models would not fix it.
+      return { error: "no Claude accounts configured (add one in Settings → Models)" };
+    }
+    return { error: "no usable Claude account in the pool (all exhausted or sidelined)" };
+  }
+  if (pin?.accountId) {
+    const pinName = getAccountById(pin.accountId)?.name || pin.accountId;
+    if (!ids.includes(pin.accountId)) {
+      if (pin.accountStrict) {
+        // Config error, deliberately NOT exhaustion-shaped — hopping models
+        // would not fix a pin that names a non-designated account.
+        return {
+          error:
+            `pinned account "${pinName}" is not a designated bridge account ` +
+            "(opencode bridgeAccountIds is set, so only those ids may serve bridge traffic) — " +
+            "strict pin, refusing to widen",
+        };
+      }
+      // Non-strict pin outside the designation: ignore it, walk the list.
+    } else {
+      const pinned = getUsableAccountById(pin.accountId, model, pin.usageCredits);
+      if (pinned) return pinned;
+      if (pin.accountStrict) {
+        return {
+          error:
+            `no designated bridge account is currently usable (pinned "${pinName}" is ` +
+            "exhausted or disabled; strict pin — not widening to the other designated accounts)",
+        };
+      }
+    }
   }
   for (const id of ids) {
-    const usable = getUsableAccountById(id, model);
+    const usable = getUsableAccountById(id, model, pin?.usageCredits);
     if (usable) return usable;
   }
   const known = ids.map((id) => getAccountById(id)?.name || id).join(", ");
@@ -179,8 +273,8 @@ function pickBridgeAccount(model: string | undefined): ClaudeAccount | { error: 
 
 // ── Anthropic request → SDK prompt mapping ───────────────────────────────────
 
-type ContentBlock = Record<string, any>;
-interface AnthropicMessage {
+export type ContentBlock = Record<string, any>;
+export interface AnthropicMessage {
   role: "user" | "assistant";
   content: string | ContentBlock[];
 }
@@ -255,12 +349,12 @@ function jsonSchemaToZod(schema: any): z.ZodTypeAny {
   }
 }
 
-const PASSTHROUGH_MCP = "oc";
-const PASSTHROUGH_PREFIX = `mcp__${PASSTHROUGH_MCP}__`;
+export const PASSTHROUGH_MCP = "oc";
+export const PASSTHROUGH_PREFIX = `mcp__${PASSTHROUGH_MCP}__`;
 
 /** Built-in SDK tools the bridge must never let run — the client owns all
  *  execution. (The PreToolUse hook blocks everything as backstop.) */
-const DISALLOWED_BUILTINS = [
+export const DISALLOWED_BUILTINS = [
   "Bash", "Edit", "Write", "Read", "Glob", "Grep", "WebFetch", "WebSearch",
   "NotebookEdit", "Task", "TaskOutput", "TaskStop", "Agent", "Skill",
   "TaskCreate", "TaskUpdate", "TaskList", "TaskGet", "AskUserQuestion",
@@ -475,7 +569,9 @@ async function handleBridgeRequest(req: Request): Promise<Response> {
         model: model || undefined,
         resume: sdkSessionId,
         // Turn 1 is the real answer; turn 2 exists because blocked tool calls
-        // count as a turn boundary (the hook's reason tells the model to stop).
+        // count as a turn boundary (the hook's reason tells the model to
+        // stop). Models that keep going anyway are handled at the result:
+        // error_max_turns with captured calls returns them as tool_use.
         maxTurns: 2,
         systemPrompt: system || " ",
         settingSources: [],
@@ -535,10 +631,18 @@ async function handleBridgeRequest(req: Request): Promise<Response> {
       if (msg.type === "result") {
         const rm = msg as any;
         sdkSessionId = rm.session_id || sdkSessionId;
+        // error_max_turns WITH captured calls is a SUCCESS for this bridge:
+        // sequential-tool models (sonnet especially) often answer a blocked
+        // call by trying the next tool — a fresh turn each time — and blow
+        // the cap before "ending" cleanly. The captured calls are the whole
+        // point; return them as tool_use and let the client execute. Only a
+        // capture-less max-turns (model never called a tool) stays an error.
+        const maxTurnsWithCaptures =
+          rm.subtype === "error_max_turns" && captured.length > 0;
         // Surface SDK/API failures as provider errors, not assistant text —
         // the CLI narrates errors (e.g. "API Error: 400 …") as a message,
         // which would otherwise read as a normal model reply in opencode.
-        if (rm.is_error || rm.subtype !== "success") {
+        if ((rm.is_error || rm.subtype !== "success") && !maxTurnsWithCaptures) {
           const detail =
             (typeof rm.result === "string" && rm.result) ||
             contentOut.filter((b) => b.type === "text").map((b) => b.text).join("\n") ||

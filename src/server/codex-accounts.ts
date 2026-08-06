@@ -32,7 +32,7 @@ const WEDGE_SIDELINE_MS = 5 * 60 * 1000;
 /**
  * Test seam (bun tests only): repoint codexHomes()'s VPS-account entry
  * (`${HOME}/.codex`) AFTER this module has been evaluated — mirrors
- * paths.ts's __setChatsDirForTest. ES module bindings are live, so
+ * paths.ts's __setSessionsDirForTest. ES module bindings are live, so
  * consumers that reference codexHomes() (including callers that bare-
  * imported this module before the test set process.env.HOME) pick the new
  * value up regardless of import order. Returns the previous value so

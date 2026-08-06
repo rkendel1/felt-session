@@ -21,7 +21,7 @@ interface Props {
 
 /**
  * A sub-agent's conversation, rendered full-width as its own view tab beside
- * the chat tabs — a sub-agent run is a conversation, so it reads like one
+ * the session tabs — a sub-agent run is a conversation, so it reads like one
  * instead of being squeezed into the right sidebar. Fetches over REST and,
  * while the parent session is still running, polls so a live sub-agent's
  * transcript fills in. Sub-agents that spawn their own sub-agents are

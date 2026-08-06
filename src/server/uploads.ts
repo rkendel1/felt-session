@@ -41,7 +41,7 @@ export function parseImageDataUrls(urls?: unknown): ImageInput[] | undefined {
 }
 
 export const UPLOADS_DIR = `${SESSIONS_DIR}/uploads`;
-// The HTTP endpoint stages here — a brand-new chat has no session id yet, so the
+// The HTTP endpoint stages here — a brand-new session has no session id yet, so the
 // reference is resolved back (and validated) at send time.
 const STAGED_UPLOADS_DIR = `${UPLOADS_DIR}/staged`;
 // Cap so a single upload can't OOM the process. The HTTP path streams, but the

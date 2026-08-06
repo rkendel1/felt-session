@@ -26,7 +26,7 @@
  */
 
 import { existsSync, statSync, writeFileSync } from "fs";
-import { OPENSESSION_CHATS_DIR } from "./paths";
+import { OPENSESSION_SESSIONS_DIR } from "./paths";
 import { audit } from "./audit";
 import type { UnifiedSession } from "./types";
 // WP-A touchpoint (design §1) — the only store API this module uses:
@@ -35,7 +35,7 @@ import type { UnifiedSession } from "./types";
 import { transcriptStore } from "./transcript-store";
 
 /** One-shot boot marker — presence means the full backfill already completed. */
-const MARKER_PATH = `${OPENSESSION_CHATS_DIR}/.transcript-v2-backfill-done.json`;
+const MARKER_PATH = `${OPENSESSION_SESSIONS_DIR}/.transcript-v2-backfill-done.json`;
 
 /** Pause between sessions so the event loop keeps serving (design: 25-50ms). */
 const PACE_MS = 35;

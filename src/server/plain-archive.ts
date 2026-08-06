@@ -6,11 +6,11 @@
 import { readdirSync, readFileSync, existsSync } from "fs";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import { plainApiUrl } from "./config";
-import { homeDir, OPENSESSION_CHATS_DIR } from "./paths";
+import { homeDir, OPENSESSION_SESSIONS_DIR } from "./paths";
 import type { NativeSessionFile } from "./types";
 
 const HOME = homeDir();
-const SESSIONS_DIR = OPENSESSION_CHATS_DIR;
+const SESSIONS_DIR = OPENSESSION_SESSIONS_DIR;
 
 function activePlainSessions(): Array<{ path: string; data: NativeSessionFile }> {
   if (!existsSync(SESSIONS_DIR)) return [];

@@ -30,7 +30,7 @@ interface Props {
 
 /**
  * One assistant turn's work, folded into a single calm line — "Worked · 12m 4s
- * · 51 steps · +461 -70" — closed by default so the chat reads as question →
+ * · 51 steps · +461 -70" — closed by default so the session reads as question →
  * answer. Expanding shows the full flat run: intermediate assistant notes
  * interleaved with the tool calls on the timeline rail.
  *
@@ -124,7 +124,7 @@ export const TurnBlock = React.memo(function TurnBlock({
 
   return (
     <div
-      className="mx-auto mb-3 w-full max-w-[var(--chat-col)]"
+      className="mx-auto mb-3 w-full max-w-[var(--session-col)]"
       // Anchor identity for the history scroll hold: the LAST item survives a
       // history page merging older items into this turn (the first doesn't).
       data-eid={lastItem ? `${lastItem.id}#turn` : undefined}
@@ -139,7 +139,7 @@ export const TurnBlock = React.memo(function TurnBlock({
         // Baseline, not centre: this row mixes its 14px title with 13px meta
         // runs, and centring aligns boxes rather than text. The chevron carries
         // no baseline of its own, so it keeps centring individually.
-        className="mx-auto flex w-full max-w-[var(--chat-col)] min-w-0 cursor-pointer items-baseline gap-2 rounded-md border-0 bg-transparent px-1 py-1 text-left font-sans text-[14px] leading-5 text-dim transition-colors hover:bg-hover/40 hover:text-fg"
+        className="mx-auto flex w-full max-w-[var(--session-col)] min-w-0 cursor-pointer items-baseline gap-2 rounded-md border-0 bg-transparent px-1 py-1 text-left font-sans text-[14px] leading-5 text-dim transition-colors hover:bg-hover/40 hover:text-fg"
       >
         <span
           className={cn(
@@ -227,7 +227,7 @@ function TurnMessage({
 }) {
   return (
     <div
-      className="mx-auto my-2 w-full max-w-[var(--chat-col)] px-1"
+      className="mx-auto my-2 w-full max-w-[var(--session-col)] px-1"
       data-eid={entry.id}
     >
       <ClampedBody

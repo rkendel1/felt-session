@@ -11,7 +11,7 @@
  */
 import { readFileSync, existsSync } from "fs";
 import { writeJsonAtomic } from "./shared/atomic-write";
-import { OPENSESSION_CHATS_DIR } from "./paths";
+import { OPENSESSION_SESSIONS_DIR } from "./paths";
 
 export interface ReviewRequest {
 	/** Reviewer's display name (the `backstage-user` value, e.g. "Kent"). */
@@ -26,7 +26,7 @@ export interface ReviewRequest {
 	accepted?: { by: string; at: string };
 }
 
-const REGISTRY_PATH = `${OPENSESSION_CHATS_DIR}/review-requests.json`;
+const REGISTRY_PATH = `${OPENSESSION_SESSIONS_DIR}/review-requests.json`;
 
 let cache: Record<string, ReviewRequest> | null = null;
 

@@ -215,10 +215,9 @@ export function SessionSearch({
 		};
 	}, [query]);
 
-	// Only live sessions are searchable. The sideChatOf check is a compatibility
-	// guard for older/cloud servers that may still return removed side-chat rows.
+	// Only live sessions are searchable.
 	const pool = useMemo(
-		() => sessions.filter((s) => !s.archived && !s.sideChatOf),
+		() => sessions.filter((s) => !s.archived),
 		[sessions],
 	);
 
@@ -260,7 +259,7 @@ export function SessionSearch({
 	);
 	const hasSessionFilter = person !== "all" || repo !== "all" || status !== "all";
 
-	// Commands, PRs, and chats share one flat result list so arrow-key navigation
+	// Commands, PRs, and sessions share one flat result list so arrow-key navigation
 	// crosses group boundaries just like Tella's command menu.
 	const results = useMemo<PaletteResult[]>(() => {
 		const q = query.trim().toLowerCase();

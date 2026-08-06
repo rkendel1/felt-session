@@ -96,7 +96,7 @@ export async function handleTodosRoutes(
 		});
 	}
 
-	// Hide the chat before now in the overlay (display marker only — the full
+	// Hide the transcript before now in the overlay (display marker only — the full
 	// transcript stays in the expanded session view).
 	if (path === "/api/desk/clear" && req.method === "POST") {
 		const body = await req.json().catch(() => null);

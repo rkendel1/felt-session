@@ -107,6 +107,13 @@ enum NativePreferences {
             resetMissing: true,
             in: defaults
         )
+        set(
+            validated(prefs["desk-voice"], allowed: ["on", "off"]),
+            default: "off",
+            key: "os1.desk.voice",
+            resetMissing: changedIdentity,
+            in: defaults
+        )
         defaults.set(identity, forKey: identityKey)
         defaults.set(bucket, forKey: bucketKey)
     }

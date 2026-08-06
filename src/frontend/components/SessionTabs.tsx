@@ -5,32 +5,32 @@ import { TAB_COLORS, colorHex } from "../lib/tab-colors";
 import { hasDraft, onDraftsChanged } from "../lib/drafts";
 import { relativeTime } from "../lib/api";
 import { Menu, ContextMenu } from "../ui/menu";
-import { chatPath, absoluteLink, copyToClipboard } from "../lib/share-link";
+import { sessionPath, absoluteLink, copyToClipboard } from "../lib/share-link";
 import { copySessionTranscript } from "../lib/transcript-copy";
 import { IconHistory, IconPencil, IconPlus, IconRestore } from "./icons";
 import { useIsPhone } from "../hooks/useIsPhone";
 
 /**
- * The tab strip is scoped to ONE Workspace: it shows the sibling chats of the
- * currently-open chat (every session sharing its `projectId`/workspace). It
- * only renders once a workspace has TWO or more chats — a lone chat needs no
+ * The tab strip is scoped to ONE Workspace: it shows the sibling sessions of the
+ * currently-open session (every session sharing its `workspaceId`/workspace). It
+ * only renders once a workspace has TWO or more sessions — a lone session needs no
  * strip, so the "+ New tab" affordance moves next to the session title in
  * SessionViewer's header instead (and ⌘T does the same thing). A pre-migration
- * standalone chat (empty list) likewise renders nothing.
+ * standalone session (empty list) likewise renders nothing.
  *
  * There is no pinning here anymore (pinning moved to the sidebar). Right-click
  * opens a context menu (rename / copy concise or full transcript / copy link /
- * tab color / close); double-click the title also renames the chat. The +
- * button starts a new chat in this workspace sharing its worktree;
+ * tab color / close); double-click the title also renames the session. The +
+ * button starts a new session in this workspace sharing its worktree;
  * right-clicking + offers the other modes (stacked worktree / ask).
  *
- * Chats and view panes (Review, Assets, …) are ONE draggable row: every tab is
- * a Reorder.Item, so a pane can be dragged among the chats and the whole
+ * Sessions and view panes (Review, Assets, …) are ONE draggable row: every tab is
+ * a Reorder.Item, so a pane can be dragged among the sessions and the whole
  * arrangement is what the parent persists per workspace.
  */
 /**
- * A non-chat pane (Review, …) surfaced in the strip. It starts after the chat
- * tabs and is draggable from there like any chat tab.
+ * A non-session pane (Review, …) surfaced in the strip. It starts after the session
+ * tabs and is draggable from there like any session tab.
  */
 export type ViewTab = {
 	/** Stable id, e.g. `review:<sessionId>`. */
@@ -49,9 +49,9 @@ export type ViewTab = {
 };
 
 interface Props {
-	/** Sibling chats in the current workspace, in display order. */
+	/** Sibling sessions in the current workspace, in display order. */
 	tabs: UnifiedSession[];
-	/** Archived (closed) chats of this workspace, newest activity first. */
+	/** Archived (closed) sessions of this workspace, newest activity first. */
 	archived: UnifiedSession[];
 	/** Session id of the active tab. */
 	activeId: string | null;
@@ -60,14 +60,14 @@ interface Props {
 	onSelect: (session: UnifiedSession) => void;
 	onSetColor: (key: string, color: string | null) => void;
 	/**
-	 * The strip's left-to-right arrangement — chat ids and view-tab ids in ONE
-	 * list, so a pane (Review, Assets, …) can sit in front of a chat. Ids the
+	 * The strip's left-to-right arrangement — session ids and view-tab ids in ONE
+	 * list, so a pane (Review, Assets, …) can sit in front of a session. Ids the
 	 * list doesn't mention keep their natural place at the end.
 	 */
 	tabOrder: string[];
 	/**
 	 * Commit a new left-to-right order for this bar's tabs (desktop drag-drop).
-	 * Receives the reordered ids — chats and view tabs alike; the parent splices
+	 * Receives the reordered ids — sessions and view tabs alike; the parent splices
 	 * them back into the workspace's order and persists it.
 	 */
 	onReorderTabs: (orderedIds: string[]) => void;
@@ -78,7 +78,7 @@ interface Props {
 	 * holding one tab must still be able to hand it over.
 	 */
 	inSplit?: boolean;
-	/** Show the archived-chats menu — only the rightmost bar does. */
+	/** Show the archived-sessions menu — only the rightmost bar does. */
 	showHistory?: boolean;
 	/** Dragging below the strip previews a left/right split over the content. */
 	onSplitDrag?: (id: string | null, point?: { x: number; y: number }) => void;
@@ -92,8 +92,8 @@ interface Props {
 	/** Where `onMoveAcross` lands — it names the menu item. */
 	moveAcrossSide?: "left" | "right";
 	/**
-	 * Non-chat "view" tabs (Review, Preview, …), in their natural order — they
-	 * follow the chat tabs until dragged elsewhere (see `tabOrder`). Each is
+	 * Non-session "view" tabs (Review, Preview, …), in their natural order — they
+	 * follow the session tabs until dragged elsewhere (see `tabOrder`). Each is
 	 * bound to a session; selecting one foregrounds that pane, its × dismisses
 	 * it. Generalized so more panes (diff, terminal, …) can drop in later.
 	 */
@@ -103,16 +103,16 @@ interface Props {
 	/** Dismiss a view tab from the strip. */
 	onCloseView: (id: string) => void;
 	/**
-	 * Start a new chat in this workspace. share = reuse the workspace worktree
+	 * Start a new session in this workspace. share = reuse the workspace worktree
 	 * (the + button's plain-click default), stack = new worktree branched off it,
 	 * ask = no worktree.
 	 */
-	onNewChat: (mode: "share" | "stack" | "ask") => void;
-	/** Rename a chat (double-click the title); empty title resets it. */
+	onNewSession: (mode: "share" | "stack" | "ask") => void;
+	/** Rename a session (double-click the title); empty title resets it. */
 	onRename: (id: string, title: string) => void;
-	/** Close (archive) a chat — the × revealed on hover. */
+	/** Close (archive) a session — the × revealed on hover. */
 	onClose: (session: UnifiedSession) => void;
-	/** Un-archive a chat from the history menu, back into the strip. */
+	/** Un-archive a session from the history menu, back into the strip. */
 	onRestore: (session: UnifiedSession) => void;
 	/** Report a copy action's outcome ("Link copied", …). */
 	onToast: (message: string) => void;
@@ -120,7 +120,7 @@ interface Props {
 
 type NewMenu = { x: number; y: number };
 type TabMember =
-	| { kind: "chat"; id: string; session: UnifiedSession }
+	| { kind: "session"; id: string; session: UnifiedSession }
 	| { kind: "view"; id: string; view: ViewTab };
 
 const isApple = /Mac|iPhone|iPad|iPod/.test(navigator.platform);
@@ -148,7 +148,7 @@ export function SessionTabs({
 	viewTabs,
 	onSelectView,
 	onCloseView,
-	onNewChat,
+	onNewSession,
 	onRename,
 	onClose,
 	onRestore,
@@ -158,7 +158,7 @@ export function SessionTabs({
 	const [editKey, setEditKey] = useState<string | null>(null);
 	const [draft, setDraft] = useState("");
 	// Re-render when a composer draft appears/disappears — tabs check hasDraft()
-	// during render to show the unsent-draft pencil on sibling chats.
+	// during render to show the unsent-draft pencil on sibling sessions.
 	const [, setDraftsRev] = useState(0);
 	useEffect(() => onDraftsChanged(() => setDraftsRev((v) => v + 1)), []);
 	// On phones the +/history controls ride INSIDE the scroll (see below) so the
@@ -168,7 +168,7 @@ export function SessionTabs({
 	const isPhone = useIsPhone();
 	const ctrlIconSize = isPhone ? 25 : 22;
 
-	// Drag-to-reorder the chat tabs (desktop only — an x-drag would fight touch
+	// Drag-to-reorder the session tabs (desktop only — an x-drag would fight touch
 	// scrolling / the phone swipe gestures). `orderDraft` holds the in-flight
 	// order during a drag so the strip stays smooth; it's cleared on drop once
 	// the parent's reordered `tabs` come back. `justDragged` swallows the click
@@ -265,15 +265,15 @@ export function SessionTabs({
 
 	useEffect(() => () => stopPointerTracking.current?.(), []);
 
-	// Chats and view panes are one draggable row: the same drag that moves a
-	// chat moves Review or Assets, and a pane can end up anywhere among the
-	// chats. Natural order (chats, then panes in the order the parent built
+	// Sessions and view panes are one draggable row: the same drag that moves a
+	// session moves Review or Assets, and a pane can end up anywhere among the
+	// sessions. Natural order (sessions, then panes in the order the parent built
 	// them) is the fallback; the arrangement is the in-flight drag draft while
 	// dragging, else the parent's saved `tabOrder`. A tab that arrives mid-drag
 	// — or that no order mentions yet — keeps its natural place at the end
 	// rather than being dropped.
 	const members: TabMember[] = [
-		...tabs.map((session): TabMember => ({ kind: "chat", id: session.id, session })),
+		...tabs.map((session): TabMember => ({ kind: "session", id: session.id, session })),
 		...viewTabs.map((view): TabMember => ({ kind: "view", id: view.id, view })),
 	];
 	const rank = new Map((orderDraft ?? tabOrder).map((id, i) => [id, i] as const));
@@ -361,7 +361,7 @@ export function SessionTabs({
 	}
 
 	/**
-	 * The drag wiring every tab in the strip shares — chats and view panes are
+	 * The drag wiring every tab in the strip shares — sessions and view panes are
 	 * the same kind of draggable item, differing only in what they render.
 	 * A drag that ends over the pane hands the tab to the other split column
 	 * (`onSplitDrop`) instead of committing a reorder.
@@ -421,10 +421,10 @@ export function SessionTabs({
 		};
 	}, [newMenu]);
 
-	// One chat and no view tabs → no strip. The lone workspace's "+ New tab"
+	// One session and no view tabs → no strip. The lone workspace's "+ New tab"
 	// button lives next to the session title in the header instead. But once a
-	// non-chat pane (Review) is open, the strip appears so it has somewhere to
-	// live — a lone code chat then reads as [chat][Review].
+	// non-session pane (Review) is open, the strip appears so it has somewhere to
+	// live — a lone code session then reads as [session][Review].
 	if (!inSplit && tabs.length <= 1 && viewTabs.length === 0) return null;
 
 	// New-tab "+" — plain-click shares the workspace worktree; right-click offers
@@ -434,9 +434,9 @@ export function SessionTabs({
 			type="button"
 			className="session-tab session-tab-new"
 			data-menu-open={newMenu ? "" : undefined}
-			aria-label="New chat in this workspace"
-			title="New chat. Shares this workspace's worktree (right-click for options)"
-			onClick={() => onNewChat("share")}
+			aria-label="New session in this workspace"
+			title="New session. Shares this workspace's worktree (right-click for options)"
+			onClick={() => onNewSession("share")}
 			onContextMenu={(e) => {
 				e.preventDefault();
 				setNewMenu({ x: e.clientX, y: e.clientY });
@@ -446,12 +446,12 @@ export function SessionTabs({
 		</button>
 	);
 
-	// History: every archived (closed) chat of this workspace, in one list.
-	// Clicking a row opens the chat read-only-ish (it gets a tab while viewed);
+	// History: every archived (closed) session of this workspace, in one list.
+	// Clicking a row opens the session read-only-ish (it gets a tab while viewed);
 	// the ⟲ restores it into the strip for good.
 	const historyMenu = showHistory && archived.length > 0 && (
 		<Menu.Root>
-			<Menu.Trigger className="session-tab session-tab-history" aria-label="Archived chats" title="Archived chats">
+			<Menu.Trigger className="session-tab session-tab-history" aria-label="Archived sessions" title="Archived sessions">
 				<IconHistory size={ctrlIconSize} />
 			</Menu.Trigger>
 			<Menu.Popup align="end" sideOffset={4} className="min-w-[240px] max-w-[320px]">
@@ -462,7 +462,7 @@ export function SessionTabs({
 						<button
 							type="button"
 							className="flex shrink-0 cursor-pointer items-center rounded-sm border-0 bg-transparent p-0.5 text-dim hover:text-fg"
-							aria-label="Restore chat"
+							aria-label="Restore session"
 							title="Restore to tabs"
 							onClick={(e) => {
 								e.stopPropagation();
@@ -484,7 +484,7 @@ export function SessionTabs({
 					as="div"
 					axis="x"
 					ref={groupRef}
-					className="session-tabs-chatgroup"
+					className="session-tabs-sessiongroup"
 					values={orderedKeys}
 					onReorder={reorderTabs}
 				>
@@ -499,7 +499,7 @@ export function SessionTabs({
 					{orderedMembers.map((member) => {
 						const key = member.id;
 						// A view pane (Review, Assets, …): the same draggable item as a
-						// chat, minus the rename/color/transcript menu it has no use for.
+						// session, minus the rename/color/transcript menu it has no use for.
 						if (member.kind === "view") {
 							const v = member.view;
 							return (
@@ -588,9 +588,9 @@ export function SessionTabs({
 												{session.title}
 											</span>
 										)}
-										{/* Unsent draft in a sibling chat (the active tab's draft is
+										{/* Unsent draft in a sibling session (the active tab's draft is
 							    already on screen in the composer — no pencil needed). */}
-										{key !== activeId && hasDraft(`chat:${key}`) && (
+										{key !== activeId && hasDraft(`session:${key}`) && (
 											<span className="session-tab-draft" title="Unsent draft">
 												<IconPencil size={20} />
 											</span>
@@ -598,8 +598,8 @@ export function SessionTabs({
 										<button
 											type="button"
 											className="session-tab-close"
-											aria-label="Close chat"
-											title="Close chat"
+											aria-label="Close session"
+											title="Close session"
 											onClick={(e) => {
 												e.stopPropagation();
 												onClose(session);
@@ -608,7 +608,7 @@ export function SessionTabs({
 											×
 										</button>
 									</ContextMenu.Trigger>
-									{/* finalFocus=false: "Rename chat" mounts the inline rename
+									{/* finalFocus=false: "Rename session" mounts the inline rename
 							    input (autoFocus) — the closing menu must not steal focus
 							    back to the tab. */}
 									<ContextMenu.Popup className="min-w-[250px]" finalFocus={false}>
@@ -618,7 +618,7 @@ export function SessionTabs({
 												setEditKey(key);
 											}}
 										>
-											<span className="grow">Rename chat</span>
+											<span className="grow">Rename session</span>
 										</ContextMenu.Item>
 										{/* The cross-bar drag, spelled out: a bar down to its last
 								    tab has no room to show a drag, and this is also the
@@ -637,7 +637,7 @@ export function SessionTabs({
 											<span className="grow">Copy full transcript</span>
 										</ContextMenu.Item>
 										<ContextMenu.Item
-											onClick={() => copyToClipboard(absoluteLink(chatPath(session)), () => onToast("Link copied"))}
+											onClick={() => copyToClipboard(absoluteLink(sessionPath(session)), () => onToast("Link copied"))}
 										>
 											<span className="grow">Copy link</span>
 										</ContextMenu.Item>
@@ -696,30 +696,30 @@ export function SessionTabs({
 						className="session-tab-new-menu-item"
 						onClick={() => {
 							setNewMenu(null);
-							onNewChat("share");
+							onNewSession("share");
 						}}
 					>
-						New chat — share worktree
+						New session — share worktree
 					</button>
 					<button
 						type="button"
 						className="session-tab-new-menu-item"
 						onClick={() => {
 							setNewMenu(null);
-							onNewChat("stack");
+							onNewSession("stack");
 						}}
 					>
-						New chat — stacked worktree
+						New session — stacked worktree
 					</button>
 					<button
 						type="button"
 						className="session-tab-new-menu-item"
 						onClick={() => {
 							setNewMenu(null);
-							onNewChat("ask");
+							onNewSession("ask");
 						}}
 					>
-						New chat — ask (no worktree)
+						New session — ask (no worktree)
 					</button>
 				</div>
 			)}

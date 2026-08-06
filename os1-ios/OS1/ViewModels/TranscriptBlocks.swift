@@ -17,8 +17,6 @@ enum TranscriptBlock: Identifiable, Equatable {
     case work(WorkTurn)
     /// Duration / model / touched files under a settled answer.
     case footer(TurnFooter)
-    /// A team note, interleaved by the time it was written.
-    case note(SessionNote)
     /// The agent-published walkthrough, at the point it was published.
     case walkthrough(SessionWalkthrough)
 
@@ -28,7 +26,6 @@ enum TranscriptBlock: Identifiable, Equatable {
         case .tool(let item): item.id
         case .work(let turn): turn.id
         case .footer(let footer): footer.id
-        case .note(let note): "note:\(note.id)"
         case .walkthrough(let walkthrough): "walkthrough:\(walkthrough.publishedAt)"
         }
     }
@@ -49,9 +46,9 @@ enum TranscriptBlock: Identifiable, Equatable {
         case .tool(let item): [item.use?.id, item.result?.id].compactMap { $0 }
         case .work(let turn): turn.items.flatMap(\.entryIds)
         case .footer(let footer): [footer.entryId]
-        // Neither a note nor a walkthrough is a transcript entry, so neither
-        // can ever be a scroll anchor.
-        case .note, .walkthrough: []
+        // A walkthrough is not a transcript entry, so it can never be a
+        // scroll anchor.
+        case .walkthrough: []
         }
     }
 }
@@ -181,7 +178,7 @@ enum TranscriptGrouping {
     /// preserves the order it was given.
     ///
     /// Shared with the sub-agent viewer, which renders a worker's transcript
-    /// through exactly the same pipeline as the main chat.
+    /// through exactly the same pipeline as the main session.
     static func displayItems(
         from all: [TranscriptEntry],
         liveIds: Set<String> = []
@@ -228,7 +225,6 @@ enum TranscriptGrouping {
         from items: [SessionViewModel.DisplayItem],
         live: Bool,
         worktreeDir: String?,
-        notes: [SessionNote] = [],
         walkthrough: SessionWalkthrough? = nil
     ) -> [TranscriptBlock] {
         var blocks: [TranscriptBlock] = []
@@ -322,7 +318,7 @@ enum TranscriptGrouping {
             }
             if isLast { flush(isTrailing: true) }
         }
-        return place(walkthrough, into: interleave(notes, into: blocks))
+        return place(walkthrough, into: blocks)
     }
 
     /// Drop the walkthrough card straight after the turn that published it —
@@ -374,41 +370,12 @@ enum TranscriptGrouping {
         }
     }
 
-    /// Drop each note after the last block written before it.
-    ///
-    /// A footer reports its ANSWER's timestamp rather than its own, so a note
-    /// written in the same second as an answer lands after the footer instead
-    /// of wedged between the answer and its own metadata row.
-    private static func interleave(
-        _ notes: [SessionNote], into blocks: [TranscriptBlock]
-    ) -> [TranscriptBlock] {
-        guard !notes.isEmpty else { return blocks }
-        let sorted = notes.sorted { $0.ts < $1.ts }
-        var out: [TranscriptBlock] = []
-        var next = 0
-        // Blocks without a timestamp (an entry the server sent undated)
-        // inherit the last known time, so they can't reorder the notes.
-        var lastTime = Date.distantPast
-        for block in blocks {
-            let time = blockTime(block) ?? lastTime
-            while next < sorted.count, sorted[next].date < time {
-                out.append(.note(sorted[next]))
-                next += 1
-            }
-            out.append(block)
-            lastTime = time
-        }
-        out.append(contentsOf: sorted[next...].map(TranscriptBlock.note))
-        return out
-    }
-
     private static func blockTime(_ block: TranscriptBlock) -> Date? {
         switch block {
         case .message(let entry): entry.timestampDate
         case .tool(let item): (item.result ?? item.use)?.timestampDate
         case .work(let turn): turn.items.last.flatMap(endTimestamp)
         case .footer(let footer): footer.timestamp
-        case .note(let note): note.date
         case .walkthrough(let walkthrough): walkthrough.publishedDate
         }
     }

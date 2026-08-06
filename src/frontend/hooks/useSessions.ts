@@ -58,7 +58,7 @@ export function useSessions(pollInterval = 5000) {
   const pollPromiseRef = useRef<Promise<void> | null>(null);
   const pollAbortRef = useRef<AbortController | null>(null);
   // Optimistically-injected sessions the server hasn't caught up to yet (a
-  // just-created workspace/chat). A plain poll replaces the whole array and
+  // just-created workspace/session). A plain poll replaces the whole array and
   // would drop the injected copy — flashing a loading placeholder until the
   // create lands seconds later. Keep these merged into every poll result until
   // the server's own copy shows up (auto-cleared here) or `unstick` drops it.
@@ -158,7 +158,7 @@ export function useSessions(pollInterval = 5000) {
   const refresh = useCallback(() => { poll(); }, [poll]);
 
   // Drop a just-created session straight into the list so the UI can render it
-  // immediately (e.g. the tab-strip + creating a new chat) instead of showing a
+  // immediately (e.g. the tab-strip + creating a new session) instead of showing a
   // loading state until the next poll. The next poll replaces it with the
   // server's copy. Pass `{ sticky: true }` for a create the server takes a while
   // to register (a new workspace): the injected copy then survives every poll

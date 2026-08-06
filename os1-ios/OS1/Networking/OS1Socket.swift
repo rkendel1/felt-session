@@ -17,6 +17,8 @@ protocol SessionSocket: AnyObject {
     )
     func steerQueued(sessionId: String, queueId: String)
     func deleteQueued(sessionId: String, queueId: String)
+    func updateQueued(sessionId: String, queueId: String, content: String)
+    func reorderQueued(sessionId: String, order: [String])
     func cancelWatchedRun()
     func answer(sessionId: String, questionId: String, answers: [String: String]?)
 }
@@ -133,6 +135,21 @@ final class OS1Socket: SessionSocket {
 
     func deleteQueued(sessionId: String, queueId: String) {
         send(["type": "delete_queued_prompt", "sessionId": sessionId, "queueId": queueId])
+    }
+
+    /// Rewrite a queued message in place. Atomic on the server and it keeps
+    /// the message's position — unlike delete-then-resend, which drops it to
+    /// the back of the queue and leaves a window where it exists nowhere but
+    /// the composer.
+    func updateQueued(sessionId: String, queueId: String, content: String) {
+        send([
+            "type": "update_queued_prompt", "sessionId": sessionId,
+            "queueId": queueId, "content": content,
+        ])
+    }
+
+    func reorderQueued(sessionId: String, order: [String]) {
+        send(["type": "reorder_queued_prompt", "sessionId": sessionId, "order": order])
     }
 
     func cancelWatchedRun() {

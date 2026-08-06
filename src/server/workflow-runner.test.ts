@@ -157,7 +157,7 @@ describe("workflow runner", () => {
 				"return { a, b };",
 			].join("\n"),
 			executor,
-			user: "michiel",
+			user: "alex",
 			defaultModel: "claude-sonnet-5",
 		});
 
@@ -184,7 +184,7 @@ describe("workflow runner", () => {
 		// Executor got the run context.
 		expect(executor.calls[0].ctx.sessionId).toBe("bks-wf-test");
 		expect(executor.calls[0].ctx.cwd).toBe("/tmp");
-		expect(executor.calls[0].ctx.user).toBe("michiel");
+		expect(executor.calls[0].ctx.user).toBe("alex");
 		expect(executor.calls[0].ctx.defaultModel).toBe("claude-sonnet-5");
 
 		const journal = readWorkflowJournal(runId) as WorkflowJournalEntry[];

@@ -780,7 +780,7 @@ export function demoReplayScript(): Array<() => JsonlLine[]> {
   ];
 }
 
-// ── Stores beyond the chat dir ──────────────────────────────────────────────
+// ── Stores beyond the session dir ──────────────────────────────────────────────
 
 export function demoAutomations(now: number) {
   const iso8 = (agoMin: number) => iso(now - agoMin * 60_000);

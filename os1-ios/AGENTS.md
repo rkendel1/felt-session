@@ -107,7 +107,7 @@ TestFlight.
 - **REST decoding and list preparation are off-main too.** `OS1API` is
   `@MainActor`, so its generic get/post decode via `decodeDetached` —
   `/api/sessions` is multi-megabyte (thousands of rows) and polls every 5s
-  while a chat is open, and inline decoding was a visible periodic hitch
+  while a session is open, and inline decoding was a visible periodic hitch
   while typing. Keep new endpoints on that path, keep the sessions-list
   filter/sort in `SessionsListViewModel.prepared` (detached, decorated sort),
   and never allocate an `ISO8601DateFormatter` per call — `Session.parseISO`

@@ -201,7 +201,11 @@ export function pickOpenaiAccount(
   out?: { reason?: string },
   user?: string,
   pinnedId?: string,
-  strict?: boolean
+  strict?: boolean,
+  /** Account ids to skip entirely (caller-side ineligibility, e.g. the pi
+   *  engine excluding api_key accounts it cannot seed). Absent = no change
+   *  to the existing pick behavior. */
+  exclude?: ReadonlySet<string>
 ): CodexAccount | { error: string } {
   if (isLocalProfile()) return localCodexAccount();
   const all = listCodexAccounts();
@@ -214,7 +218,8 @@ export function pickOpenaiAccount(
   }
   const allowedOwner = (a: CodexAccount) => !a.owner || (!!user && userMatchesAny(user, [a.owner]));
   const designated = (id: string) => !ids?.length || ids.includes(id);
-  if (pinnedId) {
+  const eligible = (id: string) => !exclude?.has(id);
+  if (pinnedId && eligible(pinnedId)) {
     const pinned = getUsableCodexAccountById(pinnedId, model);
     if (pinned && allowedOwner(pinned) && designated(pinnedId)) {
       if (out) out.reason = "pinned";
@@ -229,6 +234,7 @@ export function pickOpenaiAccount(
   }
   if (ids?.length) {
     for (const id of ids) {
+      if (!eligible(id)) continue;
       const a = getUsableCodexAccountById(id, model);
       if (a && allowedOwner(a)) {
         if (out) out.reason = "designated";
@@ -238,7 +244,7 @@ export function pickOpenaiAccount(
     const known = ids.join(", ");
     return { error: `no designated openai account is configured (bridge.openaiAccounts: ${known})` };
   }
-  const picked = pickCodexAccount(undefined, model, sessionKey, out, user);
+  const picked = pickCodexAccount(exclude ? new Set(exclude) : undefined, model, sessionKey, out, user);
   if (picked) return picked;
   return { error: "no usable codex account for opencode/openai (all currently sidelined)" };
 }

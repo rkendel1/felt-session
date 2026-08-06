@@ -297,7 +297,7 @@ export class SlackAgent implements AgentModule {
           lines.length
             ? `Recent messages (oldest first):\n${lines.join("\n")}`
             : "No recent messages.",
-          "Use the slack MCP tools for more history, thread replies, or to post (always prefix posts saying you're Michael).",
+          `Use the slack MCP tools for more history, thread replies, or to post (always prefix posts saying you're ${personaName()}).`,
         ].join("\n\n");
       },
     };
@@ -377,7 +377,7 @@ export class SlackAgent implements AgentModule {
         }
 
         // Channel-watch automations: one run per top-level message in a
-        // watched channel (thread replies and @michael mentions don't
+        // watched channel (thread replies and @-mentions don't
         // re-trigger — mentions go through the interactive path below).
         if (
           event.type === "message" &&
@@ -871,7 +871,7 @@ Please address this feedback:
         const ghCompareUrl = `https://github.com/${GITHUB_REPO}/compare/main...${encodeURIComponent(branch)}`;
         await setChannelTopic(
           channelId,
-          `${ghCompareUrl} | Mention @michael to interact`
+          `${ghCompareUrl} | Mention @${personaName()} to interact`
         );
 
         // Post intro message
