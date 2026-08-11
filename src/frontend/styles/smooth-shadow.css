@@ -6,10 +6,10 @@
  * newer canonical scale in tellahq/tella-fusion#5517 rather than the much
  * blurrier shadows this branch originally replaced.
  *
- * `sm` is for compact floating controls, `md` for popovers, and `lg` for
- * menus, palettes, dialogs, and large preview cards. The 1px hairline is the
- * final shadow layer, so do not add a border, ring, or native `shadow-*`
- * utility to the same element.
+ * `sm` is for compact floating controls, `md` for menus and popovers, and `lg`
+ * for palettes, dialogs, and large preview cards. The 1px hairline is the final
+ * shadow layer, so do not add a border, ring, or native `shadow-*` utility to
+ * the same element.
  *
  * MIT License
  *
