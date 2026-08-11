@@ -373,7 +373,8 @@ function CommentCard({
 				side="left"
 				align="start"
 				sideOffset={10}
-				className="flex max-h-[min(560px,70vh,var(--available-height))] w-[min(440px,calc(100vw-24px))] cursor-pointer gap-[9px] overflow-hidden border border-line-strong bg-panel px-3 py-[11px] shadow-[0_12px_40px_-8px_rgba(0,0,0,0.5),0_0_0_1px_var(--border)]"
+				elevation="lg"
+				className="flex max-h-[min(560px,70vh,var(--available-height))] w-[min(440px,calc(100vw-24px))] cursor-pointer gap-[9px] overflow-hidden bg-panel px-3 py-[11px]"
 			>
 				<div className="contents" onClick={() => onOpenTab?.("pr")}>
 					{avatar}
@@ -480,7 +481,8 @@ function FileRow({
 					side="left"
 					align="start"
 					sideOffset={10}
-					className="flex max-h-[min(720px,82vh,var(--available-height))] w-[min(720px,calc(100vw-24px))] cursor-pointer flex-col overflow-hidden border border-line-strong bg-panel px-3 py-2.5 shadow-[0_12px_40px_-8px_rgba(0,0,0,0.5),0_0_0_1px_var(--border)]"
+					elevation="lg"
+					className="flex max-h-[min(720px,82vh,var(--available-height))] w-[min(720px,calc(100vw-24px))] cursor-pointer flex-col overflow-hidden bg-panel px-3 py-2.5"
 				>
 					<div
 						className="flex min-h-0 flex-1 flex-col overflow-hidden"

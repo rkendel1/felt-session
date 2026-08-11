@@ -73,6 +73,7 @@ function Popup({
 	align,
 	sideOffset = 8,
 	arrow = false,
+	elevation = "md",
 	anchor,
 	initialFocus = false,
 	children,
@@ -85,6 +86,8 @@ function Popup({
 	 * `sideOffset`. Matches the sidebar's legacy hover card, so a popup that
 	 * sits beside one of those reads as the same object. */
 	arrow?: boolean;
+	/** Large preview cards need a wider cast shadow than compact popovers. */
+	elevation?: "md" | "lg";
 	/** Position against something other than the Trigger — pass the wrapper of a
 	 * control cluster whose popup opens from several places (a caret, a
 	 * right-click, a disabled button), so the popup keeps one anchor no matter
@@ -111,7 +114,10 @@ function Popup({
 				<BasePopover.Popup
 					initialFocus={initialFocus}
 					className={cn(
-						"rounded-control [corner-shape:squircle] border border-line-strong bg-panel shadow-[0_10px_30px_rgba(0,0,0,0.32)] outline-none",
+						"rounded-control [corner-shape:squircle] bg-panel outline-none",
+						elevation === "lg"
+							? "smooth-shadow-ring-lg"
+							: "smooth-shadow-ring-md",
 						"origin-[var(--transform-origin)] transition-[transform,opacity] duration-[120ms] ease-out",
 						"data-[starting-style]:scale-[0.97] data-[starting-style]:opacity-0",
 						"data-[ending-style]:opacity-0 data-[ending-style]:transition-none",
@@ -120,12 +126,12 @@ function Popup({
 				>
 					{arrow && (
 						// A square rotated onto its point, half of it hanging off the
-						// popup edge: the outward two borders continue the popup's own
-						// border, the fill covers the segment behind it. Base UI sets
+						// popup edge: the outward two borders continue the popup's
+						// hairline, while the fill covers the segment behind it. Base UI sets
 						// the cross-axis offset inline; the main-axis one is ours.
 						<BasePopover.Arrow
 							className={cn(
-								"size-[10px] rotate-45 border-line-strong bg-panel",
+								"size-[10px] rotate-45 [border-color:var(--smooth-ring-color)] bg-panel",
 								"data-[side=right]:left-[-5px] data-[side=right]:border-b data-[side=right]:border-l",
 								"data-[side=left]:right-[-6px] data-[side=left]:border-t data-[side=left]:border-r",
 								"data-[side=top]:bottom-[-6px] data-[side=top]:border-r data-[side=top]:border-b",

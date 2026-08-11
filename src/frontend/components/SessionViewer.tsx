@@ -5166,7 +5166,7 @@ export function SessionViewer({
 									{historyTruncated && (
 										<div className="flex justify-center [overflow-anchor:none] px-0 pt-1 pb-3.5">
 											{loadingHistory ? (
-												<div className="inline-flex items-center gap-1.5 rounded-full bg-control px-3.5 py-2 text-label font-semibold text-dim shadow-[0_1px_6px_rgba(0,0,0,0.12)]">
+												<div className="inline-flex items-center gap-1.5 rounded-full bg-control px-3.5 py-2 text-label font-semibold text-dim smooth-shadow-ring-sm">
 													<PixelSpinner className="text-faint" />
 													<span>
 														{loadingAllHistory
@@ -5180,7 +5180,7 @@ export function SessionViewer({
 												<div
 													role="group"
 													aria-label="Earlier messages"
-													className="inline-flex items-stretch overflow-hidden rounded-full bg-control shadow-[0_1px_6px_rgba(0,0,0,0.12)]"
+													className="inline-flex items-stretch overflow-hidden rounded-full bg-control smooth-shadow-ring-sm"
 												>
 													<button
 														type="button"
