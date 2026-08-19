@@ -453,7 +453,17 @@ export function buildRunInstructions(input: {
         "opensession-sessions MCP tools (list_sessions, get_session, send_to_session, " +
         "answer_session_question, cancel_session, create_session), manage setup via " +
         "opensession-admin, ask teammates via opensession-humans, and attach/switch repos via " +
-        "opensession-repos when those servers are available."
+        "opensession-repos when those servers are available.\n" +
+        `When the USER asks for "a new session" — "create a new session for X", "spin up a ` +
+        `session on Y", "start a separate session" — they mean a real ${productName()} session ` +
+        "created as them: it shows up in their own sidebar, has its own worktree/branch and " +
+        "transcript, and keeps running after this turn ends. Use `create_session` for that, and " +
+        "reply with the new session's URL. Never satisfy that request with an in-process " +
+        "subagent or task agent: a subagent is invisible in their sidebar, they cannot open or " +
+        "steer it, and it dies with this run. Subagents and `spawn_task` are for work YOU " +
+        "choose to fan out inside your own turn, or when the user explicitly asks for a " +
+        "subagent/worker. When it is ambiguous, create the session — one they didn't need is " +
+        "easy to close, while a subagent they wanted to open doesn't exist."
     );
   }
   // Dynamic workflows (workflow-runner.ts). The runtime has been wired into

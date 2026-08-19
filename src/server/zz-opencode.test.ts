@@ -777,6 +777,22 @@ describe("buildRunInstructions", () => {
     // A rejected reviewer must not cost the PR itself.
     expect(s).toContain("never drop the PR over it");
   });
+  // A user asking for "a new session" means a detached session in their own
+  // sidebar, not an in-process subagent that dies with this run.
+  test("a user asking for a new session gets create_session, not a subagent", () => {
+    const s = buildRunInstructions({
+      isAsk: false,
+      inProcessMcp: { "opensession-sessions": {} },
+    });
+    expect(s).toContain('When the USER asks for "a new session"');
+    expect(s).toContain("Use `create_session` for that");
+    expect(s).toContain("Never satisfy that request with an in-process");
+    expect(s).toContain("When it is ambiguous, create the session");
+  });
+  test("runs without the sessions server are told nothing about create_session", () => {
+    const s = buildRunInstructions({ isAsk: false });
+    expect(s).not.toContain('When the USER asks for "a new session"');
+  });
   test("no reviewer configured leaves the PR section alone", () => {
     const s = buildRunInstructions({ isAsk: false, osSessionId: "os-1" });
     expect(s).toContain("## PR attribution");
