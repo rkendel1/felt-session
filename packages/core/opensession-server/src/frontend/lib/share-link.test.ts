@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+	composerSessionRef,
 	sessionPath,
 	splitSessionRef,
 	subagentSuffix,
@@ -90,6 +91,22 @@ describe("workspacePanePath", () => {
 		);
 		expect(workspacePanePath("ws 1", "conversation")).toBe(
 			"/workspace/ws%201/conversation",
+		);
+	});
+});
+
+describe("composerSessionRef", () => {
+	const MINTED = "os-01a01ae5-ce77-7000-8874-98ded6c9208f";
+
+	test("writes a minted session as the bare id the composer chips", () => {
+		expect(composerSessionRef({ id: MINTED, workspaceId: "ws-1" })).toBe(MINTED);
+	});
+
+	test("keeps the whole URL for an id that has no bare form", () => {
+		// @ts-expect-error — jsdom-less test env; absoluteLink only reads origin.
+		globalThis.location = { origin: "https://os.tella.dev" };
+		expect(composerSessionRef({ id: "bks-ghpr-5099-review" })).toBe(
+			"https://os.tella.dev/session/bks-ghpr-5099-review",
 		);
 	});
 });

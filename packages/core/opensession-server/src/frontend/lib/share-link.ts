@@ -4,6 +4,7 @@
 // textarea + execCommand, the same trick the viewer's share button uses.
 
 import { BASE_PATH } from "./base";
+import { isMintedSessionId } from "./session-url";
 
 /**
  * Canonical session/workspace URL path — workspace-scoped when the session has
@@ -70,6 +71,27 @@ export function prPath(repo: string, branch: string): string {
 /** Absolute link for a path built above. */
 export function absoluteLink(path: string): string {
   return `${location.origin}${path}`;
+}
+
+/**
+ * How to write a reference to a session INTO a composer draft.
+ *
+ * The bare id, because that is the form the composer settles on anyway: a
+ * pasted session URL is rewritten to its id the moment it lands
+ * (`insertPastedSessionId` in lib/session-url.ts), and the id is what paints
+ * as a chip carrying the session's title. Handing the composer a URL it would
+ * immediately shorten would be taking the long way round on purpose.
+ *
+ * An id older than the minted shape has no bare form that chips, so it keeps
+ * its whole URL — the renderer reads that too.
+ */
+export function composerSessionRef(session: {
+  id: string;
+  workspaceId?: string | null;
+}): string {
+  return isMintedSessionId(session.id)
+    ? session.id
+    : absoluteLink(sessionPath(session));
 }
 
 /**

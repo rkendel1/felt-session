@@ -8,6 +8,8 @@ import type { UnifiedSession, TranscriptEntry } from "../lib/types";
 import { getCurrentUser } from "./UserPicker";
 import { Field, fieldClasses } from "../ui/input";
 import { noAutofill } from "../lib/composer-autofill";
+import { composerSessionRef } from "../lib/share-link";
+import type { NewSessionPrefill } from "../lib/new-session-link";
 
 type Flavor = "build" | "learnings" | "analyze";
 
@@ -16,6 +18,9 @@ interface Props {
   entries: TranscriptEntry[];
   send: (msg: any) => void;
   connected: boolean;
+  /** Open the new-session composer prefilled — the one flavor that writes no
+      prompt of its own. */
+  onOpenNewSession: (prefill: NewSessionPrefill) => void;
 }
 
 /**
@@ -23,8 +28,18 @@ interface Props {
  *  - build:     ask → code handoff with conversation context (Devin's "spin-off")
  *  - learnings: code session that feeds durable learnings back into the repo's docs as a PR
  *  - analyze:   ask session reviewing what went well/wrong + better prompt
+ *
+ * A fourth row spins nothing off itself: it opens the new-session composer with
+ * a link to this session already in the draft, for when the handoff is one the
+ * person wants to word themselves.
  */
-export function SpinOffMenu({ session, entries, send, connected }: Props) {
+export function SpinOffMenu({
+  session,
+  entries,
+  send,
+  connected,
+  onOpenNewSession,
+}: Props) {
   const [flavor, setFlavor] = useState<Flavor | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [branch, setBranch] = useState("");
@@ -46,6 +61,17 @@ export function SpinOffMenu({ session, entries, send, connected }: Props) {
       setBranch(`opensession-learnings-${dateStamp()}`);
       setTask("");
     }
+  }
+
+  function openLinkedSession() {
+    onOpenNewSession({
+      // A reference, not a transcript: the new session reads this one through
+      // the link when it needs to, instead of carrying a copy that goes stale.
+      // The trailing space parks the caret clear of the chip.
+      prompt: `${composerSessionRef(session)} `,
+      mode: session.mode ?? "code",
+      ...(session.repo ? { repo: session.repo } : {}),
+    });
   }
 
   function start() {
@@ -164,6 +190,12 @@ export function SpinOffMenu({ session, entries, send, connected }: Props) {
           <Menu.Item closeOnClick={false} onClick={() => pick("analyze")} className={itemCls}>
             <span className="text-label font-semibold text-fg">Analyze session</span>
             <span className="text-supporting leading-[1.4] text-faint">What went well, what didn't, and a better prompt</span>
+          </Menu.Item>
+          {/* Closes the whole menu rather than opening the form above: there is
+              nothing to fill in here, the composer IS the form. */}
+          <Menu.Item onClick={openLinkedSession} className={itemCls}>
+            <span className="text-label font-semibold text-fg">Reference this session</span>
+            <span className="text-supporting leading-[1.4] text-faint">Opens the new-session composer with a link to this one — you write the prompt</span>
           </Menu.Item>
         </Menu.Popup>
       </Menu.SubmenuRoot>
