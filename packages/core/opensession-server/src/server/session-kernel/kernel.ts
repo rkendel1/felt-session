@@ -129,6 +129,31 @@ export class SessionKernel {
 				source: "compatibility",
 			});
 			if (admission.duplicate) return admission.result as TResult;
+			if (admission.borrowed) {
+				// Detached callbacks can write while their long-lived command owns
+				// the mailbox. The Worker remains the sole physical writer; effects
+				// are persisted directly because there is no second decision to settle.
+				const borrowed: CommandContext = {
+					sessionId: this.sessionId,
+					requestId,
+					effects: [],
+				};
+				const result = commandContext.run(borrowed, mutate);
+				if (
+					record &&
+					operation !== "session_delete" &&
+					operation !== "transcript_delete"
+				)
+					this.recordChange(operation);
+				for (const effect of borrowed.effects)
+					sessionKernelStore().enqueueOutbox(
+						this.sessionId,
+						effect.kind,
+						effect.payload,
+						effect.effectKey,
+					);
+				return result;
+			}
 			if (!admission.leaseId)
 			throw new Error("Session kernel actor did not grant a sync lease");
 		const context: CommandContext = {

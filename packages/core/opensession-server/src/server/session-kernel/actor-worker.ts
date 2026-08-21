@@ -185,8 +185,12 @@ export function startSessionKernelActorWorker(): void {
     sessionId: string,
     command: { requestId: string; type: string; payload?: unknown; replaySafe?: boolean },
   ) {
-    if (active.has(sessionId))
-      throw new Error(`Session mutation raced the ${sessionId} mailbox`);
+    // Compatibility writes can arrive from detached run callbacks while a
+    // durable command owns the session. They still execute in this Worker, so
+    // borrow its physical writer instead of trying to open a second lease (the
+    // synchronous caller cannot wait for the active gateway command without
+    // deadlocking that command's settlement).
+    if (active.has(sessionId)) return { duplicate: false, borrowed: true };
     if (store.isTombstoned(sessionId))
       throw new Error(`Session ${sessionId} was deleted`);
     const persisted = store.acceptCommand({

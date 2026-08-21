@@ -174,9 +174,10 @@ export class SessionKernelActorClient {
   beginSync(
     sessionId: string,
     command: SessionCommand,
-  ): { duplicate: boolean; leaseId?: string; result?: unknown } {
+  ): { duplicate: boolean; borrowed?: boolean; leaseId?: string; result?: unknown } {
     const admission = this.callStore<{
       duplicate: boolean;
+      borrowed?: boolean;
       leaseId?: string;
       result?: unknown;
     }>("$beginSync", [sessionId, command]);

@@ -1,9 +1,16 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { SessionKernelActorClient } from "./actor-client";
+import {
+  __setSessionKernelStoreForTest,
+  installSessionKernelActor,
+  sessionKernel,
+} from "./kernel";
 import { SESSION_KERNEL_MAX_QUEUED_PER_SESSION } from "./actor-protocol";
 
 let client: SessionKernelActorClient | undefined;
 afterEach(() => {
+  installSessionKernelActor(undefined);
+  __setSessionKernelStoreForTest(undefined);
   client?.terminate();
   client = undefined;
 });
@@ -61,16 +68,43 @@ describe("session kernel actor boundary", () => {
     await expect(host.begin("s1", { requestId: "after-fatal", type: "test" })).rejects.toThrow();
   });
 
-  test("rejects a synchronous compatibility write while an async lease is active", async () => {
+  test("borrows the actor writer for compatibility work during an async lease", async () => {
     const host = await actor();
     const first = await host.begin("s1", { requestId: "first", type: "test" });
-    expect(() =>
-      host.beginSync("s1", { requestId: "sync", type: "sync:test" }),
-    ).toThrow("raced the s1 mailbox");
+    const borrowed = host.beginSync("s1", {
+      requestId: "sync",
+      type: "sync:transcript_append",
+    });
+    expect(borrowed).toEqual({ duplicate: false, borrowed: true });
+    host.store.setRunState({
+      sessionId: "s1",
+      state: "running",
+      event: "stream_started",
+    });
+    expect(host.store.runState("s1").state).toBe("running");
+    expect(host.store.command("s1", "sync")).toBeUndefined();
     await host.complete(first.leaseId!, null, []);
-    const sync = host.beginSync("s1", { requestId: "sync", type: "sync:test" });
+
+    const sync = host.beginSync("s1", { requestId: "after", type: "sync:test" });
     expect(sync.leaseId).toBeString();
     host.completeSync(sync.leaseId!, "done", []);
+  });
+
+  test("persists detached writes while a command owns the mailbox", async () => {
+    const host = await actor();
+    const active = await host.begin("detached", {
+      requestId: "active",
+      type: "submit_prompt",
+    });
+    installSessionKernelActor(host);
+    const kernel = sessionKernel("detached");
+
+    kernel.setRunState({ state: "running", event: "stream_started" });
+    kernel.enqueueEffect("notify", { ok: true }, "detached-effect");
+    expect(kernel.runState().state).toBe("running");
+    expect(host.store.pendingOutbox(Date.now(), 10, ["notify"])).toHaveLength(1);
+
+    await host.complete(active.leaseId!, "done", []);
   });
 
   test("hydrates persisted run state into the gateway projection", async () => {
