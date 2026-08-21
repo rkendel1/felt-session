@@ -193,6 +193,32 @@ import {
 	routedModelParts,
 	workspacePresetLabel,
 } from "./ModelEffortSelect";
+
+import {
+	metadataModelLabel,
+	modelIsCodex,
+	prettyModel,
+	switchDividerText,
+} from "./session-viewer/model-labels";
+import { withModelSwitches } from "./session-viewer/model-switches";
+import {
+	cacheTranscriptView,
+	cachedTranscriptView,
+	peekCachedTranscriptView,
+	type CachedTranscriptView,
+} from "./session-viewer/transcript-cache";
+import {
+	holdTranscriptAnchor,
+	pickScrollAnchor,
+} from "./session-viewer/transcript-anchor";
+import { useLivePlan } from "./session-viewer/use-live-plan";
+import {
+	BusyInline,
+	ConversationLoading,
+	SteerWaiting,
+	WorkspaceWaiting,
+} from "./session-viewer/busy-indicators";
+import { StreamingMessage } from "./session-viewer/streaming-message";
 import { AskCard } from "./AskCard";
 import { PrPanel } from "./PrPanel";
 import { PrStatusBar } from "./PrStatusBar";
@@ -606,7 +632,6 @@ interface Props {
 // Stable identity for "no sub-agent open", so the default prop doesn't hand
 // the memoized transcript a fresh array on every render.
 const NO_SUBAGENTS: SubagentRef[] = [];
-const NO_PLAN: PlanItem[] = [];
 const NO_WORKFLOW_RUNS: WorkflowRunSnapshot[] = [];
 // Same reason: the empty row is set on every stream_start, and a fresh array
 // each time would re-render the composer block for nothing.
@@ -614,43 +639,6 @@ const EMPTY_SUGGESTIONS: ReplySuggestion[] = [];
 // And again for the Review tab's repo list, which a promoted PR replaces with
 // an empty one: PrPanel memoizes its targets on this array.
 const NO_REVIEW_REPOS: Array<{ repo: string; primary: boolean }> = [];
-
-// A two-item "plan" is ceremony, not a plan — below this the flap stays shut
-// and the checklist lives in the transcript like any other tool call.
-const MIN_PLAN_ITEMS = 3;
-
-/**
- * The model's own plan for the turn that's running right now: the newest
- * todowrite/update_plan checklist written since the last user message.
- *
- * Both bounds matter. Stopping at the last user entry keeps a finished turn's
- * plan from being adopted by the next one (a steer mid-turn also stops the
- * scan — the plan reappears the moment the model writes the next one). Gating
- * on `running` means a half-checked list can never outlive its turn above the
- * composer, where it would read as work still in flight.
- */
-function useLivePlan(
-	entries: TranscriptEntry[],
-	running: boolean,
-): PlanItem[] {
-	return useMemo(() => {
-		if (!running) return NO_PLAN;
-		for (let i = entries.length - 1; i >= 0; i--) {
-			const e = entries[i];
-			if (e.type === "user") break;
-			if (e.type !== "tool_use") continue;
-			if (canonicalToolName(e.toolName) !== "TodoWrite") continue;
-			// todoread canonicalizes to the same name and carries no list —
-			// parsing to nothing means "keep looking", not "no plan".
-			const items = parsePlanItems(e.toolInput);
-			if (items.length === 0) continue;
-			return items.length >= MIN_PLAN_ITEMS ? items : NO_PLAN;
-		}
-		return NO_PLAN;
-	}, [entries, running]);
-}
-
-
 // Hidden for at least this long, returning to the tab is a "reopen" — jump to
 // the live edge even if nothing new arrived. Shorter absences (glancing at a
 // notification) keep the reader's place unless the transcript grew meanwhile.
@@ -668,237 +656,6 @@ const RESUME_GROWTH_WINDOW_MS = 8_000;
 const JUMP_PAGE_ENTRIES = HISTORY_PAGE_ENTRIES;
 const JUMP_MAX_ENTRIES = 4_000;
 const EMPTY_TRANSCRIPT_ENTRIES: TranscriptEntry[] = [];
-
-function modelIsCodex(id: string, models: ModelOption[]): boolean {
-	const found = models.find((m) => m.id === id);
-	if (found) return found.provider === "codex";
-	return id.startsWith("gpt") || id.startsWith("codex");
-}
-
-// Friendly "<name> · <engine>" for the model-switch divider, so a cross-provider
-// switch reads unmistakably as e.g. "Sonnet · Claude → GPT-5.5 · Codex". Pure
-// (no models list needed) so it works in the transcript_init weave before the
-// models endpoint has loaded.
-const MODEL_NAMES: Record<string, string> = {
-	"claude-fable-5": "Fable",
-	"claude-opus-5": "Opus 5",
-	"claude-opus-4-8": "Opus 4.8",
-	"claude-sonnet-5": "Sonnet",
-	"claude-haiku-4-5-20251001": "Haiku",
-	"gpt-5.5": "GPT-5.5",
-	"gpt-5": "GPT-5",
-	codex: "Codex",
-};
-function prettyModel(id: string): string {
-	// A workspace preset names itself; with no models list to read its label
-	// from, its slug is still a name and its storage path is not.
-	const preset = workspacePresetLabel(baseModelId(id), []);
-	if (preset) return preset;
-	// Pi ids get their friendly name with no engine suffix — the engine
-	// is an implementation detail ("Sonnet 5", not "… · Pi").
-	const oc = routedModelParts(id);
-	if (oc) return friendlyModelSlug(oc.model);
-	const isCodex = id.startsWith("gpt") || id.startsWith("codex");
-	const name = MODEL_NAMES[id] || id;
-	return `${name} · ${isCodex ? "Codex" : "Claude"}`;
-}
-/** Model label for the header/info metadata lines: the registry label, but
- * pi ids always take the pure friendly-name path (the server's labels
- * for them only refresh on restart). */
-function metadataModelLabel(effectiveModel: string, models: ModelOption[]): string {
-	const preset = workspacePresetLabel(baseModelId(effectiveModel), models);
-	if (preset) return preset;
-	if (routedModelParts(effectiveModel)) return prettyModel(effectiveModel);
-	return models.find((m) => m.id === effectiveModel)?.label || prettyModel(effectiveModel);
-}
-// An automatic fallback arrives as by = "auto-switch — <from label> <reason>",
-// which repeats the model the divider already names. Keep only the reason, and
-// take the from-model's name from it: a dial preset id ("dial/opus-fable") has
-// no friendly name of its own here, so prettyModel would print the raw slug.
-const AUTO_SWITCH_BY = /^auto-switch — (.+) (out of credits|hit a transient engine error)$/;
-function switchDividerText(model: string, from?: string, by?: string): string {
-	const auto = by ? AUTO_SWITCH_BY.exec(by) : null;
-	const fromName = from ? (auto ? auto[1] : prettyModel(from)) : "";
-	const head = fromName
-		? `Switched ${fromName} → ${prettyModel(model)}`
-		: `Switched to ${prettyModel(model)}`;
-	const suffix = auto ? auto[2] : by;
-	return suffix ? `${head} · ${suffix}` : head;
-}
-
-type CachedTranscriptView = {
-	entries: TranscriptEntry[];
-	cursor: { sessionId: string; rev: string; offset: number } | null;
-	/** Transcript v2 seq-mode state (null = legacy mode), so a session
-	 *  switch-back resumes with sinceSeq instead of re-snapshotting. */
-	seq: {
-		sessionId: string;
-		lastSeq: number;
-		firstSeq: number | null;
-		lastChangeSeq: number;
-	} | null;
-	historyTruncated: boolean;
-	historyStart: number | null;
-	index: TranscriptIndexEntry[] | null;
-	indexEpoch: number | null;
-	scrollTop: number;
-	following: boolean;
-	anchorEid: string | null;
-	anchorTop: number | null;
-};
-
-// SessionViewer remounts on navigation. Keep a small LRU of the expensive
-// transcript view state so moving between nearby sessions is instant without
-// retaining an unbounded workday's worth of conversations in the browser.
-const transcriptViewCache = new Map<string, CachedTranscriptView>();
-const TRANSCRIPT_VIEW_CACHE_MAX = 6;
-
-function cachedTranscriptView(sessionId: string): CachedTranscriptView | null {
-	const hit = transcriptViewCache.get(sessionId);
-	if (!hit) return null;
-	transcriptViewCache.delete(sessionId);
-	transcriptViewCache.set(sessionId, hit);
-	return hit;
-}
-
-function peekCachedTranscriptView(sessionId: string): CachedTranscriptView | null {
-	return transcriptViewCache.get(sessionId) ?? null;
-}
-
-function cacheTranscriptView(sessionId: string, view: CachedTranscriptView) {
-	transcriptViewCache.delete(sessionId);
-	transcriptViewCache.set(sessionId, view);
-	while (transcriptViewCache.size > TRANSCRIPT_VIEW_CACHE_MAX) {
-		const oldest = transcriptViewCache.keys().next().value;
-		if (oldest === undefined) break;
-		transcriptViewCache.delete(oldest);
-	}
-}
-
-function withModelSwitches(
-	entries: TranscriptEntry[],
-	history: UnifiedSession["modelHistory"],
-): TranscriptEntry[] {
-	const switches: TranscriptEntry[] = (history || []).map((h) => ({
-		id: `model-switch-${h.at}`,
-		type: "system" as const,
-		content: switchDividerText(h.model, h.from, h.by),
-		timestamp: h.at,
-	}));
-	if (switches.length === 0) return entries;
-	const persistedContent = new Set(switches.map((entry) => entry.content));
-	const base = entries.filter(
-		(entry) =>
-			!entry.id.startsWith("model-switch-live-") ||
-			!persistedContent.has(entry.content),
-	);
-	const current = new Map(base.map((entry) => [entry.id, entry] as const));
-	if (
-		base.length === entries.length &&
-		switches.every((entry) => {
-			const existing = current.get(entry.id);
-			return (
-				existing?.content === entry.content &&
-				existing.timestamp === entry.timestamp
-			);
-		})
-	)
-		return entries;
-	return orderTranscriptEntries(mergeTranscriptEntries(base, switches));
-}
-
-// The element whose position the history hold keeps stable: the first
-// entry-level node ([data-eid]: bubbles, tool rows, turn notes — turn-block
-// roots too) at or straddling the transcript viewport's top edge, preferring
-// the deepest qualifying descendant. Depth matters: anchoring a turn-block
-// ROOT is useless against a history page merging into that turn — the merged
-// rows land inside it above the reader while the root's own top never moves.
-// Anchoring the visible row inside it compensates exactly. (A collapsed turn
-// has no row nodes, so its root is the anchor — correct, since merged rows
-// stay hidden inside the fold.)
-function pickScrollAnchor(el: HTMLElement): HTMLElement | null {
-	const cTop = el.getBoundingClientRect().top;
-	const all = el.querySelectorAll<HTMLElement>("[data-eid]");
-	let anchor: HTMLElement | null = null;
-	for (const n of Array.from(all)) {
-		const r = n.getBoundingClientRect();
-		if (r.height <= 0 || r.bottom <= cTop + 1) continue;
-		if (!anchor) {
-			anchor = n;
-			continue;
-		}
-		// Doc order puts a block's interior rows right after the block root:
-		// keep descending while the qualifying node is inside the current pick;
-		// the first non-descendant qualifying node ends the search.
-		if (anchor.contains(n)) anchor = n;
-		else break;
-	}
-	return anchor;
-}
-
-function holdTranscriptAnchor(
-	container: HTMLElement,
-	entryId: string,
-	top: number,
-	bottomGap: number,
-	onFound: () => void,
-	onStop?: () => void,
-): () => void {
-	let raf = 0;
-	let stopped = false;
-	let foundAt: number | null = null;
-	const startedAt = performance.now();
-	const stop = () => {
-		if (stopped) return;
-		stopped = true;
-		cancelAnimationFrame(raf);
-		container.removeEventListener("wheel", stop);
-		container.removeEventListener("touchstart", stop);
-		container.removeEventListener("pointerdown", stop);
-		window.removeEventListener("keydown", stop);
-		onStop?.();
-	};
-	container.addEventListener("wheel", stop, { passive: true });
-	container.addEventListener("touchstart", stop, { passive: true });
-	container.addEventListener("pointerdown", stop, { passive: true });
-	window.addEventListener("keydown", stop);
-	const tick = () => {
-		if (stopped || !container.isConnected) {
-			stop();
-			return;
-		}
-		const target = container.querySelector<HTMLElement>(
-			`[data-eid="${CSS.escape(entryId)}"]`,
-		);
-		const now = performance.now();
-		if (target) {
-			if (foundAt === null) {
-				foundAt = now;
-				onFound();
-			}
-			const delta =
-				target.getBoundingClientRect().top -
-				container.getBoundingClientRect().top -
-				top;
-			if (Math.abs(delta) > 0.5) container.scrollTop += delta;
-		} else {
-			container.scrollTop = Math.max(
-				0,
-				container.scrollHeight - container.clientHeight - bottomGap,
-			);
-		}
-		if (
-			(foundAt !== null && now - foundAt >= 2500) ||
-			(foundAt === null && now - startedAt >= 6000)
-		) {
-			stop();
-			return;
-		}
-		raf = requestAnimationFrame(tick);
-	};
-	raf = requestAnimationFrame(tick);
-	return stop;
-}
 
 export function SessionViewer({
 	session,
@@ -2010,7 +1767,7 @@ export function SessionViewer({
 	// every streamed frame.
 	const captureScrollAnchor = useCallback(() => {
 		const el = messagesRef.current;
-		const cached = transcriptViewCache.get(session.id);
+		const cached = peekCachedTranscriptView(session.id);
 		if (!el || !cached) return;
 		// Nothing qualifying at the top edge clears the pair, rather than
 		// leaving one the reader has scrolled away from.
@@ -3732,7 +3489,7 @@ export function SessionViewer({
 		const current = el?.scrollTop ?? previous;
 		lastHistoryScrollTopRef.current = current;
 		onScroll();
-		const cached = transcriptViewCache.get(session.id);
+		const cached = peekCachedTranscriptView(session.id);
 		// Only the cheap fields here: a scroll event must not walk the
 		// transcript. The anchor follows once the reader settles.
 		if (el && cached) {
@@ -7828,191 +7585,3 @@ export function SessionViewer({
 // Placeholder for regions that need the session's worktree while the create
 // run is still preparing it (new-workspace creates announce the session before
 // the slow git work — see create_session in opensession.ts).
-function WorkspaceWaiting({ detail }: { detail: string }) {
-	return (
-		<div className="flex h-full min-h-[240px] flex-col items-center justify-center gap-1 px-6 text-center">
-			<PageLoader className="mb-2 text-dim" />
-			<div className="text-item-title font-semibold text-fg">
-				Setting up your workspace
-			</div>
-			<div className="max-w-[340px] text-label font-medium leading-relaxed text-dim">
-				{detail}
-			</div>
-		</div>
-	);
-}
-
-function ConversationLoading() {
-	// Held back for a beat: most transcripts arrive fast enough that a
-	// placeholder would flash and go, which is more distracting than the empty
-	// canvas it replaced. Only a load slow enough to notice gets stood in for.
-	const [visible, setVisible] = useState(false);
-	useEffect(() => {
-		const t = setTimeout(() => setVisible(true), 180);
-		return () => clearTimeout(t);
-	}, []);
-	if (!visible) return <div className="min-h-full" />;
-	// The fade sits on the wrapper, not on the skeleton: Motion writes inline
-	// opacity, which the ghosts' own breathing animation would overwrite.
-	return (
-		<motion.div
-			initial={{ opacity: 0 }}
-			animate={{ opacity: 1 }}
-			transition={{ type: "tween", duration: duration.base, ease }}
-		>
-			<TranscriptSkeleton />
-		</motion.div>
-	);
-}
-
-// Ticking elapsed-time label for the busy dot row. Self-ticking
-// so the 10Hz re-render stays inside this tiny span, not the whole viewer.
-function BusyElapsed({ since }: { since: number }) {
-	const [now, setNow] = useState(() => Date.now());
-	useEffect(() => {
-		const t = setInterval(() => setNow(Date.now()), 100);
-		return () => clearInterval(t);
-	}, []);
-	const s = Math.max(0, now - since) / 1000;
-	let label: string;
-	if (s < 60) label = `${s.toFixed(1)}s`;
-	else if (s < 3600)
-		label = `${Math.floor(s / 60)}m, ${(s % 60).toFixed(1)}s`;
-	else label = `${Math.floor(s / 3600)}h, ${Math.floor((s % 3600) / 60)}m`;
-	// Tabular figures so a 10Hz counter doesn't jitter its own width.
-	return <span className="text-meta text-faint tabular-nums">{label}</span>;
-}
-
-// How long a steer may wait before the chip starts showing how long it has
-// waited. Under this, the counter would be noise on a fold-in that is about to
-// land anyway; over it, the silence is what reads as a hang.
-const STEER_SLOW_MS = 5000;
-
-/**
- * A steer the run has accepted but not yet read. pi's agent loop drains its
- * steering queue only between turns, after the current assistant message AND
- * its whole tool batch finish, so this wait is the remainder of whatever the
- * agent is doing right now: usually seconds, but a `bun test` or a subagent
- * holds it for minutes (measured p90 85s, max 385s over two days).
- *
- * The counter appears only once the wait is long enough to worry about, and it
- * counts up rather than predicting a landing time, because nothing here knows
- * how long the running tool will take. A still chip saying "Steered" was the
- * bug: it claimed delivery during the only window in which delivery had not
- * happened, since the receipt is reconciled away as soon as it has.
- */
-function SteerWaiting({ since }: { since?: number }) {
-	const [waited, setWaited] = useState(() =>
-		since ? Date.now() - since : 0,
-	);
-	useEffect(() => {
-		if (!since) return;
-		setWaited(Date.now() - since);
-		const t = setInterval(() => setWaited(Date.now() - since), 1000);
-		return () => clearInterval(t);
-	}, [since]);
-	// An old receipt restored across a restart has no stamp; showing nothing is
-	// better than showing a made-up zero.
-	if (!since || waited < STEER_SLOW_MS) return null;
-	const s = Math.floor(waited / 1000);
-	const label =
-		s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, "0")}s`;
-	return <span className="font-normal tabular-nums opacity-70">{label}</span>;
-}
-
-// How long a stop may sit there before the label stops sounding confident.
-const STOP_SLOW_MS = 5000;
-
-/**
- * The stop has been asked for, the turn has not settled yet. This deliberately
- * counts nothing: freezing the work timer at click time would be a small lie
- * (the engine really is still unwinding its current tool call), and letting it
- * run is the complaint we are fixing. After STOP_SLOW_MS the wording admits
- * the abort has not landed rather than sitting on a hopeful "Stopping…"
- * forever — the one thing this row must never do is claim the agent has
- * stopped while it is still editing files.
- */
-function BusyStopping({ since }: { since: number }) {
-	const [slow, setSlow] = useState(false);
-	useEffect(() => {
-		const waited = Date.now() - since;
-		setSlow(waited >= STOP_SLOW_MS);
-		if (waited >= STOP_SLOW_MS) return;
-		const t = setTimeout(() => setSlow(true), STOP_SLOW_MS - waited);
-		return () => clearTimeout(t);
-	}, [since]);
-	return (
-		<span className="text-meta text-faint">
-			{slow ? "Still stopping…" : "Stopping…"}
-		</span>
-	);
-}
-
-function BusyInline({
-	since,
-	stoppingSince,
-}: {
-	since: number | null;
-	stoppingSince: number | null;
-}) {
-	return (
-		<div
-			className={cn(
-				msgRow,
-				"mt-0.5 flex-row items-center gap-2 px-1 py-1.25 text-dim",
-			)}
-		>
-			{/* The 8px pull hangs off the DOT, not off the row: msgRow centres
-			    itself in the reading column with `mx-auto`, and a `-ml-2` on the
-			    row overrides that auto (Tailwind emits `margin-left` after
-			    `margin-inline`), leaving `margin-right: auto` to shove the whole
-			    row against the scroller's left gutter. Here it lands the dot's
-			    centre on the work fold's chevron, which hangs out by the same
-			    8px from a box that stays centred. */}
-			<span className="-ml-2 grid size-5 shrink-0 place-items-center">
-				<PulseDot size={7} />
-			</span>
-			{stoppingSince != null ? (
-				<BusyStopping since={stoppingSince} />
-			) : (
-				since != null && <BusyElapsed since={since} />
-			)}
-		</div>
-	);
-}
-
-function StreamingMessage({
-	store,
-	sessionId,
-}: {
-	store: LiveTurnStore;
-	sessionId: string;
-}) {
-	const snapshot = useSyncExternalStore(
-		store.subscribe,
-		store.getSnapshot,
-		store.getServerSnapshot,
-	);
-	const repo = useMarkdownRepo();
-	const assetPaths = useOpenAssetPaths();
-	const html = React.useMemo(
-		() =>
-			snapshot.text
-				? renderMarkdown(snapshot.text, { repo, sessionId, assetPaths })
-				: "",
-		[snapshot.text, repo, sessionId, assetPaths],
-	);
-	if (!snapshot.text) return null;
-
-	// Always rendered, never raw source: the server cuts frames at block
-	// boundaries (safeFlushLength), so what arrives here is markdown that
-	// stands on its own rather than a paragraph caught mid-construct.
-	return (
-		/* .msg-streaming + .msg-body-assistant stay as hooks: the streaming caret
-		   is a ::after on that pair, and base.css's reduced-motion exception
-		   keeps it blinking by naming the same selector. */
-		<div className={cn(msgRow, msgStreamingRow)}>
-			<MarkdownBody className={cn(msgBodyStreaming, "markdown")} html={html} />
-		</div>
-	);
-}
