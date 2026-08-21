@@ -403,6 +403,32 @@ describe("SessionKernel", () => {
 		});
 	});
 
+	test("reduces and fences run events in one actor-store transaction", () => {
+		expect(store.applyRunEvent({ sessionId: "fsm", event: "prompt" })).toMatchObject({
+			accepted: true,
+			from: "idle",
+			to: "starting",
+		});
+		expect(store.applyRunEvent({
+			sessionId: "fsm",
+			event: "run_registered",
+			runKey: "run-1",
+		})).toMatchObject({
+			accepted: true,
+			state: { state: "running", currentRunId: "run-1", generation: 1 },
+		});
+		expect(store.applyRunEvent({
+			sessionId: "fsm",
+			event: "run_registered",
+			runKey: "stale",
+		})).toMatchObject({
+			accepted: false,
+			reason: "stale_run",
+			state: { currentRunId: "run-1", generation: 1, changeSeq: 2 },
+		});
+		expect(store.changesSince("fsm", 0)).toHaveLength(2);
+	});
+
 	test("commits command completion and its effects in one decision transaction", async () => {
 		await sessionKernel("decision").dispatch(
 			{ requestId: "request", type: "notify" },
@@ -422,6 +448,14 @@ describe("SessionKernel", () => {
 				payload: { text: "hello" },
 			}),
 		]);
+	});
+
+	test("batches compatibility effects in one store transaction", () => {
+		expect(store.enqueueOutboxMany("borrowed", [
+			{ kind: "one", payload: { n: 1 }, effectKey: "a" },
+			{ kind: "two", payload: { n: 2 }, effectKey: "b" },
+		])).toHaveLength(2);
+		expect(store.pendingOutbox().map((effect) => effect.effectKey)).toEqual(["a", "b"]);
 	});
 
 	test("does not publish staged effects when a command fails", async () => {

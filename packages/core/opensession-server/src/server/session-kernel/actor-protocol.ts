@@ -1,7 +1,7 @@
 import type { SessionCommand } from "./kernel";
-import type { DurableOutboxItem, DurableTimer } from "./store";
+import type { DurableOutboxItem, DurableTimer, RunEventDecision, RunEventDecisionResult } from "./store";
 
-export const SESSION_KERNEL_ACTOR_VERSION = 2;
+export const SESSION_KERNEL_ACTOR_VERSION = 3;
 export const SESSION_KERNEL_MAX_QUEUED_PER_SESSION = 128;
 export const SESSION_KERNEL_MAX_QUEUED_TOTAL = 4096;
 
@@ -47,10 +47,13 @@ export type KernelActorAsyncResponse =
     }
   | { t: "error"; rpcId: string; error: string; retryable?: boolean };
 
-export type KernelActorSyncRequest = {
-  t: "store";
-  method: string;
-  args: unknown[];
+type SyncBuffers = {
   control: SharedArrayBuffer;
   output: SharedArrayBuffer;
 };
+
+export type KernelActorSyncRequest =
+  | ({ t: "store"; method: string; args: unknown[] } & SyncBuffers)
+  | ({ t: "decide_run_event"; decision: RunEventDecision } & SyncBuffers);
+
+export type KernelActorRunEventResult = RunEventDecisionResult;

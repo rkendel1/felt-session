@@ -183,8 +183,7 @@ export function reconcileSessionKernelOwnership(
 	for (const state of sessionKernelStore().runStates()) {
 		if (!unsettled.has(state.state) || ownedSessionIds.has(state.sessionId))
 			continue;
-		sessionKernel(state.sessionId).setRunState({
-			state: "failed",
+		sessionKernel(state.sessionId).applyRunEvent({
 			event: "boot_owner_missing",
 			detail: { previousState: state.state },
 		});

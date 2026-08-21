@@ -16,6 +16,11 @@ executor event belongs to the current run.
 The implementation lives in
 `packages/core/opensession-server/src/server/session-kernel/`.
 
+The target is an Erlang/Durable Objects style state machine: each typed message
+is reduced and committed in one short actor turn, external work is emitted as a
+durable effect, and results return as fenced messages. The actor never waits for
+a model run or gateway callback before processing the next state fact.
+
 ## Durable state
 
 `~/.opensession-sessions/session-kernel.sqlite` contains:
@@ -84,9 +89,13 @@ again from durable state.
 
 ## Run ownership
 
-Run state is durable and explicit. Registering a new run id increments the
-session generation. Registering the same logical run again, such as a detached
-host reconnect, keeps its generation.
+Run state is durable and explicit. Run events are typed actor messages. The
+Worker validates the transition, current run id and generation, then commits the
+new state and change event in one SQLite transaction. This reducer remains
+responsive even while a gateway command is waiting on external work.
+
+Registering a new run id increments the session generation. Registering the
+same logical run again, such as a detached host reconnect, keeps its generation.
 
 Detached host events and direct side-effect frames (transcript, asks and failed
 steers) are accepted only while their stable logical run id is current. An
@@ -157,17 +166,20 @@ and replay committed changes without becoming another session owner.
 The writable `SessionKernelStore` and per-session lease coordinator run in
 `session-kernel-worker.ts`, a separate JavaScript actor isolate. The gateway
 starts and handshakes that actor before hydrating queue or ask projections.
-Asynchronous commands acquire an actor lease. Runtime timer/outbox work is loaded
-through asynchronous typed IPC, so the one-second wake does not block the gateway
-or allocate fixed multi-megabyte SharedArrayBuffers. Remaining synchronous
-compatibility writes use a bounded SharedArrayBuffer RPC and fail closed rather
-than entering an active mailbox; they are a migration bridge, not the target
-API. The actor is therefore the only code that opens the writable kernel
-database in a production server.
+Run-state facts use exhaustive typed IPC and are reduced autonomously in the
+Worker. Runtime timer/outbox work is loaded through asynchronous typed IPC, so
+the one-second wake does not block the gateway or allocate fixed multi-megabyte
+SharedArrayBuffers. Remaining gateway command closures still use the older lease
+adapter while their queue, ask, create and turn behavior moves into typed
+reducers. Synchronous compatibility writes use a bounded SharedArrayBuffer RPC;
+when they must run during an older lease, the Worker remains the sole physical
+writer and batches any resulting outbox effects in one transaction. This bridge
+is not the target API and must shrink with each migrated domain.
 
-Decision closures still execute in the gateway as effect adapters, but every
-such execution is fenced by the actor lease and its command result is committed
-by the actor. Terminal failures are durable receipts and do not execute again.
+Unmigrated decision closures still execute in the gateway as effect adapters,
+but every such execution is fenced by the compatibility lease and its command
+result is committed by the actor. Run-state transitions no longer use that
+path. Terminal failures are durable receipts and do not execute again.
 If the actor is lost after physical execution begins, commands fail closed as
 `indeterminate` unless the call site explicitly declares a stable adoption path
 with `replaySafe`. Handler failures can retry only for replay-safe commands;

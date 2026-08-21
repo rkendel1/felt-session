@@ -6,6 +6,7 @@
  * but they never participate in admission or recovery decisions.
  */
 import { Database } from "bun:sqlite";
+import { nextRunState, type RunEvent, type RunState } from "./run-state-machine";
 import { chmodSync, existsSync, mkdirSync, readFileSync, statSync } from "fs";
 import { dirname } from "path";
 import { sessionsDir } from "../paths";
@@ -137,6 +138,23 @@ export function sessionKernelDbPath(): string {
 	if (process.env.NODE_ENV === "test") return ":memory:";
 	return `${sessionsDir()}/session-kernel.sqlite`;
 }
+
+export type RunEventDecision = {
+	sessionId: string;
+	event: RunEvent;
+	detail?: Record<string, unknown>;
+	runKey?: string;
+};
+
+export type RunEventDecisionResult = {
+	accepted: boolean;
+	from: RunState;
+	to: RunState;
+	reason?: "invalid_transition" | "stale_run";
+	currentRunId?: string;
+	rejectedRunId?: string;
+	state: DurableRunState;
+};
 
 export class SessionKernelStore {
 	private readonly db: Database;
@@ -663,6 +681,85 @@ export class SessionKernelStore {
 		}));
 	}
 
+	applyRunEvent(input: RunEventDecision): RunEventDecisionResult {
+		const now = Date.now();
+		const since = new Date(now).toISOString();
+		let result!: RunEventDecisionResult;
+		const tx = this.db.transaction(() => {
+			const prior = this.runState(input.sessionId);
+			const from = prior.state as RunState;
+			const to = nextRunState(from, input.event);
+			if (!to) {
+				result = { accepted: false, from, to: from, reason: "invalid_transition", state: prior };
+				return;
+			}
+			if (
+				input.event === "run_registered" &&
+				input.runKey &&
+				prior.currentRunId &&
+				prior.currentRunId !== input.runKey &&
+				["running", "ask_blocked", "interrupted", "reattaching"].includes(from)
+			) {
+				result = {
+					accepted: false,
+					from,
+					to: from,
+					reason: "stale_run",
+					currentRunId: prior.currentRunId,
+					rejectedRunId: input.runKey,
+					state: prior,
+				};
+				return;
+			}
+			const registers =
+				!!input.runKey &&
+				(input.event === "run_registered" || input.event === "boot_journal_found");
+			const generation = registers && prior.currentRunId !== input.runKey
+				? prior.generation + 1
+				: prior.generation;
+			const currentRunId = ["idle", "stopped", "failed"].includes(to)
+				? undefined
+				: (registers ? input.runKey : prior.currentRunId);
+			const changeSeq = prior.changeSeq + 1;
+			this.db.run(
+				`INSERT INTO session_kernel_state
+					(session_id, run_state, run_since, last_event, generation,
+					 current_run_id, change_seq, updated_at)
+				 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+				 ON CONFLICT(session_id) DO UPDATE SET
+					run_state = excluded.run_state,
+					run_since = excluded.run_since,
+					last_event = excluded.last_event,
+					generation = excluded.generation,
+					current_run_id = excluded.current_run_id,
+					change_seq = excluded.change_seq,
+					updated_at = excluded.updated_at`,
+				[input.sessionId, to, since, input.event, generation, currentRunId ?? null, changeSeq, now],
+			);
+			this.db.run(
+				`INSERT INTO session_kernel_changes
+					(session_id, change_seq, kind, payload, created_at)
+				 VALUES (?, ?, 'run_state', ?, ?)`,
+				[input.sessionId, changeSeq, json({ state: to, event: input.event, detail: input.detail }), now],
+			);
+			const state: DurableRunState = {
+				state: to,
+				since,
+				lastEvent: input.event,
+				generation,
+				currentRunId,
+				changeSeq,
+			};
+			result = { accepted: true, from, to, state };
+		});
+		tx.immediate();
+		if (result.accepted) {
+			this.runStateCache.set(input.sessionId, result.state);
+			this.dirtyChangeSessions.add(input.sessionId);
+		}
+		return result;
+	}
+
 	setRunState(input: {
 		sessionId: string;
 		state: string;
@@ -910,6 +1007,20 @@ export class SessionKernelStore {
 				"SELECT id FROM session_kernel_outbox WHERE session_id = ? AND kind = ? AND effect_key = ?",).get(sessionId, kind, effectKey) as { id: number } | null;
 		if (!row) throw new Error("Outbox effect was not persisted");
 		return Number(row.id);
+	}
+
+	enqueueOutboxMany(
+		sessionId: string,
+		effects: Array<{ kind: string; payload: unknown; effectKey: string }>,
+	): number[] {
+		if (effects.length === 0) return [];
+		const ids: number[] = [];
+		const tx = this.db.transaction(() => {
+			for (const effect of effects)
+				ids.push(this.enqueueOutbox(sessionId, effect.kind, effect.payload, effect.effectKey));
+		});
+		tx.immediate();
+		return ids;
 	}
 
 	completeCommandDecision(input: {

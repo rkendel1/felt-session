@@ -4,6 +4,8 @@ import type {
   DurableOutboxItem,
   DurableRunState,
   DurableTimer,
+  RunEventDecision,
+  RunEventDecisionResult,
   SessionKernelStoreApi,
 } from "./store";
 import {
@@ -240,41 +242,49 @@ export class SessionKernelActorClient {
     }
   }
 
-  callStore<TResult>(method: string, args: unknown[]): TResult {
-    if (this.deadError) throw this.deadError;
-    const controlBuffer = new SharedArrayBuffer(
-      Int32Array.BYTES_PER_ELEMENT * 2,
+  decideRunEvent(decision: RunEventDecision): RunEventDecisionResult {
+    const result = this.callSync<RunEventDecisionResult>(
+      { t: "decide_run_event", decision },
+      "run event decision",
     );
+    if (result.accepted)
+      (this.store as RemoteStore).noteRunState(decision.sessionId, result.state);
+    return result;
+  }
+
+  callStore<TResult>(method: string, args: unknown[]): TResult {
+    return this.callSync<TResult>(
+      { t: "store", method, args },
+      method,
+      LARGE_STORE_RESPONSES.has(method),
+    );
+  }
+
+  private callSync<TResult>(
+    request:
+      | { t: "store"; method: string; args: unknown[] }
+      | { t: "decide_run_event"; decision: RunEventDecision },
+    label: string,
+    large = false,
+  ): TResult {
+    if (this.deadError) throw this.deadError;
+    const controlBuffer = new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT * 2);
     const outputBuffer = new SharedArrayBuffer(
-      LARGE_STORE_RESPONSES.has(method)
-        ? LARGE_OUTPUT_BYTES
-        : SMALL_OUTPUT_BYTES,
+      large ? LARGE_OUTPUT_BYTES : SMALL_OUTPUT_BYTES,
     );
     const control = new Int32Array(controlBuffer);
-    this.worker.postMessage({
-      t: "store",
-      method,
-      args,
-      control: controlBuffer,
-      output: outputBuffer,
-    });
+    this.worker.postMessage({ ...request, control: controlBuffer, output: outputBuffer });
     const waited = Atomics.wait(control, 0, 0, 10_000);
     if (waited === "timed-out") {
-      const error = new Error(`Session kernel actor timed out in ${method}`);
+      const error = new Error(`Session kernel actor timed out in ${label}`);
       this.markDead(error);
       throw error;
     }
     const length = Atomics.load(control, 1);
-    const text = new TextDecoder().decode(
-      new Uint8Array(outputBuffer, 0, length),
-    );
-    const response = JSON.parse(text) as {
-      ok: boolean;
-      result?: TResult;
-      error?: string;
-    };
+    const text = new TextDecoder().decode(new Uint8Array(outputBuffer, 0, length));
+    const response = JSON.parse(text) as { ok: boolean; result?: TResult; error?: string };
     if (!response.ok)
-      throw new Error(response.error || `Session kernel ${method} failed`);
+      throw new Error(response.error || `Session kernel ${label} failed`);
     return response.result as TResult;
   }
 
@@ -341,6 +351,9 @@ class RemoteStore implements SessionKernelStoreApi {
     this.runStateCache.clear();
     for (const state of this.call<Array<DurableRunState & { sessionId: string }>>("runStates"))
       this.runStateCache.set(state.sessionId, state);
+  }
+  noteRunState(sessionId: string, state: DurableRunState): void {
+    this.runStateCache.set(sessionId, state);
   }
   noteChange(sessionId: string): void {
     const current = this.runStateCache.get(sessionId) ?? {
@@ -418,6 +431,9 @@ class RemoteStore implements SessionKernelStoreApi {
       limit,
     );
   }
+  applyRunEvent(input: RunEventDecision) {
+    return this.actor.decideRunEvent(input);
+  }
   setRunState(input: Parameters<SessionKernelStoreApi["setRunState"]>[0]) {
     const next = this.call<DurableRunState>("setRunState", input);
     this.runStateCache.set(input.sessionId, next);
@@ -462,6 +478,12 @@ class RemoteStore implements SessionKernelStoreApi {
       payload,
       effectKey,
     );
+  }
+  enqueueOutboxMany(
+    sessionId: string,
+    effects: Array<{ kind: string; payload: unknown; effectKey: string }>,
+  ) {
+    return this.call<number[]>("enqueueOutboxMany", sessionId, effects);
   }
   pendingOutbox(now?: number, limit?: number, kinds?: readonly string[]) {
     return this.call<DurableOutboxItem[]>("pendingOutbox", now, limit, kinds);

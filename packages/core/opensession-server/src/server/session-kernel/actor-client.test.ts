@@ -90,6 +90,17 @@ describe("session kernel actor boundary", () => {
     host.completeSync(sync.leaseId!, "done", []);
   });
 
+  test("a tombstone rejects compatibility writes even during an active lease", async () => {
+    const host = await actor();
+    const active = await host.begin("deleted", { requestId: "active", type: "test" });
+    host.store.tombstoneSession("deleted");
+    expect(() => host.beginSync("deleted", {
+      requestId: "late",
+      type: "sync:transcript_append",
+    })).toThrow("Session deleted was deleted");
+    await host.complete(active.leaseId!, null, []);
+  });
+
   test("persists detached writes while a command owns the mailbox", async () => {
     const host = await actor();
     const active = await host.begin("detached", {
@@ -104,6 +115,41 @@ describe("session kernel actor boundary", () => {
     expect(kernel.runState().state).toBe("running");
     expect(host.store.pendingOutbox(Date.now(), 10, ["notify"])).toHaveLength(1);
 
+    await host.complete(active.leaseId!, "done", []);
+  });
+
+  test("reduces run events atomically while gateway work is still active", async () => {
+    const host = await actor();
+    const active = await host.begin("autonomous", {
+      requestId: "physical-work",
+      type: "submit_prompt",
+    });
+    expect(host.decideRunEvent({ sessionId: "autonomous", event: "prompt" }))
+      .toMatchObject({ accepted: true, from: "idle", to: "starting" });
+    expect(host.decideRunEvent({
+      sessionId: "autonomous",
+      event: "run_registered",
+      runKey: "run-1",
+    })).toMatchObject({
+      accepted: true,
+      from: "starting",
+      to: "running",
+      state: { currentRunId: "run-1", generation: 1 },
+    });
+    expect(host.decideRunEvent({
+      sessionId: "autonomous",
+      event: "run_registered",
+      runKey: "stale-run",
+    })).toMatchObject({
+      accepted: false,
+      reason: "stale_run",
+      state: { currentRunId: "run-1", generation: 1 },
+    });
+    expect(host.store.runState("autonomous")).toMatchObject({
+      state: "running",
+      currentRunId: "run-1",
+      generation: 1,
+    });
     await host.complete(active.leaseId!, "done", []);
   });
 

@@ -17,6 +17,8 @@ import {
 	type DurableCommandRecord,
 	type DurableRunState,
 	type DurableTimer,
+	type RunEventDecision,
+	type RunEventDecisionResult,
 } from "./store";
 
 export interface SessionCommand<TPayload = unknown> {
@@ -145,13 +147,7 @@ export class SessionKernel {
 					operation !== "transcript_delete"
 				)
 					this.recordChange(operation);
-				for (const effect of borrowed.effects)
-					sessionKernelStore().enqueueOutbox(
-						this.sessionId,
-						effect.kind,
-						effect.payload,
-						effect.effectKey,
-					);
+				sessionKernelStore().enqueueOutboxMany(this.sessionId, borrowed.effects);
 				return result;
 			}
 			if (!admission.leaseId)
@@ -201,6 +197,13 @@ export class SessionKernel {
 			operation !== "transcript_delete"
 		)
 			throw new Error(`Session ${this.sessionId} was deleted`);
+	}
+
+	applyRunEvent(input: Omit<RunEventDecision, "sessionId">): RunEventDecisionResult {
+		this.assertWritable(`run_state:${input.event}`);
+		this.touch();
+		const decision = { sessionId: this.sessionId, ...input };
+		return sessionKernelStore().applyRunEvent(decision);
 	}
 
 	runState(): DurableRunState {

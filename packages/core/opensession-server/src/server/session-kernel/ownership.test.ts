@@ -26,6 +26,17 @@ describe("single session ownership", () => {
 		);
 	});
 
+	test("run-state decisions execute atomically inside the actor", () => {
+		const facade = read("run-state.ts");
+		const actor = read("session-kernel/actor-worker.ts");
+		expect(facade).toContain(".applyRunEvent({");
+		expect(actor).toContain('request.t === "decide_run_event"');
+		expect(actor).toContain("store.applyRunEvent(request.decision)");
+		expect(read("session-kernel/run-state-machine.ts")).toContain(
+			"export function nextRunState",
+		);
+	});
+
 	test("every transcript mutation enters the session owner", () => {
 		const source = read("transcript-store.ts");
 		for (const operation of [

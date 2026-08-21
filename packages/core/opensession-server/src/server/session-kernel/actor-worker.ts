@@ -190,9 +190,9 @@ export function startSessionKernelActorWorker(): void {
     // borrow its physical writer instead of trying to open a second lease (the
     // synchronous caller cannot wait for the active gateway command without
     // deadlocking that command's settlement).
-    if (active.has(sessionId)) return { duplicate: false, borrowed: true };
     if (store.isTombstoned(sessionId))
       throw new Error(`Session ${sessionId} was deleted`);
+    if (active.has(sessionId)) return { duplicate: false, borrowed: true };
     const persisted = store.acceptCommand({
       sessionId,
       requestId: command.requestId,
@@ -247,7 +247,9 @@ export function startSessionKernelActorWorker(): void {
     const output = new Uint8Array(request.output);
     try {
       let result: unknown;
-      if (request.method === "$beginSync")
+      if (request.t === "decide_run_event")
+        result = store.applyRunEvent(request.decision);
+      else if (request.method === "$beginSync")
         result = beginSync(request.args[0] as string, request.args[1] as any);
       else if (request.method === "$completeSync")
         result = completeSync(
@@ -291,7 +293,7 @@ export function startSessionKernelActorWorker(): void {
     event: MessageEvent<KernelActorAsyncRequest | KernelActorSyncRequest>,
   ) => {
     const request = event.data;
-    if (request.t === "store") {
+    if (request.t === "store" || request.t === "decide_run_event") {
       syncStore(request);
       return;
     }
