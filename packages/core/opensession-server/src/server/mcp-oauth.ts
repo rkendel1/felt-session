@@ -153,6 +153,25 @@ const OAUTH_PRESETS: Record<string, OauthPreset> = {
     }),
     envVar: "SLACK_BOT_TOKEN",
   },
+  vercel: {
+    // Static client from a Vercel integration (vercel.com/dashboard/integrations).
+    // Vercel's MCP rejects dynamic client registration for any callback it has
+    // not approved, so the generic flow can never connect; an integration's
+    // pre-approved redirect URL is the way in.
+    authorize: "https://vercel.com/oauth/authorize",
+    token: "https://vercel.com/api/login/oauth/token",
+    clientIdEnv: "VERCEL_OAUTH_CLIENT_ID",
+    clientSecretEnv: "VERCEL_OAUTH_CLIENT_SECRET",
+    authorizeParams: {
+      // offline_access → refresh token; without it grants die within hours.
+      scope: "openid offline_access",
+    },
+    extract: (res) => ({
+      accessToken: res?.access_token,
+      refreshToken: res?.refresh_token,
+      expiresIn: res?.expires_in,
+    }),
+  },
 };
 
 export function oauthPresetFor(name: string): OauthPreset | undefined {
