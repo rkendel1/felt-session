@@ -61,6 +61,8 @@ export type CreationOpeningIntent = {
   openingPromptEntryId: string;
   runId: string;
   runGeneration: number;
+  /** Serializable recovery input atomically owned with the opening effect. */
+  openingPlan: Record<string, unknown>;
 };
 
 type CreationIntentKernel = Pick<
@@ -242,6 +244,7 @@ export async function requestCreationOpening(
     const emitted = kernel.applyCreationEvent({
       identity: input.identity,
       event: "opening_dispatched",
+      openingPlan: input.openingPlan,
       nextEffectId: effectId,
       effect: {
         kind: "creation_opening_turn",

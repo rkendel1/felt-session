@@ -10,6 +10,7 @@ import {
   readCreatePlan,
   pruneCreatePlans,
   restoreResolvedCreate,
+  snapshotOpeningCreate,
   snapshotResolvedCreate,
   updateCreatePlan,
 } from "./session-create-plan";
@@ -33,6 +34,28 @@ describe("durable create plan", () => {
     expect(snapshot.gitPrincipal).toBe("user:alice");
     expect(snapshot.gitEnv).toBeUndefined();
     expect(JSON.stringify(snapshot)).not.toContain("gho_secret");
+  });
+
+  test("opening recovery excludes bodies, functions, and workspace drafts", () => {
+    const snapshot = snapshotOpeningCreate({
+      id: "os-opening",
+      images: [{ mediaType: "image/png", data: "base64-secret" }],
+      materializeWorktree: () => {},
+      gitEnv: { GH_TOKEN: "gho_secret" },
+      autoNameWorkspace: {
+        id: "ws-opening",
+        name: "Provisional workspace",
+        draft: { files: [{ dataUrl: "data:text/plain;base64,c2VjcmV0" }] },
+      },
+    });
+    expect(snapshot).toEqual({
+      id: "os-opening",
+      autoNameWorkspace: {
+        id: "ws-opening",
+        name: "Provisional workspace",
+      },
+    });
+    expect(JSON.stringify(snapshot)).not.toContain("secret");
   });
 
   test("preserves explicitly absent resolved decisions", () => {

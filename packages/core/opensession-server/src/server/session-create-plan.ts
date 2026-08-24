@@ -155,6 +155,29 @@ export function snapshotResolvedCreate(
   return snapshotValue(durable) as Record<string, unknown>;
 }
 
+export function snapshotOpeningCreate(value: object): Record<string, unknown> {
+  const {
+    images: _images,
+    materializeWorktree: _materializeWorktree,
+    autoNameWorkspace,
+    ...durable
+  } = value as Record<string, unknown>;
+  const renameTarget =
+    autoNameWorkspace &&
+    typeof autoNameWorkspace === "object" &&
+    !Array.isArray(autoNameWorkspace) &&
+    typeof (autoNameWorkspace as Record<string, unknown>).id === "string"
+      ? {
+          id: (autoNameWorkspace as Record<string, unknown>).id,
+          name: (autoNameWorkspace as Record<string, unknown>).name,
+        }
+      : autoNameWorkspace;
+  return snapshotResolvedCreate({
+    ...durable,
+    autoNameWorkspace: renameTarget,
+  });
+}
+
 export function restoreResolvedCreate<T>(
   value: Record<string, unknown>,
 ): Partial<T> {

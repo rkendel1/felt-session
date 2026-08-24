@@ -152,10 +152,14 @@ receipt. Create entry points emit this effect before opening a sandboxed run.
 
 Opening turns also enter the durable outbox. Create intake first records the
 stable prompt dispatch, then atomically moves the creation aggregate to
-`opening_dispatched` with one `creation_opening_turn` effect. The executor uses
-the active create registration or reconstructs the same specification from the
-durable plan after restart. It settles `ready` or `failed` through the effect
-fence before acknowledging the prompt dispatch. Run-journal admission and cold
+`opening_dispatched` with one `creation_opening_turn` effect and the bounded,
+non-secret opening recovery input in the same actor transaction. The executor
+uses the active create registration or reconstructs the specification from that
+actor-owned input after restart. Pre-schema-10 create-plan files remain a
+read-only mixed-version fallback, not authority for new effects. Terminal actor
+settlement clears the large recovery input while retaining the permanent effect
+receipt. It settles `ready` or `failed` through the effect fence before
+acknowledging the prompt dispatch. Run-journal admission and cold
 queue restoration preserve actor-owned create dispatches until that settlement.
 Boot leaves local openings with the generic run adopter and settles the actor
 from that adopter's fenced terminal callback; remote sandbox and Runner journals

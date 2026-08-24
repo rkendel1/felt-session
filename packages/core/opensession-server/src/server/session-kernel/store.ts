@@ -170,8 +170,9 @@ const PROCESS_OWNER_ID = (ownerGlobal.__opensessionSessionKernelOwnerId ??=
 		bootId: linuxBootId(),
 		start: linuxProcessStart(process.pid),
 	} satisfies ProcessOwnerIdentity));
-export const SESSION_KERNEL_SCHEMA_VERSION = 9;
+export const SESSION_KERNEL_SCHEMA_VERSION = 10;
 export const SESSION_KERNEL_MAX_CREATION_EFFECT_RECEIPTS = 256;
+export const SESSION_KERNEL_MAX_OPENING_PLAN_BYTES = 16 * 1024 * 1024;
 
 export function sessionKernelDbPath(): string {
 	// Test processes must never open the live instance state. Tests that need
@@ -196,6 +197,8 @@ export type CreationEventDecision = {
   /** Stable effect emitted by this reduction, when it advances physical work. */
   nextEffectId?: string;
   effect?: StagedCreationActorEffect;
+  /** Serializable, non-secret opening input committed with its launch effect. */
+  openingPlan?: Record<string, unknown>;
   detail?: Record<string, unknown>;
 };
 
@@ -205,6 +208,7 @@ export type DurableCreationState = {
   generation: number;
   currentEffectId?: string;
   completedEffectIds: string[];
+  openingPlan?: Record<string, unknown>;
   changeSeq: number;
   updatedAt: number;
 };
@@ -218,6 +222,7 @@ export type CreationEventDecisionResult = {
     | "identity_mismatch"
     | "stale_effect"
     | "invalid_effect"
+    | "invalid_opening_plan"
     | "effect_receipt_capacity";
   state?: DurableCreationState;
 };
@@ -301,6 +306,7 @@ export class SessionKernelStore {
 				generation INTEGER NOT NULL DEFAULT 0,
 				current_effect_id TEXT,
 				completed_effects TEXT NOT NULL DEFAULT '[]',
+				opening_plan TEXT,
 				change_seq INTEGER NOT NULL DEFAULT 0,
 				updated_at INTEGER NOT NULL
 			);
@@ -387,6 +393,10 @@ export class SessionKernelStore {
     if (!creationColumns.has("completed_effects"))
       this.db.exec(
         "ALTER TABLE session_kernel_creation ADD COLUMN completed_effects TEXT NOT NULL DEFAULT '[]'",
+      );
+    if (!creationColumns.has("opening_plan"))
+      this.db.exec(
+        "ALTER TABLE session_kernel_creation ADD COLUMN opening_plan TEXT",
       );
 		const commandColumns = new Set(
 			(
@@ -893,7 +903,8 @@ export class SessionKernelStore {
   creationState(sessionId: string): DurableCreationState | undefined {
     const row = this.db
       .query(
-        `SELECT identity, state, generation, current_effect_id, completed_effects, change_seq, updated_at
+        `SELECT identity, state, generation, current_effect_id, completed_effects,
+                opening_plan, change_seq, updated_at
          FROM session_kernel_creation WHERE session_id = ?`,
       )
       .get(sessionId) as Record<string, unknown> | null;
@@ -909,6 +920,7 @@ export class SessionKernelStore {
       completedEffectIds: [
         ...(parsed<string[]>(row.completed_effects as string) ?? []),
       ],
+      openingPlan: parsed<Record<string, unknown>>(row.opening_plan as string),
       changeSeq: Number(row.change_seq),
       updatedAt: Number(row.updated_at),
     };
@@ -1015,6 +1027,27 @@ export class SessionKernelStore {
         };
         return;
       }
+      const openingPlanText =
+        input.openingPlan === undefined ? undefined : json(input.openingPlan);
+      const invalidOpeningPlan =
+        (input.event === "opening_dispatched" &&
+          (!openingPlanText ||
+            Buffer.byteLength(openingPlanText) >
+              SESSION_KERNEL_MAX_OPENING_PLAN_BYTES)) ||
+        (input.event !== "opening_dispatched" && input.openingPlan !== undefined);
+      if (invalidOpeningPlan) {
+        result = {
+          accepted: false,
+          from,
+          to: from,
+          reason: "invalid_opening_plan",
+          state: prior,
+        };
+        return;
+      }
+      const openingPlan = ["ready", "failed"].includes(to)
+        ? undefined
+        : input.openingPlan ?? prior?.openingPlan;
       const currentEffectId = ["ready", "failed"].includes(to)
         ? undefined
         : effect?.effectKey ??
@@ -1022,13 +1055,14 @@ export class SessionKernelStore {
       this.db.run(
         `INSERT INTO session_kernel_creation
           (session_id, identity, state, generation, current_effect_id,
-           completed_effects, change_seq, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+           completed_effects, opening_plan, change_seq, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(session_id) DO UPDATE SET
           state = excluded.state,
           generation = excluded.generation,
           current_effect_id = excluded.current_effect_id,
           completed_effects = excluded.completed_effects,
+          opening_plan = excluded.opening_plan,
           change_seq = excluded.change_seq,
           updated_at = excluded.updated_at`,
         [
@@ -1038,6 +1072,7 @@ export class SessionKernelStore {
           generation,
           currentEffectId ?? null,
           json(completedEffectIds),
+          openingPlan === undefined ? null : json(openingPlan),
           changeSeq,
           now,
         ],
@@ -1094,6 +1129,7 @@ export class SessionKernelStore {
         generation,
         currentEffectId,
         completedEffectIds,
+        openingPlan,
         changeSeq,
         updatedAt: now,
       };

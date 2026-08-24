@@ -263,7 +263,8 @@ describe("single session ownership", () => {
 		const create = read("session-create.ts");
 		expect(create).toContain("const recoveringSession = findSession(bksId)");
 		expect(create).toContain('existingBranch: restored.worktreeKind === "existing"');
-		expect(create).toContain("identity: plan.identity");
+		expect(create).toContain("const openingPlan = creation?.openingPlan");
+		expect(create).toContain("const identity = creation?.openingPlan");
 		expect(create.indexOf("openingPromptEntryId = beginPromptDispatch"))
 			.toBeLessThan(create.indexOf("await persist()"));
 		// The direct host run must use the create dispatch's stable transcript id.

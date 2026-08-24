@@ -87,6 +87,7 @@ import { resolveWorkspaceModelPreset } from "./workspace-model-presets";
 import { type Workspace, getWorkspace, updateWorkspace, } from "./workspaces";
 import {
 	type CreationOpeningEffectItem,
+	SESSION_KERNEL_MAX_OPENING_PLAN_BYTES,
 	ensureCreationPlanned,
 	requestCreationAttachment,
 	requestCreationBranch,
@@ -107,6 +108,7 @@ import {
 	createPlanWorkspaceId,
 	readCreatePlanForRecovery,
 	restoreResolvedCreate,
+	snapshotOpeningCreate,
 	snapshotResolvedCreate,
 	updateCreatePlan,
 } from "./session-create-plan";
@@ -404,6 +406,15 @@ const activeOpeningCreates = new Map<
 	}
 >();
 
+function snapshotOpeningPlan(spec: ResolvedCreate): Record<string, unknown> {
+	const plan = snapshotOpeningCreate(spec);
+	if (Buffer.byteLength(JSON.stringify(plan)) > SESSION_KERNEL_MAX_OPENING_PLAN_BYTES)
+		throw new Error(
+			`Opening recovery input exceeds ${SESSION_KERNEL_MAX_OPENING_PLAN_BYTES} bytes`,
+		);
+	return plan;
+}
+
 export function runOpeningCreateOnce(
 	spec: ResolvedCreate,
 	io: CreateSessionIO,
@@ -415,6 +426,8 @@ export function runOpeningCreateOnce(
 			throw new Error("Create request identity crossed active opening ownership");
 		return { owner: false, done: existing.done };
 	}
+	// Validate and bound actor recovery input before accepting the prompt dispatch.
+	const openingPlan = snapshotOpeningPlan(spec);
 	const openingPromptEntryId = beginPromptDispatch(
 		spec.id,
 		[
@@ -442,6 +455,7 @@ export function runOpeningCreateOnce(
 		openingPromptEntryId,
 		runId: `opening:${spec.id}:${openingPromptEntryId}`,
 		runGeneration: 1,
+		openingPlan,
 	}).then(() => undefined).finally(() => {
 		if (activeOpeningCreates.get(spec.id)?.done === done)
 			activeOpeningCreates.delete(spec.id);
@@ -495,10 +509,15 @@ async function restorePlannedOpening(sessionId: string): Promise<{
 	io: CreateSessionIO;
 	identity: string;
 } | null> {
-	const plan = readCreatePlanForRecovery(sessionId);
+	const creation = sessionKernel(sessionId).creationState();
+	const legacyPlan = creation?.openingPlan
+		? undefined
+		: readCreatePlanForRecovery(sessionId);
+	const openingPlan = creation?.openingPlan ?? legacyPlan?.resolved;
+	const identity = creation?.openingPlan ? creation.identity : legacyPlan?.identity;
 	const dispatch = promptDispatches.get(sessionId);
-	if (!plan?.resolved || dispatch?.kind !== "create") return null;
-	const restored = restoreResolvedCreate<ResolvedCreate>(plan.resolved);
+	if (!openingPlan || !identity || dispatch?.kind !== "create") return null;
+	const restored = restoreResolvedCreate<ResolvedCreate>(openingPlan);
 	const restoredGitEnv = githubCredentialForPrincipal(restored.gitPrincipal)?.env;
 	if (
 		typeof restored.wtPath !== "string" ||
@@ -511,7 +530,7 @@ async function restorePlannedOpening(sessionId: string): Promise<{
 	const materializeWorktree = restored.needsWorktree && !ready
 		? actorWorktreeMaterializer({
 				sessionId,
-				identity: plan.identity,
+				identity,
 				project: restored.repoId!,
 				branch: restored.branch,
 				worktreePath: restored.wtPath,
@@ -523,7 +542,7 @@ async function restorePlannedOpening(sessionId: string): Promise<{
 		: undefined;
 	const imageUrls = dispatch.items.flatMap((item) => item.images || []);
 	return {
-		identity: plan.identity,
+		identity,
 		spec: {
 			...(restored as ResolvedCreate),
 			id: sessionId,
@@ -627,9 +646,9 @@ export async function executeCreationOpeningEffect(
 		? { spec: active.spec, io: active.io, identity: active.identity }
 		: await restorePlannedOpening(item.sessionId);
 	if (!restored)
-		throw new Error("Opening effect has no durable create plan to recover");
+		throw new Error("Opening effect has no durable actor plan to recover");
 	if (restored.identity !== item.payload.creationIdentity)
-		throw new Error("Opening effect create-plan identity changed during recovery");
+		throw new Error("Opening effect actor-plan identity changed during recovery");
 	if (restored.spec.openingPromptEntryId !== item.payload.openingPromptEntryId)
 		throw new Error("Opening effect prompt identity changed during recovery");
 	await openCreatedSession(

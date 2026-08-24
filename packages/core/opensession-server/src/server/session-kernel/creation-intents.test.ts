@@ -131,6 +131,11 @@ describe("creation opening intents", () => {
     openingPromptEntryId: "opening-prompt-one",
     runId: "opening:create-opening-intent:opening-prompt-one",
     runGeneration: 1,
+    openingPlan: {
+      id: "create-opening-intent",
+      openingPrompt: "durable opening",
+      openingPromptEntryId: "opening-prompt-one",
+    },
   };
 
   test("waits for an accepted preparation effect before dispatching", async () => {
@@ -249,6 +254,9 @@ describe("creation opening intents", () => {
           pollMs: 1,
         }),
       ).rejects.toThrow("remains durably pending");
+      expect(store.creationState(opening.sessionId)?.openingPlan).toEqual(
+        opening.openingPlan,
+      );
       expect(store.pendingOutbox()).toHaveLength(1);
     } finally {
       store.close();

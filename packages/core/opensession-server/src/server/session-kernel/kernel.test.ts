@@ -637,9 +637,36 @@ describe("SessionKernel", () => {
 				},
 			},
 		})).toMatchObject({
+			accepted: false,
+			reason: "invalid_opening_plan",
+		});
+		expect(store.applyCreationEvent({
+			sessionId: "create-fsm",
+			identity: "request-one",
+			event: "opening_dispatched",
+			effectId: "prepare-one",
+			openingPlan: { id: "create-fsm", openingPrompt: "durable" },
+			nextEffectId: "opening-one",
+			effect: {
+				kind: "creation_opening_turn",
+				effectKey: "opening-one",
+				payload: {
+					creationIdentity: "request-one",
+					creationGeneration: 1,
+					openingPromptEntryId: "entry-one",
+					runId: "run-one",
+					runGeneration: 1,
+					mode: "adopt_or_launch",
+				},
+			},
+		})).toMatchObject({
 			accepted: true,
 			to: "opening_dispatched",
-			state: { currentEffectId: "opening-one", changeSeq: 3 },
+			state: {
+				currentEffectId: "opening-one",
+				openingPlan: { id: "create-fsm", openingPrompt: "durable" },
+				changeSeq: 3,
+			},
 		});
 		expect(store.applyCreationEvent({
 			sessionId: "create-fsm",
@@ -649,7 +676,11 @@ describe("SessionKernel", () => {
 		})).toMatchObject({
 			accepted: true,
 			to: "ready",
-			state: { currentEffectId: undefined, changeSeq: 4 },
+			state: {
+				currentEffectId: undefined,
+				openingPlan: undefined,
+				changeSeq: 4,
+			},
 		});
 		expect(store.applyCreationEvent({
 			sessionId: "create-fsm",
@@ -702,6 +733,7 @@ describe("SessionKernel", () => {
 				identity,
 				event: "opening_dispatched",
 				effectId: preparationEffectId,
+				openingPlan: { id: sessionId, openingPrompt: "durable" },
 				nextEffectId: effectId,
 				effect: {
 					kind: "creation_opening_turn",
@@ -832,6 +864,60 @@ describe("SessionKernel", () => {
 				currentEffectId: undefined,
 				completedEffectIds: ["workspace-receipt-restart"],
 			});
+		} finally {
+			durableStore.close();
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	test("persists opening recovery input with its effect and clears it terminally", () => {
+		const dir = mkdtempSync(join(tmpdir(), "session-kernel-opening-plan-"));
+		const path = join(dir, "kernel.sqlite");
+		let durableStore = new SessionKernelStore(path);
+		try {
+			const sessionId = "create-opening-plan-restart";
+			const identity = "request-opening-plan-restart";
+			const effectId = "opening:entry-restart";
+			const openingPlan = {
+				id: sessionId,
+				openingPrompt: "survives actor restart",
+				openingPromptEntryId: "entry-restart",
+			};
+			durableStore.applyCreationEvent({ sessionId, identity, event: "plan" });
+			durableStore.applyCreationEvent({
+				sessionId,
+				identity,
+				event: "preparation_started",
+			});
+			expect(durableStore.applyCreationEvent({
+				sessionId,
+				identity,
+				event: "opening_dispatched",
+				openingPlan,
+				nextEffectId: effectId,
+				effect: {
+					kind: "creation_opening_turn",
+					effectKey: effectId,
+					payload: {
+						creationIdentity: identity,
+						creationGeneration: 1,
+						openingPromptEntryId: "entry-restart",
+						runId: `opening:${sessionId}:entry-restart`,
+						runGeneration: 1,
+						mode: "adopt_or_launch",
+					},
+				},
+			})).toMatchObject({ accepted: true });
+			durableStore.close();
+			durableStore = new SessionKernelStore(path);
+			expect(durableStore.creationState(sessionId)?.openingPlan).toEqual(openingPlan);
+			durableStore.applyCreationEvent({
+				sessionId,
+				identity,
+				event: "succeeded",
+				effectId,
+			});
+			expect(durableStore.creationState(sessionId)?.openingPlan).toBeUndefined();
 		} finally {
 			durableStore.close();
 			rmSync(dir, { recursive: true, force: true });

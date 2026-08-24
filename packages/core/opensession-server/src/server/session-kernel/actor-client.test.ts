@@ -316,6 +316,53 @@ describe("session kernel actor boundary", () => {
     await host.complete(active.executionId!, "done", []);
   });
 
+  test("resizes creation decisions and snapshots for bounded opening plans", async () => {
+    const host = await actor();
+    const sessionId = "large-opening-plan";
+    const identity = "large-opening-request";
+    expect(host.decideCreationEvent({
+      sessionId,
+      identity,
+      event: "plan",
+    }).accepted).toBe(true);
+    expect(host.decideCreationEvent({
+      sessionId,
+      identity,
+      event: "preparation_started",
+    }).accepted).toBe(true);
+    const openingPrompt = "x".repeat(300 * 1024);
+    const effectId = "opening:large-opening-entry";
+    expect(host.decideCreationEvent({
+      sessionId,
+      identity,
+      event: "opening_dispatched",
+      openingPlan: {
+        id: sessionId,
+        openingPrompt,
+        openingPromptEntryId: "large-opening-entry",
+      },
+      nextEffectId: effectId,
+      effect: {
+        kind: "creation_opening_turn",
+        effectKey: effectId,
+        payload: {
+          creationIdentity: identity,
+          creationGeneration: 1,
+          openingPromptEntryId: "large-opening-entry",
+          runId: `opening:${sessionId}:large-opening-entry`,
+          runGeneration: 1,
+          mode: "adopt_or_launch",
+        },
+      },
+    })).toMatchObject({
+      accepted: true,
+      state: { openingPlan: { openingPrompt } },
+    });
+    expect(host.store.creationState(sessionId)?.openingPlan).toMatchObject({
+      openingPrompt,
+    });
+  });
+
   test("hydrates persisted run state into the gateway projection", async () => {
     const host = await actor();
     host.callStore("setRunState", [
