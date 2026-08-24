@@ -93,10 +93,21 @@ revision. They invalidate the gateway projection instead of returning or eagerly
 refetching the full attachment-bearing aggregate. Queue batching policy (solo
 interrupts, auto-continue, review handoffs, delegated reports and worker holds)
 now runs inside the same actor reduction as the claim. The gateway supplies
-only live policy facts such as whether child workers remain. Claiming removes
-the selected batch from the queue and installs its dispatch in one SQLite
-transaction. Failure atomically restores that exact batch
-ahead of later work. Steering first moves an item to a pending-steer checkpoint,
+only live policy facts such as whether child workers remain. The actor prepares
+a stable interrupt identity and fenced cancel outbox effect before physical
+cancellation, then records the explicit `confirmed` or `not_aborted` result. An
+`executing` receipt makes cancellation retryable against only the same run
+generation; ambiguous retry conservatively confirms instead of crossing into a
+successor. Claiming waits for confirmation and atomically moves
+the interrupt with its selected batch into dispatch ownership. A crash or
+launch failure restores the exact batch and confirmed interrupt together, so
+restart cannot lose the solo target or separate hold bypass from steer framing.
+Failure atomically restores that exact batch
+ahead of later work. Actor-owned boot recovery reconciles each dispatch and
+steer with idempotent reducers and never clears durable slots for a projection
+rebuild. Interrupt preparation may atomically move an accepted-but-unread steer
+receipt into its anchored queue position; `not_aborted` restores its original
+steered position. Steering first moves an item to a pending-steer checkpoint,
 then reports runner acceptance or rejection as a second typed fact. Restart treats
 an unresolved checkpoint as ambiguous acceptance and reconciles it through the
 receipt and transcript path instead of delivering a duplicate turn. The old queue and ask JSON formats are imported once under

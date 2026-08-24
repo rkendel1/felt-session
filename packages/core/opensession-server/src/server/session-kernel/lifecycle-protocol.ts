@@ -108,7 +108,19 @@ export type HumanAskDeliverEffect = {
   };
 };
 
-export type SessionActorEffect = HumanAskDeliverEffect | CreationActorEffect;
+export type DeliveryInterruptCancelEffect = {
+  kind: "delivery_interrupt_cancel";
+  payload: {
+    interruptId: string;
+    runIds: string[];
+    runGeneration: number;
+  };
+};
+
+export type SessionActorEffect =
+  | HumanAskDeliverEffect
+  | DeliveryInterruptCancelEffect
+  | CreationActorEffect;
 export type SessionActorEffectKind = SessionActorEffect["kind"];
 export type SessionActorEffectFor<K extends SessionActorEffectKind> = Extract<
   SessionActorEffect,

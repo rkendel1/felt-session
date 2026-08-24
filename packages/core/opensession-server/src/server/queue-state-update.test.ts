@@ -8,11 +8,13 @@ import {
 	isDelegatedQueueItem,
 	isEditableQueueItem,
 	isWorkerQueueItem,
+	preparePromptInterrupt,
 	isWorkflowQueueItem,
 	promptDispatches,
 	promptQueues,
 	queueDisplayState,
 	steeredReceipts,
+	settlePromptInterrupt,
 	takeQueuedPrompt,
 	takeSteeredPrompt,
 } from "./queue-state";
@@ -36,9 +38,11 @@ describe("takeQueuedPrompt", () => {
 	});
 
 	test("selects and claims through the compatibility actor store", () => {
+		const interruptId = preparePromptInterrupt(SESSION, "q2", [SESSION], "q2");
+		settlePromptInterrupt(SESSION, interruptId, "confirmed");
 		const claim = beginNextPromptDispatch(
 			SESSION,
-			{ soloId: "q2", interruptMark: true, stillWorking: true },
+			{ stillWorking: true },
 			false,
 		);
 		expect(claim).toMatchObject({
@@ -54,6 +58,29 @@ describe("takeQueuedPrompt", () => {
 				files: [{ name: "brief.pdf", path: "/tmp/brief.pdf" }],
 			},
 		]);
+	});
+
+	test("prepares an interrupt from an already-steered receipt", () => {
+		promptQueues.delete(SESSION);
+		steeredReceipts.set(SESSION, [
+			{ id: "steered", content: "accepted but unread", hold: true },
+		]);
+		const interruptId = preparePromptInterrupt(
+			SESSION,
+			"steered",
+			[SESSION],
+			"steered",
+		);
+		expect(promptQueues.get(SESSION)).toMatchObject([{ id: "steered" }]);
+		expect(steeredReceipts.get(SESSION)).toBeUndefined();
+		settlePromptInterrupt(SESSION, interruptId, "confirmed");
+		expect(
+			beginNextPromptDispatch(SESSION, { stillWorking: true }, false),
+		).toMatchObject({
+			kind: "deliver",
+			interrupted: true,
+			batch: [{ id: "steered" }],
+		});
 	});
 
 	test("keeps a selected prompt durable until the runner acknowledges it", () => {

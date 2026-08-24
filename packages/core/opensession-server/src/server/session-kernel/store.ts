@@ -71,6 +71,14 @@ export type DurableDeliveryState = {
   revision: number;
   queued: unknown[];
   dispatch?: unknown;
+  interrupt?: {
+    interruptId: string;
+    phase: "prepared" | "executing" | "confirmed";
+    runGeneration: number;
+    anchorId: string;
+    soloId?: string;
+    source?: { slot: "steered"; index: number };
+  };
   steered: unknown[];
   pendingSteers: Array<{ item: unknown; index: number; preparedAt: number }>;
   updatedAt: number;
@@ -174,7 +182,7 @@ const PROCESS_OWNER_ID = (ownerGlobal.__opensessionSessionKernelOwnerId ??=
 		bootId: linuxBootId(),
 		start: linuxProcessStart(process.pid),
 	} satisfies ProcessOwnerIdentity));
-export const SESSION_KERNEL_SCHEMA_VERSION = 11;
+export const SESSION_KERNEL_SCHEMA_VERSION = 12;
 export const SESSION_KERNEL_MAX_CREATION_EFFECT_RECEIPTS = 256;
 export const SESSION_KERNEL_MAX_OPENING_PLAN_BYTES = 16 * 1024 * 1024;
 
@@ -383,6 +391,7 @@ export class SessionKernelStore {
 				revision INTEGER NOT NULL DEFAULT 0,
 				queued TEXT NOT NULL DEFAULT '[]',
 				dispatch TEXT,
+				interrupt TEXT,
 				steered TEXT NOT NULL DEFAULT '[]',
 				pending_steers TEXT NOT NULL DEFAULT '[]',
 				updated_at INTEGER NOT NULL
@@ -445,6 +454,15 @@ export class SessionKernelStore {
 			CREATE INDEX IF NOT EXISTS idx_sko_session
 				ON session_kernel_outbox(session_id, id);
 		`);
+    const deliveryColumns = new Set(
+      (
+        this.db
+          .query("PRAGMA table_info(session_kernel_delivery)")
+          .all() as Array<{ name: string }>
+      ).map((column) => column.name),
+    );
+    if (!deliveryColumns.has("interrupt"))
+      this.db.exec("ALTER TABLE session_kernel_delivery ADD COLUMN interrupt TEXT");
     const creationColumns = new Set(
       (
         this.db
@@ -1636,7 +1654,7 @@ export class SessionKernelStore {
   private deliveryRow(sessionId: string): DurableDeliveryState {
     const row = this.db
       .query(
-        "SELECT revision, queued, dispatch, steered, pending_steers, updated_at FROM session_kernel_delivery WHERE session_id = ?",
+        "SELECT revision, queued, dispatch, interrupt, steered, pending_steers, updated_at FROM session_kernel_delivery WHERE session_id = ?",
       )
       .get(sessionId) as Record<string, unknown> | null;
     if (!row)
@@ -1651,6 +1669,7 @@ export class SessionKernelStore {
       revision: Number(row.revision),
       queued: parsed<unknown[]>(String(row.queued)) ?? [],
       dispatch: parsed(row.dispatch as string | null),
+      interrupt: parsed(row.interrupt as string | null),
       steered: parsed<unknown[]>(String(row.steered)) ?? [],
       pendingSteers:
         parsed<Array<{ item: unknown; index: number; preparedAt: number }>>(
@@ -1707,11 +1726,12 @@ export class SessionKernelStore {
       };
       this.db.run(
         `INSERT INTO session_kernel_delivery
-				 (session_id, revision, queued, dispatch, steered, pending_steers, updated_at)
-				 VALUES (?, ?, ?, ?, ?, ?, ?)
+				 (session_id, revision, queued, dispatch, interrupt, steered, pending_steers, updated_at)
+				 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 				 ON CONFLICT(session_id) DO UPDATE SET
 				 revision = excluded.revision, queued = excluded.queued,
-				 dispatch = excluded.dispatch, steered = excluded.steered,
+				 dispatch = excluded.dispatch, interrupt = excluded.interrupt,
+					 steered = excluded.steered,
 				 pending_steers = excluded.pending_steers,
 				 updated_at = excluded.updated_at`,
         [
@@ -1719,6 +1739,7 @@ export class SessionKernelStore {
           state.revision,
           json(state.queued),
           state.dispatch === undefined ? null : json(state.dispatch),
+          state.interrupt === undefined ? null : json(state.interrupt),
           json(state.steered),
           json(state.pendingSteers),
           now,
@@ -1893,11 +1914,147 @@ export class SessionKernelStore {
     return count;
   }
 
+  prepareDeliveryInterrupt(input: {
+    sessionId: string;
+    interruptId: string;
+    anchorId: string;
+    runIds: string[];
+    soloId?: string;
+  }): {
+    interruptId: string;
+    phase: "prepared" | "executing" | "confirmed";
+    runGeneration: number;
+    anchorId: string;
+    soloId?: string;
+  } {
+    if (
+      !input.interruptId ||
+      input.interruptId.length > 256 ||
+      !input.anchorId ||
+      input.anchorId.length > 256 ||
+      input.runIds.length === 0 ||
+      input.runIds.length > 8 ||
+      input.runIds.some((id) => !id || id.length > 256) ||
+      (input.soloId !== undefined &&
+        (!input.soloId || input.soloId.length > 256))
+    ) throw new Error("Invalid prompt interrupt identity");
+    return this.mutateDelivery(
+      input.sessionId,
+      "delivery_interrupt_prepared",
+      (state) => {
+        if (state.dispatch) throw new Error("A prompt dispatch is already active");
+        const queued = state.queued as QueueItem[];
+        const steered = state.steered as QueueItem[];
+        const queuedIndex = queued.findIndex((item) => item.id === input.anchorId);
+        const steeredIndex = steered.findIndex((item) => item.id === input.anchorId);
+        if (queuedIndex < 0 && steeredIndex < 0)
+          throw new Error("Interrupted prompt is no longer delivery-owned");
+        const existing = state.interrupt;
+        if (existing) {
+          if (existing.interruptId === input.interruptId) return existing;
+          throw new Error("A prompt interrupt is already pending");
+        }
+        const runGeneration = this.runState(input.sessionId).generation;
+        const source =
+          queuedIndex < 0 && steeredIndex >= 0
+            ? { slot: "steered" as const, index: steeredIndex }
+            : undefined;
+        if (source) {
+          const [receipt] = steered.splice(steeredIndex, 1);
+          state.queued = [receipt, ...queued];
+          state.steered = steered;
+        }
+        state.interrupt = {
+          interruptId: input.interruptId,
+          phase: "prepared",
+          runGeneration,
+          anchorId: input.anchorId,
+          ...(input.soloId ? { soloId: input.soloId } : {}),
+          ...(source ? { source } : {}),
+        };
+        this.enqueueOutbox(
+          input.sessionId,
+          "delivery_interrupt_cancel",
+          {
+            interruptId: input.interruptId,
+            runIds: [...new Set(input.runIds)],
+            runGeneration,
+          },
+          input.interruptId,
+        );
+        return state.interrupt;
+      },
+    ).result as {
+      interruptId: string;
+      phase: "prepared" | "executing" | "confirmed";
+      runGeneration: number;
+      anchorId: string;
+      soloId?: string;
+    };
+  }
+
+  beginDeliveryInterruptEffect(input: {
+    sessionId: string;
+    interruptId: string;
+    runGeneration: number;
+  }): "execute" | "retry" | "adopt_confirmed" | "settled" {
+    return this.mutateDelivery(
+      input.sessionId,
+      "delivery_interrupt_effect_started",
+      (state) => {
+        const interrupt = state.interrupt;
+        if (!interrupt || interrupt.interruptId !== input.interruptId)
+          return "settled" as const;
+        if (interrupt.phase === "confirmed") return "settled" as const;
+        if (
+          interrupt.runGeneration !== input.runGeneration ||
+          this.runState(input.sessionId).generation !== input.runGeneration
+        ) return "adopt_confirmed" as const;
+        if (interrupt.phase === "executing") return "retry" as const;
+        state.interrupt = { ...interrupt, phase: "executing" };
+        return "execute" as const;
+      },
+    ).result as "execute" | "retry" | "adopt_confirmed" | "settled";
+  }
+
+  settleDeliveryInterrupt(input: {
+    sessionId: string;
+    interruptId: string;
+    outcome: "confirmed" | "not_aborted";
+  }): boolean {
+    return this.mutateDelivery(
+      input.sessionId,
+      "delivery_interrupt_settled",
+      (state) => {
+        const interrupt = state.interrupt;
+        if (!interrupt || interrupt.interruptId !== input.interruptId) return false;
+        if (input.outcome === "not_aborted") {
+          if (interrupt.source?.slot === "steered") {
+            const queued = state.queued as QueueItem[];
+            const index = queued.findIndex((item) => item.id === interrupt.anchorId);
+            if (index >= 0) {
+              const [receipt] = queued.splice(index, 1);
+              const steered = state.steered as QueueItem[];
+              if (!steered.some((item) => item.id === interrupt.anchorId))
+                steered.splice(
+                  Math.min(interrupt.source.index, steered.length),
+                  0,
+                  receipt,
+                );
+              state.queued = queued;
+              state.steered = steered;
+            }
+          }
+          state.interrupt = undefined;
+        } else state.interrupt = { ...interrupt, phase: "confirmed" };
+        return true;
+      },
+    ).result as boolean;
+  }
+
   claimNextDeliveryDispatch(input: {
     sessionId: string;
     promptEntryId: string;
-    soloId?: string;
-    interruptMark?: boolean;
     stillWorking?: boolean;
   }):
     | { kind: "empty"; revision: number }
@@ -1906,21 +2063,28 @@ export class SessionKernelStore {
         kind: "deliver";
         promptEntryId: string;
         items: QueueItem[];
+        interrupted: boolean;
         revision: number;
       } {
-    if (
-      !input.promptEntryId ||
-      input.promptEntryId.length > 256 ||
-      (input.soloId !== undefined &&
-        (!input.soloId || input.soloId.length > 256))
-    ) throw new Error("Invalid next prompt dispatch identity");
+    if (!input.promptEntryId || input.promptEntryId.length > 256)
+      throw new Error("Invalid next prompt dispatch identity");
     const mutation = this.mutateDelivery(
       input.sessionId,
       "delivery_next_dispatch_claimed",
       (state) => {
         if (state.dispatch) throw new Error("A prompt dispatch is already active");
+        const interrupt = state.interrupt;
         const queued = state.queued as QueueItem[];
-        if (!queued.length) return { kind: "empty" as const };
+        if (!queued.length) {
+          state.interrupt = undefined;
+          return { kind: "empty" as const };
+        }
+        const anchorQueued =
+          interrupt !== undefined &&
+          queued.some((item) => item.id === interrupt.anchorId);
+        if (interrupt && !anchorQueued) state.interrupt = undefined;
+        const confirmedInterrupt =
+          anchorQueued && interrupt.phase === "confirmed";
         const retryDispatchId = queued.find(
           (item) => item.retryDispatchId,
         )?.retryDispatchId;
@@ -1935,11 +2099,18 @@ export class SessionKernelStore {
               ),
             }
           : selectQueueBatch(queued, {
-              soloId: input.soloId,
-              interruptMark: input.interruptMark,
+              soloId: confirmedInterrupt ? interrupt.soloId : undefined,
+              interruptMark: confirmedInterrupt,
               stillWorking: input.stillWorking,
             });
         if (plan.kind === "hold") return plan;
+        const batchOwnsInterrupt =
+          anchorQueued &&
+          plan.batch.some((item) => item.id === interrupt.anchorId);
+        if (batchOwnsInterrupt && interrupt.phase !== "confirmed")
+          return { kind: "hold" as const, heldCount: plan.batch.length };
+        const applyInterrupt = confirmedInterrupt && batchOwnsInterrupt;
+        if (applyInterrupt) state.interrupt = undefined;
         const promptEntryId =
           retryDispatchId || plan.batch[0]?.promptEntryId || input.promptEntryId;
         if (!promptEntryId || promptEntryId.length > 256)
@@ -1948,11 +2119,13 @@ export class SessionKernelStore {
         state.dispatch = {
           promptEntryId,
           items: plan.batch,
+          ...(applyInterrupt ? { interrupt } : {}),
         };
         return {
           kind: "deliver" as const,
           promptEntryId,
           items: plan.batch,
+          interrupted: applyInterrupt,
         };
       },
     );
@@ -1964,6 +2137,7 @@ export class SessionKernelStore {
             kind: "deliver";
             promptEntryId: string;
             items: QueueItem[];
+            interrupted: boolean;
           }),
       revision: mutation.state.revision,
     };
@@ -2057,7 +2231,12 @@ export class SessionKernelStore {
     if (current?.promptEntryId !== promptEntryId) return false;
     this.mutateDelivery(sessionId, "delivery_dispatch_failed", (state) => {
       const dispatch = state.dispatch as
-        { promptEntryId?: string; items?: unknown[] } | undefined;
+        | {
+            promptEntryId?: string;
+            items?: unknown[];
+            interrupt?: DurableDeliveryState["interrupt"];
+          }
+        | undefined;
       if (dispatch?.promptEntryId !== promptEntryId)
         throw new Error("Prompt dispatch changed before failure settlement");
       const restored = (dispatch.items ?? []).map((item, index) =>
@@ -2080,6 +2259,11 @@ export class SessionKernelStore {
           (item) => !item.id || !restoredIds.has(item.id),
         ),
       ];
+      if (dispatch.interrupt) {
+        if (state.interrupt)
+          throw new Error("A successor prompt interrupt is already pending");
+        state.interrupt = { ...dispatch.interrupt, phase: "confirmed" };
+      }
       state.dispatch = undefined;
     });
     return true;

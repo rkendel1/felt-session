@@ -341,6 +341,12 @@ export function startSessionKernelActorWorker(): void {
               delivery.sessionId,
               delivery.items,
             );
+          else if (delivery.op === "prepare_interrupt")
+            result = store.prepareDeliveryInterrupt(delivery);
+          else if (delivery.op === "begin_interrupt_effect")
+            result = store.beginDeliveryInterruptEffect(delivery);
+          else if (delivery.op === "settle_interrupt")
+            result = store.settleDeliveryInterrupt(delivery);
           else if (delivery.op === "claim_next_dispatch")
             result = store.claimNextDeliveryDispatch(delivery);
           else if (delivery.op === "claim_dispatch")

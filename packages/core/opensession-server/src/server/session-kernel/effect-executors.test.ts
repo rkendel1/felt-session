@@ -32,6 +32,24 @@ describe("session effect executor registry", () => {
     expect(delivered).toEqual({ askId: "ask-one", skipUi: false });
   });
 
+  test("decodes fenced interrupt cancellation effects", async () => {
+    const registry = new SessionEffectExecutorRegistry();
+    let cancel: unknown;
+    registry.register("delivery_interrupt_cancel", (item) => {
+      cancel = item.payload;
+    });
+    expect(await registry.execute(outbox({
+      interruptId: "interrupt-one",
+      runIds: ["session-one", "engine-one"],
+      runGeneration: 4,
+    }, "delivery_interrupt_cancel"))).toBe(true);
+    expect(cancel).toEqual({
+      interruptId: "interrupt-one",
+      runIds: ["session-one", "engine-one"],
+      runGeneration: 4,
+    });
+  });
+
   test("decodes creation references without forwarding durable secrets or bodies", async () => {
     const registry = new SessionEffectExecutorRegistry();
     let credential: unknown;

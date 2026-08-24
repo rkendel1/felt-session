@@ -683,6 +683,30 @@ class RemoteStore implements SessionKernelStoreApi {
       items,
     });
   }
+  prepareDeliveryInterrupt(
+    input: Parameters<SessionKernelStoreApi["prepareDeliveryInterrupt"]>[0],
+  ): ReturnType<SessionKernelStoreApi["prepareDeliveryInterrupt"]> {
+    return this.actor.decideDelivery({
+      op: "prepare_interrupt",
+      ...input,
+    }) as ReturnType<SessionKernelStoreApi["prepareDeliveryInterrupt"]>;
+  }
+  beginDeliveryInterruptEffect(
+    input: Parameters<SessionKernelStoreApi["beginDeliveryInterruptEffect"]>[0],
+  ): ReturnType<SessionKernelStoreApi["beginDeliveryInterruptEffect"]> {
+    return this.actor.decideDelivery({
+      op: "begin_interrupt_effect",
+      ...input,
+    }) as ReturnType<SessionKernelStoreApi["beginDeliveryInterruptEffect"]>;
+  }
+  settleDeliveryInterrupt(
+    input: Parameters<SessionKernelStoreApi["settleDeliveryInterrupt"]>[0],
+  ): ReturnType<SessionKernelStoreApi["settleDeliveryInterrupt"]> {
+    return this.actor.decideDelivery({
+      op: "settle_interrupt",
+      ...input,
+    }) as ReturnType<SessionKernelStoreApi["settleDeliveryInterrupt"]>;
+  }
   claimNextDeliveryDispatch(
     input: Parameters<SessionKernelStoreApi["claimNextDeliveryDispatch"]>[0],
   ): ReturnType<SessionKernelStoreApi["claimNextDeliveryDispatch"]> {

@@ -126,6 +126,9 @@ import {
 	beginNextPromptDispatch,
 	beginPromptDispatch,
 	durableQueueItem,
+	beginPromptInterruptEffect,
+	preparePromptInterrupt,
+	settlePromptInterrupt,
 	acknowledgePromptDispatch,
 	failPromptDispatch,
 	clearSteerReceipts,
@@ -160,10 +163,40 @@ import {
 import { automationSessionMcp, interactiveMcpServers } from "./interactive-mcp";
 import { makeAskHandler, settleRestoredAskAfterRecovery } from "./asks";
 import {
+	registerSessionEffectExecutor,
 	settleCreationFailed,
 	settleCreationSucceeded,
 	sessionKernel,
 } from "./session-kernel";
+
+const interruptExecutorGlobal = globalThis as typeof globalThis & {
+	__opensessionInterruptExecutorRegistered?: boolean;
+};
+if (!interruptExecutorGlobal.__opensessionInterruptExecutorRegistered) {
+	registerSessionEffectExecutor("delivery_interrupt_cancel", (item) => {
+		const { interruptId, runIds, runGeneration } = item.payload;
+		const decision = beginPromptInterruptEffect(
+			item.sessionId,
+			interruptId,
+			runGeneration,
+		);
+		if (decision === "settled") return;
+		if (decision === "adopt_confirmed") {
+			settlePromptInterrupt(item.sessionId, interruptId, "confirmed");
+			return;
+		}
+		const aborted = cancelAgentRun(...runIds);
+		// A retry follows a durably recorded executing phase. False then means
+		// either the first attempt already cancelled the owner or this retry found
+		// it terminal, so the accepted interrupt is conservatively confirmed.
+		settlePromptInterrupt(
+			item.sessionId,
+			interruptId,
+			aborted || decision === "retry" ? "confirmed" : "not_aborted",
+		);
+	});
+	interruptExecutorGlobal.__opensessionInterruptExecutorRegistered = true;
+}
 
 export function creationOwnsPrompt(sessionId: string, promptEntryId: string): boolean {
 	const creation = sessionKernel(sessionId).creationState();
@@ -256,36 +289,6 @@ const orphanRedeliveredTails: Map<string, string> = (g.__orphanRedeliveredTails 
 // row parks for the human instead of looping. Cleared on any clean turn.
 const wedgeRetriedFailures: Map<string, string> = (g.__wedgeRetriedFailures ??=
 	new Map());
-
-// The session's pending interrupt: its current queue head was armed by
-// aborting the running turn (busy-send). ONE record with ONE ttl, taken once
-// per drain pass — the same mark both waves the batch past the queue hold and
-// appends INTERRUPT_STEER_NOTE, so the model treats the delivery as a mid-task
-// steer instead of a fresh turn it can acknowledge-and-park on. Reading those
-// two halves separately let an expired mark do one without the other: the hold
-// was bypassed (a held human send landed mid-task) and the note was then
-// refused as expired, so it landed unframed too.
-// `soloId` is set when the interrupt targeted a SPECIFIC queued item (the queue
-// chip's send/▲ button) rather than a fresh compose-send: only that item rides
-// this drain, and the rest of the queue stays put for the next natural stopping
-// point. Timestamped so a mark whose drain never happens (the user hits Stop
-// before it fires) expires instead of mislabeling — or solo-delivering — a much
-// later, unrelated prompt.
-const interruptMarks: Map<string, { at: number; soloId?: string }> =
-	(g.__interruptMarks ??= new Map());
-const INTERRUPT_MARK_TTL_MS = 5 * 60_000;
-
-/** Take this session's pending interrupt. Always clears the record, so one
- *  interrupt drives exactly one drain; an expired one reads as no interrupt. */
-function consumeInterruptMark(
-	sessionId: string,
-): { soloId?: string } | undefined {
-	const mark = interruptMarks.get(sessionId);
-	if (!mark) return undefined;
-	interruptMarks.delete(sessionId);
-	if (Date.now() - mark.at >= INTERRUPT_MARK_TTL_MS) return undefined;
-	return mark;
-}
 
 // One "queue held" notice per hold engagement (not one per watcher tick);
 // cleared whenever a drain actually delivers a batch.
@@ -1030,15 +1033,10 @@ async function drainQueueInner(sessionId: string): Promise<void> {
 		// completes. Orchestration traffic (worker reports, FYIs) keeps
 		// flowing so held items can't wedge the run.
 		//
-		// One read of the pending interrupt per pass: the same record decides
-		// both whether this batch skips the hold and whether it gets the steer
-		// note below, so an expired one can never do one without the other.
-		const interrupt = consumeInterruptMark(sessionId);
-		// Selection and claim are one actor reduction. Queue contents cannot
-		// change between the gateway choosing a batch and durable dispatch ownership.
+		// Selection, interrupt consumption, and claim are one actor reduction.
+		// Queue contents cannot change between choosing a batch and durable
+		// dispatch ownership, and a crash cannot lose or duplicate the interrupt.
 		const claim = beginNextPromptDispatch(sessionId, {
-			soloId: interrupt?.soloId,
-			interruptMark: interrupt !== undefined,
 			stillWorking: runningChildCount(sessionId) > 0,
 		});
 		if (claim.kind === "empty") continue;
@@ -1055,7 +1053,7 @@ async function drainQueueInner(sessionId: string): Promise<void> {
 			return;
 		}
 		queueHoldNotified.delete(sessionId);
-		const { batch, promptEntryId } = claim;
+		const { batch, promptEntryId, interrupted } = claim;
 		broadcastQueue(sessionId);
 		let combined = batch
 			.map((m) =>
@@ -1066,7 +1064,7 @@ async function drainQueueInner(sessionId: string): Promise<void> {
 		// append the fenced steer note so the model resumes the interrupted work
 		// instead of acknowledge-and-parking. Fenced, so the transcript shows
 		// only the user's text.
-		if (interrupt) {
+		if (interrupted) {
 			combined = `${combined}\n\n${wrapContext(INTERRUPT_STEER_NOTE, "steer-note")}`;
 		}
 		// Attachments queued alongside the text ride the drained turn: images are
@@ -1154,9 +1152,9 @@ export function watchExternalRunAndDrain(sessionId: string): void {
  * the run's current turn — the same abort the Esc/stop path uses — and let the
  * drain watcher deliver the queue as the immediate next turn on the same
  * engine session. The interrupting message must already be in promptQueues
- * before calling (durability: nothing is lost if the abort races a crash).
- * False = nothing abortable (external CLI/tmux run) — the message stays queued
- * for the run's natural stopping point.
+ * before calling. True means the actor accepted the durable cancel intent. If
+ * the fenced effect proves the owner was not abortable, it records
+ * `not_aborted` and the message stays queued for the natural stopping point.
  */
 export function abortTurnAndDrain(
 	sessionId: string,
@@ -1167,24 +1165,22 @@ export function abortTurnAndDrain(
 		id: string;
 	},
 	/** The one queued item this interrupt targeted (queue chip send/▲), when
-	 *  it targeted one — the rest of the queue stays put for this drain. */
+	 *  it targeted one. The rest of the queue stays put for this drain. */
 	soloId?: string,
+	/** The queued item that fences even a whole-batch composer interrupt. */
+	anchorId?: string,
 ): boolean {
-	const ids = [session.claudeSessionId, session.codexThreadId, session.id];
-	const aborted = cancelAgentRun(...ids);
-	if (!aborted) return false;
-	// The user explicitly asked for delivery now — unpark an earlier Stop, and
-	// fold steer receipts the engine never got back in ahead so nothing is
-	// dropped (landed steers are already in the engine history — requeueing
-	// them would deliver duplicates).
+	const interruptAnchorId = anchorId || soloId;
+	if (!interruptAnchorId)
+		throw new Error("Interrupted prompt is missing its durable queue identity");
+	// Actor preparation and its outbox effect commit before physical cancel.
+	// The effect retries against the fenced run generation after a crash, while
+	// the queue anchor prevents a stale result from crossing into later work.
+	const ids = [session.claudeSessionId, session.codexThreadId, session.id].filter(
+		(id): id is string => !!id,
+	);
+	preparePromptInterrupt(sessionId, interruptAnchorId, ids, soloId);
 	stoppedSessions.delete(sessionId);
-	requeueSteerReceipts(sessionId, engineUserTexts(session));
-	// The drained batch is an interrupt delivery: record it so the next drain
-	// pass lets it past the queue hold and frames it as a mid-task steer (see
-	// INTERRUPT_STEER_NOTE). Only marked once the abort actually took — a
-	// message left queued for the run's natural stopping point was never
-	// interrupted into anything.
-	interruptMarks.set(sessionId, { at: Date.now(), soloId });
 	watchExternalRunAndDrain(sessionId);
 	return true;
 }

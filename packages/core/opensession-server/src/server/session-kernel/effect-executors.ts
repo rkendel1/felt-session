@@ -64,7 +64,7 @@ function creationBase(kind: string, value: Record<string, unknown>) {
 
 function creationPayload<K extends Exclude<
   SessionActorEffectKind,
-  "human_ask_deliver"
+  "human_ask_deliver" | "delivery_interrupt_cancel"
 >>(
   kind: K,
   payload: unknown,
@@ -213,6 +213,25 @@ function creationPayload<K extends Exclude<
   }
 }
 
+function deliveryInterruptCancelPayload(
+  payload: unknown,
+): SessionActorEffectFor<"delivery_interrupt_cancel">["payload"] {
+  const kind = "delivery_interrupt_cancel";
+  const value = recordPayload(kind, payload);
+  const runIds = optionalStringList(kind, value.runIds, "runIds");
+  if (
+    !runIds?.length ||
+    runIds.length > 8 ||
+    !Number.isSafeInteger(value.runGeneration) ||
+    Number(value.runGeneration) < 0
+  ) throw new Error(`Invalid ${kind} effect payload: run fence`);
+  return {
+    interruptId: requiredString(kind, value.interruptId, "interruptId"),
+    runIds,
+    runGeneration: Number(value.runGeneration),
+  };
+}
+
 function humanAskDeliverPayload(
   payload: unknown,
 ): SessionActorEffectFor<"human_ask_deliver">["payload"] {
@@ -228,6 +247,7 @@ const payloadDecoders: {
   ) => SessionActorEffectFor<K>["payload"];
 } = {
   human_ask_deliver: humanAskDeliverPayload,
+  delivery_interrupt_cancel: deliveryInterruptCancelPayload,
   creation_workspace_prepare: (payload) =>
     creationPayload("creation_workspace_prepare", payload),
   creation_branch_prepare: (payload) =>

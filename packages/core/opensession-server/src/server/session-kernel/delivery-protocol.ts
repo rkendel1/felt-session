@@ -17,11 +17,29 @@ export type DeliveryActorRequest =
   | { op: "settle_pending_steers" }
   | { op: "requeue_steers"; sessionId: string; items: unknown[] }
   | {
+      op: "prepare_interrupt";
+      sessionId: string;
+      interruptId: string;
+      anchorId: string;
+      runIds: string[];
+      soloId?: string;
+    }
+  | {
+      op: "begin_interrupt_effect";
+      sessionId: string;
+      interruptId: string;
+      runGeneration: number;
+    }
+  | {
+      op: "settle_interrupt";
+      sessionId: string;
+      interruptId: string;
+      outcome: "confirmed" | "not_aborted";
+    }
+  | {
       op: "claim_next_dispatch";
       sessionId: string;
       promptEntryId: string;
-      soloId?: string;
-      interruptMark?: boolean;
       stillWorking?: boolean;
     }
   | {
@@ -61,6 +79,7 @@ export type DeliveryActorResult<T extends DeliveryActorRequest> =
                   kind: "deliver";
                   promptEntryId: string;
                   items: unknown[];
+                  interrupted: boolean;
                   revision: number;
                 }
         : T extends { op: "prepare_steer" }
@@ -76,4 +95,16 @@ export type DeliveryActorResult<T extends DeliveryActorRequest> =
             ? boolean
             : T extends { op: "settle_pending_steers" | "requeue_steers" }
               ? number
-              : void;
+              : T extends { op: "prepare_interrupt" }
+                ? {
+                    interruptId: string;
+                    phase: "prepared" | "executing" | "confirmed";
+                    runGeneration: number;
+                    anchorId: string;
+                    soloId?: string;
+                  }
+                : T extends { op: "begin_interrupt_effect" }
+                  ? "execute" | "retry" | "adopt_confirmed" | "settled"
+                  : T extends { op: "settle_interrupt" }
+                    ? boolean
+                  : void;

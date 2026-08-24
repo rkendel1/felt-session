@@ -524,17 +524,30 @@ describe("session kernel actor boundary", () => {
         { id: "solo", promptEntryId: "stable-entry", content: "now", hold: true },
       ],
     });
+    host.decideDelivery({
+      op: "prepare_interrupt",
+      sessionId: "actor-next-dispatch",
+      interruptId: "interrupt-one",
+      anchorId: "solo",
+      runIds: ["run-owner"],
+      soloId: "solo",
+    });
+    host.decideDelivery({
+      op: "settle_interrupt",
+      sessionId: "actor-next-dispatch",
+      interruptId: "interrupt-one",
+      outcome: "confirmed",
+    });
     expect(host.decideDelivery({
       op: "claim_next_dispatch",
       sessionId: "actor-next-dispatch",
       promptEntryId: "candidate-entry",
-      soloId: "solo",
-      interruptMark: true,
       stillWorking: true,
     })).toMatchObject({
       kind: "deliver",
       promptEntryId: "stable-entry",
       items: [{ id: "solo", promptEntryId: "stable-entry" }],
+      interrupted: true,
     });
     expect(host.decideDelivery({
       op: "snapshot",

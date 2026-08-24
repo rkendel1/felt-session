@@ -409,9 +409,11 @@ export function restorePersistedQueueState(options: {
 	effects?: boolean;
 }): { queuedSessionIds: string[]; queuedCount: number; steeredCount: number } {
 	const storePath = options.storePath ?? QUEUE_STORE;
+	const actorOwned =
+		storePath === QUEUE_STORE &&
+		sessionKernelStore().deliveryMigrationComplete();
   const data: PersistedQueueState =
-    storePath === QUEUE_STORE &&
-    sessionKernelStore().deliveryMigrationComplete()
+    actorOwned
       ? {
           queued: Object.fromEntries(promptQueues),
           steered: Object.fromEntries(steeredReceipts),
@@ -424,6 +426,56 @@ export function restorePersistedQueueState(options: {
     !Object.keys(data.dispatching || {}).length
   )
     return { queuedSessionIds: [], queuedCount: 0, steeredCount: 0 };
+
+	if (actorOwned) {
+		for (const [sessionId] of promptQueues) {
+			if (!options.sessionExists(sessionId)) promptQueues.delete(sessionId);
+		}
+		for (const [sessionId, dispatch] of promptDispatches) {
+			if (!options.sessionExists(sessionId)) {
+				promptDispatches.delete(sessionId);
+				continue;
+			}
+			if (
+				dispatch.kind === "create" &&
+				(options.creationOwnsPrompt?.(sessionId, dispatch.promptEntryId) ||
+					!options.journalOwnsPrompt(sessionId, dispatch.promptEntryId))
+			) continue;
+			if (options.journalOwnsPrompt(sessionId, dispatch.promptEntryId))
+				acknowledgePromptDispatch(sessionId, dispatch.promptEntryId, false);
+			else failPromptDispatch(sessionId, dispatch.promptEntryId, false);
+		}
+
+		let steeredCount = 0;
+		for (const [sessionId, items] of steeredReceipts) {
+			if (!options.sessionExists(sessionId)) {
+				steeredReceipts.delete(sessionId);
+				continue;
+			}
+			const delivered = options.deliveredUserTexts(sessionId);
+			const pending = queueWithIds(undeliveredSteers(items, delivered), sessionId);
+			if (options.runOwnsSteers(sessionId)) {
+				if (pending.length) steeredReceipts.set(sessionId, pending);
+				else steeredReceipts.delete(sessionId);
+				steeredCount += pending.length;
+			} else requeueSteerReceipts(sessionId, delivered);
+		}
+		if (options.effects !== false) {
+			persistQueues(storePath);
+			for (const sessionId of new Set([
+				...promptQueues.keys(),
+				...steeredReceipts.keys(),
+			])) broadcastQueue(sessionId);
+		}
+		return {
+			queuedSessionIds: [...promptQueues.keys()],
+			queuedCount: [...promptQueues.values()].reduce(
+				(count, items) => count + items.length,
+				0,
+			),
+			steeredCount,
+		};
+	}
 
 	const liveDispatches = new Map(promptDispatches);
 	const preservedDispatches = new Map<string, PromptDispatch>();
@@ -516,19 +568,69 @@ export function restorePersistedQueueState(options: {
 	};
 }
 
+/** Persist the interrupt before attempting its physical cancellation. */
+export function preparePromptInterrupt(
+	sessionId: string,
+	anchorId: string,
+	runIds: string[],
+	soloId?: string,
+): string {
+	const interruptId = crypto.randomUUID();
+	sessionDelivery({
+		op: "prepare_interrupt",
+		sessionId,
+		interruptId,
+		anchorId,
+		runIds,
+		...(soloId ? { soloId } : {}),
+	});
+	return interruptId;
+}
+
+export function beginPromptInterruptEffect(
+	sessionId: string,
+	interruptId: string,
+	runGeneration: number,
+): "execute" | "retry" | "adopt_confirmed" | "settled" {
+	return sessionDelivery({
+		op: "begin_interrupt_effect",
+		sessionId,
+		interruptId,
+		runGeneration,
+	});
+}
+
+export function settlePromptInterrupt(
+	sessionId: string,
+	interruptId: string,
+	outcome: "confirmed" | "not_aborted",
+): void {
+	const settled = sessionDelivery({
+		op: "settle_interrupt",
+		sessionId,
+		interruptId,
+		outcome,
+	});
+	if (!settled)
+		throw new Error(`Prompt interrupt ${interruptId} lost actor ownership`);
+}
+
 /** Let the actor select and claim the next queue batch in one transaction. */
 export function beginNextPromptDispatch(
 	sessionId: string,
 	opts: {
-		soloId?: string;
-		interruptMark?: boolean;
 		stillWorking?: boolean;
 	},
 	effects = true,
 ):
 	| { kind: "empty" }
 	| { kind: "hold"; heldCount: number }
-	| { kind: "deliver"; promptEntryId: string; batch: QueueItem[] } {
+	| {
+			kind: "deliver";
+			promptEntryId: string;
+			batch: QueueItem[];
+			interrupted: boolean;
+		} {
 	const claimed = sessionDelivery({
 		op: "claim_next_dispatch",
 		sessionId,
@@ -541,6 +643,7 @@ export function beginNextPromptDispatch(
 		kind: "deliver",
 		promptEntryId: claimed.promptEntryId,
 		batch: claimed.items as QueueItem[],
+		interrupted: claimed.interrupted,
 	};
 }
 

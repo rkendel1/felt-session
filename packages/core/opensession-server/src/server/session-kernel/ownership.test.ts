@@ -159,11 +159,29 @@ describe("single session ownership", () => {
 
 	test("queue selection and dispatch claim execute atomically inside the actor", () => {
 		const run = read("run-session.ts");
+		const queue = read("queue-state.ts");
 		const actor = read("session-kernel/actor-worker.ts");
 		expect(run).toContain("beginNextPromptDispatch(sessionId");
 		expect(run).not.toContain("selectQueueBatch(queue");
+		expect(run).not.toContain("interruptMarks");
+		expect(actor).toContain('delivery.op === "prepare_interrupt"');
+		expect(actor).toContain('delivery.op === "begin_interrupt_effect"');
+		expect(actor).toContain('delivery.op === "settle_interrupt"');
 		expect(actor).toContain('delivery.op === "claim_next_dispatch"');
 		expect(actor).toContain("store.claimNextDeliveryDispatch(delivery)");
+		expect(queue).toContain(
+			"failPromptDispatch(sessionId, dispatch.promptEntryId, false)",
+		);
+		expect(run).toContain(
+			'registerSessionEffectExecutor("delivery_interrupt_cancel"',
+		);
+		const beginEffect = run.indexOf("beginPromptInterruptEffect(");
+		const cancel = run.indexOf("cancelAgentRun(...runIds)", beginEffect);
+		const settle = run.indexOf("settlePromptInterrupt(", cancel);
+		expect(run).toContain("preparePromptInterrupt(sessionId");
+		expect(beginEffect).toBeGreaterThan(-1);
+		expect(beginEffect).toBeLessThan(cancel);
+		expect(cancel).toBeLessThan(settle);
 	});
 
 	test("run-state decisions execute atomically inside the actor", () => {

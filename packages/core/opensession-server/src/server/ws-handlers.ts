@@ -1290,7 +1290,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 						session.id,
 					)
 				) {
-					if (!abortTurnAndDrain(sessionId, session))
+					if (!abortTurnAndDrain(sessionId, session, undefined, msg.requestId))
 						watchExternalRunAndDrain(sessionId);
 				} else {
 					void drainQueue(sessionId).catch((error) =>

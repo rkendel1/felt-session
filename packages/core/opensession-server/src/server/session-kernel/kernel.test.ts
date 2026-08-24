@@ -1124,11 +1124,21 @@ describe("SessionKernel", () => {
 			stillWorking: true,
 		})).toMatchObject({ kind: "hold", heldCount: 2 });
 		expect(store.deliverySnapshot("next-delivery").queued).toHaveLength(2);
+		store.prepareDeliveryInterrupt({
+			sessionId: "next-delivery",
+			interruptId: "interrupt-next-delivery",
+			anchorId: "solo",
+			runIds: ["run-owner"],
+			soloId: "solo",
+		});
+		store.settleDeliveryInterrupt({
+			sessionId: "next-delivery",
+			interruptId: "interrupt-next-delivery",
+			outcome: "confirmed",
+		});
 		expect(store.claimNextDeliveryDispatch({
 			sessionId: "next-delivery",
 			promptEntryId: "solo-entry",
-			soloId: "solo",
-			interruptMark: true,
 			stillWorking: true,
 		})).toMatchObject({
 			kind: "deliver",
@@ -1158,6 +1168,187 @@ describe("SessionKernel", () => {
 		});
 	});
 
+	test("rolls an unabortable steered receipt back to its durable slot", () => {
+		store.setDeliverySlot("steered-interrupt", "steered", [
+			{ id: "before", content: "before" },
+			{ id: "target", content: "accepted but unread" },
+			{ id: "after", content: "after" },
+		]);
+		store.prepareDeliveryInterrupt({
+			sessionId: "steered-interrupt",
+			interruptId: "steered-interrupt-one",
+			anchorId: "target",
+			runIds: ["run-owner"],
+			soloId: "target",
+		});
+		expect(store.deliverySnapshot("steered-interrupt")).toMatchObject({
+			queued: [{ id: "target" }],
+			steered: [{ id: "before" }, { id: "after" }],
+			interrupt: { source: { slot: "steered", index: 1 } },
+		});
+		store.settleDeliveryInterrupt({
+			sessionId: "steered-interrupt",
+			interruptId: "steered-interrupt-one",
+			outcome: "not_aborted",
+		});
+		expect(store.deliverySnapshot("steered-interrupt")).toMatchObject({
+			queued: [],
+			steered: [{ id: "before" }, { id: "target" }, { id: "after" }],
+		});
+		expect(
+			store.deliverySnapshot("steered-interrupt").interrupt,
+		).toBeUndefined();
+	});
+
+	test("does not transfer an interrupt to an earlier retry group", () => {
+		store.setDeliverySlot("interrupt-behind-retry", "queued", [
+			{ id: "retry", retryDispatchId: "older-entry", content: "retry first" },
+			{ id: "anchor", content: "interrupt target", hold: true },
+		]);
+		store.prepareDeliveryInterrupt({
+			sessionId: "interrupt-behind-retry",
+			interruptId: "interrupt-behind-retry",
+			anchorId: "anchor",
+			runIds: ["run-owner"],
+			soloId: "anchor",
+		});
+		store.settleDeliveryInterrupt({
+			sessionId: "interrupt-behind-retry",
+			interruptId: "interrupt-behind-retry",
+			outcome: "confirmed",
+		});
+		expect(store.claimNextDeliveryDispatch({
+			sessionId: "interrupt-behind-retry",
+			promptEntryId: "unused",
+			stillWorking: true,
+		})).toMatchObject({
+			kind: "deliver",
+			promptEntryId: "older-entry",
+			interrupted: false,
+			items: [{ id: "retry" }],
+		});
+		expect(
+			store.deliverySnapshot("interrupt-behind-retry").interrupt,
+		).toMatchObject({ anchorId: "anchor" });
+		store.ackDeliveryDispatch("interrupt-behind-retry", "older-entry");
+		expect(store.claimNextDeliveryDispatch({
+			sessionId: "interrupt-behind-retry",
+			promptEntryId: "anchor-entry",
+			stillWorking: true,
+		})).toMatchObject({
+			kind: "deliver",
+			interrupted: true,
+			items: [{ id: "anchor" }],
+		});
+	});
+
+	test("does not apply a solo interrupt after its target is removed", () => {
+		store.setDeliverySlot("stale-solo-interrupt", "queued", [
+			{ id: "removed", content: "interrupt target", hold: true },
+			{ id: "other", content: "still held", hold: true },
+		]);
+		store.prepareDeliveryInterrupt({
+			sessionId: "stale-solo-interrupt",
+			interruptId: "interrupt-stale-solo-interrupt",
+			anchorId: "removed",
+			runIds: ["run-owner"],
+			soloId: "removed",
+		});
+		store.setDeliverySlot("stale-solo-interrupt", "queued", [
+			{ id: "other", content: "still held", hold: true },
+		]);
+		expect(store.claimNextDeliveryDispatch({
+			sessionId: "stale-solo-interrupt",
+			promptEntryId: "must-not-deliver",
+			stillWorking: true,
+		})).toMatchObject({ kind: "hold", heldCount: 1 });
+		expect(store.deliverySnapshot("stale-solo-interrupt").interrupt).toBeUndefined();
+	});
+
+	test("recovers prepared and claimed interrupts across crashes", () => {
+		const dir = mkdtempSync(join(tmpdir(), "session-kernel-interrupt-"));
+		const path = join(dir, "kernel.sqlite");
+		const first = new SessionKernelStore(path);
+		try {
+			first.setDeliverySlot("restart-interrupt", "queued", [
+				{ id: "held", content: "deliver after restart", hold: true },
+			]);
+			first.prepareDeliveryInterrupt({
+				sessionId: "restart-interrupt",
+				interruptId: "interrupt-restart-interrupt",
+				anchorId: "held",
+				runIds: ["run-owner"],
+			});
+			expect(first.stats().pendingOutbox).toBe(1);
+		} finally {
+			first.close();
+		}
+
+		const recoveredBeforeCancel = new SessionKernelStore(path);
+		try {
+			const interrupt = recoveredBeforeCancel.deliverySnapshot(
+				"restart-interrupt",
+			).interrupt;
+			expect(interrupt).toMatchObject({ phase: "prepared", anchorId: "held" });
+			expect(recoveredBeforeCancel.claimNextDeliveryDispatch({
+				sessionId: "restart-interrupt",
+				promptEntryId: "must-wait-for-cancel",
+				stillWorking: true,
+			})).toMatchObject({ kind: "hold" });
+			expect(recoveredBeforeCancel.beginDeliveryInterruptEffect({
+				sessionId: "restart-interrupt",
+				interruptId: "interrupt-restart-interrupt",
+				runGeneration: interrupt?.runGeneration ?? -1,
+			})).toBe("execute");
+		} finally {
+			recoveredBeforeCancel.close();
+		}
+
+		const recoveredDuringCancel = new SessionKernelStore(path);
+		try {
+			const interrupt = recoveredDuringCancel.deliverySnapshot(
+				"restart-interrupt",
+			).interrupt;
+			expect(interrupt).toMatchObject({ phase: "executing" });
+			expect(recoveredDuringCancel.beginDeliveryInterruptEffect({
+				sessionId: "restart-interrupt",
+				interruptId: "interrupt-restart-interrupt",
+				runGeneration: interrupt?.runGeneration ?? -1,
+			})).toBe("retry");
+			expect(recoveredDuringCancel.settleDeliveryInterrupt({
+				sessionId: "restart-interrupt",
+				interruptId: "interrupt-restart-interrupt",
+				outcome: "confirmed",
+			})).toBe(true);
+			expect(recoveredDuringCancel.claimNextDeliveryDispatch({
+				sessionId: "restart-interrupt",
+				promptEntryId: "restart-entry",
+				stillWorking: true,
+			})).toMatchObject({ kind: "deliver", interrupted: true });
+		} finally {
+			recoveredDuringCancel.close();
+		}
+
+		const recoveredAfterClaim = new SessionKernelStore(path);
+		try {
+			expect(recoveredAfterClaim.failDeliveryDispatch(
+				"restart-interrupt",
+				"restart-entry",
+			)).toBe(true);
+			expect(
+				recoveredAfterClaim.deliverySnapshot("restart-interrupt").interrupt,
+			).toMatchObject({ phase: "confirmed", anchorId: "held" });
+			expect(recoveredAfterClaim.claimNextDeliveryDispatch({
+				sessionId: "restart-interrupt",
+				promptEntryId: "retry-entry",
+				stillWorking: true,
+			})).toMatchObject({ kind: "deliver", interrupted: true });
+		} finally {
+			recoveredAfterClaim.close();
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
 	test("reuses a failed multi-item dispatch identity", () => {
 		store.setDeliverySlot("failed-multi-dispatch", "queued", [
 			{ id: "one", content: "first" },
@@ -1182,11 +1373,21 @@ describe("SessionKernel", () => {
 			...restored,
 			{ id: "later", content: "must stay later" },
 		]);
+		store.prepareDeliveryInterrupt({
+			sessionId: "failed-multi-dispatch",
+			interruptId: "interrupt-failed-multi-dispatch",
+			anchorId: "two",
+			runIds: ["run-owner"],
+			soloId: "two",
+		});
+		store.settleDeliveryInterrupt({
+			sessionId: "failed-multi-dispatch",
+			interruptId: "interrupt-failed-multi-dispatch",
+			outcome: "confirmed",
+		});
 		expect(store.claimNextDeliveryDispatch({
 			sessionId: "failed-multi-dispatch",
 			promptEntryId: "replacement-must-not-win",
-			soloId: "two",
-			interruptMark: true,
 		})).toMatchObject({
 			kind: "deliver",
 			promptEntryId: "stable-batch-entry",
@@ -1216,11 +1417,21 @@ describe("SessionKernel", () => {
 				.deliverySnapshot("failed-multi-dispatch")
 				.queued.filter((item) => (item as { id?: string }).id !== "one"),
 		);
+		store.prepareDeliveryInterrupt({
+			sessionId: "failed-multi-dispatch",
+			interruptId: "interrupt-failed-multi-dispatch",
+			anchorId: "two",
+			runIds: ["run-owner"],
+			soloId: "two",
+		});
+		store.settleDeliveryInterrupt({
+			sessionId: "failed-multi-dispatch",
+			interruptId: "interrupt-failed-multi-dispatch",
+			outcome: "confirmed",
+		});
 		expect(store.claimNextDeliveryDispatch({
 			sessionId: "failed-multi-dispatch",
 			promptEntryId: "replacement-still-must-not-win",
-			soloId: "two",
-			interruptMark: true,
 		})).toMatchObject({
 			kind: "deliver",
 			promptEntryId: "stable-batch-entry",

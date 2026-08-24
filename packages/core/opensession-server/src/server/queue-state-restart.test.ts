@@ -9,11 +9,14 @@ import {
 	persistQueues,
 	promptDispatches,
 	promptQueues,
+	preparePromptInterrupt,
 	requeueSteerReceipts,
 	restorePersistedQueueState,
 	steeredReceipts,
+	settlePromptInterrupt,
 	undeliveredSteers,
 } from "./queue-state";
+import { sessionKernelStore } from "./session-kernel";
 import { sessionWatchers } from "./ws-hub";
 
 const SESSION = "os-steer-restart-test";
@@ -186,18 +189,60 @@ describe("steer receipt restart persistence", () => {
 		expect(deleteQueuedPrompt(SESSION, "ordinary-one", undefined, false)).toBe(
 			true,
 		);
+		const interruptId = preparePromptInterrupt(
+			SESSION,
+			"ordinary-two",
+			[SESSION],
+			"ordinary-two",
+		);
+		settlePromptInterrupt(SESSION, interruptId, "confirmed");
 		expect(
-			beginNextPromptDispatch(
-				SESSION,
-				{ soloId: "ordinary-two", interruptMark: true },
-				false,
-			),
+			beginNextPromptDispatch(SESSION, {}, false),
 		).toMatchObject({
 			kind: "deliver",
 			promptEntryId: "ordinary-entry",
 			batch: [
 				{ id: "ordinary-two", retryDispatchId: "ordinary-entry" },
 			],
+		});
+	});
+
+	test("production boot restores an unjournaled interrupt with its dispatch", () => {
+		sessionKernelStore().markDeliveryMigrationComplete();
+		promptQueues.set(SESSION, [
+			{ id: "interrupt", content: "send now", hold: true },
+		]);
+		promptQueues.set(`${SESSION}-unrelated`, [
+			{ id: "unrelated", content: "must never be globally cleared" },
+		]);
+		const interruptId = preparePromptInterrupt(
+			SESSION,
+			"interrupt",
+			[SESSION],
+			"interrupt",
+		);
+		settlePromptInterrupt(SESSION, interruptId, "confirmed");
+		expect(
+			beginNextPromptDispatch(SESSION, { stillWorking: true }, false),
+		).toMatchObject({ kind: "deliver", interrupted: true });
+
+		const restored = restorePersistedQueueState({
+			sessionExists: () => true,
+			journalOwnsPrompt: () => false,
+			runOwnsSteers: () => false,
+			deliveredUserTexts: () => [],
+			effects: false,
+		});
+		expect(restored.queuedCount).toBe(2);
+		expect(promptQueues.get(`${SESSION}-unrelated`)).toMatchObject([
+			{ id: "unrelated" },
+		]);
+		expect(
+			beginNextPromptDispatch(SESSION, { stillWorking: true }, false),
+		).toMatchObject({
+			kind: "deliver",
+			interrupted: true,
+			batch: [{ id: "interrupt" }],
 		});
 	});
 
