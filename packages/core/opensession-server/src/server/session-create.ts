@@ -94,7 +94,6 @@ import {
 	requestCreationBranch,
 	requestCreationCredential,
 	requestCreationOpening,
-	requestCreationSandbox,
 	patchCreationSetupPlan,
 	requestCreationWorkspace,
 	settleCreationCancelled,
@@ -534,26 +533,6 @@ export function runOpeningCreateOnce(
 		if (spec.needsWorktree && spec.materializeWorktree) {
 			try {
 				await spec.materializeWorktree();
-			} catch (error) {
-				io.fail(error instanceof Error ? error.message : String(error));
-				throw error;
-			}
-		}
-		// Durable sandbox preparation precedes the opening dispatch: the
-		// creation actor owns one effect at a time, so provisioning cannot
-		// start once the opening effect holds the fence. openCreatedSession's
-		// later call adopts the completed receipt.
-		if (spec.sandboxProvider) {
-			try {
-				await requestCreationSandbox({
-					sessionId: spec.id,
-					identity: creationIdentity,
-					provider: spec.sandboxProvider,
-					repo: spec.repoId,
-					branch: spec.branch || undefined,
-					sessionMode: spec.mode,
-					cwd: spec.wtPath,
-				}, { timeoutMs: 15 * 60_000 });
 			} catch (error) {
 				io.fail(error instanceof Error ? error.message : String(error));
 				throw error;
@@ -1162,22 +1141,12 @@ export async function openCreatedSession(
 			let sandboxOpeningRun: AsyncGenerator<StreamEvent> | null = null;
 			let runnerOpeningRun: AsyncGenerator<StreamEvent> | null = null;
 			if (spec.sandboxProvider) {
-				// Creation owns the first physical sandbox preparation. The opening
-				// launcher still calls provider.ensure as an idempotent adoption step
-				// until launch itself becomes a later actor-issued effect.
+				// The opening effect holds the creation actor's single-effect
+				// fence, so a second durable prepare intent cannot run here.
+				// Provisioning rides maybeLaunchSandboxedRun's idempotent,
+				// per-session-locked provider.ensure instead: a crash replays the
+				// opening effect and adopts the same canonical session sandbox.
 				const created = findSession(bksId);
-				await requestCreationSandbox({
-					sessionId: bksId,
-					identity: creationIdentity,
-					provider: spec.sandboxProvider,
-					repo: spec.repoId,
-					branch: spec.branch || undefined,
-					sessionMode: spec.mode,
-					cwd: spec.wtPath,
-					attachedDirs: created?.attachedRepos
-						?.map((repo) => repo.dir)
-						.filter(Boolean),
-				}, { timeoutMs: 15 * 60_000 });
 				sandboxOpeningRun = created
 					? await maybeLaunchSandboxedRun(created, {
 							prompt: openingPromptForRun,

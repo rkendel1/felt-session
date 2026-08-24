@@ -353,17 +353,10 @@ describe("single session ownership", () => {
 		expect(create).toContain("actorWorktreeMaterializer({");
 		expect(create).toContain("await requestCreationCredential({");
 		expect(create).toContain("await requestCreationBranch({");
-		expect(create).toContain("await requestCreationSandbox({");
-		expect(create).toContain("requestCreationOpening({");
-		expect(create).toContain("executeCreationOpeningEffect(");
-		expect(create.indexOf("await requestCreationSandbox({")).toBeLessThan(
-			create.indexOf("await maybeLaunchSandboxedRun("),
-		);
-		// Provisioning is durable BEFORE the opening dispatches: once the
-		// opening effect holds the creation fence no other effect may start.
-		expect(create.indexOf("await requestCreationSandbox({")).toBeLessThan(
-			create.indexOf("await requestCreationOpening({"),
-		);
+		expect(create).not.toContain("requestCreationSandbox");
+		// The opening effect holds the creation fence, so provisioning rides
+		// the launch-time idempotent provider.ensure instead of a second
+		// durable effect that could never be admitted.
 		expect(create).not.toContain("markCreationOpeningDispatched");
 		expect(create).toMatch(
 			/executeCreationOpeningEffect\([\s\S]*?openCreatedSession\(/,
