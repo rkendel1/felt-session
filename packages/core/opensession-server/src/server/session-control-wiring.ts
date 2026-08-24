@@ -38,7 +38,7 @@ import {
 	type SessionSummary,
 	registerSessionControl,
 } from "./session-control";
-import { type ResolvedCreate, actorCreationSetupPlan, forkHandoffContext, runOpeningCreateOnce, resolveForkContext, resolvePinnedAccountId } from "./session-create";
+import { type ResolvedCreate, actorCreationSetupPlan, forkHandoffContext, runOpeningCreateOnce, resolveForkContext, resolvePinnedAccountId, waitForCreatedSessionProjection } from "./session-create";
 import { resolveSessionRepoContext, workspaceOwningWorktree } from "./session-repos";
 import { engineUserTexts, getAllSessions, mergedSessionTranscript } from "./sessions";
 import { rebuildIndex } from "./slack-links";
@@ -455,8 +455,33 @@ registerSessionControl({
 		const createIdentity = new Bun.CryptoHasher("sha256")
 			.update(canonicalCommandPayload(ownedInput))
 			.digest("hex");
+		const durableCreation = sessionKernel(bksId).creationState();
+		if (durableCreation && durableCreation.identity !== createIdentity)
+			throw new Error("Create request identity crossed durable session ownership");
+		let completedCreate = findSession(requestedId);
+		if (
+			durableCreation?.state === "opening_dispatched" ||
+			durableCreation?.state === "ready" ||
+			durableCreation?.state === "failed"
+		) {
+			completedCreate = await waitForCreatedSessionProjection(
+				bksId,
+				createIdentity,
+			);
+			if (durableCreation.state === "ready") clearCreatePlan(bksId);
+			return {
+				id: bksId,
+				createdBy:
+					completedCreate.createdBy ||
+					completedCreate.startedBy ||
+					user ||
+					"Anonymous",
+				createdAt:
+					completedCreate.createdAt ||
+					new Date(durableCreation.updatedAt).toISOString(),
+			};
+		}
 		let createPlan = actorCreationSetupPlan(bksId, createIdentity);
-		const completedCreate = findSession(requestedId);
 		if (
 			completedCreate?.claudeSessionId ||
 			completedCreate?.codexThreadId

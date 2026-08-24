@@ -261,7 +261,7 @@ describe("single session ownership", () => {
 
 	test("interrupted creates resume their environment setup, not only their prompt", () => {
 		const create = read("session-create.ts");
-		expect(create).toContain("const recoveringSession = findSession(bksId)");
+		expect(create).toContain("let recoveringSession = findSession(bksId)");
 		expect(create).toContain('existingBranch: restored.worktreeKind === "existing"');
 		expect(create).toContain("const actorPlan =");
 		expect(create).toContain("creation?.setupPlan?.resolved");
@@ -276,6 +276,25 @@ describe("single session ownership", () => {
 		expect(create).not.toContain("if (requeuePromptDispatch(bksId))");
 		const routes = read("routes/sessions.ts");
 		expect(routes).not.toContain("requeuePromptDispatch(targetId)");
+	});
+
+	test("create replay waits for a resolvable projection before success", () => {
+		const create = read("session-create.ts");
+		const wiring = read("session-control-wiring.ts");
+		for (const source of [create, wiring]) {
+			expect(source).toContain("waitForCreatedSessionProjection(");
+			expect(source.indexOf("sessionKernel(bksId).creationState()"))
+				.toBeLessThan(source.indexOf("actorCreationSetupPlan(bksId, createIdentity)"));
+		}
+		expect(create).toContain("failCreate(error instanceof Error");
+		expect(create).toContain("if (projected) return projected");
+		expect(create.indexOf("if (projected) return projected")).toBeLessThan(
+			create.indexOf('if (state.state === "failed")'),
+		);
+		const ws = read("ws-handlers.ts");
+		expect(ws).toContain("const kernelDispatchErrors = new Map<string, Error>()");
+		expect(ws).toContain("if (dispatchError) throw dispatchError");
+		expect(ws).toContain("kernelDispatchErrors.set(");
 	});
 
 	test("actor setup plans and MCP controls retain stable request identity", () => {
@@ -501,7 +520,8 @@ describe("single session ownership", () => {
 	test("WebSocket session mutations enter the mailbox before dispatch", () => {
 		const source = read("ws-handlers.ts");
 		expect(source).toContain("kernelCommands.has(msg.type)");
-		expect(source).toContain("kernelDispatchTokens.delete");
+		expect(source).toContain("isInternalKernelDispatch(");
+		expect(source).toContain("kernelDispatchTokens.delete(kernelToken)");
 		expect(source).toContain("__sessionKernelToken");
 		expect(source).not.toContain("__sessionKernelOwned");
 		expect(source).toContain('source: "websocket"');

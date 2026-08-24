@@ -407,6 +407,26 @@ const activeOpeningCreates = new Map<
 	}
 >();
 
+export async function waitForCreatedSessionProjection(
+	sessionId: string,
+	identity: string,
+	timeoutMs = 24 * 60 * 60_000,
+): Promise<UnifiedSession> {
+	const deadline = Date.now() + timeoutMs;
+	while (true) {
+		const state = sessionKernel(sessionId).creationState();
+		if (!state || state.identity !== identity)
+			throw new Error("Create request identity crossed durable session ownership");
+		const projected = findSession(sessionId);
+		if (projected) return projected;
+		if (state.state === "failed")
+			throw new Error("Session creation failed before it was persisted");
+		if (Date.now() >= deadline)
+			throw new Error("Session creation remains durably pending");
+		await Bun.sleep(25);
+	}
+}
+
 export function actorCreationSetupPlan(
 	sessionId: string,
 	identity: string,
@@ -1484,8 +1504,39 @@ export async function handleCreateSessionMessage(
 			? sessionIdForRequest(ws.data?.authLogin || user || "anonymous", requestId)
 			: newSessionId());
 	const createIdentity = requestId || clientSessionId || bksId;
+	const durableCreation = sessionKernel(bksId).creationState();
+	if (durableCreation && durableCreation.identity !== createIdentity) {
+		failCreate("Create request identity crossed durable session ownership");
+		return;
+	}
+	let recoveringSession = findSession(bksId);
+	if (
+		durableCreation?.state === "opening_dispatched" ||
+		durableCreation?.state === "ready" ||
+		durableCreation?.state === "failed"
+	) {
+		try {
+			recoveringSession = await waitForCreatedSessionProjection(
+				bksId,
+				createIdentity,
+			);
+		} catch (error) {
+			failCreate(error instanceof Error ? error.message : String(error));
+			throw error;
+		}
+		if (durableCreation.state === "ready") clearCreatePlan(bksId);
+		const response = {
+			type: "session_created",
+			id: bksId,
+			...(recoveringSession.workspaceId
+				? { workspaceId: recoveringSession.workspaceId }
+				: {}),
+		};
+		sendCreateFrame(attempt, response);
+		finishCreate();
+		return response;
+	}
 	let createPlan = actorCreationSetupPlan(bksId, createIdentity);
-	const recoveringSession = findSession(bksId);
 	if (
 		recoveringSession?.claudeSessionId ||
 		recoveringSession?.codexThreadId
