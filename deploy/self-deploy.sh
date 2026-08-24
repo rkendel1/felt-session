@@ -43,6 +43,7 @@ ALLOW_RESET="${OPENSESSION_DEPLOY_ALLOW_RESET:-0}"
 SERVICE_NAME="${OPENSESSION_SERVICE_NAME:-opensession.service}"
 EXECUTOR_SERVICE_NAME="opensession-executor.service"
 EXECUTOR_READY_FILE="/run/opensession-executor/ready"
+RUN_HOST_HELPER_VERSION=2
 
 # Health gate: 30 x 2s = 60s budget, matching deploy.sh's post-restart gate.
 HEALTH_TRIES=30
@@ -140,9 +141,9 @@ refresh_executor() {
     return 1
   fi
   if [ "$(id -u)" = "0" ]; then
-    /usr/local/libexec/opensession-run-host check-version 1
+    /usr/local/libexec/opensession-run-host check-version "$RUN_HOST_HELPER_VERSION"
   else
-    sudo -n /usr/local/libexec/opensession-run-host check-version 1
+    sudo -n /usr/local/libexec/opensession-run-host check-version "$RUN_HOST_HELPER_VERSION"
   fi
   run_systemctl restart "$EXECUTOR_SERVICE_NAME"
   local i

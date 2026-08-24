@@ -46,6 +46,8 @@ describe("executor deployment", () => {
     expect(deploy).toContain("target executor failed readiness; attempting rollback to pin");
     expect(deploy).toContain("opensession-executor.service");
     expect(deploy).toContain("EXECUTOR_READY_FILE");
+    expect(deploy).toContain("RUN_HOST_HELPER_VERSION=2");
+    expect(deploy).toContain('check-version "$RUN_HOST_HELPER_VERSION"');
     expect(deploy).not.toContain("sudo -n cp");
     expect(deploy).not.toContain("sudo -n rm");
     expect(deploy).toContain("rollback_schema_compatible");
