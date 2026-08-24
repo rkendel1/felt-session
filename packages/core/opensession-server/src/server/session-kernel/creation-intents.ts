@@ -165,7 +165,15 @@ export function settleCreationCancelled(
   const existing = kernel.creationState();
   if (existing?.identity !== undefined && existing.identity !== identity)
     throw new Error("Create request identity crossed durable session ownership");
-  if (existing?.state === "cancelled") return existing;
+  // Terminal states are idempotent, mirroring settleCreationSucceeded/
+  // settleCreationFailed: a Stop racing an opening result must not throw —
+  // the terminal receipt already owns the lifecycle.
+  if (
+    existing?.state === "cancelled" ||
+    existing?.state === "ready" ||
+    existing?.state === "failed"
+  )
+    return existing;
   ensureCreationPlanned(sessionId, identity, kernel);
   const settled = kernel.applyCreationEvent({
     identity,

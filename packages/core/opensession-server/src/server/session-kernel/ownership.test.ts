@@ -622,15 +622,24 @@ describe("single session ownership", () => {
 			"try {\n    settleCreationOpeningForStop(sessionId);",
 			cancelPrepared,
 		);
-		const stopBookkept = runSession.indexOf("stoppedSessions.add(sessionId)", cancelPrepared);
+		const bookkeeping = runSession.indexOf("} finally {", settleGuarded);
 		expect(cancelPrepared).toBeGreaterThan(0);
 		expect(settleGuarded).toBeGreaterThan(cancelPrepared);
-		expect(stopBookkept).toBeGreaterThan(settleGuarded);
-		// A concurrent opening settlement racing the Stop must never undo the
-		// committed durable cancel or skip queue persistence/broadcast.
-		expect(runSession.slice(settleGuarded, stopBookkept)).toContain("catch");
-		// A retained cancel receipt fences only the exact run it cancelled.
-		expect(create).toContain("cancel.runId === item.payload.runId");
+		expect(bookkeeping).toBeGreaterThan(settleGuarded);
+		// A racing opening settlement must never undo the committed durable
+		// cancel or skip queue persistence/broadcast — but genuine invariant
+		// failures still propagate after the bookkeeping ran.
+		const bookkeptInFinally = runSession.indexOf(
+			"stoppedSessions.add(sessionId)",
+			bookkeeping,
+		);
+		expect(bookkeptInFinally).toBeGreaterThan(bookkeeping);
+		// A retained cancel receipt fences only the exact run it cancelled:
+		// the receipt records the admitted physical token, deterministically
+		// derived from the effect payload's logical run id and generation.
+		expect(create).toContain(
+			"runnerOpeningHostId(item.payload.runId, item.payload.runGeneration)",
+		);
 		expect(create).toContain(
 			"cancel.runGeneration === item.payload.runGeneration",
 		);

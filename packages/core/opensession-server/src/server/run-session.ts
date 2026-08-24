@@ -353,17 +353,16 @@ export function requestTurnCancel(
     ...(request.user ? { user: request.user } : {}),
   });
   // The durable Stop committed above must not be undone by a concurrent
-  // creation settlement racing this read (the opening effect may have just
-  // settled failed/succeeded between our snapshot and the reducer write).
-  // Stop bookkeeping below therefore always runs.
+  // creation settlement racing this read: terminal settlements are idempotent
+  // (see settleCreationCancelled), so only genuine invariant failures throw.
+  // Bookkeeping below always runs, even when the error propagates.
   try {
     settleCreationOpeningForStop(sessionId);
-  } catch (e) {
-    console.error(`[stop] Opening creation settlement failed for ${sessionId}:`, e);
+  } finally {
+    stoppedSessions.add(sessionId);
+    persistQueues();
+    broadcastQueue(sessionId);
   }
-  stoppedSessions.add(sessionId);
-  persistQueues();
-  broadcastQueue(sessionId);
   return { requeued: requeued.length };
 }
 

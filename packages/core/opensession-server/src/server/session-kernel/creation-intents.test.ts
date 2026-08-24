@@ -320,6 +320,90 @@ describe("creation opening intents", () => {
     }
   });
 
+  test("Stop racing a terminal opening result stays idempotent", () => {
+    const raced = {
+      ...opening,
+      sessionId: "create-raced-opening",
+      identity: "request-raced-opening",
+    };
+    const { store, kernel } = harness(raced.sessionId);
+    try {
+      // The opening effect settles a terminal between Stop's snapshot and its
+      // reducer write. The cancellation must no-op on the terminal receipt
+      // instead of throwing and failing an already-committed Stop.
+      store.applyCreationEvent({
+        sessionId: raced.sessionId,
+        identity: raced.identity,
+        event: "plan",
+      });
+      store.applyCreationEvent({
+        sessionId: raced.sessionId,
+        identity: raced.identity,
+        event: "preparation_started",
+      });
+      store.applyCreationEvent({
+        sessionId: raced.sessionId,
+        identity: raced.identity,
+        event: "opening_dispatched",
+        openingPlan: { prompt: "opening" },
+        nextEffectId: `opening:${raced.openingPromptEntryId}`,
+        effect: {
+          kind: "creation_opening_turn",
+          effectKey: `opening:${raced.openingPromptEntryId}`,
+          payload: {
+            creationIdentity: raced.identity,
+            creationGeneration: 1,
+            openingPromptEntryId: raced.openingPromptEntryId,
+            runId: raced.runId,
+            runGeneration: 1,
+            mode: "adopt_or_launch" as const,
+          },
+        },
+      });
+      store.applyCreationEvent({
+        sessionId: raced.sessionId,
+        identity: raced.identity,
+        event: "succeeded",
+        effectId: `opening:${raced.openingPromptEntryId}`,
+      });
+      expect(
+        settleCreationCancelled(
+          raced.sessionId,
+          raced.identity,
+          kernel,
+          `opening:${raced.openingPromptEntryId}`,
+        ).state,
+      ).toBe("ready");
+    } finally {
+      store.close();
+    }
+
+    const failed = {
+      ...opening,
+      sessionId: "create-raced-failed",
+      identity: "request-raced-failed",
+    };
+    const failedHarness = harness(failed.sessionId);
+    try {
+      settleCreationFailed(
+        failed.sessionId,
+        failed.identity,
+        new Error("setup failed"),
+        failedHarness.kernel,
+      );
+      expect(
+        settleCreationCancelled(
+          failed.sessionId,
+          failed.identity,
+          failedHarness.kernel,
+          `opening:${failed.openingPromptEntryId}`,
+        ).state,
+      ).toBe("failed");
+    } finally {
+      failedHarness.store.close();
+    }
+  });
+
   test("keeps a timed-out opening durable without emitting another launch", async () => {
     const { store, kernel } = harness(opening.sessionId);
     try {
