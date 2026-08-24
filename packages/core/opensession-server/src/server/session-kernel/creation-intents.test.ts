@@ -1,9 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import {
+  markCreationOpeningDispatched,
   requestCreationBranch,
   requestCreationCredential,
   requestCreationSandbox,
   requestCreationWorkspace,
+  settleCreationFailed,
+  settleCreationSucceeded,
 } from "./creation-intents";
 import {
   SessionKernelStore,
@@ -45,6 +48,101 @@ const branchInput = {
   isolated: true,
   credentialPrincipal: "user:alice",
 };
+
+describe("creation lifecycle intents", () => {
+  test("moves a preparation-free create through opening to ready idempotently", () => {
+    const { store, kernel } = harness("create-lifecycle");
+    try {
+      const opening = markCreationOpeningDispatched(
+        "create-lifecycle",
+        "request-lifecycle",
+        kernel,
+      );
+      expect(opening.state).toBe("opening_dispatched");
+      expect(opening.currentEffectId).toBeUndefined();
+      const ready = settleCreationSucceeded(
+        "create-lifecycle",
+        "request-lifecycle",
+        kernel,
+      );
+      expect(ready.state).toBe("ready");
+      expect(
+        settleCreationSucceeded(
+          "create-lifecycle",
+          "request-lifecycle",
+          kernel,
+        ).state,
+      ).toBe("ready");
+    } finally {
+      store.close();
+    }
+  });
+
+  test("refuses to dispatch an opening while preparation is pending", () => {
+    const { store, kernel } = harness("create-pending-opening");
+    try {
+      store.applyCreationEvent({
+        sessionId: "create-pending-opening",
+        identity: "request-pending",
+        event: "plan",
+      });
+      store.applyCreationEvent({
+        sessionId: "create-pending-opening",
+        identity: "request-pending",
+        event: "preparation_started",
+        nextEffectId: "prepare-pending",
+        effect: {
+          kind: "creation_workspace_prepare",
+          effectKey: "prepare-pending",
+          payload: {
+            creationIdentity: "request-pending",
+            creationGeneration: 1,
+            workspaceId: "ws-pending",
+            dedupeKey: "create:pending",
+            name: "Pending",
+            createdBy: "Alice",
+            mode: "adopt_or_create",
+          },
+        },
+      });
+      expect(() =>
+        markCreationOpeningDispatched(
+          "create-pending-opening",
+          "request-pending",
+          kernel,
+        ),
+      ).toThrow("must settle before opening");
+      expect(store.creationState("create-pending-opening")?.state).toBe(
+        "preparing",
+      );
+    } finally {
+      store.close();
+    }
+  });
+
+  test("records terminal setup failure without launching an opening", () => {
+    const { store, kernel } = harness("create-failed-lifecycle");
+    try {
+      const failed = settleCreationFailed(
+        "create-failed-lifecycle",
+        "request-failed",
+        new Error("workspace refused"),
+        kernel,
+      );
+      expect(failed.state).toBe("failed");
+      expect(
+        settleCreationFailed(
+          "create-failed-lifecycle",
+          "request-failed",
+          "duplicate",
+          kernel,
+        ).state,
+      ).toBe("failed");
+    } finally {
+      store.close();
+    }
+  });
+});
 
 describe("creation workspace intents", () => {
   test("waits for the actor receipt rather than destination evidence", async () => {

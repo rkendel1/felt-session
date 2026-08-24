@@ -284,6 +284,15 @@ describe("single session ownership", () => {
 		expect(create.indexOf("await requestCreationSandbox({")).toBeLessThan(
 			create.indexOf("await maybeLaunchSandboxedRun("),
 		);
+		expect(create.match(/markCreationOpeningDispatched\(/g)?.length).toBe(3);
+		expect(create).toMatch(
+			/requestCreationSandbox\([\s\S]*?markCreationOpeningDispatched\([\s\S]*?maybeLaunchSandboxedRun\(/,
+		);
+		expect(create).toMatch(
+			/prepareRunnerWorkspace\([\s\S]*?markCreationOpeningDispatched\([\s\S]*?maybeLaunchRunnerRun\(/,
+		);
+		expect(create).toContain("settleCreationSucceeded(bksId, creationIdentity)");
+		expect(create).toContain("settleCreationFailed(bksId, creationIdentity, e)");
 		expect(create).toContain(
 			"baseBranch: input.baseBranch || getRepo(input.project).defaultBranch",
 		);

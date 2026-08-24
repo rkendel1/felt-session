@@ -83,6 +83,80 @@ export function ensureCreationPlanned(
   return planned.state;
 }
 
+/** Cross the durable preparation-to-opening boundary before launching a runner. */
+export function markCreationOpeningDispatched(
+  sessionId: string,
+  identity: string,
+  kernel: CreationIntentKernel = sessionKernel(sessionId),
+): DurableCreationState {
+  let state = ensureCreationPlanned(sessionId, identity, kernel);
+  if (state.state === "ready" || state.state === "opening_dispatched") return state;
+  assertIdentity(state, identity);
+  if (state.currentEffectId)
+    throw new Error(
+      `Creation effect ${state.currentEffectId} must settle before opening`,
+    );
+  if (state.state === "planned") {
+    const preparing = kernel.applyCreationEvent({
+      identity,
+      event: "preparation_started",
+    });
+    if (!preparing.accepted || !preparing.state)
+      throw new Error(
+        `Creation preparation was rejected: ${preparing.reason || "unknown"}`,
+      );
+    state = preparing.state;
+  }
+  const dispatched = kernel.applyCreationEvent({
+    identity,
+    event: "opening_dispatched",
+  });
+  if (!dispatched.accepted || !dispatched.state)
+    throw new Error(
+      `Creation opening dispatch was rejected: ${dispatched.reason || "unknown"}`,
+    );
+  return dispatched.state;
+}
+
+export function settleCreationSucceeded(
+  sessionId: string,
+  identity: string,
+  kernel: CreationIntentKernel = sessionKernel(sessionId),
+): DurableCreationState {
+  const state = ensureCreationPlanned(sessionId, identity, kernel);
+  if (state.state === "ready") return state;
+  assertIdentity(state, identity);
+  const settled = kernel.applyCreationEvent({ identity, event: "succeeded" });
+  if (!settled.accepted || !settled.state)
+    throw new Error(
+      `Creation success was rejected: ${settled.reason || "unknown"}`,
+    );
+  return settled.state;
+}
+
+export function settleCreationFailed(
+  sessionId: string,
+  identity: string,
+  error: unknown,
+  kernel: CreationIntentKernel = sessionKernel(sessionId),
+): DurableCreationState {
+  const existing = kernel.creationState();
+  if (existing?.identity !== undefined && existing.identity !== identity)
+    throw new Error("Create request identity crossed durable session ownership");
+  if (existing?.state === "failed") return existing;
+  ensureCreationPlanned(sessionId, identity, kernel);
+  const settled = kernel.applyCreationEvent({
+    identity,
+    event: "failed",
+    detail: { error: error instanceof Error ? error.message : String(error) },
+  });
+  if (!settled.accepted || !settled.state)
+    throw new Error(
+      `Creation failure was rejected: ${settled.reason || "unknown"}`,
+    );
+  return settled.state;
+}
+
 /** Emit one stable workspace intent and wait for its actor receipt, never its file. */
 export async function requestCreationWorkspace(
   input: CreationWorkspaceIntent,

@@ -81,10 +81,13 @@ import { resolveWorkspaceModelPreset } from "./workspace-model-presets";
 import { type Workspace, getWorkspace, updateWorkspace, } from "./workspaces";
 import {
 	ensureCreationPlanned,
+	markCreationOpeningDispatched,
 	requestCreationBranch,
 	requestCreationCredential,
 	requestCreationSandbox,
 	requestCreationWorkspace,
+	settleCreationFailed,
+	settleCreationSucceeded,
 } from "./session-kernel";
 import { AUTO_REPO, ensureAskCheckout, ensureScratchDir, getRepo, isRegisteredWorktree, listWorktrees, NO_REPO, repoForPath, repoForPathOrNull, resolveUniqueBranch, sharedCheckoutForNewSessions, worktreeHeadBranch, worktreePathFor, } from "./worktree";
 import { type WSClientData, broadcastToSession, preparingWorkspaces, } from "./ws-hub";
@@ -391,10 +394,15 @@ export function runOpeningCreateOnce(
 			throw new Error("Create request identity crossed active opening ownership");
 		return { owner: false, done: existing.done };
 	}
-	const done = openCreatedSession(spec, io, creationIdentity).finally(() => {
-		if (activeOpeningCreates.get(spec.id)?.done === done)
-			activeOpeningCreates.delete(spec.id);
-	});
+	const done = openCreatedSession(spec, io, creationIdentity)
+		.catch((error) => {
+			settleCreationFailed(spec.id, creationIdentity, error);
+			throw error;
+		})
+		.finally(() => {
+			if (activeOpeningCreates.get(spec.id)?.done === done)
+				activeOpeningCreates.delete(spec.id);
+		});
 	activeOpeningCreates.set(spec.id, { identity: creationIdentity, done });
 	return { owner: true, done };
 }
@@ -775,6 +783,7 @@ export async function openCreatedSession(
 						?.map((repo) => repo.dir)
 						.filter(Boolean),
 				}, { timeoutMs: 15 * 60_000 });
+				markCreationOpeningDispatched(bksId, creationIdentity);
 				sandboxOpeningRun = created
 					? await maybeLaunchSandboxedRun(created, {
 							prompt: openingPromptForRun,
@@ -811,6 +820,7 @@ export async function openCreatedSession(
 				await touchNativeSession(bksId, {
 					runner: { id: spec.runnerTarget.id, name: spec.runnerTarget.name, workspacePath: spec.runnerTarget.workspacePath, lifecycle: "awake", },
 				});
+				markCreationOpeningDispatched(bksId, creationIdentity);
 				const created = findSession(bksId);
 				runnerOpeningRun = created
 					? await maybeLaunchRunnerRun(created, {
@@ -833,6 +843,8 @@ export async function openCreatedSession(
 			// gets is read back rather than reassembled, so it can only name
 			// worktrees that were actually cut.
 			const spanning = attachedRepoIds.length ? findSession(bksId) : null;
+			if (!sandboxOpeningRun && !runnerOpeningRun)
+				markCreationOpeningDispatched(bksId, creationIdentity);
 			for await (const event of sandboxOpeningRun ?? runnerOpeningRun ?? runAgent({
 				prompt: openingPromptForRun,
 				// A recovered create is the same logical turn. Reuse the durable
@@ -1103,6 +1115,7 @@ export async function openCreatedSession(
 			else
 				onHumanAsksSessionIdle(bksId);
 		}
+		settleCreationSucceeded(bksId, creationIdentity);
 	} catch (e: any) {
 		// Failure after the early announce: the client is already in the
 		// session — close out the stream and surface the failure there
@@ -1139,6 +1152,7 @@ export async function openCreatedSession(
 		} else {
 			io.fail(e.message || String(e));
 		}
+		settleCreationFailed(bksId, creationIdentity, e);
 	}
 }
 
