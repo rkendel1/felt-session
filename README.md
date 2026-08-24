@@ -6,8 +6,8 @@ and GitHub agents, driving coding sessions through the Pi engine
 sandboxes — Docker locally, with pluggable adapters for other providers.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/readme-hero-site-dark.webp">
-  <img alt="Open Session on desktop and phone: a session that added multiplayer workspace presence and opened a pull request" src="docs/readme-hero-site-light.webp">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/readme-hero-roomy-dark.webp">
+  <img alt="Open Session on desktop and phone: a session that added multiplayer workspace presence and opened a pull request" src="docs/readme-hero-roomy-light.webp">
 </picture>
 
 <br>
