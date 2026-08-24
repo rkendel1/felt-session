@@ -69,6 +69,19 @@ describe("shutdown intake fence", () => {
     expect(source).toContain("resumePendingAutomationRuns(onAutomationSession)");
   });
 
+  test("does not launch derived one-shots after shutdown or a capacity wait", async () => {
+    const source = await read("./one-shot.ts");
+    const detailed = source.indexOf("export async function oneShotDetailed(");
+    const firstFence = source.indexOf("if (isShuttingDown())", detailed);
+    const acquire = source.indexOf("await acquireOneShotSlot()", firstFence);
+    const secondFence = source.indexOf("if (isShuttingDown())", acquire);
+    const launch = source.indexOf("for await (const event of runPi(", secondFence);
+    expect(firstFence).toBeGreaterThan(detailed);
+    expect(firstFence).toBeLessThan(acquire);
+    expect(acquire).toBeLessThan(secondFence);
+    expect(secondFence).toBeLessThan(launch);
+  });
+
   test("does not start a queued boot recovery after shutdown begins", async () => {
     const source = await read("./agent-runner.ts");
     const recovery = source.indexOf("const recoveryTask = (");

@@ -15,6 +15,7 @@ import {
   runPi,
 } from "./pi-runner";
 import { toPiModel, type SessionEffort } from "./models";
+import { isShuttingDown } from "./shutdown-state";
 
 const DEFAULT_ONESHOT_MODEL = "pi/anthropic/claude-haiku-4-5";
 const DEFAULT_TIMEOUT_MS = 120_000;
@@ -93,6 +94,11 @@ export async function oneShotDetailed(
   // One-shots are real model calls. Import-heavy test suites rely on their
   // deterministic fallback paths and must never spend a model turn.
   if (process.env.NODE_ENV === "test") return { text: null, error: null };
+  // Derived one-shots have deterministic fallbacks and no caller-owned durable
+  // intent. Once shutdown starts, both new calls and calls waiting on bounded
+  // capacity must park instead of creating fresh model work during the drain.
+  if (isShuttingDown())
+    return { text: null, error: "server restarting" };
 
   const model = oneShotModel(opts.model);
   const label = opts.label || "oneshot";
@@ -107,6 +113,10 @@ export async function oneShotDetailed(
   }
 
   const releaseSlot = await acquireOneShotSlot();
+  if (isShuttingDown()) {
+    releaseSlot();
+    return { text: null, error: "server restarting" };
+  }
   mkdirSync(ONESHOT_CWD, { recursive: true });
   const runKey = `oneshot-${crypto.randomUUID()}`;
   const sessionDir = `${PI_STATE_DIR}/sessions/${runKey}`;
