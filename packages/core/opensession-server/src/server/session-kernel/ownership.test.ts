@@ -359,6 +359,11 @@ describe("single session ownership", () => {
 		expect(create.indexOf("await requestCreationSandbox({")).toBeLessThan(
 			create.indexOf("await maybeLaunchSandboxedRun("),
 		);
+		// Provisioning is durable BEFORE the opening dispatches: once the
+		// opening effect holds the creation fence no other effect may start.
+		expect(create.indexOf("await requestCreationSandbox({")).toBeLessThan(
+			create.indexOf("await requestCreationOpening({"),
+		);
 		expect(create).not.toContain("markCreationOpeningDispatched");
 		expect(create).toMatch(
 			/executeCreationOpeningEffect\([\s\S]*?openCreatedSession\(/,

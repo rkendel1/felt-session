@@ -539,6 +539,26 @@ export function runOpeningCreateOnce(
 				throw error;
 			}
 		}
+		// Durable sandbox preparation precedes the opening dispatch: the
+		// creation actor owns one effect at a time, so provisioning cannot
+		// start once the opening effect holds the fence. openCreatedSession's
+		// later call adopts the completed receipt.
+		if (spec.sandboxProvider) {
+			try {
+				await requestCreationSandbox({
+					sessionId: spec.id,
+					identity: creationIdentity,
+					provider: spec.sandboxProvider,
+					repo: spec.repoId,
+					branch: spec.branch || undefined,
+					sessionMode: spec.mode,
+					cwd: spec.wtPath,
+				}, { timeoutMs: 15 * 60_000 });
+			} catch (error) {
+				io.fail(error instanceof Error ? error.message : String(error));
+				throw error;
+			}
+		}
 		await requestCreationOpening({
 			sessionId: spec.id,
 			identity: creationIdentity,
