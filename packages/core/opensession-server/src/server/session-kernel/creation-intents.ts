@@ -55,6 +55,18 @@ export type CreationAttachmentIntent = {
   digest: string;
 };
 
+export type CreationSetupPlan = {
+  branch?: string;
+  workspaceId?: string;
+  attachments?: Array<{
+    attachmentId: string;
+    name: string;
+    sourceRef: string;
+    digest: string;
+  }>;
+  resolved?: Record<string, unknown>;
+};
+
 export type CreationOpeningIntent = {
   sessionId: string;
   identity: string;
@@ -84,6 +96,25 @@ function assertIdentity(
     throw new Error("Create request identity crossed durable session ownership");
   if (state.state === "failed")
     throw new Error("Session creation has already failed");
+}
+
+export function patchCreationSetupPlan(
+  sessionId: string,
+  identity: string,
+  patch: Partial<CreationSetupPlan>,
+  kernel: CreationIntentKernel = sessionKernel(sessionId),
+): CreationSetupPlan {
+  const state = ensureCreationPlanned(sessionId, identity, kernel);
+  const decided = kernel.applyCreationEvent({
+    identity,
+    event: "plan",
+    planPatch: patch,
+  });
+  if (!decided.accepted || !decided.state)
+    throw new Error(
+      `Creation setup plan was rejected: ${decided.reason || "unknown"}`,
+    );
+  return (decided.state.setupPlan ?? state.setupPlan ?? {}) as CreationSetupPlan;
 }
 
 export function ensureCreationPlanned(

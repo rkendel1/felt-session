@@ -155,10 +155,13 @@ stable prompt dispatch, then atomically moves the creation aggregate to
 `opening_dispatched` with one `creation_opening_turn` effect and the bounded,
 non-secret opening recovery input in the same actor transaction. The executor
 uses the active create registration or reconstructs the specification from that
-actor-owned input after restart. Pre-schema-10 create-plan files remain a
-read-only mixed-version fallback, not authority for new effects. Terminal actor
-settlement clears the large recovery input while retaining the permanent effect
-receipt. It settles `ready` or `failed` through the effect fence before
+actor-owned input after restart. Schema 11 also keeps branch, workspace,
+attachment, and resolved setup decisions as write-once actor state. Opening
+launch atomically retires that setup state in favor of the exact opening input.
+Pre-schema-11 create-plan files remain a read-only mixed-version import fallback;
+production has no create-plan file writer. Terminal actor settlement clears the
+large recovery input while retaining the permanent effect receipt. It settles
+`ready` or `failed` through the effect fence before
 acknowledging the prompt dispatch. Run-journal admission and cold
 queue restoration preserve actor-owned create dispatches until that settlement.
 Boot leaves local openings with the generic run adopter and settles the actor

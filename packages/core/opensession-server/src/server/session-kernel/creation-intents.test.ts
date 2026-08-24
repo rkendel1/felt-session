@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  patchCreationSetupPlan,
   requestCreationAttachment,
   requestCreationBranch,
   requestCreationCredential,
@@ -48,6 +49,54 @@ const branchInput = {
   isolated: true,
   credentialPrincipal: "user:alice",
 };
+
+describe("creation setup plan", () => {
+  test("persists write-once setup decisions in the actor", () => {
+    const sessionId = "create-setup-plan";
+    const identity = "create-setup-request";
+    const { store, kernel } = harness(sessionId);
+    try {
+      expect(
+        patchCreationSetupPlan(
+          sessionId,
+          identity,
+          { branch: "feature/stable" },
+          kernel,
+        ),
+      ).toEqual({ branch: "feature/stable" });
+      expect(
+        patchCreationSetupPlan(
+          sessionId,
+          identity,
+          { workspaceId: "ws-stable" },
+          kernel,
+        ),
+      ).toEqual({ branch: "feature/stable", workspaceId: "ws-stable" });
+      expect(() =>
+        patchCreationSetupPlan(
+          sessionId,
+          identity,
+          { branch: "feature-crossover" },
+          kernel,
+        ),
+      ).toThrow("setup_plan_conflict");
+      expect(store.creationState(sessionId)?.setupPlan).toEqual({
+        branch: "feature/stable",
+        workspaceId: "ws-stable",
+      });
+      expect(
+        store.applyCreationEvent({
+          sessionId,
+          identity,
+          event: "plan",
+          planPatch: { resolved: { gitEnv: { GH_TOKEN: "secret" } } },
+        }),
+      ).toMatchObject({ accepted: false, reason: "invalid_setup_plan" });
+    } finally {
+      store.close();
+    }
+  });
+});
 
 describe("creation lifecycle intents", () => {
   test("records terminal setup failure without launching an opening", () => {

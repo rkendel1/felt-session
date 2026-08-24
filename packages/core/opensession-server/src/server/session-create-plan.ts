@@ -1,7 +1,6 @@
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync } from "fs";
+import { existsSync, readFileSync, readdirSync, rmSync } from "fs";
 import { join } from "path";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
-import { writeJsonAtomic } from "./shared/atomic-write";
 import type { SessionKernelStoreApi } from "./session-kernel/store";
 import type { CreationAttachmentSource } from "./uploads";
 
@@ -46,30 +45,6 @@ export function readCreatePlan(
   if (plan.identity !== identity) {
     throw new Error(`Create request id for ${sessionId} was reused with another payload`);
   }
-  return plan;
-}
-
-export function updateCreatePlan(
-  sessionId: string,
-  identity: string,
-  patch: Partial<
-    Pick<
-      DurableCreatePlan,
-      "branch" | "workspaceId" | "attachments" | "resolved"
-    >
-  > = {},
-): DurableCreatePlan {
-  const prior = readCreatePlan(sessionId, identity);
-  const plan: DurableCreatePlan = {
-    version: 1,
-    sessionId,
-    identity,
-    createdAt: prior?.createdAt || new Date().toISOString(),
-    ...prior,
-    ...patch,
-  };
-  mkdirSync(planDir(), { recursive: true, mode: 0o700 });
-  writeJsonAtomic(planPath(sessionId), plan, true, 0o600);
   return plan;
 }
 

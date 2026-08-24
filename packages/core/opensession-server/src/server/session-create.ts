@@ -87,6 +87,7 @@ import { resolveWorkspaceModelPreset } from "./workspace-model-presets";
 import { type Workspace, getWorkspace, updateWorkspace, } from "./workspaces";
 import {
 	type CreationOpeningEffectItem,
+	type CreationSetupPlan,
 	SESSION_KERNEL_MAX_OPENING_PLAN_BYTES,
 	ensureCreationPlanned,
 	requestCreationAttachment,
@@ -94,6 +95,7 @@ import {
 	requestCreationCredential,
 	requestCreationOpening,
 	requestCreationSandbox,
+	patchCreationSetupPlan,
 	requestCreationWorkspace,
 	settleCreationFailed,
 	settleCreationSucceeded,
@@ -106,11 +108,10 @@ import { isClientSessionId } from "./paths";
 import {
 	clearCreatePlan,
 	createPlanWorkspaceId,
+	readCreatePlan,
 	readCreatePlanForRecovery,
 	restoreResolvedCreate,
 	snapshotOpeningCreate,
-	snapshotResolvedCreate,
-	updateCreatePlan,
 } from "./session-create-plan";
 import {
 	githubCredentialForLogin,
@@ -269,7 +270,7 @@ export interface ResolvedCreate {
 	attachRepos?: { repos: string[]; branch: string };
 	/** Durable, non-secret selector for trusted server-owned worktree fetches. */
 	gitPrincipal?: string;
-	/** Ephemeral capability. snapshotResolvedCreate always strips this field. */
+	/** Ephemeral capability. Durable create snapshots always strip this field. */
 	gitEnv?: Record<string, string>;
 	stackedOn?: { repo: string; branch: string };
 	/** Workspace recorded on the session file. */
@@ -406,6 +407,25 @@ const activeOpeningCreates = new Map<
 	}
 >();
 
+export function actorCreationSetupPlan(
+	sessionId: string,
+	identity: string,
+): CreationSetupPlan {
+	const state = ensureCreationPlanned(sessionId, identity);
+	if (state.setupPlan || !["planned", "preparing"].includes(state.state))
+		return (state.setupPlan ?? {}) as CreationSetupPlan;
+	const legacy = readCreatePlan(sessionId, identity);
+	if (!legacy) return {};
+	return patchCreationSetupPlan(sessionId, identity, {
+		...(legacy.branch ? { branch: legacy.branch } : {}),
+		...(legacy.workspaceId ? { workspaceId: legacy.workspaceId } : {}),
+		...(legacy.attachments ? { attachments: legacy.attachments } : {}),
+		...(legacy.resolved
+			? { resolved: snapshotOpeningCreate(legacy.resolved) }
+			: {}),
+	});
+}
+
 function snapshotOpeningPlan(spec: ResolvedCreate): Record<string, unknown> {
 	const plan = snapshotOpeningCreate(spec);
 	if (Buffer.byteLength(JSON.stringify(plan)) > SESSION_KERNEL_MAX_OPENING_PLAN_BYTES)
@@ -510,11 +530,12 @@ async function restorePlannedOpening(sessionId: string): Promise<{
 	identity: string;
 } | null> {
 	const creation = sessionKernel(sessionId).creationState();
-	const legacyPlan = creation?.openingPlan
-		? undefined
-		: readCreatePlanForRecovery(sessionId);
-	const openingPlan = creation?.openingPlan ?? legacyPlan?.resolved;
-	const identity = creation?.openingPlan ? creation.identity : legacyPlan?.identity;
+	const actorPlan =
+		creation?.openingPlan ??
+		(creation?.setupPlan?.resolved as Record<string, unknown> | undefined);
+	const legacyPlan = actorPlan ? undefined : readCreatePlanForRecovery(sessionId);
+	const openingPlan = actorPlan ?? legacyPlan?.resolved;
+	const identity = actorPlan ? creation!.identity : legacyPlan?.identity;
 	const dispatch = promptDispatches.get(sessionId);
 	if (!openingPlan || !identity || dispatch?.kind !== "create") return null;
 	const restored = restoreResolvedCreate<ResolvedCreate>(openingPlan);
@@ -1463,7 +1484,7 @@ export async function handleCreateSessionMessage(
 			? sessionIdForRequest(ws.data?.authLogin || user || "anonymous", requestId)
 			: newSessionId());
 	const createIdentity = requestId || clientSessionId || bksId;
-	let createPlan = updateCreatePlan(bksId, createIdentity);
+	let createPlan = actorCreationSetupPlan(bksId, createIdentity);
 	const recoveringSession = findSession(bksId);
 	if (
 		recoveringSession?.claudeSessionId ||
@@ -1481,7 +1502,6 @@ export async function handleCreateSessionMessage(
 		finishCreate();
 		return response;
 	}
-	ensureCreationPlanned(bksId, createIdentity);
 	// This WebSocket create is interactive. The raw credential reaches only the
 	// server-owned materializer; recovery persists and resolves its principal.
 	const githubCredential = ws.data.authLogin
@@ -1669,7 +1689,7 @@ export async function handleCreateSessionMessage(
 		const plannedWorkspaceId =
 			createPlan.workspaceId || createPlanWorkspaceId(bksId);
 		if (!createPlan.workspaceId)
-			createPlan = updateCreatePlan(bksId, createIdentity, {
+			createPlan = patchCreationSetupPlan(bksId, createIdentity, {
 				workspaceId: plannedWorkspaceId,
 			});
 		// A code create landing on a branch whose worktree an existing
@@ -1923,7 +1943,7 @@ export async function handleCreateSessionMessage(
 			const plannedWorkspaceId =
 				createPlan.workspaceId || createPlanWorkspaceId(bksId);
 			if (!createPlan.workspaceId)
-				createPlan = updateCreatePlan(bksId, createIdentity, {
+				createPlan = patchCreationSetupPlan(bksId, createIdentity, {
 					workspaceId: plannedWorkspaceId,
 				});
 			await requestCreationWorkspace({
@@ -1965,7 +1985,7 @@ export async function handleCreateSessionMessage(
 		const attachmentSources =
 			createPlan.attachments ?? prepareCreationAttachmentSources(bksId, msg.files);
 		if (!createPlan.attachments && attachmentSources.length)
-			createPlan = updateCreatePlan(bksId, createIdentity, {
+			createPlan = patchCreationSetupPlan(bksId, createIdentity, {
 				attachments: attachmentSources,
 			});
 		for (const attachment of attachmentSources)
@@ -2058,7 +2078,7 @@ export async function handleCreateSessionMessage(
 		}
 
 		if (branch && branch !== createPlan.branch)
-			createPlan = updateCreatePlan(bksId, createIdentity, { branch });
+			createPlan = patchCreationSetupPlan(bksId, createIdentity, { branch });
 		const computedSpec: ResolvedCreate = {
 			id: bksId,
 			title,
@@ -2202,10 +2222,8 @@ export async function handleCreateSessionMessage(
 				}
 			: computedSpec;
 		if (!createPlan.resolved) {
-			const { images: _images, materializeWorktree: _materialize, ...durable } =
-				computedSpec;
-			createPlan = updateCreatePlan(bksId, createIdentity, {
-				resolved: snapshotResolvedCreate(durable),
+			createPlan = patchCreationSetupPlan(bksId, createIdentity, {
+				resolved: snapshotOpeningCreate(computedSpec),
 			});
 		}
 	} catch (e: any) {

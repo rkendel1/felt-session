@@ -38,7 +38,7 @@ import {
 	type SessionSummary,
 	registerSessionControl,
 } from "./session-control";
-import { type ResolvedCreate, forkHandoffContext, runOpeningCreateOnce, resolveForkContext, resolvePinnedAccountId } from "./session-create";
+import { type ResolvedCreate, actorCreationSetupPlan, forkHandoffContext, runOpeningCreateOnce, resolveForkContext, resolvePinnedAccountId } from "./session-create";
 import { resolveSessionRepoContext, workspaceOwningWorktree } from "./session-repos";
 import { engineUserTexts, getAllSessions, mergedSessionTranscript } from "./sessions";
 import { rebuildIndex } from "./slack-links";
@@ -50,8 +50,8 @@ import { ensureAskCheckout, ensureScratchDir, getRepo, isRegisteredWorktree, lis
 import { broadcastToSession } from "./ws-hub";
 import { randomUUIDv7 } from "bun";
 import {
-	ensureCreationPlanned,
 	legacyGatewayEffect,
+	patchCreationSetupPlan,
 	requestCreationAttachment,
 	requestCreationBranch,
 	requestCreationCredential,
@@ -67,8 +67,7 @@ import {
 	clearCreatePlan,
 	createPlanWorkspaceId,
 	restoreResolvedCreate,
-	snapshotResolvedCreate,
-	updateCreatePlan,
+	snapshotOpeningCreate,
 } from "./session-create-plan";
 import {
 	githubCredentialForLogin,
@@ -456,7 +455,7 @@ registerSessionControl({
 		const createIdentity = new Bun.CryptoHasher("sha256")
 			.update(canonicalCommandPayload(ownedInput))
 			.digest("hex");
-		let createPlan = updateCreatePlan(bksId, createIdentity);
+		let createPlan = actorCreationSetupPlan(bksId, createIdentity);
 		const completedCreate = findSession(requestedId);
 		if (
 			completedCreate?.claudeSessionId ||
@@ -469,7 +468,6 @@ registerSessionControl({
 				createdAt: completedCreate.createdAt || new Date().toISOString(),
 			};
 		}
-		ensureCreationPlanned(bksId, createIdentity);
 		// Fork: branch a new session off an existing one — same rules as the
 		// web create (shares the source's cwd/branch/model; Claude sources are
 		// cloned via SDK forkSession, others get a transcript handoff). An
@@ -645,7 +643,7 @@ registerSessionControl({
 					else {
 						sessionBranch = await branchNameFromPrompt(prompt);
 						sessionBranch = await resolveUniqueBranch(sessionBranch, repo.id);
-						createPlan = updateCreatePlan(bksId, createIdentity, {
+						createPlan = patchCreationSetupPlan(bksId, createIdentity, {
 							branch: sessionBranch,
 						});
 					}
@@ -772,7 +770,7 @@ registerSessionControl({
 				const plannedWorkspaceId =
 					createPlan.workspaceId || createPlanWorkspaceId(bksId);
 				if (!createPlan.workspaceId)
-					createPlan = updateCreatePlan(bksId, createIdentity, {
+					createPlan = patchCreationSetupPlan(bksId, createIdentity, {
 						workspaceId: plannedWorkspaceId,
 					});
 				const branchForWs = wsParent?.branch || sessionBranch;
@@ -821,7 +819,7 @@ registerSessionControl({
 		const attachmentSources =
 			createPlan.attachments ?? prepareCreationAttachmentSources(bksId, rawFiles);
 		if (!createPlan.attachments && attachmentSources.length)
-			createPlan = updateCreatePlan(bksId, createIdentity, {
+			createPlan = patchCreationSetupPlan(bksId, createIdentity, {
 				attachments: attachmentSources,
 			});
 		for (const attachment of attachmentSources)
@@ -1017,10 +1015,8 @@ ${createMentionsNote}`;
 				}
 			: computedSpec;
 		if (!createPlan.resolved) {
-			const { images: _images, materializeWorktree: _materialize, ...durable } =
-				computedSpec;
-			createPlan = updateCreatePlan(bksId, createIdentity, {
-				resolved: snapshotResolvedCreate(durable),
+			createPlan = patchCreationSetupPlan(bksId, createIdentity, {
+				resolved: snapshotOpeningCreate(computedSpec),
 			});
 		}
 
@@ -1045,7 +1041,11 @@ ${createMentionsNote}`;
 					resolve({
 						id: bksId,
 						createdBy: existing?.createdBy || user || "Anonymous",
-						createdAt: existing?.createdAt || createPlan.createdAt,
+						createdAt:
+							existing?.createdAt ||
+							new Date(
+								sessionKernel(bksId).creationState()?.updatedAt ?? Date.now(),
+							).toISOString(),
 					});
 					return;
 				}

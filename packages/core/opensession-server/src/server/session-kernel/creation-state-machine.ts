@@ -24,6 +24,7 @@ export const CREATION_STATE_TRANSITIONS: Record<
     failed: "failed",
   },
   preparing: {
+    plan: "preparing",
     preparation_started: "preparing",
     opening_dispatched: "opening_dispatched",
     failed: "failed",

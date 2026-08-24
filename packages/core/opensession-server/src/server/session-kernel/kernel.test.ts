@@ -889,6 +889,15 @@ describe("SessionKernel", () => {
 				identity,
 				event: "preparation_started",
 			});
+			durableStore.applyCreationEvent({
+				sessionId,
+				identity,
+				event: "plan",
+				planPatch: { resolved: openingPlan },
+			});
+			expect(durableStore.creationState(sessionId)?.setupPlan).toEqual({
+				resolved: openingPlan,
+			});
 			expect(durableStore.applyCreationEvent({
 				sessionId,
 				identity,
@@ -910,7 +919,10 @@ describe("SessionKernel", () => {
 			})).toMatchObject({ accepted: true });
 			durableStore.close();
 			durableStore = new SessionKernelStore(path);
-			expect(durableStore.creationState(sessionId)?.openingPlan).toEqual(openingPlan);
+			expect(durableStore.creationState(sessionId)).toMatchObject({
+				setupPlan: undefined,
+				openingPlan,
+			});
 			durableStore.applyCreationEvent({
 				sessionId,
 				identity,

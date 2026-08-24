@@ -263,8 +263,9 @@ describe("single session ownership", () => {
 		const create = read("session-create.ts");
 		expect(create).toContain("const recoveringSession = findSession(bksId)");
 		expect(create).toContain('existingBranch: restored.worktreeKind === "existing"');
-		expect(create).toContain("const openingPlan = creation?.openingPlan");
-		expect(create).toContain("const identity = creation?.openingPlan");
+		expect(create).toContain("const actorPlan =");
+		expect(create).toContain("creation?.setupPlan?.resolved");
+		expect(create).toContain("const identity = actorPlan");
 		expect(create.indexOf("openingPromptEntryId = beginPromptDispatch"))
 			.toBeLessThan(create.indexOf("await persist()"));
 		// The direct host run must use the create dispatch's stable transcript id.
@@ -277,11 +278,12 @@ describe("single session ownership", () => {
 		expect(routes).not.toContain("requeuePromptDispatch(targetId)");
 	});
 
-	test("create plans and MCP controls retain stable request identity", () => {
+	test("actor setup plans and MCP controls retain stable request identity", () => {
 		const wiring = read("session-control-wiring.ts");
-		expect(wiring).toContain("updateCreatePlan(bksId, createIdentity)");
+		expect(wiring).toContain("patchCreationSetupPlan(bksId, createIdentity");
 		expect(wiring).toContain("createPlan.resolved");
-		expect(wiring).toContain("ensureCreationPlanned(bksId, createIdentity)");
+		expect(wiring).toContain("actorCreationSetupPlan(bksId, createIdentity)");
+		expect(wiring).not.toContain("updateCreatePlan(");
 		expect(wiring).toContain("await requestCreationWorkspace({");
 		expect(wiring.match(/await requestCreationCredential\(\{/g)?.length).toBe(2);
 		expect(wiring.match(/await requestCreationBranch\(\{/g)?.length).toBe(2);
@@ -290,7 +292,11 @@ describe("single session ownership", () => {
 		expect(wiring).not.toMatch(/\bcreateWorktree\(/);
 		const create = read("session-create.ts");
 		expect(create).toContain("createPlan.resolved");
-		expect(create).toContain("ensureCreationPlanned(bksId, createIdentity)");
+		expect(create).toContain("patchCreationSetupPlan(bksId, createIdentity");
+		expect(create).not.toContain("updateCreatePlan(");
+		expect(read("session-create-plan.ts")).not.toContain(
+			"function updateCreatePlan",
+		);
 		expect(create.match(/await requestCreationWorkspace\(\{/g)?.length).toBe(2);
 		expect(create).toContain("actorWorktreeMaterializer({");
 		expect(create).toContain("await requestCreationCredential({");
