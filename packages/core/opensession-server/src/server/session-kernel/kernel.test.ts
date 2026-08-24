@@ -858,6 +858,63 @@ describe("SessionKernel", () => {
 		expect(settled?.completedEffectIds).toContain(effectId);
 	});
 
+	test("settles an exactly cancelled recovered opening without reviving it", async () => {
+		const sessionId = "local-opening-cancel-recovery";
+		const identity = "local-opening-cancel-request";
+		const promptEntryId = "local-opening-cancel-prompt";
+		const effectId = `opening:${promptEntryId}`;
+		const runId = "rh-local-opening-cancel";
+		store.applyCreationEvent({ sessionId, identity, event: "plan" });
+		store.applyCreationEvent({
+			sessionId,
+			identity,
+			event: "preparation_started",
+		});
+		store.applyCreationEvent({
+			sessionId,
+			identity,
+			event: "opening_dispatched",
+			openingPlan: { id: sessionId, openingPrompt: "cancel durable" },
+			nextEffectId: effectId,
+			effect: {
+				kind: "creation_opening_turn",
+				effectKey: effectId,
+				payload: {
+					creationIdentity: identity,
+					creationGeneration: 1,
+					openingPromptEntryId: promptEntryId,
+					runId: `opening:${sessionId}:${promptEntryId}`,
+					runGeneration: 1,
+					mode: "adopt_or_launch",
+				},
+			},
+		});
+		store.applyRunEvent({ sessionId, event: "prompt", runKey: runId });
+		const run = store.runState(sessionId);
+		store.prepareTurnCancel({
+			sessionId,
+			cancelId: `stop:${runId}`,
+			expectedRunId: runId,
+			expectedGeneration: run.generation,
+			dispatchId: runId,
+			requeueIds: [],
+			source: "test",
+		});
+		const { settleRecoveredCreationOpening } = await import("../run-session");
+		expect(
+			settleRecoveredCreationOpening(
+				sessionId,
+				promptEntryId,
+				undefined,
+				runId,
+			),
+		).toBe(true);
+		expect(store.creationState(sessionId)).toMatchObject({
+			state: "cancelled",
+			completedEffectIds: [effectId],
+		});
+	});
+
 	test("clears an accepted creation effect so replay is a stale no-op", () => {
 		const sessionId = "create-result-replay";
 		const identity = "request-result-replay";
@@ -1034,6 +1091,57 @@ describe("SessionKernel", () => {
 			durableStore.close();
 			rmSync(dir, { recursive: true, force: true });
 		}
+	});
+
+	test("settles a cancelled opening effect and fences its late success", () => {
+		const sessionId = "create-opening-cancelled";
+		const identity = "request-opening-cancelled";
+		const effectId = "opening:entry-cancelled";
+		store.applyCreationEvent({ sessionId, identity, event: "plan" });
+		store.applyCreationEvent({
+			sessionId,
+			identity,
+			event: "preparation_started",
+		});
+		expect(store.applyCreationEvent({
+			sessionId,
+			identity,
+			event: "opening_dispatched",
+			openingPlan: { id: sessionId, openingPrompt: "cancel me" },
+			nextEffectId: effectId,
+			effect: {
+				kind: "creation_opening_turn",
+				effectKey: effectId,
+				payload: {
+					creationIdentity: identity,
+					creationGeneration: 1,
+					openingPromptEntryId: "entry-cancelled",
+					runId: `opening:${sessionId}:entry-cancelled`,
+					runGeneration: 1,
+					mode: "adopt_or_launch",
+				},
+			},
+		})).toMatchObject({ accepted: true });
+		expect(store.applyCreationEvent({
+			sessionId,
+			identity,
+			event: "cancelled",
+			effectId,
+		})).toMatchObject({
+			accepted: true,
+			to: "cancelled",
+			state: {
+				currentEffectId: undefined,
+				openingPlan: undefined,
+				completedEffectIds: [effectId],
+			},
+		});
+		expect(store.applyCreationEvent({
+			sessionId,
+			identity,
+			event: "succeeded",
+			effectId,
+		})).toMatchObject({ accepted: false, reason: "stale_effect" });
 	});
 
 	test("rejects creation effect capacity before accepting more work", () => {

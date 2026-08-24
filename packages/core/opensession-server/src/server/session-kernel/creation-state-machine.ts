@@ -5,14 +5,16 @@ export type CreationState =
   | "preparing"
   | "opening_dispatched"
   | "ready"
-  | "failed";
+  | "failed"
+  | "cancelled";
 
 export type CreationEvent =
   | "plan"
   | "preparation_started"
   | "opening_dispatched"
   | "succeeded"
-  | "failed";
+  | "failed"
+  | "cancelled";
 
 export const CREATION_STATE_TRANSITIONS: Record<
   CreationState,
@@ -22,23 +24,29 @@ export const CREATION_STATE_TRANSITIONS: Record<
     plan: "planned",
     preparation_started: "preparing",
     failed: "failed",
+    cancelled: "cancelled",
   },
   preparing: {
     plan: "preparing",
     preparation_started: "preparing",
     opening_dispatched: "opening_dispatched",
     failed: "failed",
+    cancelled: "cancelled",
   },
   opening_dispatched: {
     opening_dispatched: "opening_dispatched",
     succeeded: "ready",
     failed: "failed",
+    cancelled: "cancelled",
   },
   ready: {
     succeeded: "ready",
   },
   failed: {
     failed: "failed",
+  },
+  cancelled: {
+    cancelled: "cancelled",
   },
 };
 

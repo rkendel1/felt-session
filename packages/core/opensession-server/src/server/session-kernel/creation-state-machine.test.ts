@@ -26,6 +26,14 @@ describe("creation state reducer", () => {
     expect(nextCreationState("ready", "preparation_started")).toBeUndefined();
   });
 
+  test("an opening Stop is terminal and cannot later succeed", () => {
+    expect(nextCreationState("opening_dispatched", "cancelled")).toBe(
+      "cancelled",
+    );
+    expect(nextCreationState("cancelled", "succeeded")).toBeUndefined();
+    expect(nextCreationState("cancelled", "cancelled")).toBe("cancelled");
+  });
+
   test("every nonterminal phase can fail without inventing recovery", () => {
     for (const state of [
       "planned",

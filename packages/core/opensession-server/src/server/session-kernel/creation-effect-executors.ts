@@ -447,10 +447,13 @@ export async function executeCreationAttachmentStage(
 }
 
 type OpeningExecutorDependencies = {
+  cancel?: (item: CreationOpeningEffectItem) => boolean | Promise<boolean>;
   launch: (item: CreationOpeningEffectItem) => Promise<void>;
 };
 
 const defaultOpeningDependencies: OpeningExecutorDependencies = {
+  cancel: async (item) =>
+    (await import("../session-create")).settleStoppedCreationOpening(item),
   launch: async (item) =>
     (await import("../session-create")).executeCreationOpeningEffect(item),
 };
@@ -465,6 +468,7 @@ export async function executeCreationOpeningTurn(
     throw new CreationEffectIndeterminateError(
       `Opening run ${item.payload.runId} crossed session ownership`,
     );
+  if (dependencies.cancel && await dependencies.cancel(item)) return;
   await dependencies.launch(item);
 }
 

@@ -97,9 +97,11 @@ import {
 	requestCreationSandbox,
 	patchCreationSetupPlan,
 	requestCreationWorkspace,
+	settleCreationCancelled,
 	settleCreationFailed,
 	settleCreationSucceeded,
 	sessionKernel,
+	sessionTurn,
 } from "./session-kernel";
 import { AUTO_REPO, ensureAskCheckout, ensureScratchDir, getRepo, isRegisteredWorktree, listWorktrees, NO_REPO, repoForPath, repoForPathOrNull, resolveUniqueBranch, sharedCheckoutForNewSessions, worktreeHeadBranch, worktreePathFor, } from "./worktree";
 import { type WSClientData, broadcastToSession, preparingWorkspaces, } from "./ws-hub";
@@ -453,6 +455,8 @@ export async function waitForCreatedSessionProjection(
 		if (projected) return projected;
 		if (state.state === "failed")
 			throw new Error("Session creation failed before it was persisted");
+		if (state.state === "cancelled")
+			throw new Error("Session creation was cancelled before it was persisted");
 		if (Date.now() >= deadline)
 			throw new Error("Session creation remains durably pending");
 		await Bun.sleep(25);
@@ -652,6 +656,24 @@ async function restorePlannedOpening(sessionId: string): Promise<{
 	};
 }
 
+export function settleStoppedCreationOpening(item: CreationOpeningEffectItem): boolean {
+	const kernel = sessionKernel(item.sessionId);
+	const turn = sessionTurn({ op: "snapshot", sessionId: item.sessionId });
+	if (kernel.runState().state !== "stopped" && !turn.cancel) return false;
+	settleCreationCancelled(
+		item.sessionId,
+		item.payload.creationIdentity,
+		kernel,
+		item.effectKey,
+	);
+	acknowledgePromptDispatch(
+		item.sessionId,
+		item.payload.openingPromptEntryId,
+	);
+	clearCreatePlan(item.sessionId);
+	return true;
+}
+
 export async function executeCreationOpeningEffect(
 	item: CreationOpeningEffectItem,
 ): Promise<void> {
@@ -661,16 +683,20 @@ export async function executeCreationOpeningEffect(
 	if (state.generation !== item.payload.creationGeneration)
 		throw new Error("Opening effect used a stale creation generation");
 	if (
-		(state.state === "ready" || state.state === "failed") &&
+		(state.state === "ready" ||
+			state.state === "failed" ||
+			state.state === "cancelled") &&
 		state.completedEffectIds.includes(item.effectKey)
 	) {
 		acknowledgePromptDispatch(
 			item.sessionId,
 			item.payload.openingPromptEntryId,
 		);
-		if (state.state === "ready") clearCreatePlan(item.sessionId);
+		if (state.state === "ready" || state.state === "cancelled")
+			clearCreatePlan(item.sessionId);
 		return;
 	}
+	if (settleStoppedCreationOpening(item)) return;
 	if (
 		state.state !== "opening_dispatched" ||
 		state.currentEffectId !== item.effectKey
@@ -705,16 +731,20 @@ export async function executeCreationOpeningEffect(
 		while (true) {
 			const recovered = sessionKernel(item.sessionId).creationState();
 			if (
-				(recovered?.state === "ready" || recovered?.state === "failed") &&
+				(recovered?.state === "ready" ||
+					recovered?.state === "failed" ||
+					recovered?.state === "cancelled") &&
 				recovered.completedEffectIds.includes(item.effectKey)
 			) {
 				acknowledgePromptDispatch(
 					item.sessionId,
 					item.payload.openingPromptEntryId,
 				);
-				if (recovered.state === "ready") clearCreatePlan(item.sessionId);
+				if (recovered.state === "ready" || recovered.state === "cancelled")
+					clearCreatePlan(item.sessionId);
 				return;
 			}
+			if (settleStoppedCreationOpening(item)) return;
 			if (
 				!recovered ||
 				recovered.identity !== item.payload.creationIdentity ||
@@ -737,6 +767,7 @@ export async function executeCreationOpeningEffect(
 		throw new Error("Opening effect actor-plan identity changed during recovery");
 	if (restored.spec.openingPromptEntryId !== item.payload.openingPromptEntryId)
 		throw new Error("Opening effect prompt identity changed during recovery");
+	if (settleStoppedCreationOpening(item)) return;
 	await openCreatedSession(
 		restored.spec,
 		restored.io,
@@ -748,18 +779,22 @@ export async function executeCreationOpeningEffect(
 		},
 	);
 	const settled = sessionKernel(item.sessionId).creationState();
-	if (settled?.state === "ready") clearCreatePlan(item.sessionId);
+	if (settled?.state === "ready" || settled?.state === "cancelled")
+		clearCreatePlan(item.sessionId);
 	else if (settled?.state !== "failed")
 		throw new Error("Opening effect returned without terminal actor settlement");
 }
 
 export async function resumePlannedCreate(sessionId: string): Promise<boolean> {
 	const state = sessionKernel(sessionId).creationState();
-	if (state?.state === "ready") {
+	if (state?.state === "ready" || state?.state === "cancelled") {
 		clearCreatePlan(sessionId);
 		return true;
 	}
-	if (state?.state === "failed" || state?.currentEffectId?.startsWith("opening:"))
+	if (
+		state?.state === "failed" ||
+		state?.currentEffectId?.startsWith("opening:")
+	)
 		return true;
 	const restored = await restorePlannedOpening(sessionId);
 	if (!restored) return false;
@@ -811,6 +846,16 @@ export async function openCreatedSession(
 	const modelHistory: NonNullable<NativeSessionFile["modelHistory"]> = [];
 	let persisted = false;
 	let releaseOpeningTurn: (() => void) | undefined;
+	let startToken = "";
+	let startGeneration = 0;
+	const openingTurnWasCancelled = (): boolean => {
+		if (!startToken || startGeneration < 1) return false;
+		const cancel = sessionTurn({ op: "snapshot", sessionId: bksId }).cancel;
+		return (
+			cancel?.runId === startToken &&
+			cancel.runGeneration === startGeneration
+		);
+	};
 	// Cumulative token/cost for this new session's opening run.
 	let latestUsage: SessionUsage | undefined;
 	// Extra repos that actually got a worktree (see attachCreateRepos) — what
@@ -930,11 +975,15 @@ export async function openCreatedSession(
 		// engine is up. The starting mark keeps a prompt typed in that
 		// window from double-starting a run (same race as
 		// runSessionPrompt).
-		const startToken = markSessionStarting(bksId);
+		startToken = markSessionStarting(bksId);
     if (currentAgentRunToken(bksId) !== startToken) {
       unmarkSessionStarting(bksId, startToken);
       throw new Error("Opening turn is already owned by another preparation");
     }
+		const admittedRun = sessionKernel(bksId).runState();
+		if (admittedRun.currentRunId !== startToken)
+			throw new Error("Opening turn lost actor admission before preparation");
+		startGeneration = admittedRun.generation;
 		const pendingAttach = spec.attachRepos?.repos.length
 			? spec.attachRepos
 			: null;
@@ -1165,18 +1214,26 @@ export async function openCreatedSession(
 					engineSessionId,
 					noticePersisted: failureNoticePersisted,
 					runId: startToken,
-					runGeneration: sessionKernel(bksId).runState().generation,
+					runGeneration: startGeneration,
 					projectionId: `outcome:${startToken}`,
 				});
 				// This runs in the terminal event's consumer body, before requesting
 				// the generator's next item. Backend generator finally blocks may now
 				// retire their journal/host only after the actor has the receipt.
-				settleCreationSucceeded(
-					bksId,
-					creationIdentity,
-					undefined,
-					creationEffectId,
-				);
+				if (openingTurnWasCancelled())
+					settleCreationCancelled(
+						bksId,
+						creationIdentity,
+						undefined,
+						creationEffectId,
+					);
+				else
+					settleCreationSucceeded(
+						bksId,
+						creationIdentity,
+						undefined,
+						creationEffectId,
+					);
 				creationSettled = true;
 				acknowledgePromptDispatch(bksId, openingPromptEntryId);
 			};
@@ -1440,6 +1497,20 @@ export async function openCreatedSession(
 			console.error(`[create] Post-opening follow-up failed for ${bksId}:`, e);
 			return;
 		}
+		if (openingTurnWasCancelled()) {
+			settleCreationCancelled(
+				bksId,
+				creationIdentity,
+				undefined,
+				creationEffectId,
+			);
+			acknowledgePromptDispatch(bksId, openingPromptEntryId);
+			if (announced) {
+				io.emit({ type: "stream_done" });
+				io.emit({ type: "session_status", isRunning: false });
+			}
+			return;
+		}
 		// Failure after the early announce: the client is already in the
 		// session — close out the stream and surface the failure there
 		// instead of leaving the viewer spinning. Before the announce there's
@@ -1575,7 +1646,8 @@ export async function handleCreateSessionMessage(
 	if (
 		durableCreation?.state === "opening_dispatched" ||
 		durableCreation?.state === "ready" ||
-		durableCreation?.state === "failed"
+		durableCreation?.state === "failed" ||
+		durableCreation?.state === "cancelled"
 	) {
 		try {
 			recoveringSession = await waitForCreatedSessionProjection(
@@ -1586,7 +1658,11 @@ export async function handleCreateSessionMessage(
 			failCreate(error instanceof Error ? error.message : String(error));
 			throw error;
 		}
-		if (durableCreation.state === "ready") clearCreatePlan(bksId);
+		if (
+			durableCreation.state === "ready" ||
+			durableCreation.state === "cancelled"
+		)
+			clearCreatePlan(bksId);
 		const response = {
 			type: "session_created",
 			id: bksId,

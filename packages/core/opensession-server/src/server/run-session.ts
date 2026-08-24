@@ -174,6 +174,7 @@ import { makeAskHandler, settleRestoredAskAfterRecovery } from "./asks";
 import {
 	registerSessionEffectExecutor,
   SessionEffectDeferredError,
+	settleCreationCancelled,
 	settleCreationFailed,
 	settleCreationSucceeded,
 	sessionKernel,
@@ -351,10 +352,30 @@ export function requestTurnCancel(
     source: request.source,
     ...(request.user ? { user: request.user } : {}),
   });
+  settleCreationOpeningForStop(sessionId);
   stoppedSessions.add(sessionId);
   persistQueues();
   broadcastQueue(sessionId);
   return { requeued: requeued.length };
+}
+
+export function settleCreationOpeningForStop(sessionId: string): boolean {
+	const kernel = sessionKernel(sessionId);
+	const creation = kernel.creationState();
+	const effectId = creation?.currentEffectId;
+	if (
+		creation?.state !== "opening_dispatched" ||
+		!effectId?.startsWith("opening:")
+	)
+		return false;
+	settleCreationCancelled(
+		sessionId,
+		creation.identity,
+		kernel,
+		effectId,
+	);
+	acknowledgePromptDispatch(sessionId, effectId.slice("opening:".length));
+	return true;
 }
 
 export function creationOwnsPrompt(sessionId: string, promptEntryId: string): boolean {
@@ -370,6 +391,7 @@ export function settleRecoveredCreationOpening(
 	sessionId: string,
 	promptEntryId: string,
 	failure?: string,
+	runId?: string,
 ): boolean {
 	const creation = sessionKernel(sessionId).creationState();
 	const effectId = `opening:${promptEntryId}`;
@@ -379,7 +401,15 @@ export function settleRecoveredCreationOpening(
 		creation.state !== "opening_dispatched"
 	)
 		return false;
-	if (failure) {
+	const cancel = sessionTurn({ op: "snapshot", sessionId }).cancel;
+	if (runId && cancel?.runId === runId) {
+		settleCreationCancelled(
+			sessionId,
+			creation.identity,
+			sessionKernel(sessionId),
+			effectId,
+		);
+	} else if (failure) {
 		settleCreationFailed(
 			sessionId,
 			creation.identity,

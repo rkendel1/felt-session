@@ -7,6 +7,7 @@ import {
   requestCreationOpening,
   requestCreationSandbox,
   requestCreationWorkspace,
+  settleCreationCancelled,
   settleCreationFailed,
 } from "./creation-intents";
 import {
@@ -281,6 +282,39 @@ describe("creation opening intents", () => {
           },
         },
       ]);
+    } finally {
+      store.close();
+    }
+  });
+
+  test("settles an opening Stop without allowing a later launch result", async () => {
+    const cancelled = {
+      ...opening,
+      sessionId: "create-cancelled-opening",
+      identity: "request-cancelled-opening",
+    };
+    const { store, kernel } = harness(cancelled.sessionId);
+    try {
+      setTimeout(() => {
+        settleCreationCancelled(
+          cancelled.sessionId,
+          cancelled.identity,
+          kernel,
+          `opening:${cancelled.openingPromptEntryId}`,
+        );
+      }, 5);
+      await expect(
+        requestCreationOpening(cancelled, {
+          kernel,
+          timeoutMs: 200,
+          pollMs: 1,
+        }),
+      ).rejects.toThrow("was cancelled while opening was pending");
+      expect(store.creationState(cancelled.sessionId)).toMatchObject({
+        state: "cancelled",
+        currentEffectId: undefined,
+        completedEffectIds: [`opening:${cancelled.openingPromptEntryId}`],
+      });
     } finally {
       store.close();
     }

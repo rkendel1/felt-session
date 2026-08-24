@@ -489,13 +489,18 @@ registerSessionControl({
 		if (
 			durableCreation?.state === "opening_dispatched" ||
 			durableCreation?.state === "ready" ||
-			durableCreation?.state === "failed"
+			durableCreation?.state === "failed" ||
+			durableCreation?.state === "cancelled"
 		) {
 			completedCreate = await waitForCreatedSessionProjection(
 				bksId,
 				createIdentity,
 			);
-			if (durableCreation.state === "ready") clearCreatePlan(bksId);
+			if (
+				durableCreation.state === "ready" ||
+				durableCreation.state === "cancelled"
+			)
+				clearCreatePlan(bksId);
 			return {
 				id: bksId,
 				createdBy:

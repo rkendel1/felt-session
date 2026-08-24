@@ -511,6 +511,17 @@ describe("creation opening effect executor", () => {
     expect(launched).toEqual([input]);
   });
 
+  test("settles a stopped opening before any physical launch", async () => {
+    let launches = 0;
+    await executeCreationOpeningTurn(openingItem(), {
+      cancel: () => true,
+      launch: async () => {
+        launches += 1;
+      },
+    });
+    expect(launches).toBe(0);
+  });
+
   test("rejects an opening run id that crosses session ownership", async () => {
     const input = openingItem();
     input.payload.runId = "opening:another-session:opening-prompt-one";

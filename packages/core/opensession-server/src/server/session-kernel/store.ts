@@ -210,7 +210,7 @@ const PROCESS_OWNER_ID = (ownerGlobal.__opensessionSessionKernelOwnerId ??=
 		bootId: linuxBootId(),
 		start: linuxProcessStart(process.pid),
 	} satisfies ProcessOwnerIdentity));
-export const SESSION_KERNEL_SCHEMA_VERSION = 14;
+export const SESSION_KERNEL_SCHEMA_VERSION = 15;
 export const SESSION_KERNEL_MAX_CREATION_EFFECT_RECEIPTS = 256;
 export const SESSION_KERNEL_MAX_OPENING_PLAN_BYTES = 16 * 1024 * 1024;
 
@@ -1097,6 +1097,7 @@ export class SessionKernelStore {
           "opening_dispatched",
           "succeeded",
           "failed",
+          "cancelled",
         ].includes(input.event);
       if (
         (requiresEffectResult || input.effectId !== undefined) &&
@@ -1239,12 +1240,12 @@ export class SessionKernelStore {
         };
         return;
       }
-      if (["opening_dispatched", "ready", "failed"].includes(to))
+      if (["opening_dispatched", "ready", "failed", "cancelled"].includes(to))
         setupPlan = undefined;
-      const openingPlan = ["ready", "failed"].includes(to)
+      const openingPlan = ["ready", "failed", "cancelled"].includes(to)
         ? undefined
         : input.openingPlan ?? prior?.openingPlan;
-      const currentEffectId = ["ready", "failed"].includes(to)
+      const currentEffectId = ["ready", "failed", "cancelled"].includes(to)
         ? undefined
         : effect?.effectKey ??
           (input.effectId === undefined ? prior?.currentEffectId : undefined);

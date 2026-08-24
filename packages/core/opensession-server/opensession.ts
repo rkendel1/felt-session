@@ -785,6 +785,7 @@ if (!g.__opensessionBooted) {
 									terminalEvent.result ||
 									"Recovered opening run failed"
 								: undefined,
+							recoveredRun.runKey,
 						);
 					}
 					recordRunOutcome(

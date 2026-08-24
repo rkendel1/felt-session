@@ -96,6 +96,8 @@ function assertIdentity(
     throw new Error("Create request identity crossed durable session ownership");
   if (state.state === "failed")
     throw new Error("Session creation has already failed");
+  if (state.state === "cancelled")
+    throw new Error("Session creation has already been cancelled");
 }
 
 export function patchCreationSetupPlan(
@@ -154,6 +156,30 @@ export function settleCreationSucceeded(
   return settled.state;
 }
 
+export function settleCreationCancelled(
+  sessionId: string,
+  identity: string,
+  kernel: CreationIntentKernel = sessionKernel(sessionId),
+  effectId?: string,
+): DurableCreationState {
+  const existing = kernel.creationState();
+  if (existing?.identity !== undefined && existing.identity !== identity)
+    throw new Error("Create request identity crossed durable session ownership");
+  if (existing?.state === "cancelled") return existing;
+  ensureCreationPlanned(sessionId, identity, kernel);
+  const settled = kernel.applyCreationEvent({
+    identity,
+    event: "cancelled",
+    effectId,
+    detail: { source: "turn_stop" },
+  });
+  if (!settled.accepted || !settled.state)
+    throw new Error(
+      `Creation cancellation was rejected: ${settled.reason || "unknown"}`,
+    );
+  return settled.state;
+}
+
 export function settleCreationFailed(
   sessionId: string,
   identity: string,
@@ -164,7 +190,8 @@ export function settleCreationFailed(
   const existing = kernel.creationState();
   if (existing?.identity !== undefined && existing.identity !== identity)
     throw new Error("Create request identity crossed durable session ownership");
-  if (existing?.state === "failed") return existing;
+  if (existing?.state === "failed" || existing?.state === "cancelled")
+    return existing;
   ensureCreationPlanned(sessionId, identity, kernel);
   const settled = kernel.applyCreationEvent({
     identity,
@@ -246,6 +273,8 @@ export async function requestCreationOpening(
   while (state.currentEffectId && state.currentEffectId !== effectId) {
     if (state.state === "failed")
       throw new Error("Session creation failed before opening dispatch");
+    if (state.state === "cancelled")
+      throw new Error("Session creation was cancelled before opening dispatch");
     if (Date.now() >= deadline)
       throw new Error(
         `Creation effect ${state.currentEffectId} must settle before ${effectId}`,
@@ -260,6 +289,8 @@ export async function requestCreationOpening(
   }
   if (state.state === "failed")
     throw new Error("Session creation failed before opening dispatch");
+  if (state.state === "cancelled")
+    throw new Error("Session creation was cancelled before opening dispatch");
   if (state.state === "planned") {
     const preparing = kernel.applyCreationEvent({
       identity: input.identity,
@@ -304,6 +335,8 @@ export async function requestCreationOpening(
   while (state.state !== "ready") {
     if (state.state === "failed")
       throw new Error("Session creation failed while opening was pending");
+    if (state.state === "cancelled")
+      throw new Error("Session creation was cancelled while opening was pending");
     if (Date.now() >= deadline)
       throw new Error(`Creation opening effect ${effectId} remains durably pending`);
     await Bun.sleep(options.pollMs ?? 25);

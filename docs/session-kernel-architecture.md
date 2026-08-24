@@ -212,6 +212,12 @@ live journal with a durable abnormal-completion receipt instead of clearing it;
 boot recovery or the opening executor settles that receipt without relaunching.
 A crash after actor settlement adopts the completed receipt without launching
 another turn. Direct `opening_dispatched` transitions without a typed effect are rejected.
+Schema 15 makes Stop terminal for that opening effect as well as its physical
+turn. The creation actor records a `cancelled` receipt for the exact effect,
+clears its recovery plan, and fences late success. Opening recovery checks the
+durable stopped turn or its retained cancel receipt before launch and while
+awaiting a detached local owner, so a restart cannot resurrect a cancelled
+opening prompt.
 Non-image create attachments are durably spooled to bounded source references,
 then copied or adopted at deterministic session-owned paths by
 `creation_attachment_stage`; digest crossover fails closed and inline bodies
