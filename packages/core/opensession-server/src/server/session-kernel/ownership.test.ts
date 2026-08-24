@@ -634,6 +634,17 @@ describe("single session ownership", () => {
 		expect(create).toContain(
 			"cancel.runGeneration === item.payload.runGeneration",
 		);
+		// Losing actor admission releases the process reservation it just took.
+		const admissionLoss = create.indexOf(
+			'"Opening turn lost actor admission before preparation"',
+		);
+		const unmarkBeforeThrow = create.lastIndexOf(
+			"unmarkSessionStarting(bksId, startToken);",
+			admissionLoss,
+		);
+		expect(admissionLoss).toBeGreaterThan(0);
+		expect(unmarkBeforeThrow).toBeGreaterThan(0);
+		expect(unmarkBeforeThrow).toBeLessThan(admissionLoss);
 		for (const backend of [
 			"host-client.ts",
 			"runner-session.ts",

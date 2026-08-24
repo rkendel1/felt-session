@@ -995,8 +995,12 @@ export async function openCreatedSession(
       throw new Error("Opening turn is already owned by another preparation");
     }
 		const admittedRun = sessionKernel(bksId).runState();
-		if (admittedRun.currentRunId !== startToken)
+		if (admittedRun.currentRunId !== startToken) {
+			// Release the process reservation before failing: this throw lands
+			// outside the inner try/finally that would otherwise unmark it.
+			unmarkSessionStarting(bksId, startToken);
 			throw new Error("Opening turn lost actor admission before preparation");
+		}
 		startGeneration = admittedRun.generation;
 		const pendingAttach = spec.attachRepos?.repos.length
 			? spec.attachRepos
