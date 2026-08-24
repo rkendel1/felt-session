@@ -228,6 +228,10 @@ responsive even while a gateway command is waiting on external work.
 
 Registering a new run id increments the session generation. Registering the
 same logical run again, such as a detached host reconnect, keeps its generation.
+Prompt preparation also takes the actor decision before installing any gateway
+reservation. A rejected candidate remains a cancelled local token and cannot
+replace or launch ahead of the actor's current run, even when the gateway lost
+its in-memory projection of that owner.
 
 Schema 14 moves normal and opening-turn terminal outcome persistence behind the
 typed `turn_outcome_project` effect. The actor validates the immutable run id and

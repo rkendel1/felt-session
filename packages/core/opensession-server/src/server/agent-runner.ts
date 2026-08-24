@@ -18,6 +18,7 @@ import {
   type QuarantinedRun,
 } from "./run-journal";
 import {
+  decideRunStateTransition,
   getRunState,
   isRunStateUnsettled,
   transitionRunState,
@@ -879,28 +880,17 @@ function untrackRecovery(run: ActiveRunRecord): void {
 /** Mark a session as starting a run (call synchronously, before any await). */
 export function markSessionStarting(id: string): string {
   const token = `rh-${crypto.randomUUID()}`;
-  const state = getRunState(id);
-  if (
-    sessionRunOwners.has(id) &&
-    (state === "preparing" || state === "starting")
-  ) {
+  const decision = decideRunStateTransition(id, "prompt", { run_key: token });
+  if (!decision.accepted) {
     // Return a distinct rejected token so the caller can requeue without
-    // sharing/unmarking the winner's process reservation.
+    // sharing/unmarking the actor winner's process reservation.
     cancelledRunTokens.add(token);
     return token;
   }
   let tokens = pendingStarts.get(id);
   if (!tokens) pendingStarts.set(id, (tokens = new Set()));
   tokens.add(token);
-  if (
-    !sessionRunOwners.has(id) ||
-    state === "idle" ||
-    state === "stopped" ||
-    state === "failed"
-  ) {
-    sessionRunOwners.set(id, token);
-  }
-  transitionRunState(id, "prompt", { run_key: token });
+  sessionRunOwners.set(id, token);
   return token;
 }
 

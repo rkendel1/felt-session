@@ -380,6 +380,24 @@ describe("run journal", () => {
     }
   });
 
+  it("does not let a stale gateway projection replace the actor's start owner", () => {
+    const sessionId = `actor-preparation-winner-${crypto.randomUUID()}`;
+    const firstToken = agent.markSessionStarting(sessionId);
+    agent.unmarkSessionStarting(sessionId, firstToken);
+    const rejectedToken = agent.markSessionStarting(sessionId);
+    try {
+      expect(agent.isAgentSessionCancelled(sessionId, rejectedToken)).toBe(true);
+      expect(agent.currentAgentRunToken(sessionId)).toBeUndefined();
+      expect(sessionKernelStore().runState(sessionId)).toMatchObject({
+        state: "starting",
+        currentRunId: firstToken,
+      });
+    } finally {
+      agent.unmarkSessionStarting(sessionId, rejectedToken);
+      clearRunState(sessionId);
+    }
+  });
+
   it("never launches a rejected concurrent preparation before the actor winner", async () => {
     const sessionId = `preparation-engine-winner-${crypto.randomUUID()}`;
     const fake = makeFakeEngine([{ kind: "clean" }]);

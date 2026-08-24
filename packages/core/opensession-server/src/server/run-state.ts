@@ -64,32 +64,37 @@ export function getRunState(sessionId: string): RunState {
 
 type AuditEmit = (event: Record<string, unknown>) => void;
 
-/**
- * Apply an event through the owning SessionKernel. A defined edge moves the
- * durable state and emits `run_state_transition`; an undefined one leaves the
- * state untouched and emits `run_state_rejected`.
- */
-export function transitionRunState(
+export type RunStateTransitionDecision = {
+	accepted: boolean;
+	from: RunState;
+	to: RunState;
+	reason?: "invalid_transition" | "stale_run";
+	currentRunId?: string;
+	rejectedRunId?: string;
+};
+
+/** Apply one run event and retain the actor's admission decision. */
+export function decideRunStateTransition(
 	sessionId: string,
 	event: RunEvent,
 	detail?: Record<string, unknown>,
 	emit: AuditEmit = audit,
-): RunState {
+): RunStateTransitionDecision {
 	if (detachedRunHost()) {
 		const from = getRunState(sessionId);
-		const to = nextRunState(from, event);
-		if (!to) {
+		const next = nextRunState(from, event);
+		if (!next) {
 			console.warn(`[run-state] rejected: ${event} while ${from} (session ${sessionId})`);
 			emit({ msg: "run_state_rejected", session_id: sessionId, state: from, event, ...detail });
-			return from;
+			return { accepted: false, from, to: from, reason: "invalid_transition" };
 		}
 		detachedHostStates.set(sessionId, {
-			state: to,
+			state: next,
 			since: new Date().toISOString(),
 			lastEvent: event,
 		});
-		emit({ msg: "run_state_transition", session_id: sessionId, from, to, event, ...detail });
-		return to;
+		emit({ msg: "run_state_transition", session_id: sessionId, from, to: next, event, ...detail });
+		return { accepted: true, from, to: next };
 	}
 
 	const runKey = typeof detail?.run_key === "string" ? detail.run_key : undefined;
@@ -119,7 +124,7 @@ export function transitionRunState(
 				...detail,
 			});
 		}
-		return decision.from;
+		return decision;
 	}
 	emit({
 		msg: "run_state_transition",
@@ -129,7 +134,22 @@ export function transitionRunState(
 		event,
 		...detail,
 	});
-	return decision.to;
+	return decision;
+}
+
+/**
+ * Apply an event through the owning SessionKernel. A defined edge moves the
+ * durable state and emits `run_state_transition`; an undefined one leaves the
+ * state untouched and emits `run_state_rejected`.
+ */
+export function transitionRunState(
+	sessionId: string,
+	event: RunEvent,
+	detail?: Record<string, unknown>,
+	emit: AuditEmit = audit,
+): RunState {
+	const decision = decideRunStateTransition(sessionId, event, detail, emit);
+	return decision.accepted ? decision.to : decision.from;
 }
 
 /** Drop tracking for a deleted session. */
