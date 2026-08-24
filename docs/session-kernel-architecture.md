@@ -219,7 +219,11 @@ durable stopped turn or its retained cancel receipt before launch and while
 awaiting a detached local owner, so a restart cannot resurrect a cancelled
 opening prompt. Runner, sandbox, and local openings use the same stable token
 for actor admission and physical control, letting Stop reach the exact backend
-without giving up restart adoption.
+without giving up restart adoption. Stop bookkeeping never depends on the
+creation settlement succeeding: a concurrent opening result racing the cancel
+read is logged and skipped, while the durable `prepare_cancel` commit, queue
+persistence, and broadcast always run. Retained cancel receipts fence by exact
+run id and generation, matching the opening they cancelled.
 Non-image create attachments are durably spooled to bounded source references,
 then copied or adopted at deterministic session-owned paths by
 `creation_attachment_stage`; digest crossover fails closed and inline bodies

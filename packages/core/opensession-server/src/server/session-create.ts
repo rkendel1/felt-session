@@ -659,7 +659,16 @@ async function restorePlannedOpening(sessionId: string): Promise<{
 export function settleStoppedCreationOpening(item: CreationOpeningEffectItem): boolean {
 	const kernel = sessionKernel(item.sessionId);
 	const turn = sessionTurn({ op: "snapshot", sessionId: item.sessionId });
-	if (kernel.runState().state !== "stopped" && !turn.cancel) return false;
+	// Exact cancel identity, matching openingTurnWasCancelled(): a retained
+	// receipt fences only the exact run it cancelled. `stopped` alone still
+	// fences because creation is single-shot — while it is opening_dispatched
+	// the opening turn is the only run Stop could have targeted.
+	const cancel = turn.cancel;
+	const exactCancel =
+		cancel != null &&
+		cancel.runId === item.payload.runId &&
+		cancel.runGeneration === item.payload.runGeneration;
+	if (kernel.runState().state !== "stopped" && !exactCancel) return false;
 	settleCreationCancelled(
 		item.sessionId,
 		item.payload.creationIdentity,

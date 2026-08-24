@@ -618,12 +618,22 @@ describe("single session ownership", () => {
 		expect(create).toContain("isAgentSessionCancelled(bksId, startToken)");
 		const runSession = read("run-session.ts");
 		const cancelPrepared = runSession.indexOf('op: "prepare_cancel"');
-		const creationCancelled = runSession.indexOf(
-			"settleCreationOpeningForStop(sessionId)",
+		const settleGuarded = runSession.indexOf(
+			"try {\n    settleCreationOpeningForStop(sessionId);",
 			cancelPrepared,
 		);
+		const stopBookkept = runSession.indexOf("stoppedSessions.add(sessionId)", cancelPrepared);
 		expect(cancelPrepared).toBeGreaterThan(0);
-		expect(creationCancelled).toBeGreaterThan(cancelPrepared);
+		expect(settleGuarded).toBeGreaterThan(cancelPrepared);
+		expect(stopBookkept).toBeGreaterThan(settleGuarded);
+		// A concurrent opening settlement racing the Stop must never undo the
+		// committed durable cancel or skip queue persistence/broadcast.
+		expect(runSession.slice(settleGuarded, stopBookkept)).toContain("catch");
+		// A retained cancel receipt fences only the exact run it cancelled.
+		expect(create).toContain("cancel.runId === item.payload.runId");
+		expect(create).toContain(
+			"cancel.runGeneration === item.payload.runGeneration",
+		);
 		for (const backend of [
 			"host-client.ts",
 			"runner-session.ts",

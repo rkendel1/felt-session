@@ -352,7 +352,15 @@ export function requestTurnCancel(
     source: request.source,
     ...(request.user ? { user: request.user } : {}),
   });
-  settleCreationOpeningForStop(sessionId);
+  // The durable Stop committed above must not be undone by a concurrent
+  // creation settlement racing this read (the opening effect may have just
+  // settled failed/succeeded between our snapshot and the reducer write).
+  // Stop bookkeeping below therefore always runs.
+  try {
+    settleCreationOpeningForStop(sessionId);
+  } catch (e) {
+    console.error(`[stop] Opening creation settlement failed for ${sessionId}:`, e);
+  }
   stoppedSessions.add(sessionId);
   persistQueues();
   broadcastQueue(sessionId);
