@@ -39,6 +39,42 @@ async function actor(): Promise<SessionKernelActorClient> {
 }
 
 describe("session kernel actor boundary", () => {
+  test("reconciles compatible branch dead letters inside the actor store", async () => {
+    const host = await actor();
+    const id = host.store.enqueueOutbox(
+      "shared-session",
+      "creation_branch_prepare",
+      {
+        creationIdentity: "creation-one",
+        creationGeneration: 1,
+        project: "opensession",
+        branch: "feature",
+        worktreePath: "/srv/opensession",
+        isolated: false,
+        mode: "adopt_or_create",
+      },
+      "shared-branch",
+    );
+    host.store.noteOutboxFailure(
+      id,
+      "Worktree destination /srv/opensession exists without a registered branch",
+      1,
+    );
+
+    expect(
+      host.store.retryCompatibleCreationBranchDeadLetters([
+        { project: "opensession", worktreePath: "/srv/opensession" },
+      ]),
+    ).toEqual([
+      {
+        id,
+        sessionId: "shared-session",
+        reason: "shared_checkout_destination_adoptable",
+      },
+    ]);
+    expect(host.store.pendingOutbox(Date.now() + 1_000)).toHaveLength(1);
+  });
+
   test("admits independent commands while physical work is active", async () => {
     const host = await actor();
     const first = await host.begin("s1", testEffect({ requestId: "first", type: "test" }));

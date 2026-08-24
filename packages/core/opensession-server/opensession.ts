@@ -93,6 +93,7 @@ import { beginShutdown } from "./src/server/shutdown-state";
 import { setServiceReadiness } from "./src/server/service-readiness";
 import {
 	reconcileSessionKernelOwnership,
+	reconcileCompatibleCreationBranchEffects,
 	startSessionKernelActor,
 	startSessionKernelRuntime,
 	stopSessionKernelRuntime,
@@ -881,6 +882,15 @@ if (!g.__opensessionBooted) {
 		} catch (error) {
 			throw error;
 		}
+		// Re-admit only historical branch effects rejected before execution by
+		// retired compatibility checks. Do this behind the recovery gate so the
+		// runtime cannot race the dead-letter transition.
+		const reconciledBranchEffects =
+			await reconcileCompatibleCreationBranchEffects();
+		if (reconciledBranchEffects.length)
+			console.warn(
+				`[session-kernel] Reconciled ${reconciledBranchEffects.length} compatible branch effect(s)`,
+			);
 		// Only now may durable timers and effects wake actors: every recovery
 		// stage above completed and ownership is established.
 		startSessionKernelRuntime();

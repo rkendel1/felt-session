@@ -2376,6 +2376,104 @@ export class SessionKernelStore {
 		return result.changes > 0;
 	}
 
+	/**
+	 * Re-admit branch effects rejected before physical work by compatibility bugs:
+	 * the former shared-checkout classifier and the old empty-base decoder. The
+	 * caller supplies trusted shared destinations; every other failure stays dead.
+	 */
+	retryCompatibleCreationBranchDeadLetters(
+		destinations: ReadonlyArray<{ project: string; worktreePath: string }>,
+		now = Date.now(),
+	): Array<{
+		id: number;
+		sessionId: string;
+		reason: "shared_checkout_destination_adoptable" | "legacy_empty_base_branch";
+	}> {
+		const allowed = new Set(
+			destinations.map(({ project, worktreePath }) =>
+				JSON.stringify([project, worktreePath]),
+			),
+		);
+		const rows = this.db
+			.query(
+				`SELECT id, session_id, payload, last_error
+				 FROM session_kernel_outbox
+				 WHERE kind = 'creation_branch_prepare'
+				   AND dead_lettered_at IS NOT NULL
+				 ORDER BY id
+				 LIMIT 1000`,
+			)
+			.all() as Array<{
+				id: number;
+				session_id: string;
+				payload: string;
+				last_error: string | null;
+			}>;
+		const retried: Array<{
+			id: number;
+			sessionId: string;
+			reason: "shared_checkout_destination_adoptable" | "legacy_empty_base_branch";
+		}> = [];
+		const tx = this.db.transaction(() => {
+			for (const row of rows) {
+				let payload: Record<string, unknown>;
+				try {
+					const parsed = JSON.parse(row.payload);
+					if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
+						continue;
+					payload = parsed as Record<string, unknown>;
+				} catch {
+					continue;
+				}
+				if (
+					typeof payload.creationIdentity !== "string" ||
+					payload.creationIdentity.length === 0 ||
+					!Number.isSafeInteger(payload.creationGeneration) ||
+					Number(payload.creationGeneration) < 1 ||
+					typeof payload.project !== "string" ||
+					typeof payload.worktreePath !== "string" ||
+					typeof payload.branch !== "string" ||
+					payload.branch.length === 0 ||
+					payload.mode !== "adopt_or_create" ||
+					typeof payload.isolated !== "boolean"
+				)
+					continue;
+				const sharedCheckoutFalsePositive =
+					payload.isolated === false &&
+					allowed.has(
+						JSON.stringify([payload.project, payload.worktreePath]),
+					) &&
+					row.last_error ===
+						`Worktree destination ${payload.worktreePath} exists without a registered branch`;
+				// This decoder rejection happened before any executor or physical Git
+				// action. Current additive decoding treats the old empty sentinel as
+				// an omitted optional base, so replay cannot duplicate prior work.
+				const legacyEmptyBaseBranch =
+					payload.baseBranch === "" &&
+					row.last_error ===
+						"Invalid creation_branch_prepare effect payload: baseBranch";
+				if (!sharedCheckoutFalsePositive && !legacyEmptyBaseBranch) continue;
+				const result = this.db.run(
+					`UPDATE session_kernel_outbox
+					 SET attempts = 0, next_attempt_at = ?, last_error = NULL,
+					     dead_lettered_at = NULL
+					 WHERE id = ? AND dead_lettered_at IS NOT NULL`,
+					[now, row.id],
+				);
+				if (result.changes > 0)
+					retried.push({
+						id: Number(row.id),
+						sessionId: row.session_id,
+						reason: sharedCheckoutFalsePositive
+							? "shared_checkout_destination_adoptable"
+							: "legacy_empty_base_branch",
+					});
+			}
+		});
+		tx.immediate();
+		return retried;
+	}
+
 	ackOutbox(id: number): void {
 		this.db.run("DELETE FROM session_kernel_outbox WHERE id = ?", [id]);
 	}

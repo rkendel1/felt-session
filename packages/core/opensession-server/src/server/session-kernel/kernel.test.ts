@@ -1142,6 +1142,85 @@ describe("SessionKernel durable runtime", () => {
 		expect(store.stats().deadLetteredOutbox).toBe(0);
 	});
 
+	test("re-admits only pre-execution branch compatibility false positives", () => {
+		const sharedPayload = {
+			creationIdentity: "creation-one",
+			creationGeneration: 1,
+			project: "opensession",
+			branch: "feature",
+			worktreePath: "/srv/opensession",
+			isolated: false,
+			mode: "adopt_or_create",
+		};
+		const matching = store.enqueueOutbox(
+			"shared-session",
+			"creation_branch_prepare",
+			sharedPayload,
+			"shared-branch",
+		);
+		const ordinary = store.enqueueOutbox(
+			"ordinary-session",
+			"creation_branch_prepare",
+			{ ...sharedPayload, worktreePath: "/srv/ordinary" },
+			"ordinary-branch",
+		);
+		const legacyEmptyBase = store.enqueueOutbox(
+			"legacy-session",
+			"creation_branch_prepare",
+			{
+				...sharedPayload,
+				project: "tella-fusion",
+				worktreePath: "/srv/tella-fusion-feature",
+				baseBranch: "",
+			},
+			"legacy-empty-base",
+		);
+		const differentFailure = store.enqueueOutbox(
+			"different-session",
+			"creation_branch_prepare",
+			sharedPayload,
+			"different-failure",
+		);
+		store.noteOutboxFailure(
+			matching,
+			"Worktree destination /srv/opensession exists without a registered branch",
+			1,
+		);
+		store.noteOutboxFailure(
+			ordinary,
+			"Worktree destination /srv/ordinary exists without a registered branch",
+			1,
+		);
+		store.noteOutboxFailure(
+			legacyEmptyBase,
+			"Invalid creation_branch_prepare effect payload: baseBranch",
+			1,
+		);
+		store.noteOutboxFailure(differentFailure, "credential unavailable", 1);
+
+		expect(
+			store.retryCompatibleCreationBranchDeadLetters([
+				{ project: "opensession", worktreePath: "/srv/opensession" },
+			]),
+		).toEqual([
+			{
+				id: matching,
+				sessionId: "shared-session",
+				reason: "shared_checkout_destination_adoptable",
+			},
+			{
+				id: legacyEmptyBase,
+				sessionId: "legacy-session",
+				reason: "legacy_empty_base_branch",
+			},
+		]);
+		expect(store.pendingOutbox(Date.now() + 1_000).map((item) => item.id)).toEqual([
+			matching,
+			legacyEmptyBase,
+		]);
+		expect(store.stats().deadLetteredOutbox).toBe(2);
+	});
+
 	test("retries an outbox effect until it succeeds", async () => {
 		const { drainSessionKernelRuntime, waitForSessionKernelRuntimeIdle, } = await import("./runtime");
 		const { replaceSessionEffectExecutorForTest } = await import("./effect-executors");

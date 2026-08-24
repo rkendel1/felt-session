@@ -773,6 +773,24 @@ class RemoteStore implements SessionKernelStoreApi {
   retryDeadOutbox(id: number) {
     return this.call<boolean>("retryDeadOutbox", id);
   }
+  retryCompatibleCreationBranchDeadLetters(
+    destinations: ReadonlyArray<{ project: string; worktreePath: string }>,
+    now?: number,
+  ) {
+    return this.call<
+      Array<{
+        id: number;
+        sessionId: string;
+        reason:
+          | "shared_checkout_destination_adoptable"
+          | "legacy_empty_base_branch";
+      }>
+    >(
+      "retryCompatibleCreationBranchDeadLetters",
+      destinations,
+      now,
+    );
+  }
   ackOutbox(id: number) {
     this.call("ackOutbox", id);
   }

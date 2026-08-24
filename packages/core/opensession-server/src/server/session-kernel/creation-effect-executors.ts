@@ -8,7 +8,7 @@ import type {
 import { createWorkspace, getWorkspace, type Workspace } from "../workspaces";
 import type { WorktreeInfo } from "../worktree";
 import { registerSessionEffectExecutor } from "./effect-executors";
-import { sessionKernel } from "./kernel";
+import { sessionKernel, sessionKernelStore } from "./kernel";
 import type { SessionActorEffectFor } from "./lifecycle-protocol";
 import type {
   CreationEventDecisionResult,
@@ -391,6 +391,44 @@ export async function executeCreationCredentialResolve(
   throw new CreationEffectIndeterminateError(
     `Credential effect ${item.effectId} result was rejected: ${result.reason || "unknown"}`,
   );
+}
+
+/**
+ * Re-admit branch effects rejected before execution by retired compatibility
+ * checks. The store matches exact historical errors and validates configured
+ * shared destinations before clearing any dead-letter marker.
+ */
+export async function reconcileCompatibleCreationBranchEffects(): Promise<
+  Array<{
+    id: number;
+    sessionId: string;
+    reason: "shared_checkout_destination_adoptable" | "legacy_empty_base_branch";
+  }>
+> {
+  const [{ configuredRepos }, { sharedCheckoutForNewSessions }, { audit }] =
+    await Promise.all([
+      import("../config"),
+      import("../worktree"),
+      import("../audit"),
+    ]);
+  const destinations = Object.values(configuredRepos())
+    .filter((repo) => sharedCheckoutForNewSessions(repo))
+    .map((repo) => ({
+      project: repo.id,
+      worktreePath: resolve(repo.repo),
+    }));
+  const retried = sessionKernelStore().retryCompatibleCreationBranchDeadLetters(
+    destinations,
+  );
+  for (const item of retried)
+    audit({
+      msg: "session_kernel_dead_letter_reconciled",
+      kind: "outbox",
+      session_id: item.sessionId,
+      outbox_id: item.id,
+      reason: item.reason,
+    });
+  return retried;
 }
 
 const registrationGlobal = globalThis as typeof globalThis & {
