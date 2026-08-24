@@ -22,7 +22,7 @@
 import type { ServerWebSocket } from "bun";
 import { randomUUIDv7 } from "bun";
 import { existsSync } from "node:fs";
-import { currentAgentRunToken, type StreamEvent, markSessionStarting, runAgent, unmarkSessionStarting, } from "./agent-runner";
+import { currentAgentRunToken, isAgentSessionCancelled, type StreamEvent, markSessionStarting, runAgent, unmarkSessionStarting, } from "./agent-runner";
 import {
 	activeRunRecords,
 	journalClearIfLineage,
@@ -1169,6 +1169,8 @@ export async function openCreatedSession(
 						prompt: openingPromptForRun,
 						promptEntryId: openingPromptEntryId,
 						hostId: startToken,
+						shouldCancel: () =>
+							isAgentSessionCancelled(bksId, startToken),
 						images: spec.images,
 						mcpServers: spec.runMcpServers ?? [],
 						user: spec.user,

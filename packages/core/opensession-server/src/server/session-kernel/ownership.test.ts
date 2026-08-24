@@ -615,6 +615,7 @@ describe("single session ownership", () => {
 		expect(create).toContain("openingJournal?.terminalFailure");
 		expect(create).toContain("startToken = markSessionStarting(");
 		expect(create).toContain("hostId: startToken");
+		expect(create).toContain("isAgentSessionCancelled(bksId, startToken)");
 		const runSession = read("run-session.ts");
 		const cancelPrepared = runSession.indexOf('op: "prepare_cancel"');
 		const creationCancelled = runSession.indexOf(
