@@ -20,6 +20,8 @@ import type { StagedCreationActorEffect } from "./creation-effect-protocol";
 import { chmodSync, existsSync, mkdirSync, readFileSync, statSync } from "fs";
 import { dirname } from "path";
 import { sessionsDir } from "../paths";
+import { selectQueueBatch } from "./queue-batch-reducer";
+import type { QueueItem } from "../queue-state";
 
 export type DurableCommandStatus =
   "pending" | "processing" | "completed" | "failed" | "indeterminate";
@@ -1876,6 +1878,69 @@ export class SessionKernelStore {
       });
     }
     return count;
+  }
+
+  claimNextDeliveryDispatch(input: {
+    sessionId: string;
+    promptEntryId: string;
+    soloId?: string;
+    interruptMark?: boolean;
+    stillWorking?: boolean;
+  }):
+    | { kind: "empty"; revision: number }
+    | { kind: "hold"; heldCount: number; revision: number }
+    | {
+        kind: "deliver";
+        promptEntryId: string;
+        items: QueueItem[];
+        revision: number;
+      } {
+    if (
+      !input.promptEntryId ||
+      input.promptEntryId.length > 256 ||
+      (input.soloId !== undefined &&
+        (!input.soloId || input.soloId.length > 256))
+    ) throw new Error("Invalid next prompt dispatch identity");
+    const mutation = this.mutateDelivery(
+      input.sessionId,
+      "delivery_next_dispatch_claimed",
+      (state) => {
+        if (state.dispatch) throw new Error("A prompt dispatch is already active");
+        const queued = state.queued as QueueItem[];
+        if (!queued.length) return { kind: "empty" as const };
+        const plan = selectQueueBatch(queued, {
+          soloId: input.soloId,
+          interruptMark: input.interruptMark,
+          stillWorking: input.stillWorking,
+        });
+        if (plan.kind === "hold") return plan;
+        const promptEntryId =
+          plan.batch.length === 1 && plan.batch[0]?.promptEntryId
+            ? plan.batch[0].promptEntryId
+            : input.promptEntryId;
+        state.queued = plan.rest;
+        state.dispatch = {
+          promptEntryId,
+          items: plan.batch,
+        };
+        return {
+          kind: "deliver" as const,
+          promptEntryId,
+          items: plan.batch,
+        };
+      },
+    );
+    return {
+      ...(mutation.result as
+        | { kind: "empty" }
+        | { kind: "hold"; heldCount: number }
+        | {
+            kind: "deliver";
+            promptEntryId: string;
+            items: QueueItem[];
+          }),
+      revision: mutation.state.revision,
+    };
   }
 
   claimDeliveryDispatch(input: {

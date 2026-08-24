@@ -500,6 +500,33 @@ export function restorePersistedQueueState(options: {
 	};
 }
 
+/** Let the actor select and claim the next queue batch in one transaction. */
+export function beginNextPromptDispatch(
+	sessionId: string,
+	opts: {
+		soloId?: string;
+		interruptMark?: boolean;
+		stillWorking?: boolean;
+	},
+):
+	| { kind: "empty" }
+	| { kind: "hold"; heldCount: number }
+	| { kind: "deliver"; promptEntryId: string; batch: QueueItem[] } {
+	const claimed = sessionDelivery({
+		op: "claim_next_dispatch",
+		sessionId,
+		promptEntryId: crypto.randomUUID(),
+		...opts,
+	});
+	if (claimed.kind !== "deliver") return claimed;
+	persistQueues();
+	return {
+		kind: "deliver",
+		promptEntryId: claimed.promptEntryId,
+		batch: claimed.items as QueueItem[],
+	};
+}
+
 /** Move a selected queue batch into durable dispatching state before starting
  * runner work. The caller has already removed the batch from promptQueues, so
  * this single persistence point records either the old queued copy (if we die

@@ -682,6 +682,14 @@ class RemoteStore implements SessionKernelStoreApi {
       items,
     });
   }
+  claimNextDeliveryDispatch(
+    input: Parameters<SessionKernelStoreApi["claimNextDeliveryDispatch"]>[0],
+  ): ReturnType<SessionKernelStoreApi["claimNextDeliveryDispatch"]> {
+    return this.actor.decideDelivery({
+      op: "claim_next_dispatch",
+      ...input,
+    }) as ReturnType<SessionKernelStoreApi["claimNextDeliveryDispatch"]>;
+  }
   claimDeliveryDispatch(
     input: Parameters<SessionKernelStoreApi["claimDeliveryDispatch"]>[0],
   ) {

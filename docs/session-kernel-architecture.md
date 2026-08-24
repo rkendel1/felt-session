@@ -90,8 +90,12 @@ actor is unavailable. The direct store adapter exists only for isolated tests.
 Delivery mutation and dispatch claim, acknowledgement or failure are short typed
 Worker reductions. Mutation replies contain only the operation result and new
 revision. They invalidate the gateway projection instead of returning or eagerly
-refetching the full attachment-bearing aggregate. Claiming a batch removes it from the queue and installs its
-dispatch in one SQLite transaction. Failure atomically restores that exact batch
+refetching the full attachment-bearing aggregate. Queue batching policy (solo
+interrupts, auto-continue, review handoffs, delegated reports and worker holds)
+now runs inside the same actor reduction as the claim. The gateway supplies
+only live policy facts such as whether child workers remain. Claiming removes
+the selected batch from the queue and installs its dispatch in one SQLite
+transaction. Failure atomically restores that exact batch
 ahead of later work. Steering first moves an item to a pending-steer checkpoint,
 then reports runner acceptance or rejection as a second typed fact. Restart treats
 an unresolved checkpoint as ambiguous acceptance and reconciles it through the
