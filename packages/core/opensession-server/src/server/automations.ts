@@ -79,6 +79,7 @@ import {
   sanitizeAutomationOutputs,
   type AutomationOutput,
 } from "./automation-outputs";
+import { automationIntentAlreadySettled } from "./automation-intent-recovery";
 
 const AUTOMATIONS_DIR = stateDir("automations");
 const SESSIONS_DIR = OPENSESSION_SESSIONS_DIR;
@@ -1207,6 +1208,13 @@ export function resumePendingAutomationRuns(
       ) throw new Error("invalid automation intent");
       const automation = getAutomation(intent.automationId);
       if (!automation) throw new Error(`automation ${intent.automationId} is unavailable`);
+      if (automationIntentAlreadySettled(intent.sessionId, automation.runs || [])) {
+        const completedIntent = clearAutomationIntent(intent.sessionId);
+        if (completedIntent?.deleteAutomationAfterRun)
+          deleteAutomation(automation.id);
+        resumed++;
+        continue;
+      }
       if (intent.terminalAt) {
         settleRun(automation.id, intent.sessionId, {
           status: intent.terminalError ? "error" : "ok",
