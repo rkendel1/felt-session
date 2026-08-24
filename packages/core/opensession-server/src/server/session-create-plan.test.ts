@@ -101,6 +101,12 @@ describe("durable create plan", () => {
       const first = updateCreatePlan("os-create", "same", {
         branch: "feature/stable",
         workspaceId: createPlanWorkspaceId("os-create"),
+        attachments: [{
+          attachmentId: "attachment-one",
+          name: "brief.pdf",
+          sourceRef: "uploads:staged%2Fbrief.pdf",
+          digest: "sha256:brief",
+        }],
         resolved: {
           model: "pi/openai/gpt-5.5",
           sandboxProvider: "docker",

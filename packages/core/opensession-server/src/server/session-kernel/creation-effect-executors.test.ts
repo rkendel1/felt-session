@@ -6,11 +6,13 @@ import { createWorkspace, getWorkspace } from "../workspaces";
 import { createWorktree, listWorktrees } from "../worktree";
 import {
   CreationEffectIndeterminateError,
+  executeCreationAttachmentStage,
   executeCreationBranchPrepare,
   executeCreationCredentialResolve,
   executeCreationOpeningTurn,
   executeCreationSandboxPrepare,
   executeCreationWorkspacePrepare,
+  type CreationAttachmentEffectItem,
   type CreationBranchEffectItem,
   type CreationCredentialEffectItem,
   type CreationOpeningEffectItem,
@@ -116,6 +118,28 @@ function sandboxItem(): CreationSandboxEffectItem {
       trustProfile: "interactive",
       egressAllowlist: ["github.com"],
       mode: "adopt_or_create",
+    },
+    attempts: 0,
+    nextAttemptAt: 0,
+    createdAt: 1,
+  };
+}
+
+function attachmentItem(): CreationAttachmentEffectItem {
+  return {
+    id: 5,
+    effectId: "session:creation_attachment_stage:attachment-effect",
+    effectKey: "attachment:attachment-one",
+    sessionId: "session-one",
+    kind: "creation_attachment_stage",
+    payload: {
+      creationIdentity: "create-one",
+      creationGeneration: 1,
+      attachmentId: "attachment-one",
+      name: "brief.pdf",
+      sourceRef: "uploads:staged%2Fbrief.pdf",
+      digest: "sha256:brief",
+      mode: "reconcile_or_stage",
     },
     attempts: 0,
     nextAttemptAt: 0,
@@ -442,6 +466,36 @@ describe("creation sandbox effect executor", () => {
         throw new Error("must not result");
       },
     })).rejects.toBeInstanceOf(CreationEffectIndeterminateError);
+  });
+});
+
+describe("creation attachment effect executor", () => {
+  test("adopts a staged destination after a crash before actor settlement", async () => {
+    let stages = 0;
+    let results = 0;
+    const dependencies = {
+      stage: (_sessionId: string, source: any) => {
+        stages += 1;
+        expect(source).toMatchObject({
+          attachmentId: "attachment-one",
+          name: "brief.pdf",
+          digest: "sha256:brief",
+        });
+        return { name: "brief.pdf", path: "/uploads/session-one/attachment-one-brief.pdf" };
+      },
+      result: () => {
+        results += 1;
+        return results === 1
+          ? { accepted: false as const, reason: "invalid_transition" as const }
+          : { accepted: true as const };
+      },
+    };
+    await expect(
+      executeCreationAttachmentStage(attachmentItem(), dependencies),
+    ).rejects.toBeInstanceOf(CreationEffectIndeterminateError);
+    await executeCreationAttachmentStage(attachmentItem(), dependencies);
+    expect(stages).toBe(2);
+    expect(results).toBe(2);
   });
 });
 

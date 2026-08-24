@@ -9,11 +9,13 @@
  * accepted for small files and older clients.
  */
 
+import { createHash } from "crypto";
 import {
 	existsSync,
 	mkdirSync,
 	readFileSync,
 	realpathSync,
+	renameSync,
 	statSync,
 	unlinkSync,
 	writeFileSync,
@@ -116,6 +118,7 @@ const STAGED_UPLOADS_DIR = `${UPLOADS_DIR}/staged`;
 // Cap so a single upload can't OOM the process. The HTTP path streams, but the
 // inline base64/WS path buffers, so keep it modest.
 export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
+const MAX_CREATION_ATTACHMENTS = 32;
 const MAX_INLINE_IMAGES = 6;
 const INLINE_IMAGE_EXTENSIONS: Record<string, string> = {
 	"image/png": ".png",
@@ -145,6 +148,13 @@ export const WS_MAX_PAYLOAD_BYTES =
 type ParsedUpload =
 	| { kind: "staged"; name: string; path: string }
 	| { kind: "inline"; name: string; data: string };
+
+export type CreationAttachmentSource = {
+	attachmentId: string;
+	name: string;
+	sourceRef: string;
+	digest: string;
+};
 
 /** Normalize composer `files` entries into staged-path refs or inline base64. */
 export function parseFileUploads(raw?: unknown): ParsedUpload[] | undefined {
@@ -298,6 +308,128 @@ export async function stageHttpUpload(
 		);
 	writeFileSync(p, buf);
 	return { name: name || wanted, path: p };
+}
+
+function uploadDigest(bytes: Buffer): string {
+	return `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
+}
+
+function sourceRefForPath(path: string): string {
+	if (!isWithinUploads(path)) throw new Error("Attachment source is outside uploads");
+	const base = realpathSync(UPLOADS_DIR);
+	const real = realpathSync(path);
+	return `uploads:${encodeURIComponent(real.slice(base.length + 1))}`;
+}
+
+function pathForSourceRef(sourceRef: string): string {
+	if (!sourceRef.startsWith("uploads:"))
+		throw new Error("Unsupported creation attachment source");
+	const relative = decodeURIComponent(sourceRef.slice("uploads:".length));
+	if (!relative || relative.includes("\0") || relative.split("/").includes(".."))
+		throw new Error("Invalid creation attachment source");
+	const path = `${UPLOADS_DIR}/${relative}`;
+	if (!isWithinUploads(path)) throw new Error("Attachment source crossed uploads");
+	return path;
+}
+
+export function creationAttachmentPath(
+	sessionId: string,
+	attachmentId: string,
+	name: string,
+): string {
+	if (!/^[A-Za-z0-9_-]{8,128}$/.test(attachmentId))
+		throw new Error("Invalid creation attachment id");
+	return `${UPLOADS_DIR}/${sanitizeFilename(sessionId)}/${attachmentId}-${sanitizeFilename(name)}`;
+}
+
+/** Durably spool inline bodies and reduce all create inputs to bounded source refs. */
+export function prepareCreationAttachmentSources(
+	sessionId: string,
+	raw?: unknown,
+): CreationAttachmentSource[] {
+	if (raw === undefined) return [];
+	if (!Array.isArray(raw)) throw new Error("files must be an array");
+	const uploads = parseFileUploads(raw) ?? [];
+	if (uploads.length !== raw.length)
+		throw new Error("Creation contains an invalid file attachment");
+	if (uploads.length > MAX_CREATION_ATTACHMENTS)
+		throw new Error(
+			`too many creation attachments (max ${MAX_CREATION_ATTACHMENTS})`,
+		);
+	mkdirSync(STAGED_UPLOADS_DIR, { recursive: true });
+	let totalBytes = 0;
+	return uploads.map((upload, index) => {
+		let bytes: Buffer;
+		let sourcePath: string;
+		if (upload.kind === "staged") {
+			if (!isWithinUploads(upload.path) || !existsSync(upload.path))
+				throw new Error(`Creation attachment source is unavailable: ${upload.name}`);
+			bytes = readFileSync(upload.path);
+			sourcePath = upload.path;
+		} else {
+			bytes = Buffer.from(upload.data, "base64");
+			sourcePath = "";
+		}
+		if (!bytes.length || bytes.length > MAX_UPLOAD_BYTES)
+			throw new Error(`Creation attachment has invalid size: ${upload.name}`);
+		totalBytes += bytes.length;
+		if (totalBytes > MAX_UPLOAD_BYTES)
+			throw new Error(
+				`creation attachments too large (max ${MAX_UPLOAD_BYTES} bytes total)`,
+			);
+		const digest = uploadDigest(bytes);
+		const attachmentId = createHash("sha256")
+			.update(`${sessionId}\0${index}\0${upload.name}\0${digest}`)
+			.digest("hex")
+			.slice(0, 32);
+		if (!sourcePath) {
+			sourcePath = `${STAGED_UPLOADS_DIR}/creation-${attachmentId}`;
+			if (existsSync(sourcePath)) {
+				if (uploadDigest(readFileSync(sourcePath)) !== digest)
+					throw new Error(`Creation attachment source ${attachmentId} changed`);
+			} else {
+				writeFileSync(sourcePath, bytes, { mode: 0o600 });
+			}
+		}
+		return {
+			attachmentId,
+			name: upload.name || "file",
+			sourceRef: sourceRefForPath(sourcePath),
+			digest,
+		};
+	});
+}
+
+/** Copy or adopt one exact actor-owned destination after validating its source. */
+export function stageCreationAttachment(
+	sessionId: string,
+	source: CreationAttachmentSource,
+): { name: string; path: string } {
+	const path = creationAttachmentPath(
+		sessionId,
+		source.attachmentId,
+		source.name,
+	);
+	mkdirSync(path.slice(0, path.lastIndexOf("/")), { recursive: true });
+	if (existsSync(path)) {
+		if (uploadDigest(readFileSync(path)) !== source.digest)
+			throw new Error(`Creation attachment ${source.attachmentId} destination changed`);
+		return { name: source.name, path };
+	}
+	const sourcePath = pathForSourceRef(source.sourceRef);
+	const bytes = readFileSync(sourcePath);
+	if (!bytes.length || bytes.length > MAX_UPLOAD_BYTES)
+		throw new Error(`Creation attachment ${source.attachmentId} has invalid size`);
+	if (uploadDigest(bytes) !== source.digest)
+		throw new Error(`Creation attachment ${source.attachmentId} digest changed`);
+	const temp = `${path}.tmp-${process.pid}-${crypto.randomUUID()}`;
+	try {
+		writeFileSync(temp, bytes, { mode: 0o600 });
+		renameSync(temp, path);
+	} finally {
+		try { unlinkSync(temp); } catch {}
+	}
+	return { name: source.name, path };
 }
 
 /**

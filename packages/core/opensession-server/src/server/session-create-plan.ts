@@ -3,6 +3,7 @@ import { join } from "path";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import type { SessionKernelStoreApi } from "./session-kernel/store";
+import type { CreationAttachmentSource } from "./uploads";
 
 export interface DurableCreatePlan {
   version: 1;
@@ -11,7 +12,9 @@ export interface DurableCreatePlan {
   createdAt: string;
   branch?: string;
   workspaceId?: string;
-  /** Serializable ResolvedCreate decisions; attachments and functions stay external. */
+  /** Durable source identities only. Attachment bodies remain in the upload spool. */
+  attachments?: CreationAttachmentSource[];
+  /** Serializable ResolvedCreate decisions; attachment bodies and functions stay external. */
   resolved?: Record<string, unknown>;
 }
 
@@ -50,7 +53,10 @@ export function updateCreatePlan(
   sessionId: string,
   identity: string,
   patch: Partial<
-    Pick<DurableCreatePlan, "branch" | "workspaceId" | "resolved">
+    Pick<
+      DurableCreatePlan,
+      "branch" | "workspaceId" | "attachments" | "resolved"
+    >
   > = {},
 ): DurableCreatePlan {
   const prior = readCreatePlan(sessionId, identity);

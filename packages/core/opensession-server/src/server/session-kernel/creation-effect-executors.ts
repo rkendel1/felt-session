@@ -6,6 +6,7 @@ import type {
   SandboxSessionSpec,
 } from "../sandbox/provider";
 import { createWorkspace, getWorkspace, type Workspace } from "../workspaces";
+import type { CreationAttachmentSource } from "../uploads";
 import type { WorktreeInfo } from "../worktree";
 import { registerSessionEffectExecutor } from "./effect-executors";
 import { sessionKernel, sessionKernelStore } from "./kernel";
@@ -19,6 +20,7 @@ type WorkspaceEffect = SessionActorEffectFor<"creation_workspace_prepare">;
 type BranchEffect = SessionActorEffectFor<"creation_branch_prepare">;
 type CredentialEffect = SessionActorEffectFor<"creation_credential_resolve">;
 type SandboxEffect = SessionActorEffectFor<"creation_sandbox_prepare">;
+type AttachmentEffect = SessionActorEffectFor<"creation_attachment_stage">;
 type OpeningEffect = SessionActorEffectFor<"creation_opening_turn">;
 export type CreationWorkspaceEffectItem = Omit<
   DurableOutboxItem,
@@ -36,6 +38,10 @@ export type CreationSandboxEffectItem = Omit<
   DurableOutboxItem,
   "kind" | "payload"
 > & SandboxEffect;
+export type CreationAttachmentEffectItem = Omit<
+  DurableOutboxItem,
+  "kind" | "payload"
+> & AttachmentEffect;
 export type CreationOpeningEffectItem = Omit<
   DurableOutboxItem,
   "kind" | "payload"
@@ -398,6 +404,48 @@ export async function executeCreationCredentialResolve(
   );
 }
 
+type AttachmentExecutorDependencies = {
+  stage: (
+    sessionId: string,
+    source: CreationAttachmentSource,
+  ) =>
+    | { name: string; path: string }
+    | Promise<{ name: string; path: string }>;
+  result: (item: CreationAttachmentEffectItem) => CreationEventDecisionResult;
+  afterDestinationAccepted?: (path: string) => void;
+};
+
+const defaultAttachmentDependencies: AttachmentExecutorDependencies = {
+  stage: async (sessionId, source) =>
+    (await import("../uploads")).stageCreationAttachment(sessionId, source),
+  result: (item) =>
+    sessionKernel(item.sessionId).applyCreationEvent({
+      identity: item.payload.creationIdentity,
+      event: "preparation_started",
+      effectId: item.effectKey,
+      detail: { attachmentId: item.payload.attachmentId },
+    }),
+};
+
+/** Stage or adopt one digest-fenced session attachment, then settle its receipt. */
+export async function executeCreationAttachmentStage(
+  item: CreationAttachmentEffectItem,
+  dependencies: AttachmentExecutorDependencies = defaultAttachmentDependencies,
+): Promise<void> {
+  const staged = await dependencies.stage(item.sessionId, {
+    attachmentId: item.payload.attachmentId,
+    name: item.payload.name,
+    sourceRef: item.payload.sourceRef,
+    digest: item.payload.digest,
+  });
+  dependencies.afterDestinationAccepted?.(staged.path);
+  const result = dependencies.result(item);
+  if (result.accepted || result.reason === "stale_effect") return;
+  throw new CreationEffectIndeterminateError(
+    `Attachment effect ${item.effectId} result was rejected: ${result.reason || "unknown"}`,
+  );
+}
+
 type OpeningExecutorDependencies = {
   launch: (item: CreationOpeningEffectItem) => Promise<void>;
 };
@@ -463,6 +511,7 @@ const registrationGlobal = globalThis as typeof globalThis & {
   __opensessionCreationBranchExecutorRegistered?: boolean;
   __opensessionCreationCredentialExecutorRegistered?: boolean;
   __opensessionCreationSandboxExecutorRegistered?: boolean;
+  __opensessionCreationAttachmentExecutorRegistered?: boolean;
   __opensessionCreationOpeningExecutorRegistered?: boolean;
 };
 
@@ -494,6 +543,13 @@ export function ensureCreationEffectExecutors(): void {
       executeCreationCredentialResolve,
     );
     registrationGlobal.__opensessionCreationCredentialExecutorRegistered = true;
+  }
+  if (!registrationGlobal.__opensessionCreationAttachmentExecutorRegistered) {
+    registerSessionEffectExecutor(
+      "creation_attachment_stage",
+      executeCreationAttachmentStage,
+    );
+    registrationGlobal.__opensessionCreationAttachmentExecutorRegistered = true;
   }
   if (!registrationGlobal.__opensessionCreationOpeningExecutorRegistered) {
     registerSessionEffectExecutor(

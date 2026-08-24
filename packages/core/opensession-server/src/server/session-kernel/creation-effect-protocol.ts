@@ -61,6 +61,7 @@ export type CreationAttachmentStageEffect = {
   kind: "creation_attachment_stage";
   payload: CreationEffectBase & {
     attachmentId: string;
+    name: string;
     sourceRef: string;
     digest: string;
     mode: "reconcile_or_stage";

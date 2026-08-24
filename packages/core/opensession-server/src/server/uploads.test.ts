@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -9,8 +9,14 @@ import { join } from "node:path";
 const SCRATCH = mkdtempSync(join(tmpdir(), "uploads-"));
 const saved = process.env.OPENSESSION_STATE_DIR;
 process.env.OPENSESSION_STATE_DIR = SCRATCH;
-const { UPLOADS_DIR, countImageRefs, parseImageDataUrls, stageInlineImages } =
-	await import("./uploads");
+const {
+	UPLOADS_DIR,
+	countImageRefs,
+	parseImageDataUrls,
+	prepareCreationAttachmentSources,
+	stageCreationAttachment,
+	stageInlineImages,
+} = await import("./uploads");
 if (saved === undefined) delete process.env.OPENSESSION_STATE_DIR;
 else process.env.OPENSESSION_STATE_DIR = saved;
 
@@ -28,6 +34,48 @@ function stage(name: string, bytes: Buffer = PNG): string {
 	writeFileSync(path, bytes);
 	return `/media?path=${encodeURIComponent(path)}`;
 }
+
+describe("actor-owned creation attachments", () => {
+	test("spools inline input once and adopts one digest-fenced destination", () => {
+		const raw = [{
+			name: "brief.txt",
+			dataUrl: `data:text/plain;base64,${Buffer.from("hello").toString("base64")}`,
+		}];
+		const [source] = prepareCreationAttachmentSources("create-session", raw);
+		expect(source.name).toBe("brief.txt");
+		expect(source.sourceRef).toStartWith("uploads:");
+		expect(source.digest).toMatch(/^sha256:[0-9a-f]{64}$/);
+		expect(prepareCreationAttachmentSources("create-session", raw)).toEqual([
+			source,
+		]);
+		const staged = stageCreationAttachment("create-session", source);
+		expect(readFileSync(staged.path, "utf8")).toBe("hello");
+		unlinkSync(
+			`${UPLOADS_DIR}/${decodeURIComponent(source.sourceRef.slice("uploads:".length))}`,
+		);
+		expect(stageCreationAttachment("create-session", source)).toEqual(staged);
+	});
+
+	test("rejects malformed input instead of silently dropping an intent", () => {
+		expect(() =>
+			prepareCreationAttachmentSources("invalid-session", [
+				{ name: "missing-body.txt" },
+			]),
+		).toThrow("invalid file attachment");
+	});
+
+	test("rejects destination crossover instead of overwriting", () => {
+		const [source] = prepareCreationAttachmentSources("cross-session", [{
+			name: "brief.txt",
+			dataUrl: `data:text/plain;base64,${Buffer.from("first").toString("base64")}`,
+		}]);
+		const staged = stageCreationAttachment("cross-session", source);
+		writeFileSync(staged.path, "changed");
+		expect(() => stageCreationAttachment("cross-session", source)).toThrow(
+			"destination changed",
+		);
+	});
+});
 
 describe("composer image references", () => {
 	test("reads a staged ref back into vision bytes", () => {

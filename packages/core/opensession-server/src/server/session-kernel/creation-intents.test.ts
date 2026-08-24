@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  requestCreationAttachment,
   requestCreationBranch,
   requestCreationCredential,
   requestCreationOpening,
@@ -67,6 +68,56 @@ describe("creation lifecycle intents", () => {
           kernel,
         ).state,
       ).toBe("failed");
+    } finally {
+      store.close();
+    }
+  });
+});
+
+describe("creation attachment intents", () => {
+  test("emits one source-ref effect and waits for its durable receipt", async () => {
+    const attachment = {
+      sessionId: "create-attachment-intent",
+      identity: "request-attachment-intent",
+      attachmentId: "attachment-one",
+      name: "brief.pdf",
+      sourceRef: "uploads:staged%2Fbrief.pdf",
+      digest: "sha256:brief",
+    };
+    const { store, kernel } = harness(attachment.sessionId);
+    try {
+      const pending = requestCreationAttachment(attachment, {
+        kernel,
+        timeoutMs: 1_000,
+        pollMs: 5,
+      });
+      await Bun.sleep(5);
+      expect(store.pendingOutbox()).toMatchObject([{
+        kind: "creation_attachment_stage",
+        effectKey: "attachment:attachment-one",
+        payload: {
+          creationIdentity: attachment.identity,
+          creationGeneration: 1,
+          attachmentId: "attachment-one",
+          name: "brief.pdf",
+          sourceRef: "uploads:staged%2Fbrief.pdf",
+          digest: "sha256:brief",
+          mode: "reconcile_or_stage",
+        },
+      }]);
+      expect(store.applyCreationEvent({
+        sessionId: attachment.sessionId,
+        identity: attachment.identity,
+        event: "preparation_started",
+        effectId: "attachment:attachment-one",
+      }).accepted).toBe(true);
+      expect((await pending).completedEffectIds).toContain(
+        "attachment:attachment-one",
+      );
+      expect(
+        await requestCreationAttachment(attachment, { kernel }),
+      ).toMatchObject({ state: "preparing" });
+      expect(store.pendingOutbox()).toHaveLength(1);
     } finally {
       store.close();
     }

@@ -187,6 +187,7 @@ function creationPayload<K extends Exclude<
       return {
         ...base,
         attachmentId: requiredString(kind, value.attachmentId, "attachmentId"),
+        name: requiredString(kind, value.name, "name"),
         sourceRef: requiredString(kind, value.sourceRef, "sourceRef"),
         digest: requiredString(kind, value.digest, "digest"),
         mode: value.mode,

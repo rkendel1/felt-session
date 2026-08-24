@@ -46,6 +46,15 @@ export type CreationSandboxIntent = {
   egressAllowlist?: string[];
 };
 
+export type CreationAttachmentIntent = {
+  sessionId: string;
+  identity: string;
+  attachmentId: string;
+  name: string;
+  sourceRef: string;
+  digest: string;
+};
+
 export type CreationOpeningIntent = {
   sessionId: string;
   identity: string;
@@ -135,6 +144,60 @@ export function settleCreationFailed(
       `Creation failure was rejected: ${settled.reason || "unknown"}`,
     );
   return settled.state;
+}
+
+/** Stage one source-ref attachment through the actor and wait for its receipt. */
+export async function requestCreationAttachment(
+  input: CreationAttachmentIntent,
+  options: CreationIntentOptions = {},
+): Promise<DurableCreationState> {
+  const kernel = options.kernel ?? sessionKernel(input.sessionId);
+  let state = ensureCreationPlanned(input.sessionId, input.identity, kernel);
+  const effectId = `attachment:${input.attachmentId}`;
+  if (state.completedEffectIds.includes(effectId)) return state;
+  if (state.currentEffectId && state.currentEffectId !== effectId)
+    throw new Error(
+      `Creation effect ${state.currentEffectId} must settle before ${effectId}`,
+    );
+  if (!state.currentEffectId) {
+    const emitted = kernel.applyCreationEvent({
+      identity: input.identity,
+      event: "preparation_started",
+      nextEffectId: effectId,
+      effect: {
+        kind: "creation_attachment_stage",
+        effectKey: effectId,
+        payload: {
+          creationIdentity: input.identity,
+          creationGeneration: state.generation,
+          attachmentId: input.attachmentId,
+          name: input.name,
+          sourceRef: input.sourceRef,
+          digest: input.digest,
+          mode: "reconcile_or_stage",
+        },
+      },
+    });
+    if (!emitted.accepted || !emitted.state)
+      throw new Error(
+        `Creation attachment intent was rejected: ${emitted.reason || "unknown"}`,
+      );
+    state = emitted.state;
+  }
+  const deadline = Date.now() + (options.timeoutMs ?? 30_000);
+  while (!state.completedEffectIds.includes(effectId)) {
+    if (Date.now() >= deadline)
+      throw new Error(
+        `Creation attachment effect ${effectId} remains durably pending`,
+      );
+    await Bun.sleep(options.pollMs ?? 25);
+    const current = kernel.creationState();
+    if (!current)
+      throw new Error("Creation state disappeared while attachment was pending");
+    assertIdentity(current, input.identity);
+    state = current;
+  }
+  return state;
 }
 
 /** Emit one stable opening launch and wait for the executor's actor settlement. */

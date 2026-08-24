@@ -81,13 +81,14 @@ import { commitAuthorFor, userMatchesAny } from "./shared/user-mappings";
 import { sanitizeBranchSlug } from "./suggest-branch";
 import { type NativeSessionFile, type SessionUsage, type UnifiedSession, } from "./types";
 import { storeAppendUserLineEarly, transcriptLineUser } from "./transcript-persistence";
-import { parseImageDataUrls, stageFileAttachments, withUploadsNote, } from "./uploads";
+import { creationAttachmentPath, parseImageDataUrls, prepareCreationAttachmentSources, withUploadsNote, } from "./uploads";
 import { resolvePlainWorkspace } from "./workspace-resolve";
 import { resolveWorkspaceModelPreset } from "./workspace-model-presets";
 import { type Workspace, getWorkspace, updateWorkspace, } from "./workspaces";
 import {
 	type CreationOpeningEffectItem,
 	ensureCreationPlanned,
+	requestCreationAttachment,
 	requestCreationBranch,
 	requestCreationCredential,
 	requestCreationOpening,
@@ -1940,10 +1941,30 @@ export async function handleCreateSessionMessage(
 				!!msg.createWorkspace &&
 				!msg.createWorkspace.name) ||
 			(!mintedForSession && !!workspace?.draft && workspace.draft.autoName !== false);
-		// Non-image attachments: stage to disk, hand the agent the paths.
+		// Non-image attachment bodies are reduced to durable source refs at
+		// intake; only the actor can materialize their session-owned paths.
+		const attachmentSources =
+			createPlan.attachments ?? prepareCreationAttachmentSources(bksId, msg.files);
+		if (!createPlan.attachments && attachmentSources.length)
+			createPlan = updateCreatePlan(bksId, createIdentity, {
+				attachments: attachmentSources,
+			});
+		for (const attachment of attachmentSources)
+			await requestCreationAttachment({
+				sessionId: bksId,
+				identity: createIdentity,
+				...attachment,
+			});
 		let openingPrompt = withUploadsNote(
 			prompt,
-			stageFileAttachments(bksId, msg.files),
+			attachmentSources.map((attachment) => ({
+				name: attachment.name,
+				path: creationAttachmentPath(
+					bksId,
+					attachment.attachmentId,
+					attachment.name,
+				),
+			})),
 		);
 		if (deferredAutoRepo) {
 			openingPrompt += `\n\n${wrapContext(

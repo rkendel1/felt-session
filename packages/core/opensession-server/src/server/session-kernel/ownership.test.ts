@@ -137,13 +137,21 @@ describe("single session ownership", () => {
 			'"creation_credential_resolve",\n      executeCreationCredentialResolve',
 		);
 		expect(creationExecutors).toContain(
+			'"creation_attachment_stage",\n      executeCreationAttachmentStage',
+		);
+		expect(creationExecutors).toContain(
 			'"creation_opening_turn",\n      executeCreationOpeningTurn',
 		);
 		expect(creationExecutors).toContain(
 			"payload.sandboxKey !== item.sessionId",
 		);
 		expect(creationExecutors).toContain("resolveCurrentCredential");
+		expect(creationExecutors).toContain("stageCreationAttachment");
 		expect(creationExecutors).not.toContain("payload.gitEnv");
+		expect(read("session-create.ts")).not.toContain("stageFileAttachments(");
+		expect(read("session-control-wiring.ts")).not.toContain(
+			"stageFileAttachments(",
+		);
 		expect(creationExecutors).toContain("assertAdoptableWorkspace(workspace, item)");
 		expect(creationExecutors.indexOf("dependencies.result(item)")).toBeGreaterThan(
 			creationExecutors.indexOf("dependencies.createWorkspace({"),

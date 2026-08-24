@@ -25,7 +25,7 @@ import { SESSION_EFFORTS, type SessionEffort, providerFor, resolveModel } from "
 import { configuredInteractiveDefaultModel } from "./model-catalog";
 import { deliveryQueueState, durableQueueItem, liftUserStop, promptQueues, acceptQueuedSteer, prepareQueuedSteer, rejectQueuedSteer, requeueSteerReceipts, stoppedSessions } from "./queue-state";
 import { drainQueue, enqueuePrompt, runSessionPrompt, sessionMentionsNote, watchExternalRunAndDrain } from "./run-session";
-import { parseImageDataUrls, stageFileAttachments, withUploadsNote } from "./uploads";
+import { creationAttachmentPath, parseImageDataUrls, prepareCreationAttachmentSources, withUploadsNote } from "./uploads";
 import { type Sandbox } from "./sandbox";
 import { isRemoteSandboxProvider, resolveRequestedSandbox } from "./sandbox/config";
 import { resolveInteractiveSandbox } from "./sandbox/defaults";
@@ -52,6 +52,7 @@ import { randomUUIDv7 } from "bun";
 import {
 	ensureCreationPlanned,
 	legacyGatewayEffect,
+	requestCreationAttachment,
 	requestCreationBranch,
 	requestCreationCredential,
 	requestCreationWorkspace,
@@ -817,9 +818,28 @@ registerSessionControl({
 		// prompts on existing sessions — this create path bypasses
 		// runSessionPromptInner.
 		const createMentionsNote = sessionMentionsNote(prompt);
+		const attachmentSources =
+			createPlan.attachments ?? prepareCreationAttachmentSources(bksId, rawFiles);
+		if (!createPlan.attachments && attachmentSources.length)
+			createPlan = updateCreatePlan(bksId, createIdentity, {
+				attachments: attachmentSources,
+			});
+		for (const attachment of attachmentSources)
+			await requestCreationAttachment({
+				sessionId: bksId,
+				identity: createIdentity,
+				...attachment,
+			});
 		let openingPrompt = withUploadsNote(
 			prompt,
-			stageFileAttachments(bksId, rawFiles),
+			attachmentSources.map((attachment) => ({
+				name: attachment.name,
+				path: creationAttachmentPath(
+					bksId,
+					attachment.attachmentId,
+					attachment.name,
+				),
+			})),
 		);
 		if (createMentionsNote) openingPrompt += `
 

@@ -176,10 +176,13 @@ If a backend naturally ends without a terminal event, its wrapper replaces the
 live journal with a durable abnormal-completion receipt instead of clearing it;
 boot recovery or the opening executor settles that receipt without relaunching.
 A crash after actor settlement adopts the completed receipt without launching
-another turn. Direct `opening_dispatched` transitions without a typed effect are rejected. Attachment
-staging and removal of the remaining create-plan compatibility authority are the
-next creation cutovers; the presence or absence of a plan file is not actor
-lifecycle evidence.
+another turn. Direct `opening_dispatched` transitions without a typed effect are rejected.
+Non-image create attachments are durably spooled to bounded source references,
+then copied or adopted at deterministic session-owned paths by
+`creation_attachment_stage`; digest crossover fails closed and inline bodies
+never enter actor payloads. Removing the remaining create-plan compatibility
+authority is the next creation cutover; the presence or absence of a plan file
+is not actor lifecycle evidence.
 
 ## Run ownership
 

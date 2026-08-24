@@ -118,6 +118,7 @@ describe("session effect executor registry", () => {
     expect(await registry.execute(outbox({
       ...fence,
       attachmentId: "attachment-one",
+      name: "brief.pdf",
       sourceRef: "staged:attachment-one",
       digest: "sha256:digest",
       mode: "reconcile_or_stage",
@@ -126,6 +127,7 @@ describe("session effect executor registry", () => {
     expect(attachment).toEqual({
       ...fence,
       attachmentId: "attachment-one",
+      name: "brief.pdf",
       sourceRef: "staged:attachment-one",
       digest: "sha256:digest",
       mode: "reconcile_or_stage",
