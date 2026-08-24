@@ -1,12 +1,12 @@
 /**
- * Pure queue-batch selection for run-session's drain loop, split out so the
- * "queued messages deliver only when the agent FULLY completes" promise is
- * unit-testable. The drain calls this once per pass with the live queue and
- * the session's continuation state; it never mutates the input.
+ * Pure queue-batch selection for the actor's atomic delivery claim. The
+ * "queued messages deliver only when the agent FULLY completes" promise stays
+ * unit-testable while the gateway supplies only live policy facts. The reducer
+ * never mutates its input.
  */
-import { AUTO_CONTINUE_USER } from "./auto-continue";
-import type { QueueItem } from "./queue-state";
-import { delegatedActorParent } from "./session-actors";
+import { AUTO_CONTINUE_USER } from "../auto-continue";
+import type { QueueItem } from "../queue-state";
+import { delegatedActorParent } from "../session-actors";
 
 export type QueueBatchPlan =
 	| { kind: "deliver"; batch: QueueItem[]; rest: QueueItem[] }

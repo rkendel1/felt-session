@@ -1071,6 +1071,56 @@ describe("SessionKernel", () => {
 		expect(store.deliverySnapshot("delivery").dispatch).toBeUndefined();
 	});
 
+	test("selects and claims the next queue batch in one actor transaction", () => {
+		store.setDeliverySlot("next-delivery", "queued", [
+			{ id: "held", content: "wait", hold: true },
+			{
+				id: "solo",
+				promptEntryId: "stable-solo-entry",
+				content: "send now",
+				hold: true,
+			},
+		]);
+		expect(store.claimNextDeliveryDispatch({
+			sessionId: "next-delivery",
+			promptEntryId: "unused-entry",
+			stillWorking: true,
+		})).toMatchObject({ kind: "hold", heldCount: 2 });
+		expect(store.deliverySnapshot("next-delivery").queued).toHaveLength(2);
+		expect(store.claimNextDeliveryDispatch({
+			sessionId: "next-delivery",
+			promptEntryId: "solo-entry",
+			soloId: "solo",
+			interruptMark: true,
+			stillWorking: true,
+		})).toMatchObject({
+			kind: "deliver",
+			promptEntryId: "stable-solo-entry",
+			items: [
+				{
+					id: "solo",
+					promptEntryId: "stable-solo-entry",
+					content: "send now",
+					hold: true,
+				},
+			],
+		});
+		expect(store.deliverySnapshot("next-delivery")).toMatchObject({
+			queued: [{ id: "held", content: "wait", hold: true }],
+			dispatch: {
+				promptEntryId: "stable-solo-entry",
+				items: [
+					{
+						id: "solo",
+						promptEntryId: "stable-solo-entry",
+						content: "send now",
+						hold: true,
+					},
+				],
+			},
+		});
+	});
+
 	test("recovers an ambiguous prepared steer without duplicate queue delivery", () => {
 		store.setDeliverySlot("steer-recovery", "queued", [
 			{ id: "steer-one", content: "fold me in" },

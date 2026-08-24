@@ -123,6 +123,7 @@ import { broadcastToSession, sessionWatchers } from "./ws-hub";
 import { getWorkspace } from "./workspaces";
 import {
 	broadcastQueue,
+	beginNextPromptDispatch,
 	beginPromptDispatch,
 	durableQueueItem,
 	acknowledgePromptDispatch,
@@ -231,7 +232,6 @@ import {
 	WEDGE_RETRY_PROMPT,
 } from "./auto-continue";
 import { SYSTEM_RESTART_USER } from "./session-actors";
-import { selectQueueBatch } from "./queue-hold";
 
 const g = globalThis as any;
 
@@ -240,7 +240,7 @@ const g = globalThis as any;
 // in a row parks for the human instead of looping. Cleared when a human prompt
 // arrives or a turn does real (tool-calling) work — which also means that while
 // the agent keeps genuinely working through announced steps, queued messages
-// stay held behind fresh auto-continues (the queue-hold in the run-end handler)
+// stay held behind fresh auto-continues (the actor queue hold at run end)
 // until a turn ends without announcing more work.
 const autoContinueNudged: Set<string> = (g.__autoContinueNudged ??= new Set());
 
@@ -310,7 +310,7 @@ export function runningChildCount(sessionId: string): number {
 
 /** Append a message to a session's drainable queue and persist + broadcast.
  *  `front` puts it ahead of everything already queued — used by the run-end
- *  queue-hold so its auto-continue delivers before the user's queued messages. */
+ *  actor queue hold so its auto-continue delivers before queued user messages. */
 export function enqueuePrompt(
 	sessionId: string,
 	item: QueueItem,
@@ -1023,7 +1023,7 @@ async function drainQueueInner(sessionId: string): Promise<void> {
 			watchExternalRunAndDrain(sessionId);
 			return;
 		}
-		// Batch selection lives in queue-hold.ts (pure, unit-tested): a solo
+		// Batch selection lives in the actor's pure queue reducer: a solo
 		// interrupt (queue chip ▲) delivers one item, a head auto-continue
 		// delivers alone, and while child worker runs are still going, human
 		// composer sends (item.hold) stay parked until the agent FULLY
@@ -1034,38 +1034,28 @@ async function drainQueueInner(sessionId: string): Promise<void> {
 		// both whether this batch skips the hold and whether it gets the steer
 		// note below, so an expired one can never do one without the other.
 		const interrupt = consumeInterruptMark(sessionId);
-		const plan = selectQueueBatch(queue, {
+		// Selection and claim are one actor reduction. Queue contents cannot
+		// change between the gateway choosing a batch and durable dispatch ownership.
+		const claim = beginNextPromptDispatch(sessionId, {
 			soloId: interrupt?.soloId,
 			interruptMark: interrupt !== undefined,
 			stillWorking: runningChildCount(sessionId) > 0,
 		});
-		if (plan.kind === "hold") {
+		if (claim.kind === "empty") continue;
+		if (claim.kind === "hold") {
 			if (!queueHoldNotified.has(sessionId)) {
 				queueHoldNotified.add(sessionId);
 				broadcastToSession(sessionId, {
 					type: "notice",
 					sessionId,
-					message: `Holding ${plan.heldCount} queued message${plan.heldCount === 1 ? "" : "s"} until the agent fully completes (worker sessions still running). Steer sends one in sooner.`,
+					message: `Holding ${claim.heldCount} queued message${claim.heldCount === 1 ? "" : "s"} until the agent fully completes (worker sessions still running). Steer sends one in sooner.`,
 				});
 			}
 			watchExternalRunAndDrain(sessionId);
 			return;
 		}
 		queueHoldNotified.delete(sessionId);
-		const batch = plan.batch;
-		// Claiming removes this exact batch and installs its dispatch in one actor
-		// transaction. A crash cannot leave the items in neither location.
-		// Persist the delivery intent before starting work. If the process dies
-		// after this point but before the runner journals its run, boot restores
-		// this batch to the front of the queue.
-		const promptEntryId = beginPromptDispatch(
-			sessionId,
-			batch,
-			undefined,
-			true,
-			undefined,
-			true,
-		);
+		const { batch, promptEntryId } = claim;
 		broadcastQueue(sessionId);
 		let combined = batch
 			.map((m) =>

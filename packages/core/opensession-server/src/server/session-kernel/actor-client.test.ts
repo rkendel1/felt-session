@@ -513,6 +513,38 @@ describe("session kernel actor boundary", () => {
     expect(snapshotCalls).toBe(1);
   });
 
+  test("selects and claims a queue batch through the actor protocol", async () => {
+    const host = await actor();
+    host.decideDelivery({
+      op: "set",
+      sessionId: "actor-next-dispatch",
+      slot: "queued",
+      value: [
+        { id: "held", content: "later", hold: true },
+        { id: "solo", promptEntryId: "stable-entry", content: "now", hold: true },
+      ],
+    });
+    expect(host.decideDelivery({
+      op: "claim_next_dispatch",
+      sessionId: "actor-next-dispatch",
+      promptEntryId: "candidate-entry",
+      soloId: "solo",
+      interruptMark: true,
+      stillWorking: true,
+    })).toMatchObject({
+      kind: "deliver",
+      promptEntryId: "stable-entry",
+      items: [{ id: "solo", promptEntryId: "stable-entry" }],
+    });
+    expect(host.decideDelivery({
+      op: "snapshot",
+      sessionId: "actor-next-dispatch",
+    })).toMatchObject({
+      queued: [{ id: "held" }],
+      dispatch: { promptEntryId: "stable-entry" },
+    });
+  });
+
   test("keeps actor reducers responsive while gateway effects stay ordered", async () => {
     const host = await actor();
     installSessionKernelActor(host);

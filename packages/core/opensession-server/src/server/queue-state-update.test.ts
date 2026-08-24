@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, test } from "bun:test";
 import { classifyEntry } from "@tellahq/opensession-protocol/notices";
 import {
 	acknowledgePromptDispatch,
+	beginNextPromptDispatch,
 	beginPromptDispatch,
 	clientVisibleQueuedCount,
 	isDelegatedQueueItem,
@@ -30,6 +31,27 @@ describe("takeQueuedPrompt", () => {
 				files: [{ name: "brief.pdf", path: "/tmp/brief.pdf" }],
 			},
 			{ id: "q2", content: "second", user: "Michiel" },
+		]);
+	});
+
+	test("selects and claims through the compatibility actor store", () => {
+		const claim = beginNextPromptDispatch(
+			SESSION,
+			{ soloId: "q2", interruptMark: true, stillWorking: true },
+			false,
+		);
+		expect(claim).toMatchObject({
+			kind: "deliver",
+			batch: [{ id: "q2", content: "second", user: "Michiel" }],
+		});
+		expect(promptQueues.get(SESSION)).toEqual([
+			{
+				id: "q1",
+				content: "first",
+				user: "Kent",
+				images: [PNG],
+				files: [{ name: "brief.pdf", path: "/tmp/brief.pdf" }],
+			},
 		]);
 	});
 

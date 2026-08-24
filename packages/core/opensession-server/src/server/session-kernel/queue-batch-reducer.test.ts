@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { AUTO_CONTINUE_USER } from "./auto-continue";
-import { selectQueueBatch } from "./queue-hold";
-import type { QueueItem } from "./queue-state";
-import { agentActor, workerActor } from "./session-actors";
+import { AUTO_CONTINUE_USER } from "../auto-continue";
+import { selectQueueBatch } from "./queue-batch-reducer";
+import type { QueueItem } from "../queue-state";
+import { agentActor, workerActor } from "../session-actors";
 
 const SOURCE = "os-019fe194-5fbe-7000-a81e-d0a656ad77f4";
 const human = (id: string): QueueItem => ({ id, content: id, user: "Jaap", hold: true });

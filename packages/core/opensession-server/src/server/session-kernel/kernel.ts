@@ -138,6 +138,8 @@ export function sessionDelivery<T extends DeliveryActorRequest>(
     result = store.settlePendingSteers();
   else if (request.op === "requeue_steers")
     result = store.requeueSteerDeliveries(request.sessionId, request.items);
+  else if (request.op === "claim_next_dispatch")
+    result = store.claimNextDeliveryDispatch(request);
   else if (request.op === "claim_dispatch")
     result = store.claimDeliveryDispatch(request);
   else if (request.op === "ack_dispatch")

@@ -17,6 +17,14 @@ export type DeliveryActorRequest =
   | { op: "settle_pending_steers" }
   | { op: "requeue_steers"; sessionId: string; items: unknown[] }
   | {
+      op: "claim_next_dispatch";
+      sessionId: string;
+      promptEntryId: string;
+      soloId?: string;
+      interruptMark?: boolean;
+      stillWorking?: boolean;
+    }
+  | {
       op: "claim_dispatch";
       sessionId: string;
       items: DeliveryItem[];
@@ -45,6 +53,16 @@ export type DeliveryActorResult<T extends DeliveryActorRequest> =
       ? Array<[string, unknown]>
       : T extends { op: "claim_dispatch" }
         ? { promptEntryId: string; items: unknown[]; revision: number }
+        : T extends { op: "claim_next_dispatch" }
+          ?
+              | { kind: "empty"; revision: number }
+              | { kind: "hold"; heldCount: number; revision: number }
+              | {
+                  kind: "deliver";
+                  promptEntryId: string;
+                  items: unknown[];
+                  revision: number;
+                }
         : T extends { op: "prepare_steer" }
           ? unknown | undefined
           : T extends {

@@ -158,6 +158,15 @@ describe("single session ownership", () => {
 		);
 	});
 
+	test("queue selection and dispatch claim execute atomically inside the actor", () => {
+		const run = read("run-session.ts");
+		const actor = read("session-kernel/actor-worker.ts");
+		expect(run).toContain("beginNextPromptDispatch(sessionId");
+		expect(run).not.toContain("selectQueueBatch(queue");
+		expect(actor).toContain('delivery.op === "claim_next_dispatch"');
+		expect(actor).toContain("store.claimNextDeliveryDispatch(delivery)");
+	});
+
 	test("run-state decisions execute atomically inside the actor", () => {
 		const facade = read("run-state.ts");
 		const actor = read("session-kernel/actor-worker.ts");
