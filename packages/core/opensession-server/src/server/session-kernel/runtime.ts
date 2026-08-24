@@ -6,7 +6,7 @@ import {
 	sessionKernelStore,
 	maintainSessionKernel,
 } from "./kernel";
-import type { DurableTimer } from "./store";
+import type { DurableOutboxItem, DurableTimer } from "./store";
 import {
 	executeSessionEffect,
 	registeredSessionEffectKinds,
@@ -20,6 +20,32 @@ import {
 import { audit } from "../audit";
 
 type TimerHandler = (timer: DurableTimer) => void | Promise<void>;
+
+function failDeadCreationEffect(
+	item: DurableOutboxItem,
+	error: string,
+): void {
+	if (!item.kind.startsWith("creation_")) return;
+	const payload = item.payload as
+		| { creationIdentity?: unknown; creationGeneration?: unknown }
+		| undefined;
+	if (
+		typeof payload?.creationIdentity !== "string" ||
+		payload.creationIdentity.length === 0 ||
+		!Number.isSafeInteger(payload.creationGeneration)
+	)
+		return;
+	const result = sessionKernel(item.sessionId).applyCreationEvent({
+		identity: payload.creationIdentity,
+		event: "failed",
+		effectId: item.effectKey,
+		detail: { effectKind: item.kind, error },
+	});
+	if (!result.accepted && result.reason !== "stale_effect")
+		throw new Error(
+			`Creation effect ${item.effectId} failure was rejected: ${result.reason || "unknown"}`,
+		);
+}
 type RuntimeState = {
 	timerHandlers: Map<string, TimerHandler>;
 	handle?: ReturnType<typeof setInterval>;
@@ -128,8 +154,10 @@ export async function drainSessionKernelRuntime(): Promise<void> {
 						message,
 						error instanceof CreationEffectIndeterminateError ? 1 : 20,
 					);
-					if (settled.deadLetteredNow)
+					if (settled.deadLetteredNow) {
+						failDeadCreationEffect(item, message);
 						audit({ msg: "session_kernel_dead_lettered", kind: "outbox", session_id: item.sessionId, outbox_id: item.id, error: message });
+					}
 					console.error(
 						`[session-kernel] outbox ${item.kind}/${item.id} failed:`,error,
 					);

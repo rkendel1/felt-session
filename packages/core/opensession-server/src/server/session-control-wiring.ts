@@ -1018,7 +1018,7 @@ ${createMentionsNote}`;
 					},
 					emit: (m) => broadcastToSession(bksId, { ...m, sessionId: bksId }),
 					fail: (message) => reject(new Error(message)),
-				});
+				}, createIdentity);
 				if (!opening.owner) {
 					const existing = findSession(bksId);
 					resolve({

@@ -83,6 +83,7 @@ import {
 	ensureCreationPlanned,
 	requestCreationBranch,
 	requestCreationCredential,
+	requestCreationSandbox,
 	requestCreationWorkspace,
 } from "./session-kernel";
 import { AUTO_REPO, ensureAskCheckout, ensureScratchDir, getRepo, isRegisteredWorktree, listWorktrees, NO_REPO, repoForPath, repoForPathOrNull, resolveUniqueBranch, sharedCheckoutForNewSessions, worktreeHeadBranch, worktreePathFor, } from "./worktree";
@@ -374,19 +375,27 @@ async function attachCreateRepos(
 	return attached;
 }
 
-const activeOpeningCreates = new Map<string, Promise<void>>();
+const activeOpeningCreates = new Map<
+	string,
+	{ identity: string; done: Promise<void> }
+>();
 
 export function runOpeningCreateOnce(
 	spec: ResolvedCreate,
 	io: CreateSessionIO,
+	creationIdentity: string,
 ): { owner: boolean; done: Promise<void> } {
 	const existing = activeOpeningCreates.get(spec.id);
-	if (existing) return { owner: false, done: existing };
-	const done = openCreatedSession(spec, io).finally(() => {
-		if (activeOpeningCreates.get(spec.id) === done)
+	if (existing) {
+		if (existing.identity !== creationIdentity)
+			throw new Error("Create request identity crossed active opening ownership");
+		return { owner: false, done: existing.done };
+	}
+	const done = openCreatedSession(spec, io, creationIdentity).finally(() => {
+		if (activeOpeningCreates.get(spec.id)?.done === done)
 			activeOpeningCreates.delete(spec.id);
 	});
-	activeOpeningCreates.set(spec.id, done);
+	activeOpeningCreates.set(spec.id, { identity: creationIdentity, done });
 	return { owner: true, done };
 }
 
@@ -472,7 +481,7 @@ export async function resumePlannedCreate(sessionId: string): Promise<boolean> {
 				sessionId,
 				message,
 			}),
-	});
+	}, plan.identity);
 	if (opening.owner) {
 		await opening.done;
 		clearCreatePlan(sessionId);
@@ -483,6 +492,7 @@ export async function resumePlannedCreate(sessionId: string): Promise<boolean> {
 export async function openCreatedSession(
 	spec: ResolvedCreate,
 	io: CreateSessionIO,
+	creationIdentity: string,
 ): Promise<void> {
 	const bksId = spec.id;
 	// Replace the raw first-line title with a short summary in the background;
@@ -749,7 +759,22 @@ export async function openCreatedSession(
 			let sandboxOpeningRun: AsyncGenerator<StreamEvent> | null = null;
 			let runnerOpeningRun: AsyncGenerator<StreamEvent> | null = null;
 			if (spec.sandboxProvider) {
+				// Creation owns the first physical sandbox preparation. The opening
+				// launcher still calls provider.ensure as an idempotent adoption step
+				// until launch itself becomes a later actor-issued effect.
 				const created = findSession(bksId);
+				await requestCreationSandbox({
+					sessionId: bksId,
+					identity: creationIdentity,
+					provider: spec.sandboxProvider,
+					repo: spec.repoId,
+					branch: spec.branch || undefined,
+					sessionMode: spec.mode,
+					cwd: spec.wtPath,
+					attachedDirs: created?.attachedRepos
+						?.map((repo) => repo.dir)
+						.filter(Boolean),
+				}, { timeoutMs: 15 * 60_000 });
 				sandboxOpeningRun = created
 					? await maybeLaunchSandboxedRun(created, {
 							prompt: openingPromptForRun,
@@ -1946,7 +1971,7 @@ export async function handleCreateSessionMessage(
 			failCreate(message);
 			releaseAdmission();
 		},
-	});
+	}, createIdentity);
 	if (!opening.owner) {
 		createResponse = {
 			type: "session_created",

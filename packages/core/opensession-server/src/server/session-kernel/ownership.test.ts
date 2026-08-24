@@ -280,6 +280,10 @@ describe("single session ownership", () => {
 		expect(create).toContain("actorWorktreeMaterializer({");
 		expect(create).toContain("await requestCreationCredential({");
 		expect(create).toContain("await requestCreationBranch({");
+		expect(create).toContain("await requestCreationSandbox({");
+		expect(create.indexOf("await requestCreationSandbox({")).toBeLessThan(
+			create.indexOf("await maybeLaunchSandboxedRun("),
+		);
 		expect(create).toContain(
 			"baseBranch: input.baseBranch || getRepo(input.project).defaultBranch",
 		);
@@ -291,7 +295,7 @@ describe("single session ownership", () => {
 		expect(wiring).toContain('legacyGatewayEffect("answer_question"');
 		const tools = read("../agents/slack/sessions-tools.ts");
 		expect(tools).toContain("durableToolRequestId");
-		expect(tools).toContain('durableToolRequestId(ctx, "create_session", extra)');
+		expect(tools).toContain('durableToolRequestId(ctx, "create_session", extra');
 		const native = readFileSync(
 			resolve(serverDir, "../../../../clients/ios/OS1/Networking/SessionCreateIntent.swift"),
 			"utf8",
