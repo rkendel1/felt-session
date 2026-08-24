@@ -32,7 +32,7 @@ import { startPlainArchiveSweep } from "./src/server/plain-archive";
 import { devInstanceBootError, isDevInstance } from "./src/server/dev-mode";
 import { startPrReviewNotificationTicker } from "./src/server/pr-review-notifications";
 import { startPublicIngress } from "./src/server/public-ingress";
-import { readActiveShutdownSnapshot, recoverableLocalHostSnapshotRecords, recordRecoveredRunEvent, restorePromptQueues, resumeDrainedSessions, snapshotActiveSessions, startLoopTicker } from "./src/server/run-session";
+import { creationOwnsPrompt, readActiveShutdownSnapshot, recoverableLocalHostSnapshotRecords, recordRecoveredRunEvent, restorePromptQueues, resumeDrainedSessions, settleRecoveredCreationOpening, snapshotActiveSessions, startLoopTicker } from "./src/server/run-session";
 import { startMcpHttpServer, startRunRpcServer } from "./src/server/run-rpc";
 import { handleSandboxWsUpgrade, startTimerPoisonHeartbeat, timerPoisonRequestCheck } from "./src/server/run-ws";
 import {
@@ -770,11 +770,22 @@ if (!g.__opensessionBooted) {
 		try {
 		const shutdownRecords = readActiveShutdownSnapshot();
 		const resumedIds = resumeInterruptedRuns(
-			(bksSessionId, terminalEvent) => {
+			(bksSessionId, terminalEvent, recoveredRun) => {
 				if (bksSessionId && terminalEvent) {
 					const failed =
 						terminalEvent.type === "error" ||
 						!!terminalEvent.usageLimitExhausted;
+					if (recoveredRun?.promptEntryId) {
+						settleRecoveredCreationOpening(
+							bksSessionId,
+							recoveredRun.promptEntryId,
+							failed
+								? terminalEvent.content ||
+									terminalEvent.result ||
+									"Recovered opening run failed"
+								: undefined,
+						);
+					}
 					recordRunOutcome(
 						bksSessionId,
 						failed
@@ -853,6 +864,11 @@ if (!g.__opensessionBooted) {
 			},
 			recordRecoveredRunEvent,
 			recoverableLocalHostSnapshotRecords(shutdownRecords),
+			(run) =>
+				!!run.osSessionId &&
+				!!run.promptEntryId &&
+				!!(run.runnerId || run.sandboxId) &&
+				creationOwnsPrompt(run.osSessionId, run.promptEntryId),
 		);
 		if (resumedIds.length > 0) {
 			console.log(

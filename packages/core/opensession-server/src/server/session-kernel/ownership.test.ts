@@ -111,6 +111,9 @@ describe("single session ownership", () => {
 		);
 		expect(creationReduction).toContain("this.enqueueOutbox(");
 		expect(creationReduction).toContain("completedEffectIds.push(input.effectId!)");
+		expect(creationReduction).toContain(
+			'input.event === "opening_dispatched" && !effect',
+		);
 		expect(store).toContain("SESSION_KERNEL_MAX_CREATION_EFFECT_RECEIPTS");
 		expect(creationReduction.indexOf("this.enqueueOutbox(")).toBeLessThan(
 			creationReduction.indexOf("tx.immediate()"),
@@ -132,6 +135,9 @@ describe("single session ownership", () => {
 		);
 		expect(creationExecutors).toContain(
 			'"creation_credential_resolve",\n      executeCreationCredentialResolve',
+		);
+		expect(creationExecutors).toContain(
+			'"creation_opening_turn",\n      executeCreationOpeningTurn',
 		);
 		expect(creationExecutors).toContain(
 			"payload.sandboxKey !== item.sessionId",
@@ -281,18 +287,18 @@ describe("single session ownership", () => {
 		expect(create).toContain("await requestCreationCredential({");
 		expect(create).toContain("await requestCreationBranch({");
 		expect(create).toContain("await requestCreationSandbox({");
+		expect(create).toContain("requestCreationOpening({");
+		expect(create).toContain("executeCreationOpeningEffect(");
 		expect(create.indexOf("await requestCreationSandbox({")).toBeLessThan(
 			create.indexOf("await maybeLaunchSandboxedRun("),
 		);
-		expect(create.match(/markCreationOpeningDispatched\(/g)?.length).toBe(3);
+		expect(create).not.toContain("markCreationOpeningDispatched");
 		expect(create).toMatch(
-			/requestCreationSandbox\([\s\S]*?markCreationOpeningDispatched\([\s\S]*?maybeLaunchSandboxedRun\(/,
+			/executeCreationOpeningEffect\([\s\S]*?openCreatedSession\(/,
 		);
-		expect(create).toMatch(
-			/prepareRunnerWorkspace\([\s\S]*?markCreationOpeningDispatched\([\s\S]*?maybeLaunchRunnerRun\(/,
-		);
-		expect(create).toContain("settleCreationSucceeded(bksId, creationIdentity)");
-		expect(create).toContain("settleCreationFailed(bksId, creationIdentity, e)");
+		expect(create).toContain("settleCreationSucceeded(");
+		expect(create).toContain("settleCreationFailed(");
+		expect(create).toContain("creationEffectId,");
 		expect(create).toContain(
 			"baseBranch: input.baseBranch || getRepo(input.project).defaultBranch",
 		);
@@ -358,7 +364,44 @@ describe("single session ownership", () => {
 	test("create and sandbox recovery establish one execution owner", () => {
 		const queue = read("queue-state.ts");
 		expect(queue).toContain('kind?: "create"');
-		expect(read("run-session.ts")).toContain("resumePlannedCreate(sessionId)");
+		expect(queue).toContain("options.creationOwnsPrompt?.(");
+		const runSession = read("run-session.ts");
+		expect(runSession).toContain("resumePlannedCreate(sessionId)");
+		expect(runSession).toContain("creationOwnsPrompt(record.osSessionId");
+		const boot = read("../../opensession.ts");
+		expect(boot).toContain(
+			"creationOwnsPrompt(run.osSessionId, run.promptEntryId)",
+		);
+		expect(boot).toContain("!!(run.runnerId || run.sandboxId)");
+		expect(boot).toContain("settleRecoveredCreationOpening(");
+		const create = read("session-create.ts");
+		expect(create).toContain("const openingJournal = activeRunRecords().find(");
+		expect(create).toContain("Recovered local opening lost durable ownership");
+		const runner = read("runner-session.ts");
+		expect(runner).toContain("promptEntryId: opts.promptEntryId");
+		expect(runner).toContain("const hostId = opts.hostId ||");
+		expect(runner).toContain('run.launchPhase === "prepared"');
+		expect(runner).toContain('launchPhase: "launching"');
+		const durableLaunching = runner.indexOf(
+			'writeJsonAtomic(launchStatePath, launchState)',
+			runner.indexOf('phase: "launching"'),
+		);
+		const physicalLaunch = runner.indexOf(
+			"await launcher.launch(hostId, hostDir)",
+			durableLaunching,
+		);
+		expect(durableLaunching).toBeGreaterThan(0);
+		expect(physicalLaunch).toBeGreaterThan(durableLaunching);
+		expect(runner).toContain('launchPhase: "started"');
+		expect(runner).toContain('phase: "rejected"');
+		expect(runner).toContain('reason: "ambiguous_runner_launch"');
+		expect(runner).toContain("setRunnerWorkload(runner.id, undefined, session.id)");
+		expect(runner).toContain("has no adoptable remote evidence");
+		expect(read("runner-ws.ts")).toContain("RunnerHostLaunchRejectedError");
+		expect(runner).toContain("candidate.hostId === run.hostId");
+		const runtime = read("session-kernel/runtime.ts");
+		expect(runtime).toContain('item.kind === "creation_opening_turn"');
+		expect(runtime).toContain("activeOpeningOutbox");
 		for (const relative of [
 			"sandbox/docker.ts",
 			"sandbox/adapters/bootstrap.ts",
@@ -396,13 +439,41 @@ describe("single session ownership", () => {
 		}
 	});
 
-	test("opening runs settle session-file writes before continuing", () => {
+	test("opening runs settle actor receipts before owner retirement and follow-ups", () => {
 		const create = read("session-create.ts");
 		const writes = create
 			.split("\n")
 			.filter((line) => line.includes("touchNativeSession("));
 		expect(writes.length).toBeGreaterThan(0);
 		for (const line of writes) expect(line).toContain("await touchNativeSession(");
+		const creationSettlement = create.indexOf("settleCreationSucceeded(");
+		const dispatchAck = create.indexOf(
+			"acknowledgePromptDispatch(bksId, openingPromptEntryId)",
+			creationSettlement,
+		);
+		expect(creationSettlement).toBeGreaterThan(0);
+		expect(dispatchAck).toBeGreaterThan(creationSettlement);
+		expect(create).toContain(
+			'if (event.type === "done" || event.type === "error")',
+		);
+		expect(create).toContain("await settlePhysicalCompletion()");
+		expect(create).toContain(
+			"Terminal-event handling settles the actor before backend generators may",
+		);
+		expect(create).toContain(
+			'throw new Error("Opening run ended without a terminal event")',
+		);
+		expect(create).toContain("openingJournal?.terminalFailure");
+		for (const backend of [
+			"host-client.ts",
+			"runner-session.ts",
+			"sandbox/docker.ts",
+			"sandbox/adapters/bootstrap.ts",
+		]) {
+			const source = read(backend);
+			expect(source).toContain("journalRecordAbnormalCompletion(");
+			expect(source).toContain("sourceCompleted && sawTerminal");
+		}
 
 		const cache = read("session-cache.ts");
 		const outcome = cache.indexOf("if (errorMessage) {");

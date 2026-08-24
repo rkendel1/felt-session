@@ -53,6 +53,7 @@ type RuntimeState = {
 	lastCompactAt?: number;
 	activeTimers?: Set<string>;
 	activeOutbox?: Set<number>;
+	activeOpeningOutbox?: Set<number>;
 };
 
 const globalRuntime = globalThis as typeof globalThis & {
@@ -109,7 +110,15 @@ export async function drainSessionKernelRuntime(): Promise<void> {
 	try {
 		const timerKinds = [...runtime.timerHandlers.keys()];
 		const effectKinds = registeredSessionEffectKinds();
-		const work = await sessionKernelRuntimeWork(timerKinds, effectKinds);
+		const openingKind = "creation_opening_turn";
+		const work = await sessionKernelRuntimeWork(
+			timerKinds,
+			effectKinds.filter((kind) => kind !== openingKind),
+		);
+		if (effectKinds.includes(openingKind)) {
+			const openings = await sessionKernelRuntimeWork([], [openingKind], Date.now(), 8);
+			work.outbox.push(...openings.outbox);
+		}
 		const activeTimers = (runtime.activeTimers ??= new Set());
 		for (const timer of work.timers) {
 			if (activeTimers.size >= 8) break;
@@ -138,10 +147,17 @@ export async function drainSessionKernelRuntime(): Promise<void> {
 				.finally(() => activeTimers.delete(key));
 		}
 		const activeOutbox = (runtime.activeOutbox ??= new Set());
+		const activeOpeningOutbox = (runtime.activeOpeningOutbox ??= new Set());
 		for (const item of work.outbox) {
-			if (activeOutbox.size >= 8) break;
-			if (activeOutbox.has(item.id)) continue;
-			activeOutbox.add(item.id);
+			// Opening turns can legitimately last for hours. Keep their bounded
+			// execution pool separate so eight accepted openings cannot starve
+			// delivery, preparation, or projection effects globally.
+			const active =
+				item.kind === "creation_opening_turn"
+					? activeOpeningOutbox
+					: activeOutbox;
+			if (active.size >= 8 || active.has(item.id)) continue;
+			active.add(item.id);
 			void executeSessionEffect(item)
 				.then((executed) => {
 					if (executed) sessionKernelStore().ackOutbox(item.id);
@@ -163,7 +179,7 @@ export async function drainSessionKernelRuntime(): Promise<void> {
 					);
 				}
 				)
-				.finally(() => activeOutbox.delete(item.id));
+				.finally(() => active.delete(item.id));
 		}
 		passivateIdleSessionKernels();
 		if (!runtime.lastCompactAt || Date.now() - runtime.lastCompactAt > 60 * 60_000) {
@@ -222,7 +238,8 @@ export async function waitForSessionKernelRuntimeIdle(
 	const deadline = Date.now() + timeoutMs;
 	while (
 		(runtime.activeTimers?.size || 0) > 0 ||
-		(runtime.activeOutbox?.size || 0) > 0
+		(runtime.activeOutbox?.size || 0) > 0 ||
+		(runtime.activeOpeningOutbox?.size || 0) > 0
 	) {
 		if (Date.now() >= deadline) return false;
 		await Bun.sleep(5);

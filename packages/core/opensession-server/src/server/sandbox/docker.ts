@@ -113,7 +113,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, unl
 import { dirname, resolve as resolvePath } from "path";
 import { homeDir, OPENSESSION_SESSIONS_DIR } from "../paths";
 import { stateDir, } from "../paths";
-import { journalSet, journalClear, journalClearIfLineage, type ActiveRunRecord } from "../run-journal";
+import { journalSet, journalClear, journalClearIfLineage, journalRecordAbnormalCompletion, type ActiveRunRecord } from "../run-journal";
 import { shouldPersistModelSwitch, type StreamEvent } from "../run-events";
 import { recoveryKind, restartContinuationPrompt } from "../agent-runner";
 import { modelSupportsSteer, providerFor } from "../models";
@@ -1083,6 +1083,8 @@ async function* withRunJournal(
   journalSet(record);
   touchStateActivity(record.sandboxId!);
   let sawDone = false;
+  let sawTerminal = false;
+  let sourceCompleted = false;
   try {
     for await (const ev of events) {
       if (ev.type === "init" && ev.sessionId && ev.sessionId !== record.claudeSessionId) {
@@ -1096,10 +1098,13 @@ async function* withRunJournal(
         journalSet(record);
       }
       if (ev.type === "done") sawDone = true;
+      if (ev.type === "done" || ev.type === "error") sawTerminal = true;
       yield ev;
     }
+    sourceCompleted = true;
   } finally {
-    journalClear(record.runKey);
+    if (sourceCompleted && sawTerminal) journalClear(record.runKey);
+    else if (sourceCompleted) journalRecordAbnormalCompletion(record);
     touchStateActivity(record.sandboxId!);
     if (sawDone) schedulePostRunSnapshot(record.sandboxId!);
   }

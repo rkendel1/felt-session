@@ -1125,12 +1125,14 @@ export function resumeInterruptedRuns(
   onResumed?: (
     osSessionId?: string,
     terminalEvent?: StreamEvent,
+    run?: ActiveRunRecord,
   ) => void,
   askHandlerFor?: (osSessionId: string) => AskHandler | undefined,
   inProcessMcpFor?: (osSessionId: string, user?: string) => Record<string, unknown> | undefined,
   reposNoteFor?: (osSessionId: string) => string | undefined,
   onEvent?: (osSessionId: string, event: StreamEvent) => void,
   snapshotLocalHostRuns: ActiveRunRecord[] = [],
+  deferRecovery?: (run: ActiveRunRecord) => boolean,
 ): string[] {
   const resumed: string[] = [];
   const settledRunKeys = new Set<string>();
@@ -1153,7 +1155,7 @@ export function resumeInterruptedRuns(
     try {
       emitRecoveryEvent(run, event);
       try {
-        onResumed?.(run.osSessionId, event);
+        onResumed?.(run.osSessionId, event, run);
       } catch (e) {
         console.error(`[runner] Recovery settlement callback failed for ${run.runKey}:`, e);
       }
@@ -1278,7 +1280,9 @@ export function resumeInterruptedRuns(
   const snapshotSeeds = snapshotLocalHostRuns.filter(
     (run) => !!run.hostId && !run.sandboxId && !run.runnerId,
   );
-  const taken = takeInterruptedRuns(snapshotSeeds);
+  const taken = takeInterruptedRuns(snapshotSeeds).filter(
+    (run) => !deferRecovery?.(run),
+  );
   // A graceful shutdown snapshot is intentionally broader than the shared
   // run journal: it also covers turns that finish during the drain. A local
   // detached host can still be alive even when its shared record disappeared
@@ -1294,6 +1298,10 @@ export function resumeInterruptedRuns(
   const recoveryTasks: Array<() => Promise<void>> = [];
 
   for (const run of interrupted) {
+    if (run.terminalFailure) {
+      reportRecoveryFailure(run, run.terminalFailure.content);
+      continue;
+    }
     // Detached review turns are consumed by the GitHub agent's persisted
     // activeRun workflow. Leave their journal record intact so runReview can
     // reattach the same host and continue through parsing and GitHub posting.

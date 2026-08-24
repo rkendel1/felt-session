@@ -61,7 +61,7 @@ import {
 } from "fs";
 import { dirname, isAbsolute, relative, resolve } from "path";
 import { OPENSESSION_SESSIONS_DIR, homeDir, stateDir } from "../../paths";
-import { journalSet, journalClear, journalClearIfLineage, type ActiveRunRecord } from "../../run-journal";
+import { journalSet, journalClear, journalClearIfLineage, journalRecordAbnormalCompletion, type ActiveRunRecord } from "../../run-journal";
 import { shouldPersistModelSwitch, type StreamEvent } from "../../run-events";
 import { recoveryKind, restartContinuationPrompt } from "../../agent-runner";
 import { accountsForRemoteUpload, type ClaudeAccount } from "../../claude-accounts";
@@ -1952,6 +1952,8 @@ async function* withRunJournal(
 ): AsyncGenerator<StreamEvent> {
   journalSet(record);
   touch();
+  let sourceCompleted = false;
+  let sawTerminal = false;
   try {
     for await (const ev of events) {
       if (ev.type === "init" && ev.sessionId && ev.sessionId !== record.claudeSessionId) {
@@ -1964,10 +1966,13 @@ async function* withRunJournal(
         if (shouldPersistModelSwitch(ev)) record.selectedModel = ev.toModel;
         journalSet(record);
       }
+      if (ev.type === "done" || ev.type === "error") sawTerminal = true;
       yield ev;
     }
+    sourceCompleted = true;
   } finally {
-    journalClear(record.runKey);
+    if (sourceCompleted && sawTerminal) journalClear(record.runKey);
+    else if (sourceCompleted) journalRecordAbnormalCompletion(record);
     touch();
   }
 }

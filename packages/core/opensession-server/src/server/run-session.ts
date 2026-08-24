@@ -158,13 +158,66 @@ import {
 } from "./session-repos";
 import { automationSessionMcp, interactiveMcpServers } from "./interactive-mcp";
 import { makeAskHandler, settleRestoredAskAfterRecovery } from "./asks";
+import {
+	settleCreationFailed,
+	settleCreationSucceeded,
+	sessionKernel,
+} from "./session-kernel";
+
+export function creationOwnsPrompt(sessionId: string, promptEntryId: string): boolean {
+	const creation = sessionKernel(sessionId).creationState();
+	return (
+		creation?.state === "opening_dispatched" &&
+		creation.currentEffectId === `opening:${promptEntryId}`
+	);
+}
+
+/** Settle an actor-owned opening recovered by the generic local-run adopter. */
+export function settleRecoveredCreationOpening(
+	sessionId: string,
+	promptEntryId: string,
+	failure?: string,
+): boolean {
+	const creation = sessionKernel(sessionId).creationState();
+	const effectId = `opening:${promptEntryId}`;
+	if (
+		!creation ||
+		creation.currentEffectId !== effectId ||
+		creation.state !== "opening_dispatched"
+	)
+		return false;
+	if (failure) {
+		settleCreationFailed(
+			sessionId,
+			creation.identity,
+			new Error(failure),
+			sessionKernel(sessionId),
+			effectId,
+		);
+	} else {
+		settleCreationSucceeded(
+			sessionId,
+			creation.identity,
+			sessionKernel(sessionId),
+			effectId,
+		);
+	}
+	acknowledgePromptDispatch(sessionId, promptEntryId);
+	return true;
+}
 
 // The runner writes its active-run journal before it can call an engine. Once
 // that journal names this prompt entry, normal boot recovery owns it and the
 // queue's pre-dispatch record is no longer needed.
-setJournalSetListener((record) =>
-	acknowledgePromptDispatch(record.osSessionId, record.promptEntryId),
-);
+setJournalSetListener((record) => {
+	if (
+		record.osSessionId &&
+		record.promptEntryId &&
+		creationOwnsPrompt(record.osSessionId, record.promptEntryId)
+	)
+		return;
+	acknowledgePromptDispatch(record.osSessionId, record.promptEntryId);
+});
 import { audit } from "./audit";
 import { githubCredentialForLogin, githubCredentialForRun } from "./github-auth";
 import {
@@ -503,6 +556,7 @@ export function restorePromptQueues(resumedSessionIds: Set<string>): void {
 				(run) =>
 					run.osSessionId === sessionId && run.promptEntryId === promptEntryId,
 			),
+		creationOwnsPrompt,
 		runOwnsSteers: (sessionId) =>
 			resumedSessionIds.has(sessionId) &&
 			active.some((run) => run.osSessionId === sessionId),

@@ -46,6 +46,14 @@ export type CreationSandboxIntent = {
   egressAllowlist?: string[];
 };
 
+export type CreationOpeningIntent = {
+  sessionId: string;
+  identity: string;
+  openingPromptEntryId: string;
+  runId: string;
+  runGeneration: number;
+};
+
 type CreationIntentKernel = Pick<
   ReturnType<typeof sessionKernel>,
   "creationState" | "applyCreationEvent"
@@ -83,50 +91,20 @@ export function ensureCreationPlanned(
   return planned.state;
 }
 
-/** Cross the durable preparation-to-opening boundary before launching a runner. */
-export function markCreationOpeningDispatched(
-  sessionId: string,
-  identity: string,
-  kernel: CreationIntentKernel = sessionKernel(sessionId),
-): DurableCreationState {
-  let state = ensureCreationPlanned(sessionId, identity, kernel);
-  if (state.state === "ready" || state.state === "opening_dispatched") return state;
-  assertIdentity(state, identity);
-  if (state.currentEffectId)
-    throw new Error(
-      `Creation effect ${state.currentEffectId} must settle before opening`,
-    );
-  if (state.state === "planned") {
-    const preparing = kernel.applyCreationEvent({
-      identity,
-      event: "preparation_started",
-    });
-    if (!preparing.accepted || !preparing.state)
-      throw new Error(
-        `Creation preparation was rejected: ${preparing.reason || "unknown"}`,
-      );
-    state = preparing.state;
-  }
-  const dispatched = kernel.applyCreationEvent({
-    identity,
-    event: "opening_dispatched",
-  });
-  if (!dispatched.accepted || !dispatched.state)
-    throw new Error(
-      `Creation opening dispatch was rejected: ${dispatched.reason || "unknown"}`,
-    );
-  return dispatched.state;
-}
-
 export function settleCreationSucceeded(
   sessionId: string,
   identity: string,
   kernel: CreationIntentKernel = sessionKernel(sessionId),
+  effectId?: string,
 ): DurableCreationState {
   const state = ensureCreationPlanned(sessionId, identity, kernel);
   if (state.state === "ready") return state;
   assertIdentity(state, identity);
-  const settled = kernel.applyCreationEvent({ identity, event: "succeeded" });
+  const settled = kernel.applyCreationEvent({
+    identity,
+    event: "succeeded",
+    effectId,
+  });
   if (!settled.accepted || !settled.state)
     throw new Error(
       `Creation success was rejected: ${settled.reason || "unknown"}`,
@@ -139,6 +117,7 @@ export function settleCreationFailed(
   identity: string,
   error: unknown,
   kernel: CreationIntentKernel = sessionKernel(sessionId),
+  effectId?: string,
 ): DurableCreationState {
   const existing = kernel.creationState();
   if (existing?.identity !== undefined && existing.identity !== identity)
@@ -148,6 +127,7 @@ export function settleCreationFailed(
   const settled = kernel.applyCreationEvent({
     identity,
     event: "failed",
+    effectId,
     detail: { error: error instanceof Error ? error.message : String(error) },
   });
   if (!settled.accepted || !settled.state)
@@ -155,6 +135,89 @@ export function settleCreationFailed(
       `Creation failure was rejected: ${settled.reason || "unknown"}`,
     );
   return settled.state;
+}
+
+/** Emit one stable opening launch and wait for the executor's actor settlement. */
+export async function requestCreationOpening(
+  input: CreationOpeningIntent,
+  options: CreationIntentOptions = {},
+): Promise<DurableCreationState> {
+  const kernel = options.kernel ?? sessionKernel(input.sessionId);
+  let state = ensureCreationPlanned(input.sessionId, input.identity, kernel);
+  const effectId = `opening:${input.openingPromptEntryId}`;
+  const deadline = Date.now() + (options.timeoutMs ?? 24 * 60 * 60_000);
+  if (state.state === "ready") return state;
+  while (state.currentEffectId && state.currentEffectId !== effectId) {
+    if (state.state === "failed")
+      throw new Error("Session creation failed before opening dispatch");
+    if (Date.now() >= deadline)
+      throw new Error(
+        `Creation effect ${state.currentEffectId} must settle before ${effectId}`,
+      );
+    await Bun.sleep(options.pollMs ?? 25);
+    const current = kernel.creationState();
+    if (!current)
+      throw new Error("Creation state disappeared before opening dispatch");
+    if (current.identity !== input.identity)
+      throw new Error("Create request identity crossed durable session ownership");
+    state = current;
+  }
+  if (state.state === "failed")
+    throw new Error("Session creation failed before opening dispatch");
+  if (state.state === "planned") {
+    const preparing = kernel.applyCreationEvent({
+      identity: input.identity,
+      event: "preparation_started",
+    });
+    if (!preparing.accepted || !preparing.state)
+      throw new Error(
+        `Creation preparation was rejected: ${preparing.reason || "unknown"}`,
+      );
+    state = preparing.state;
+  }
+  if (state.state === "preparing" && !state.currentEffectId) {
+    const emitted = kernel.applyCreationEvent({
+      identity: input.identity,
+      event: "opening_dispatched",
+      nextEffectId: effectId,
+      effect: {
+        kind: "creation_opening_turn",
+        effectKey: effectId,
+        payload: {
+          creationIdentity: input.identity,
+          creationGeneration: state.generation,
+          openingPromptEntryId: input.openingPromptEntryId,
+          runId: input.runId,
+          runGeneration: input.runGeneration,
+          mode: "adopt_or_launch",
+        },
+      },
+    });
+    if (!emitted.accepted || !emitted.state)
+      throw new Error(
+        `Creation opening intent was rejected: ${emitted.reason || "unknown"}`,
+      );
+    state = emitted.state;
+  }
+  if (
+    state.state !== "opening_dispatched" ||
+    state.currentEffectId !== effectId
+  )
+    throw new Error(`Creation opening ${effectId} has an invalid durable state`);
+  while (state.state !== "ready") {
+    if (state.state === "failed")
+      throw new Error("Session creation failed while opening was pending");
+    if (Date.now() >= deadline)
+      throw new Error(`Creation opening effect ${effectId} remains durably pending`);
+    await Bun.sleep(options.pollMs ?? 25);
+    const current = kernel.creationState();
+    if (!current)
+      throw new Error("Creation state disappeared while opening was pending");
+    if (current.identity !== input.identity)
+      throw new Error("Create request identity crossed durable session ownership");
+    state = current;
+  }
+  return state;
 }
 
 /** Emit one stable workspace intent and wait for its actor receipt, never its file. */

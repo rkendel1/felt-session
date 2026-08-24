@@ -19,6 +19,7 @@ type WorkspaceEffect = SessionActorEffectFor<"creation_workspace_prepare">;
 type BranchEffect = SessionActorEffectFor<"creation_branch_prepare">;
 type CredentialEffect = SessionActorEffectFor<"creation_credential_resolve">;
 type SandboxEffect = SessionActorEffectFor<"creation_sandbox_prepare">;
+type OpeningEffect = SessionActorEffectFor<"creation_opening_turn">;
 export type CreationWorkspaceEffectItem = Omit<
   DurableOutboxItem,
   "kind" | "payload"
@@ -35,6 +36,10 @@ export type CreationSandboxEffectItem = Omit<
   DurableOutboxItem,
   "kind" | "payload"
 > & SandboxEffect;
+export type CreationOpeningEffectItem = Omit<
+  DurableOutboxItem,
+  "kind" | "payload"
+> & OpeningEffect;
 
 export class CreationEffectIndeterminateError extends Error {
   readonly indeterminate = true;
@@ -393,6 +398,28 @@ export async function executeCreationCredentialResolve(
   );
 }
 
+type OpeningExecutorDependencies = {
+  launch: (item: CreationOpeningEffectItem) => Promise<void>;
+};
+
+const defaultOpeningDependencies: OpeningExecutorDependencies = {
+  launch: async (item) =>
+    (await import("../session-create")).executeCreationOpeningEffect(item),
+};
+
+/** Launch or recover the one opening turn named by its durable actor fence. */
+export async function executeCreationOpeningTurn(
+  item: CreationOpeningEffectItem,
+  dependencies: OpeningExecutorDependencies = defaultOpeningDependencies,
+): Promise<void> {
+  const expectedRunId = `opening:${item.sessionId}:${item.payload.openingPromptEntryId}`;
+  if (item.payload.runId !== expectedRunId)
+    throw new CreationEffectIndeterminateError(
+      `Opening run ${item.payload.runId} crossed session ownership`,
+    );
+  await dependencies.launch(item);
+}
+
 /**
  * Re-admit branch effects rejected before execution by retired compatibility
  * checks. The store matches exact historical errors and validates configured
@@ -436,6 +463,7 @@ const registrationGlobal = globalThis as typeof globalThis & {
   __opensessionCreationBranchExecutorRegistered?: boolean;
   __opensessionCreationCredentialExecutorRegistered?: boolean;
   __opensessionCreationSandboxExecutorRegistered?: boolean;
+  __opensessionCreationOpeningExecutorRegistered?: boolean;
 };
 
 export function ensureCreationEffectExecutors(): void {
@@ -466,5 +494,12 @@ export function ensureCreationEffectExecutors(): void {
       executeCreationCredentialResolve,
     );
     registrationGlobal.__opensessionCreationCredentialExecutorRegistered = true;
+  }
+  if (!registrationGlobal.__opensessionCreationOpeningExecutorRegistered) {
+    registerSessionEffectExecutor(
+      "creation_opening_turn",
+      executeCreationOpeningTurn,
+    );
+    registrationGlobal.__opensessionCreationOpeningExecutorRegistered = true;
   }
 }

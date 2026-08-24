@@ -478,6 +478,8 @@ export async function prepareRunnerWorkspace(
 	return { cwd: result.stdout };
 }
 
+export class RunnerHostLaunchRejectedError extends Error {}
+
 /** Start one run-host in a server-selected Runner workspace. */
 export async function launchRunnerHost(
 	runnerId: string,
@@ -485,12 +487,12 @@ export async function launchRunnerHost(
 ): Promise<void> {
 	const connection = connections.get(runnerId);
 	if (!connection || connection.protocolVersion !== PROTOCOL_VERSION)
-		throw new Error(`Runner ${runnerId} is not connected`);
+		throw new RunnerHostLaunchRejectedError(`Runner ${runnerId} is not connected`);
 	const runner = getRunner(runnerId);
 	if (!runner || !runnerAllowed(runner, { user: request.user, repo: request.repo, permission: "fullSessions" }))
-		throw new Error(`Runner ${runner?.name ?? runnerId} is not permitted for full sessions`);
+		throw new RunnerHostLaunchRejectedError(`Runner ${runner?.name ?? runnerId} is not permitted for full sessions`);
 	if (!runnerOwnsWorkspace(runner, request.spec.cwd, request.sessionId))
-		throw new Error("Runner host path is outside its managed workspace roots");
+		throw new RunnerHostLaunchRejectedError("Runner host path is outside its managed workspace roots");
 	const id = `rh${++executionCounter}-${Date.now().toString(36)}`;
 	const operationToken = randomBytes(18).toString("base64url");
 	exitedHosts.delete(request.spec.hostId);

@@ -8,10 +8,12 @@ import {
   CreationEffectIndeterminateError,
   executeCreationBranchPrepare,
   executeCreationCredentialResolve,
+  executeCreationOpeningTurn,
   executeCreationSandboxPrepare,
   executeCreationWorkspacePrepare,
   type CreationBranchEffectItem,
   type CreationCredentialEffectItem,
+  type CreationOpeningEffectItem,
   type CreationSandboxEffectItem,
   type CreationWorkspaceEffectItem,
 } from "./creation-effect-executors";
@@ -114,6 +116,27 @@ function sandboxItem(): CreationSandboxEffectItem {
       trustProfile: "interactive",
       egressAllowlist: ["github.com"],
       mode: "adopt_or_create",
+    },
+    attempts: 0,
+    nextAttemptAt: 0,
+    createdAt: 1,
+  };
+}
+
+function openingItem(): CreationOpeningEffectItem {
+  return {
+    id: 5,
+    effectId: "session:creation_opening_turn:opening-effect",
+    effectKey: "opening:opening-prompt-one",
+    sessionId: "session-one",
+    kind: "creation_opening_turn",
+    payload: {
+      creationIdentity: "create-one",
+      creationGeneration: 1,
+      openingPromptEntryId: "opening-prompt-one",
+      runId: "opening:session-one:opening-prompt-one",
+      runGeneration: 1,
+      mode: "adopt_or_launch",
     },
     attempts: 0,
     nextAttemptAt: 0,
@@ -419,6 +442,27 @@ describe("creation sandbox effect executor", () => {
         throw new Error("must not result");
       },
     })).rejects.toBeInstanceOf(CreationEffectIndeterminateError);
+  });
+});
+
+describe("creation opening effect executor", () => {
+  test("launches the exact session-keyed opening fence", async () => {
+    const launched: CreationOpeningEffectItem[] = [];
+    const input = openingItem();
+    await executeCreationOpeningTurn(input, {
+      launch: async (item) => {
+        launched.push(item);
+      },
+    });
+    expect(launched).toEqual([input]);
+  });
+
+  test("rejects an opening run id that crosses session ownership", async () => {
+    const input = openingItem();
+    input.payload.runId = "opening:another-session:opening-prompt-one";
+    await expect(
+      executeCreationOpeningTurn(input, { launch: async () => {} }),
+    ).rejects.toBeInstanceOf(CreationEffectIndeterminateError);
   });
 });
 

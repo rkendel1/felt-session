@@ -180,7 +180,7 @@ describe("steer receipt restart persistence", () => {
 		expect(promptDispatches.has(SESSION)).toBe(false);
 	});
 
-	test("a cold restart preserves a create dispatch for plan recovery", () => {
+	test("a cold restart preserves an actor-owned create dispatch even after journaling", () => {
 		scratch = mkdtempSync(join(tmpdir(), "os-create-dispatch-adopt-"));
 		const storePath = join(scratch, "prompt-queues.json");
 		writeFileSync(
@@ -198,7 +198,9 @@ describe("steer receipt restart persistence", () => {
 		const restored = restorePersistedQueueState({
 			storePath,
 			sessionExists: () => true,
-			journalOwnsPrompt: () => false,
+			journalOwnsPrompt: () => true,
+			creationOwnsPrompt: (_sessionId, promptEntryId) =>
+				promptEntryId === "create-request-1",
 			runOwnsSteers: () => false,
 			deliveredUserTexts: () => [],
 			effects: false,

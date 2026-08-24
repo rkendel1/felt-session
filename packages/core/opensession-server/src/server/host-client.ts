@@ -39,6 +39,7 @@ import {
 } from "./agent-runner";
 import {
   journalClear,
+  journalRecordAbnormalCompletion,
   journalSet,
   registerActiveRunProbe,
   type ActiveRunRecord,
@@ -270,6 +271,8 @@ async function* hostedEventsWithJournal(
     journalSet(record);
   });
   journalSet(record);
+  let sourceCompleted = false;
+  let sawTerminal = false;
   try {
     for await (const ev of handle.events()) {
       if (!sessionKernel(spec.osSessionId).isCurrentRun(record.runKey)) {
@@ -292,10 +295,14 @@ async function* hostedEventsWithJournal(
         if (shouldPersistModelSwitch(ev)) record.selectedModel = ev.toModel;
         journalSet(record);
       }
+      if (ev.type === "done" || ev.type === "error") sawTerminal = true;
       yield ev;
     }
+    sourceCompleted = true;
   } finally {
-    if (handle.ended) journalClear(record.runKey);
+    if (handle.ended && sourceCompleted && sawTerminal) journalClear(record.runKey);
+    else if (handle.ended && sourceCompleted)
+      journalRecordAbnormalCompletion(record);
   }
 }
 

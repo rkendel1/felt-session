@@ -525,6 +525,22 @@ describe("SessionKernel", () => {
 	});
 
 	test("owns creation transitions and rejects stale effect results", () => {
+		store.applyCreationEvent({
+			sessionId: "create-opening-requires-effect",
+			identity: "request-direct",
+			event: "plan",
+		});
+		store.applyCreationEvent({
+			sessionId: "create-opening-requires-effect",
+			identity: "request-direct",
+			event: "preparation_started",
+		});
+		expect(store.applyCreationEvent({
+			sessionId: "create-opening-requires-effect",
+			identity: "request-direct",
+			event: "opening_dispatched",
+		})).toMatchObject({ accepted: false, reason: "invalid_effect" });
+
 		expect(store.applyCreationEvent({
 			sessionId: "create-fsm",
 			identity: "request-one",
@@ -648,6 +664,66 @@ describe("SessionKernel", () => {
 			{ kind: "creation_workspace_prepare", effectKey: "prepare-one" },
 			{ kind: "creation_opening_turn", effectKey: "opening-one" },
 		]);
+	});
+
+	test("settles an actor opening from an exactly journaled local recovery", async () => {
+		const sessionId = "local-opening-recovery";
+		const identity = "local-opening-request";
+		const promptEntryId = "local-opening-prompt";
+		const effectId = `opening:${promptEntryId}`;
+		expect(
+			store.applyCreationEvent({ sessionId, identity, event: "plan" }).accepted,
+		).toBe(true);
+		const preparationEffectId = "local-opening-preparation";
+		expect(
+			store.applyCreationEvent({
+				sessionId,
+				identity,
+				event: "preparation_started",
+				nextEffectId: preparationEffectId,
+				effect: {
+					kind: "creation_workspace_prepare",
+					effectKey: preparationEffectId,
+					payload: {
+						creationIdentity: identity,
+						creationGeneration: 1,
+						workspaceId: "local-opening-workspace",
+						dedupeKey: "local-opening-dedupe",
+						name: "Local opening",
+						createdBy: "Alice",
+						mode: "adopt_or_create",
+					},
+				},
+			}).accepted,
+		).toBe(true);
+		expect(
+			store.applyCreationEvent({
+				sessionId,
+				identity,
+				event: "opening_dispatched",
+				effectId: preparationEffectId,
+				nextEffectId: effectId,
+				effect: {
+					kind: "creation_opening_turn",
+					effectKey: effectId,
+					payload: {
+						creationIdentity: identity,
+						creationGeneration: 1,
+						openingPromptEntryId: promptEntryId,
+						runId: `opening:${sessionId}:${promptEntryId}`,
+						runGeneration: 1,
+						mode: "adopt_or_launch",
+					},
+				},
+			}).accepted,
+		).toBe(true);
+		const { settleRecoveredCreationOpening } = await import("../run-session");
+		expect(
+			settleRecoveredCreationOpening(sessionId, promptEntryId),
+		).toBe(true);
+		const settled = store.creationState(sessionId);
+		expect(settled?.state).toBe("ready");
+		expect(settled?.completedEffectIds).toContain(effectId);
 	});
 
 	test("clears an accepted creation effect so replay is a stale no-op", () => {

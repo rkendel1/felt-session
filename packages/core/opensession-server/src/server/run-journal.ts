@@ -114,6 +114,9 @@ export interface ActiveRunRecord {
   resumeAttempts?: number;
   /** Time the most recent boot recovery attempt started. */
   lastResumeAt?: string;
+  /** Durable abnormal completion observed before a backend produced a terminal
+   * stream event. Opening recovery adopts this receipt instead of relaunching. */
+  terminalFailure?: { type: "error"; content: string; at: string };
   startedAt: string;
   /** Stamped when a boot sweep hands the record to resumeInterruptedRuns. The
    *  record stays journaled until its resume outcome re-registers (journalSet)
@@ -247,7 +250,8 @@ export type RunQuarantineReason =
   | "duplicate_session"
   | "recursive_recovery_kind"
   | "resume_attempts_exhausted"
-  | "recovery_expired";
+  | "recovery_expired"
+  | "ambiguous_runner_launch";
 
 export interface QuarantinedRun {
   run: ActiveRunRecord;
@@ -337,6 +341,22 @@ export function journalMarkRecoveryAttached(record: ActiveRunRecord): ActiveRunR
   writeRunJournal(journal);
   const { claimedAt: _claimed, ...returned } = attached;
   return returned;
+}
+
+export function journalRecordAbnormalCompletion(
+  record: ActiveRunRecord,
+  content = "Physical run ended without a terminal event",
+): ActiveRunRecord {
+  const failed: ActiveRunRecord = {
+    ...record,
+    terminalFailure: {
+      type: "error",
+      content,
+      at: new Date().toISOString(),
+    },
+  };
+  journalSet(failed);
+  return failed;
 }
 
 export function journalClear(runKey: string): void {

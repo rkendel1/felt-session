@@ -148,10 +148,38 @@ durable effect carries the complete non-secret provider/session specification;
 the provider's idempotent `ensure` adopts resources by canonical session key.
 Session-key or returned-provider crossover is indeterminate, and a crash after
 provider acceptance re-enters the same ensure before returning the fenced actor
-receipt. Create entry points do not emit this effect yet. Attachment and
-opening-turn executors plus removal of the remaining create-plan authority are
-the next cutovers; the presence or absence of a plan file is not
-actor lifecycle evidence.
+receipt. Create entry points emit this effect before opening a sandboxed run.
+
+Opening turns also enter the durable outbox. Create intake first records the
+stable prompt dispatch, then atomically moves the creation aggregate to
+`opening_dispatched` with one `creation_opening_turn` effect. The executor uses
+the active create registration or reconstructs the same specification from the
+durable plan after restart. It settles `ready` or `failed` through the effect
+fence before acknowledging the prompt dispatch. Run-journal admission and cold
+queue restoration preserve actor-owned create dispatches until that settlement.
+Boot leaves local openings with the generic run adopter and settles the actor
+from that adopter's fenced terminal callback; remote sandbox and Runner journals
+are deferred to executors that can physically adopt them. Runner openings derive
+one stable host identity from the opening run fence, persist the prompt and host
+identities in the run journal, and advance a durable
+`prepared → launching → started` launch phase in a session-keyed launch-state
+file as well as the run journal. A prepared retry may launch; a definite server
+preflight rejection records a permanent `rejected` fence, while ambiguous
+launching/started failures are quarantined out of boot recovery. Ambiguous
+adoption requires positive Runner liveness evidence and otherwise fails closed
+instead of duplicating or later reviving a creation already reported failed. Long-running opening effects use a
+separate bounded runtime pool so they cannot consume all general outbox capacity.
+The terminal event consumer persists final session/outcome projections and settles
+the actor before requesting another generator item, so local, sandbox, and Runner
+generator `finally` blocks cannot retire the only physical-owner journal first.
+If a backend naturally ends without a terminal event, its wrapper replaces the
+live journal with a durable abnormal-completion receipt instead of clearing it;
+boot recovery or the opening executor settles that receipt without relaunching.
+A crash after actor settlement adopts the completed receipt without launching
+another turn. Direct `opening_dispatched` transitions without a typed effect are rejected. Attachment
+staging and removal of the remaining create-plan compatibility authority are the
+next creation cutovers; the presence or absence of a plan file is not actor
+lifecycle evidence.
 
 ## Run ownership
 

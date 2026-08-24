@@ -389,6 +389,7 @@ export function restorePersistedQueueState(options: {
 	storePath?: string;
 	sessionExists: (sessionId: string) => boolean;
 	journalOwnsPrompt: (sessionId: string, promptEntryId: string) => boolean;
+	creationOwnsPrompt?: (sessionId: string, promptEntryId: string) => boolean;
 	runOwnsSteers: (sessionId: string) => boolean;
 	deliveredUserTexts: (sessionId: string) => string[];
 	effects?: boolean;
@@ -423,7 +424,8 @@ export function restorePersistedQueueState(options: {
 		if (
 			dispatch?.kind === "create" &&
 			dispatch.promptEntryId &&
-			!options.journalOwnsPrompt(sessionId, dispatch.promptEntryId)
+			(options.creationOwnsPrompt?.(sessionId, dispatch.promptEntryId) ||
+				!options.journalOwnsPrompt(sessionId, dispatch.promptEntryId))
 		) {
 			const createDispatch: PromptDispatch =
 				live?.kind === "create" && live.promptEntryId === dispatch.promptEntryId

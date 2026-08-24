@@ -1,12 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import {
-  markCreationOpeningDispatched,
   requestCreationBranch,
   requestCreationCredential,
+  requestCreationOpening,
   requestCreationSandbox,
   requestCreationWorkspace,
   settleCreationFailed,
-  settleCreationSucceeded,
 } from "./creation-intents";
 import {
   SessionKernelStore,
@@ -50,76 +49,6 @@ const branchInput = {
 };
 
 describe("creation lifecycle intents", () => {
-  test("moves a preparation-free create through opening to ready idempotently", () => {
-    const { store, kernel } = harness("create-lifecycle");
-    try {
-      const opening = markCreationOpeningDispatched(
-        "create-lifecycle",
-        "request-lifecycle",
-        kernel,
-      );
-      expect(opening.state).toBe("opening_dispatched");
-      expect(opening.currentEffectId).toBeUndefined();
-      const ready = settleCreationSucceeded(
-        "create-lifecycle",
-        "request-lifecycle",
-        kernel,
-      );
-      expect(ready.state).toBe("ready");
-      expect(
-        settleCreationSucceeded(
-          "create-lifecycle",
-          "request-lifecycle",
-          kernel,
-        ).state,
-      ).toBe("ready");
-    } finally {
-      store.close();
-    }
-  });
-
-  test("refuses to dispatch an opening while preparation is pending", () => {
-    const { store, kernel } = harness("create-pending-opening");
-    try {
-      store.applyCreationEvent({
-        sessionId: "create-pending-opening",
-        identity: "request-pending",
-        event: "plan",
-      });
-      store.applyCreationEvent({
-        sessionId: "create-pending-opening",
-        identity: "request-pending",
-        event: "preparation_started",
-        nextEffectId: "prepare-pending",
-        effect: {
-          kind: "creation_workspace_prepare",
-          effectKey: "prepare-pending",
-          payload: {
-            creationIdentity: "request-pending",
-            creationGeneration: 1,
-            workspaceId: "ws-pending",
-            dedupeKey: "create:pending",
-            name: "Pending",
-            createdBy: "Alice",
-            mode: "adopt_or_create",
-          },
-        },
-      });
-      expect(() =>
-        markCreationOpeningDispatched(
-          "create-pending-opening",
-          "request-pending",
-          kernel,
-        ),
-      ).toThrow("must settle before opening");
-      expect(store.creationState("create-pending-opening")?.state).toBe(
-        "preparing",
-      );
-    } finally {
-      store.close();
-    }
-  });
-
   test("records terminal setup failure without launching an opening", () => {
     const { store, kernel } = harness("create-failed-lifecycle");
     try {
@@ -138,6 +67,138 @@ describe("creation lifecycle intents", () => {
           kernel,
         ).state,
       ).toBe("failed");
+    } finally {
+      store.close();
+    }
+  });
+});
+
+describe("creation opening intents", () => {
+  const opening = {
+    sessionId: "create-opening-intent",
+    identity: "request-opening-intent",
+    openingPromptEntryId: "opening-prompt-one",
+    runId: "opening:create-opening-intent:opening-prompt-one",
+    runGeneration: 1,
+  };
+
+  test("waits for an accepted preparation effect before dispatching", async () => {
+    const pending = {
+      ...opening,
+      sessionId: "create-pending-opening",
+      identity: "request-pending-opening",
+    };
+    const { store, kernel } = harness(pending.sessionId);
+    try {
+      store.applyCreationEvent({
+        sessionId: pending.sessionId,
+        identity: pending.identity,
+        event: "plan",
+      });
+      store.applyCreationEvent({
+        sessionId: pending.sessionId,
+        identity: pending.identity,
+        event: "preparation_started",
+        nextEffectId: "prepare-pending",
+        effect: {
+          kind: "creation_workspace_prepare",
+          effectKey: "prepare-pending",
+          payload: {
+            creationIdentity: pending.identity,
+            creationGeneration: 1,
+            workspaceId: "ws-pending",
+            dedupeKey: "create:pending",
+            name: "Pending",
+            createdBy: "Alice",
+            mode: "adopt_or_create",
+          },
+        },
+      });
+      setTimeout(() => {
+        store.applyCreationEvent({
+          sessionId: pending.sessionId,
+          identity: pending.identity,
+          event: "preparation_started",
+          effectId: "prepare-pending",
+        });
+      }, 5);
+      setTimeout(() => {
+        store.applyCreationEvent({
+          sessionId: pending.sessionId,
+          identity: pending.identity,
+          event: "succeeded",
+          effectId: `opening:${pending.openingPromptEntryId}`,
+        });
+      }, 15);
+      const state = await requestCreationOpening(pending, {
+        kernel,
+        timeoutMs: 200,
+        pollMs: 1,
+      });
+      expect(state.state).toBe("ready");
+      expect(state.completedEffectIds).toEqual([
+        "prepare-pending",
+        `opening:${pending.openingPromptEntryId}`,
+      ]);
+    } finally {
+      store.close();
+    }
+  });
+
+  test("emits one durable opening launch and waits for terminal settlement", async () => {
+    const { store, kernel } = harness(opening.sessionId);
+    try {
+      setTimeout(() => {
+        store.applyCreationEvent({
+          sessionId: opening.sessionId,
+          identity: opening.identity,
+          event: "succeeded",
+          effectId: `opening:${opening.openingPromptEntryId}`,
+        });
+      }, 5);
+      const state = await requestCreationOpening(opening, {
+        kernel,
+        timeoutMs: 200,
+        pollMs: 1,
+      });
+      expect(state.state).toBe("ready");
+      expect(state.completedEffectIds).toContain(
+        `opening:${opening.openingPromptEntryId}`,
+      );
+      expect(store.pendingOutbox()).toMatchObject([
+        {
+          kind: "creation_opening_turn",
+          effectKey: `opening:${opening.openingPromptEntryId}`,
+          payload: {
+            openingPromptEntryId: opening.openingPromptEntryId,
+            runId: opening.runId,
+            runGeneration: 1,
+          },
+        },
+      ]);
+    } finally {
+      store.close();
+    }
+  });
+
+  test("keeps a timed-out opening durable without emitting another launch", async () => {
+    const { store, kernel } = harness(opening.sessionId);
+    try {
+      await expect(
+        requestCreationOpening(opening, {
+          kernel,
+          timeoutMs: 5,
+          pollMs: 1,
+        }),
+      ).rejects.toThrow("remains durably pending");
+      await expect(
+        requestCreationOpening(opening, {
+          kernel,
+          timeoutMs: 5,
+          pollMs: 1,
+        }),
+      ).rejects.toThrow("remains durably pending");
+      expect(store.pendingOutbox()).toHaveLength(1);
     } finally {
       store.close();
     }

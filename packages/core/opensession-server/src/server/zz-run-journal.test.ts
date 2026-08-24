@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
-import { mkdtempSync, rmSync } from "fs";
+import { mkdtempSync, readFileSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import * as mod from "./run-journal";
@@ -654,6 +654,61 @@ describe("run journal", () => {
 		expect(mod.takeInterruptedRuns()).toEqual([]);
 	});
 
+	it("defers actor-owned opening journals to the durable effect executor", () => {
+		mod.journalSet({
+			runKey: "opening-run",
+			osSessionId: "opening-session",
+			promptEntryId: "opening-prompt",
+			prompt: "start",
+			cwd: "/tmp",
+			mcpServers: [],
+			startedAt: new Date().toISOString(),
+		});
+		expect(
+			agent.resumeInterruptedRuns(
+				undefined,
+				undefined,
+				undefined,
+				undefined,
+				undefined,
+				[],
+				(run) => run.promptEntryId === "opening-prompt",
+			),
+		).toEqual([]);
+		expect(mod.activeRunRecords()).toMatchObject([
+			{ runKey: "opening-run", promptEntryId: "opening-prompt" },
+		]);
+	});
+
+	it("adopts a durable abnormal-completion receipt without relaunching", () => {
+		const runKey = "abnormal-opening";
+		const record: mod.ActiveRunRecord = {
+			runKey,
+			osSessionId: "abnormal-session",
+			promptEntryId: "abnormal-prompt",
+			prompt: "start",
+			cwd: "/tmp",
+			mcpServers: [],
+			startedAt: new Date().toISOString(),
+		};
+		mod.journalSet(record);
+		mod.journalRecordAbnormalCompletion(
+			record,
+			"Opening backend ended without a terminal event",
+		);
+		let terminal: StreamEvent | undefined;
+		expect(
+			agent.resumeInterruptedRuns((_sessionId, event) => {
+				terminal = event;
+			}),
+		).toEqual(["abnormal-session"]);
+		expect(terminal).toMatchObject({
+			type: "error",
+			content: "Opening backend ended without a terminal event",
+		});
+		expect(mod.activeRunRecords()).toEqual([]);
+	});
+
 	it("moves rejected recovery records into an inspectable quarantine", async () => {
 		for (let i = 0; i < 5; i++) {
 			mod.journalSet({ runKey: `batch-${i}`, cwd: "/tmp", mcpServers: [], startedAt: new Date().toISOString() });
@@ -669,6 +724,35 @@ describe("run journal", () => {
 		expect(Object.values(quarantine).map((run: any) => run.quarantineReason).sort()).toEqual([
 			"duplicate_session",
 			"recovery_expired",
+		]);
+	});
+
+	it("quarantines ambiguous Runner admission out of boot recovery", () => {
+		const run: mod.ActiveRunRecord = {
+			runKey: "ambiguous-runner-opening",
+			osSessionId: "ambiguous-runner-session",
+			runnerId: "runner-one",
+			hostId: "runner-host-one",
+			promptEntryId: "opening-prompt",
+			prompt: "start",
+			cwd: "/runner/workspace",
+			mcpServers: [],
+			launchPhase: "launching",
+			startedAt: new Date().toISOString(),
+		};
+		mod.journalSet(run);
+		mod.journalQuarantine([
+			{ run, reason: "ambiguous_runner_launch", notify: false },
+		]);
+		expect(mod.activeRunRecords()).toEqual([]);
+		const quarantine = JSON.parse(
+			readFileSync(join(dir, "active-runs.quarantine.json"), "utf8"),
+		);
+		expect(Object.values(quarantine)).toMatchObject([
+			{
+				runKey: "ambiguous-runner-opening",
+				quarantineReason: "ambiguous_runner_launch",
+			},
 		]);
 	});
 

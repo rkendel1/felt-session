@@ -23,6 +23,11 @@ import type { ServerWebSocket } from "bun";
 import { randomUUIDv7 } from "bun";
 import { existsSync } from "node:fs";
 import { type StreamEvent, markSessionStarting, runAgent, unmarkSessionStarting, } from "./agent-runner";
+import {
+	activeRunRecords,
+	journalClearIfLineage,
+	journalRecordAbnormalCompletion,
+} from "./run-journal";
 import { makeAskHandler } from "./asks";
 import { getAccountById } from "./claude-accounts";
 import { getCodexAccountById } from "./codex-accounts";
@@ -81,14 +86,16 @@ import { resolvePlainWorkspace } from "./workspace-resolve";
 import { resolveWorkspaceModelPreset } from "./workspace-model-presets";
 import { type Workspace, getWorkspace, updateWorkspace, } from "./workspaces";
 import {
+	type CreationOpeningEffectItem,
 	ensureCreationPlanned,
-	markCreationOpeningDispatched,
 	requestCreationBranch,
 	requestCreationCredential,
+	requestCreationOpening,
 	requestCreationSandbox,
 	requestCreationWorkspace,
 	settleCreationFailed,
 	settleCreationSucceeded,
+	sessionKernel,
 } from "./session-kernel";
 import { AUTO_REPO, ensureAskCheckout, ensureScratchDir, getRepo, isRegisteredWorktree, listWorktrees, NO_REPO, repoForPath, repoForPathOrNull, resolveUniqueBranch, sharedCheckoutForNewSessions, worktreeHeadBranch, worktreePathFor, } from "./worktree";
 import { type WSClientData, broadcastToSession, preparingWorkspaces, } from "./ws-hub";
@@ -379,9 +386,21 @@ async function attachCreateRepos(
 	return attached;
 }
 
+function runnerOpeningHostId(runId: string, generation: number): string {
+	const digest = new Bun.CryptoHasher("sha256")
+		.update(`${runId}:${generation}`)
+		.digest("hex");
+	return `rh-opening-${digest.slice(0, 32)}`;
+}
+
 const activeOpeningCreates = new Map<
 	string,
-	{ identity: string; done: Promise<void> }
+	{
+		identity: string;
+		spec: ResolvedCreate;
+		io: CreateSessionIO;
+		done: Promise<void>;
+	}
 >();
 
 export function runOpeningCreateOnce(
@@ -395,16 +414,43 @@ export function runOpeningCreateOnce(
 			throw new Error("Create request identity crossed active opening ownership");
 		return { owner: false, done: existing.done };
 	}
-	const done = openCreatedSession(spec, io, creationIdentity)
-		.catch((error) => {
-			settleCreationFailed(spec.id, creationIdentity, error);
-			throw error;
-		})
-		.finally(() => {
-			if (activeOpeningCreates.get(spec.id)?.done === done)
-				activeOpeningCreates.delete(spec.id);
-		});
-	activeOpeningCreates.set(spec.id, { identity: creationIdentity, done });
+	const openingPromptEntryId = beginPromptDispatch(
+		spec.id,
+		[
+			{
+				content: spec.openingPrompt,
+				user: spec.user,
+				...(spec.images?.length
+					? {
+							images: spec.images.map(
+								(image) => `data:${image.mediaType};base64,${image.data}`,
+							),
+						}
+					: {}),
+			},
+		],
+		spec.openingPromptEntryId,
+		true,
+		"create",
+	);
+	if (openingPromptEntryId !== spec.openingPromptEntryId)
+		throw new Error("Opening prompt identity changed before actor dispatch");
+	const done = requestCreationOpening({
+		sessionId: spec.id,
+		identity: creationIdentity,
+		openingPromptEntryId,
+		runId: `opening:${spec.id}:${openingPromptEntryId}`,
+		runGeneration: 1,
+	}).then(() => undefined).finally(() => {
+		if (activeOpeningCreates.get(spec.id)?.done === done)
+			activeOpeningCreates.delete(spec.id);
+	});
+	activeOpeningCreates.set(spec.id, {
+		identity: creationIdentity,
+		spec,
+		io,
+		done,
+	});
 	return { owner: true, done };
 }
 
@@ -443,17 +489,21 @@ function actorWorktreeMaterializer(input: {
 	};
 }
 
-export async function resumePlannedCreate(sessionId: string): Promise<boolean> {
+async function restorePlannedOpening(sessionId: string): Promise<{
+	spec: ResolvedCreate;
+	io: CreateSessionIO;
+	identity: string;
+} | null> {
 	const plan = readCreatePlanForRecovery(sessionId);
 	const dispatch = promptDispatches.get(sessionId);
-	if (!plan?.resolved || dispatch?.kind !== "create") return false;
+	if (!plan?.resolved || dispatch?.kind !== "create") return null;
 	const restored = restoreResolvedCreate<ResolvedCreate>(plan.resolved);
 	const restoredGitEnv = githubCredentialForPrincipal(restored.gitPrincipal)?.env;
 	if (
 		typeof restored.wtPath !== "string" ||
 		typeof restored.branch !== "string" ||
 		(restored.needsWorktree && typeof restored.repoId !== "string")
-	) return false;
+	) return null;
 	const ready = restored.needsWorktree
 		? await isRegisteredWorktree(restored.wtPath, restored.repoId!, restored.branch)
 		: true;
@@ -471,30 +521,148 @@ export async function resumePlannedCreate(sessionId: string): Promise<boolean> {
 			})
 		: undefined;
 	const imageUrls = dispatch.items.flatMap((item) => item.images || []);
-	const spec: ResolvedCreate = {
-		...(restored as ResolvedCreate),
-		id: sessionId,
-		openingPromptEntryId: dispatch.promptEntryId,
-		images: parseImageDataUrls(imageUrls),
-		gitEnv: restoredGitEnv,
-		materializeWorktree,
-		needsWorktree: !!materializeWorktree,
+	return {
+		identity: plan.identity,
+		spec: {
+			...(restored as ResolvedCreate),
+			id: sessionId,
+			openingPromptEntryId: dispatch.promptEntryId,
+			images: parseImageDataUrls(imageUrls),
+			gitEnv: restoredGitEnv,
+			materializeWorktree,
+			needsWorktree: !!materializeWorktree,
+		},
+		io: {
+			announce: () => {},
+			emit: (message) =>
+				broadcastToSession(sessionId, { ...message, sessionId }),
+			fail: (message) =>
+				broadcastToSession(sessionId, {
+					type: "notice",
+					sessionId,
+					message,
+				}),
+		},
 	};
-	const opening = runOpeningCreateOnce(spec, {
-		announce: () => {},
-		emit: (message) =>
-			broadcastToSession(sessionId, { ...message, sessionId }),
-		fail: (message) =>
-			broadcastToSession(sessionId, {
-				type: "notice",
-				sessionId,
-				message,
-			}),
-	}, plan.identity);
-	if (opening.owner) {
-		await opening.done;
-		clearCreatePlan(sessionId);
+}
+
+export async function executeCreationOpeningEffect(
+	item: CreationOpeningEffectItem,
+): Promise<void> {
+	const state = sessionKernel(item.sessionId).creationState();
+	if (!state || state.identity !== item.payload.creationIdentity)
+		throw new Error("Opening effect crossed durable creation ownership");
+	if (state.generation !== item.payload.creationGeneration)
+		throw new Error("Opening effect used a stale creation generation");
+	if (
+		(state.state === "ready" || state.state === "failed") &&
+		state.completedEffectIds.includes(item.effectKey)
+	) {
+		acknowledgePromptDispatch(
+			item.sessionId,
+			item.payload.openingPromptEntryId,
+		);
+		if (state.state === "ready") clearCreatePlan(item.sessionId);
+		return;
 	}
+	if (
+		state.state !== "opening_dispatched" ||
+		state.currentEffectId !== item.effectKey
+	)
+		throw new Error("Opening effect no longer owns the creation lifecycle");
+	const openingJournal = activeRunRecords().find(
+		(run) =>
+			run.osSessionId === item.sessionId &&
+			run.promptEntryId === item.payload.openingPromptEntryId,
+	);
+	if (openingJournal?.terminalFailure) {
+		settleCreationFailed(
+			item.sessionId,
+			item.payload.creationIdentity,
+			new Error(openingJournal.terminalFailure.content),
+			sessionKernel(item.sessionId),
+			item.effectKey,
+		);
+		acknowledgePromptDispatch(
+			item.sessionId,
+			item.payload.openingPromptEntryId,
+		);
+		journalClearIfLineage(openingJournal);
+		return;
+	}
+	const localRecovery =
+		!!openingJournal && !openingJournal.runnerId && !openingJournal.sandboxId;
+	if (localRecovery) {
+		// Boot's generic local-run adopter owns the exact journal. It settles the
+		// actor from its terminal callback; waiting here keeps the durable effect
+		// pending without launching a second engine turn.
+		while (true) {
+			const recovered = sessionKernel(item.sessionId).creationState();
+			if (
+				(recovered?.state === "ready" || recovered?.state === "failed") &&
+				recovered.completedEffectIds.includes(item.effectKey)
+			) {
+				acknowledgePromptDispatch(
+					item.sessionId,
+					item.payload.openingPromptEntryId,
+				);
+				if (recovered.state === "ready") clearCreatePlan(item.sessionId);
+				return;
+			}
+			if (
+				!recovered ||
+				recovered.identity !== item.payload.creationIdentity ||
+				recovered.generation !== item.payload.creationGeneration ||
+				recovered.currentEffectId !== item.effectKey
+			)
+				throw new Error("Recovered local opening lost durable ownership");
+			await Bun.sleep(100);
+		}
+	}
+	const active = activeOpeningCreates.get(item.sessionId);
+	if (active && active.identity !== item.payload.creationIdentity)
+		throw new Error("Opening effect crossed active creation ownership");
+	const restored = active
+		? { spec: active.spec, io: active.io, identity: active.identity }
+		: await restorePlannedOpening(item.sessionId);
+	if (!restored)
+		throw new Error("Opening effect has no durable create plan to recover");
+	if (restored.identity !== item.payload.creationIdentity)
+		throw new Error("Opening effect create-plan identity changed during recovery");
+	if (restored.spec.openingPromptEntryId !== item.payload.openingPromptEntryId)
+		throw new Error("Opening effect prompt identity changed during recovery");
+	await openCreatedSession(
+		restored.spec,
+		restored.io,
+		restored.identity,
+		item.effectKey,
+		{
+			runId: item.payload.runId,
+			generation: item.payload.runGeneration,
+		},
+	);
+	const settled = sessionKernel(item.sessionId).creationState();
+	if (settled?.state === "ready") clearCreatePlan(item.sessionId);
+	else if (settled?.state !== "failed")
+		throw new Error("Opening effect returned without terminal actor settlement");
+}
+
+export async function resumePlannedCreate(sessionId: string): Promise<boolean> {
+	const state = sessionKernel(sessionId).creationState();
+	if (state?.state === "ready") {
+		clearCreatePlan(sessionId);
+		return true;
+	}
+	if (state?.state === "failed" || state?.currentEffectId?.startsWith("opening:"))
+		return true;
+	const restored = await restorePlannedOpening(sessionId);
+	if (!restored) return false;
+	const opening = runOpeningCreateOnce(
+		restored.spec,
+		restored.io,
+		restored.identity,
+	);
+	if (opening.owner) await opening.done;
 	return true;
 }
 
@@ -502,6 +670,8 @@ export async function openCreatedSession(
 	spec: ResolvedCreate,
 	io: CreateSessionIO,
 	creationIdentity: string,
+	creationEffectId?: string,
+	openingRun?: { runId: string; generation: number },
 ): Promise<void> {
 	const bksId = spec.id;
 	// Replace the raw first-line title with a short summary in the background;
@@ -525,6 +695,7 @@ export async function openCreatedSession(
 	// Set once the session has been announced — a later failure must then
 	// close out the stream instead of leaving the just-opened viewer spinning.
 	let announced = false;
+	let creationSettled = false;
 	let engineSessionId = "";
 	let effectiveModel = spec.model;
 	let selectedModel = spec.model;
@@ -784,7 +955,6 @@ export async function openCreatedSession(
 						?.map((repo) => repo.dir)
 						.filter(Boolean),
 				}, { timeoutMs: 15 * 60_000 });
-				markCreationOpeningDispatched(bksId, creationIdentity);
 				sandboxOpeningRun = created
 					? await maybeLaunchSandboxedRun(created, {
 							prompt: openingPromptForRun,
@@ -821,11 +991,19 @@ export async function openCreatedSession(
 				await touchNativeSession(bksId, {
 					runner: { id: spec.runnerTarget.id, name: spec.runnerTarget.name, workspacePath: spec.runnerTarget.workspacePath, lifecycle: "awake", },
 				});
-				markCreationOpeningDispatched(bksId, creationIdentity);
 				const created = findSession(bksId);
 				runnerOpeningRun = created
 					? await maybeLaunchRunnerRun(created, {
 						prompt: openingPromptForRun,
+						promptEntryId: openingPromptEntryId,
+						...(openingRun
+							? {
+								hostId: runnerOpeningHostId(
+									openingRun.runId,
+									openingRun.generation,
+								),
+							}
+							: {}),
 						images: spec.images,
 						mcpServers: spec.runMcpServers ?? [],
 						user: spec.user,
@@ -844,8 +1022,43 @@ export async function openCreatedSession(
 			// gets is read back rather than reassembled, so it can only name
 			// worktrees that were actually cut.
 			const spanning = attachedRepoIds.length ? findSession(bksId) : null;
-			if (!sandboxOpeningRun && !runnerOpeningRun)
-				markCreationOpeningDispatched(bksId, creationIdentity);
+			const settlePhysicalCompletion = async (): Promise<void> => {
+				if (creationSettled) return;
+				if (!persisted) await persist();
+				else
+					await touchNativeSession(
+						bksId,
+						{
+							...engineSessionPatch(
+								effectiveProvider,
+								engineSessionId
+							),
+							...(engineSessionId
+								? { lastEngineProvider: effectiveProvider }
+								: {}),
+							...(effectiveModel ? { lastEngineModel: effectiveModel } : {}),
+							...(modelHistory.length ? { modelHistory } : {}),
+							...headBranchPatch(),
+						}
+					);
+				if (latestUsage)
+					await touchNativeSession(bksId, { usage: latestUsage });
+				recordRunOutcome(bksId, runFailure, {
+					engineSessionId,
+					noticePersisted: failureNoticePersisted,
+				});
+				// This runs in the terminal event's consumer body, before requesting
+				// the generator's next item. Backend generator finally blocks may now
+				// retire their journal/host only after the actor has the receipt.
+				settleCreationSucceeded(
+					bksId,
+					creationIdentity,
+					undefined,
+					creationEffectId,
+				);
+				creationSettled = true;
+				acknowledgePromptDispatch(bksId, openingPromptEntryId);
+			};
 			for await (const event of sandboxOpeningRun ?? runnerOpeningRun ?? runAgent({
 				prompt: openingPromptForRun,
 				// A recovered create is the same logical turn. Reuse the durable
@@ -1047,41 +1260,24 @@ export async function openCreatedSession(
 					if (event.noticePersisted) failureNoticePersisted = true;
 					io.emit({ type: "error", message: event.content });
 				}
+				if (event.type === "done" || event.type === "error")
+					await settlePhysicalCompletion();
 			}
-
-			if (!persisted) await persist();
-			else
-				await touchNativeSession(
-					bksId,
-					{
-						...engineSessionPatch(
-							effectiveProvider,
-							engineSessionId
-						),
-						...(engineSessionId
-							? { lastEngineProvider: effectiveProvider }
-							: {}),
-						...(effectiveModel ? { lastEngineModel: effectiveModel } : {}),
-						...(modelHistory.length ? { modelHistory } : {}),
-						// The opening turn may have switched branches in the
-						// worktree (same sync as runSessionPromptInner's run-end
-						// patch) — keep the record on the actual HEAD.
-						...headBranchPatch(),
-					}
-				);
-			// Persist opening-run usage regardless of which branch ran
-			// above (persist() writes the base file without it).
-			if (latestUsage)
-				await touchNativeSession(bksId, { usage: latestUsage });
-			recordRunOutcome(bksId, runFailure, {
-				engineSessionId,
-				noticePersisted: failureNoticePersisted,
-			});
+			if (!creationSettled) {
+				for (const record of activeRunRecords()) {
+					if (
+						record.osSessionId === bksId &&
+						record.promptEntryId === openingPromptEntryId &&
+						!record.terminalFailure
+					)
+						journalRecordAbnormalCompletion(record);
+				}
+				throw new Error("Opening run ended without a terminal event");
+			}
 		} finally {
-			// Normal completion and handled launch failures no longer need the
-			// pre-launch record. If the process dies, this finally never runs and
-			// boot restores the opening prompt instead.
-			acknowledgePromptDispatch(bksId, openingPromptEntryId);
+			// Terminal-event handling settles the actor before backend generators may
+			// retire their physical-owner journal. This finally only releases the
+			// in-process admission marker.
 			unmarkSessionStarting(bksId, startToken);
 			// Safety net for throws before the worktree block's own finally
 			// (persist/announce failures) — must never leak a session stuck
@@ -1116,8 +1312,11 @@ export async function openCreatedSession(
 			else
 				onHumanAsksSessionIdle(bksId);
 		}
-		settleCreationSucceeded(bksId, creationIdentity);
 	} catch (e: any) {
+		if (creationSettled) {
+			console.error(`[create] Post-opening follow-up failed for ${bksId}:`, e);
+			return;
+		}
 		// Failure after the early announce: the client is already in the
 		// session — close out the stream and surface the failure there
 		// instead of leaving the viewer spinning. Before the announce there's
@@ -1153,7 +1352,22 @@ export async function openCreatedSession(
 		} else {
 			io.fail(e.message || String(e));
 		}
-		settleCreationFailed(bksId, creationIdentity, e);
+		settleCreationFailed(
+			bksId,
+			creationIdentity,
+			e,
+			undefined,
+			creationEffectId,
+		);
+		acknowledgePromptDispatch(bksId, openingPromptEntryId);
+		for (const record of activeRunRecords()) {
+			if (
+				record.osSessionId === bksId &&
+				record.promptEntryId === openingPromptEntryId &&
+				record.terminalFailure
+			)
+				journalClearIfLineage(record);
+		}
 	}
 }
 

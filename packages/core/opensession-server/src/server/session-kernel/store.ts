@@ -990,6 +990,7 @@ export class SessionKernelStore {
       }
       if (completesNewEffect) completedEffectIds.push(input.effectId!);
       const invalidEffect =
+        (input.event === "opening_dispatched" && !effect) ||
         (input.nextEffectId !== undefined && !effect) ||
         (!!effect && input.nextEffectId !== effect.effectKey) ||
         (!!effect && completedEffectIds.includes(effect.effectKey)) ||
