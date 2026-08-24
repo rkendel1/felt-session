@@ -32,7 +32,6 @@ describe("single session ownership", () => {
 		expect(LEGACY_GATEWAY_EFFECT_OPERATIONS).toEqual([
 			"answer_question",
 			"cancel_session",
-			"create_session",
 			"delete_session",
 			"session_file_updated",
 			"submit_prompt",
@@ -255,13 +254,20 @@ describe("single session ownership", () => {
 		expect(source.match(/deliverAsk\(/g)?.length).toBe(2);
 	});
 
-	test("create and cancel retries keep stable ownership targets", () => {
+	test("creation uses its FSM without nesting inside a legacy mailbox", () => {
 		const ws = read("ws-handlers.ts");
 		expect(ws).toContain('legacyGatewayEffect("websocket_command"');
 		expect(ws).toContain("sessionIdForRequest");
 		expect(ws).toContain('typeof msg.sessionId === "string"');
+		const mailboxCommands = ws.slice(
+			ws.indexOf("const kernelCommands"),
+			ws.indexOf("const requestId"),
+		);
 		const routes = read("routes/sessions.ts");
-		expect(routes).toContain('legacyGatewayEffect("create_session"');
+		const wiring = read("session-control-wiring.ts");
+		expect(mailboxCommands).not.toContain('"create_session"');
+		expect(routes).not.toContain('legacyGatewayEffect("create_session"');
+		expect(wiring).not.toContain('legacyGatewayEffect("create_session"');
 		expect(routes).toContain("id: targetId");
 		expect(read("../../../protocol/src/session.ts")).toContain(
 			'type: "cancel"; sessionId?: string; requestId?: string',

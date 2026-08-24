@@ -536,8 +536,10 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 			"reorder_queued_prompt",
 			"cancel",
 			"answer_question",
-				"create_session",
 		]);
+		// Creation already has its own durable FSM and outbox. Wrapping it in a
+		// websocket_command holds the per-session mailbox while the opening effect
+		// tries to enter session_file_updated, so neither command can finish.
 		const requestId =
 				typeof msg.requestId === "string" && msg.requestId
 					? msg.requestId.slice(0, 200)

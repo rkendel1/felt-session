@@ -73,7 +73,6 @@ import {
 	tombstoneSessionKernel,
 } from "../session-kernel";
 import {
-	canonicalCommandPayload,
 	sessionIdForRequest,
 } from "../session-request-id";
 import { suggestBranchName } from "../suggest-branch";
@@ -857,20 +856,8 @@ export async function handleSessionsRoutes(
 			const requestId = suppliedRequestId || crypto.randomUUID();
 			const actorScope = ctx.authUser?.login || actor || "anonymous";
 			const targetId = sessionIdForRequest(actorScope, requestId);
-			const accepted = await sessionKernel(targetId).dispatchLegacy(
-				legacyGatewayEffect("create_session", {
-					requestId,
-					payload: {
-						targetId,
-						hash: new Bun.CryptoHasher("sha256")
-							.update(canonicalCommandPayload(body))
-							.digest("hex"),
-					},
-					source: "rest",
-					replaySafe: true,
-				}),
-				async () => {
-					return getSessionControl().createSession({
+			const duplicate = !!sessionKernel(targetId).creationState();
+			const created = await getSessionControl().createSession({
 						id: targetId,
 						requestId,
 						requestScope: actorScope,
@@ -900,10 +887,9 @@ export async function handleSessionsRoutes(
 				...(imageUrls.length ? { images: imageUrls } : {}),
 				...(files?.length ? { files } : {}),
 				user: actor,
-					});
-				},);
-			return Response.json({ id: accepted.result.id,
-				...(accepted.duplicate ? { duplicate: true } : {}), });
+			});
+			return Response.json({ id: created.id,
+				...(duplicate ? { duplicate: true } : {}), });
 		} catch (e) {
 			return Response.json(
 				{ error: e instanceof Error ? e.message : String(e) },

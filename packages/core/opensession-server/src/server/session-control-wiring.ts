@@ -407,27 +407,14 @@ registerSessionControl({
 		const requestId = input.requestId || randomUUIDv7();
 		const actorScope = input.requestScope || input.user || "automation";
 		const requestedId = input.id || sessionIdForRequest(actorScope, requestId);
-		const commandOwner = requestedId;
 		const ownedInput: CreateSessionOpts = {
 			...input,
 			id: requestedId,
 			requestId,
 		};
-		if (!sessionKernelOwnsCurrentCommand(commandOwner)) {
-			const identity = new Bun.CryptoHasher("sha256")
-				.update(canonicalCommandPayload(ownedInput))
-				.digest("hex");
-			const accepted = await sessionKernel(commandOwner).dispatchLegacy(
-				legacyGatewayEffect("create_session", {
-					requestId,
-					payload: { targetId: requestedId, identity },
-					source: "session_control",
-					replaySafe: true,
-				}),
-				() => getSessionControl().createSession(ownedInput),
-			);
-			return accepted.result;
-		}
+		// The creation FSM below is the durable/idempotent owner. Do not put a
+		// second create_session command around it: the outer command would wait for
+		// projection while the opening effect waits for its session-file command.
 		const {
 			prompt,
 			branch,

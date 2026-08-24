@@ -16,7 +16,6 @@ import type {
 export const LEGACY_GATEWAY_EFFECT_OPERATIONS = Object.freeze([
   "answer_question",
   "cancel_session",
-  "create_session",
   "delete_session",
   "session_file_updated",
   "submit_prompt",
@@ -24,7 +23,7 @@ export const LEGACY_GATEWAY_EFFECT_OPERATIONS = Object.freeze([
   "websocket_command",
 ] as const);
 
-export const LEGACY_GATEWAY_EFFECT_SITE_BASELINE = 8;
+export const LEGACY_GATEWAY_EFFECT_SITE_BASELINE = 6;
 
 export type LegacyGatewayEffectOperation =
   (typeof LEGACY_GATEWAY_EFFECT_OPERATIONS)[number];
