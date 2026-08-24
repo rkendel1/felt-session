@@ -6,6 +6,7 @@
  * Deduped on head SHA so the same commit isn't reviewed twice.
  */
 import { personaName } from "../../server/config";
+import { isShuttingDown } from "../../server/shutdown-state";
 import {
   getPrDetails,
   getPrDetailsFresh,
@@ -148,6 +149,10 @@ export async function runReview(
   force = false,
   steer?: string,
 ): Promise<ReviewResult | null> {
+  if (isShuttingDown()) {
+    console.log(`[github] PR #${pr.number} review parked during shutdown`);
+    return null;
+  }
   if (!claimLock("review", pr.number, pr.ghRepo)) {
     console.log(`[github] review already running for PR #${pr.number}, skipping`);
     return null;
@@ -401,6 +406,11 @@ export async function runReview(
     };
 
     if (cancellationRequested()) return finishCancelled(placeholderId || undefined);
+    if (isShuttingDown()) {
+      preserveRecovery = true;
+      console.log(`[github] PR #${pr.number} review parked for restart`);
+      return null;
+    }
     console.log(`[github] Reviewing PR #${pr.number} @ ${pr.headSha.slice(0, 7)} (${isUpdate ? "update" : "initial"})`);
     let finalResult: GithubRunResult;
     if (recoveredReviewResult) {
@@ -445,6 +455,11 @@ export async function runReview(
     // the review contract. Give the same engine session one bounded chance to
     // turn its completed inspection into a postable verdict.
     if (!finalResult.error && !isCompleteReviewOutput(parsed)) {
+      if (isShuttingDown()) {
+        preserveRecovery = true;
+        console.log(`[github] PR #${pr.number} review repair parked for restart`);
+        return null;
+      }
       console.warn(`[github] PR #${pr.number} review ended without structured output; repairing once`);
       finalResult = await runGithubAgent({
         prNumber: pr.number,

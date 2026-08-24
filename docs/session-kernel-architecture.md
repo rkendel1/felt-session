@@ -261,6 +261,16 @@ The runtime starts only after run-host recovery and queue restoration establish
 ownership. Any recovery-gate error fail-stops the gateway before timers or
 outbox effects can run. Shutdown stops the runtime before draining the server.
 
+Background intake observes the same process-wide shutdown fence. New cron,
+automation webhook, GitHub review and queued boot-recovery work cannot start
+after the fence. Automation triggers accepted before the fence write a bounded
+pre-launch intent with a stable session id and acceptance time before setup.
+The intent remains through physical execution: boot defers to an existing run
+journal, while completed projection effects record a terminal receipt that boot can
+settle without model replay. Ledger settlement precedes intent retirement.
+Accepted setup remains part of bounded drain accounting until physical handoff. Review shutdown preserves its active-run/result marker
+rather than treating restart as user cancellation.
+
 ## Read projections
 
 The existing session-list cache, list snapshots, search index, and workspace

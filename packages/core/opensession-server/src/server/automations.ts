@@ -6,6 +6,7 @@
 import { randomUUIDv7 } from "bun";
 import { OPENSESSION_SESSIONS_DIR , newSessionId} from "./paths";
 import { mkdirSync, readdirSync, readFileSync, unlinkSync, existsSync } from "fs";
+import { join } from "path";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import {
   RequestBodyTooLargeError,
@@ -13,6 +14,7 @@ import {
   webhookBodyTooLargeResponse,
 } from "./shared/bounded-body";
 import { labelIdentity } from "./shared/user-mappings";
+import { isShuttingDown } from "./shutdown-state";
 import { parseCron, cronMatches, nextRun } from "./cron";
 import {
   STRIPE_CONFIRM_TOOLS,
@@ -22,6 +24,7 @@ import {
 import { getAccountById } from "./claude-accounts";
 import { getCodexAccountById } from "./codex-accounts";
 import { runAgent } from "./agent-runner";
+import { activeRunRecords } from "./run-journal";
 import { runAgentHosted } from "./host-client";
 import {
   providerFor,
@@ -1006,7 +1009,11 @@ function recordRunStart(id: string, run: AutomationRun): void {
     lastRunStatus: "running",
     lastRunError: undefined,
     lastTrigger: run.trigger,
-    runs: [run, ...(fresh.runs || [])].slice(0, RUNS_CAP),
+    runs: (fresh.runs || []).some((entry) => entry.sessionId === run.sessionId)
+      ? (fresh.runs || []).map((entry) =>
+          entry.sessionId === run.sessionId ? { ...entry, status: "running" as const } : entry,
+        )
+      : [run, ...(fresh.runs || [])].slice(0, RUNS_CAP),
   });
 }
 
@@ -1043,6 +1050,9 @@ export function settleResumedAutomationRun(sessionId: string, error: string | nu
       error: error || undefined,
       durationMs: Math.max(0, Date.now() - new Date(run.at).getTime()),
     });
+    const completedIntent = clearAutomationIntent(sessionId);
+    if (completedIntent?.deleteAutomationAfterRun)
+      deleteAutomation(automation.id);
     console.log(
       `[automations] Settled resumed run ${sessionId} for "${automation.name}" (${error ? "error" : "ok"})`
     );
@@ -1098,8 +1108,138 @@ function sandboxAutomationMcpEgress(mcpServers: string[]): string[] {
   return [...destinations];
 }
 
+const automationPreparations = new Set<string>();
+const activeAutomationIntentSessions = new Set<string>();
+
 export function isAutomationRunning(id: string): boolean {
   return (runningCounts.get(id) || 0) > 0;
+}
+
+export function activeAutomationPreparationCount(): number {
+  return automationPreparations.size;
+}
+
+type PendingAutomationIntent = {
+  version: 1;
+  automationId: string;
+  sessionId: string;
+  trigger: "cron" | "webhook" | "manual" | "event";
+  eventContext?: string;
+  modelOverride?: string;
+  acceptedAt: string;
+  deleteAutomationAfterRun?: boolean;
+  terminalAt?: string;
+  terminalError?: string;
+};
+
+const automationIntentDir = join(OPENSESSION_SESSIONS_DIR, "automation-intents");
+const automationIntentPath = (sessionId: string) =>
+  join(automationIntentDir, `${sessionId.replace(/[^a-zA-Z0-9._-]/g, "_")}.json`);
+
+function persistAutomationIntent(intent: PendingAutomationIntent): void {
+  mkdirSync(automationIntentDir, { recursive: true, mode: 0o700 });
+  const path = automationIntentPath(intent.sessionId);
+  if (existsSync(path)) {
+    const existing = JSON.parse(readFileSync(path, "utf8")) as PendingAutomationIntent;
+    const identity = ({
+      acceptedAt: _acceptedAt,
+      terminalAt: _terminalAt,
+      terminalError: _terminalError,
+      ...value
+    }: PendingAutomationIntent) => JSON.stringify(value);
+    if (identity(existing) !== identity(intent))
+      throw new Error(`Automation intent ${intent.sessionId} changed identity`);
+    return;
+  }
+  writeJsonAtomic(path, intent, true, 0o600);
+}
+
+function recordAutomationIntentTerminal(
+  sessionId: string,
+  error?: string,
+): void {
+  const path = automationIntentPath(sessionId);
+  const intent = JSON.parse(readFileSync(path, "utf8")) as PendingAutomationIntent;
+  writeJsonAtomic(
+    path,
+    {
+      ...intent,
+      terminalAt: new Date().toISOString(),
+      terminalError: error,
+    },
+    true,
+    0o600,
+  );
+}
+
+function clearAutomationIntent(sessionId: string): PendingAutomationIntent | undefined {
+  const path = automationIntentPath(sessionId);
+  try {
+    const intent = JSON.parse(readFileSync(path, "utf8")) as PendingAutomationIntent;
+    unlinkSync(path);
+    return intent;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    return undefined;
+  }
+}
+
+function hasAutomationIntent(sessionId: string): boolean {
+  return existsSync(automationIntentPath(sessionId));
+}
+
+export function resumePendingAutomationRuns(
+  onSessionCreated?: (sessionId: string) => void,
+): number {
+  if (isShuttingDown() || !existsSync(automationIntentDir)) return 0;
+  let resumed = 0;
+  for (const entry of readdirSync(automationIntentDir)) {
+    if (!entry.endsWith(".json")) continue;
+    try {
+      const intent = JSON.parse(
+        readFileSync(join(automationIntentDir, entry), "utf8"),
+      ) as PendingAutomationIntent;
+      if (
+        intent.version !== 1 ||
+        !intent.automationId ||
+        !intent.sessionId ||
+        !["cron", "webhook", "manual", "event"].includes(intent.trigger)
+      ) throw new Error("invalid automation intent");
+      const automation = getAutomation(intent.automationId);
+      if (!automation) throw new Error(`automation ${intent.automationId} is unavailable`);
+      if (intent.terminalAt) {
+        settleRun(automation.id, intent.sessionId, {
+          status: intent.terminalError ? "error" : "ok",
+          error: intent.terminalError,
+          durationMs: Math.max(0, Date.parse(intent.terminalAt) - Date.parse(intent.acceptedAt)),
+        });
+        const completedIntent = clearAutomationIntent(intent.sessionId);
+        if (completedIntent?.deleteAutomationAfterRun)
+          deleteAutomation(automation.id);
+        resumed++;
+        continue;
+      }
+      if (
+        automationPreparations.has(intent.sessionId) ||
+        activeAutomationIntentSessions.has(intent.sessionId) ||
+        activeRunRecords().some((run) => run.osSessionId === intent.sessionId)
+      ) continue;
+      void runAutomation(automation, onSessionCreated, {
+        trigger: intent.trigger,
+        eventContext: intent.eventContext,
+        modelOverride: intent.modelOverride,
+        osSessionId: intent.sessionId,
+        acceptedAt: intent.acceptedAt,
+        deleteAutomationAfterRun: intent.deleteAutomationAfterRun,
+      }).finally(() => {
+        if (!isShuttingDown()) resumePendingAutomationRuns(onSessionCreated);
+      });
+      resumed++;
+    } catch (error) {
+      console.error(`[automations] Pending intent ${entry} could not resume:`, error);
+    }
+  }
+  return resumed;
 }
 
 export async function runAutomation(
@@ -1114,6 +1254,10 @@ export async function runAutomation(
      * button) before the run starts, instead of waiting for onSessionCreated.
      */
     osSessionId?: string;
+    /** Durable acceptance time reused by pre-launch crash recovery. */
+    acceptedAt?: string;
+    /** Delete a consumed one-off only after intent/run settlement. */
+    deleteAutomationAfterRun?: boolean;
     /**
      * Model for THIS run only, beating the automation's configured model —
      * e.g. the Plain ticket router downgrading a basic ticket to a cheaper
@@ -1129,11 +1273,28 @@ export async function runAutomation(
     console.log(`[automations] "${automation.name}" still running, skipping`);
     return;
   }
-  runningCounts.set(automation.id, (runningCounts.get(automation.id) || 0) + 1);
-
-  const startedAt = new Date();
-  const stamp = startedAt.toISOString().slice(0, 16).replace("T", " ");
   const bksId = options?.osSessionId || newSessionId();
+  const acceptedAt = options?.acceptedAt || new Date().toISOString();
+  persistAutomationIntent({
+    version: 1,
+    automationId: automation.id,
+    sessionId: bksId,
+    trigger,
+    eventContext: options?.eventContext,
+    modelOverride: options?.modelOverride,
+    acceptedAt,
+    deleteAutomationAfterRun: options?.deleteAutomationAfterRun,
+  });
+  if (isShuttingDown()) {
+    console.log(`[automations] "${automation.name}" durably parked during shutdown`);
+    return;
+  }
+  runningCounts.set(automation.id, (runningCounts.get(automation.id) || 0) + 1);
+  activeAutomationIntentSessions.add(bksId);
+
+  const startedAt = new Date(acceptedAt);
+  const stamp = startedAt.toISOString().slice(0, 16).replace("T", " ");
+  automationPreparations.add(bksId);
   let sandboxRpcToken: string | undefined;
 
   try {
@@ -1421,6 +1582,10 @@ export async function runAutomation(
       const fb = automation.fallbackModel || DEFAULT_FALLBACK_MODEL;
       return fb ? automationModel(fb) : undefined;
     })();
+    // This run was admitted before shutdown. Keep it visible to the bounded
+    // drain until physical launch journals ownership; no later intake can join it.
+    if (isShuttingDown())
+      console.log(`[automations] "${automation.name}" completing accepted setup during shutdown`);
     let events: AsyncGenerator<StreamEvent>;
     if (sandbox) {
       sandboxRpcToken = crypto.randomUUID();
@@ -1493,6 +1658,8 @@ export async function runAutomation(
           });
     }
     for await (const event of events) {
+      // The engine stream is now physically adopted by agent-runner accounting.
+      automationPreparations.delete(bksId);
       if (event.type === "init") {
         engineSessionId = event.sessionId || "";
         if (event.provider) effectiveProvider = event.provider;
@@ -1548,11 +1715,15 @@ export async function runAutomation(
       preparedInputs.commit();
     }
 
+    recordAutomationIntentTerminal(bksId, errorMsg || undefined);
     settleRun(automation.id, bksId, {
       status: errorMsg ? "error" : "ok",
       error: errorMsg || undefined,
       durationMs: Date.now() - startedAt.getTime(),
     });
+    const completedIntent = clearAutomationIntent(bksId);
+    if (completedIntent?.deleteAutomationAfterRun)
+      deleteAutomation(automation.id);
     console.log(
       `[automations] "${automation.name}" finished ${errorMsg ? `with error: ${errorMsg}` : "ok"}`
     );
@@ -1563,7 +1734,11 @@ export async function runAutomation(
       error: e.message || String(e),
       durationMs: Date.now() - startedAt.getTime(),
     });
+    // A thrown consumer after physical adoption is ambiguous. Keep the intent;
+    // boot reconciles its active journal or terminal receipt before replay.
   } finally {
+    automationPreparations.delete(bksId);
+    activeAutomationIntentSessions.delete(bksId);
     unregisterRunToken(sandboxRpcToken);
     unregisterSessionMcpServers(bksId);
     const left = (runningCounts.get(automation.id) || 1) - 1;
@@ -1676,6 +1851,7 @@ export function startScheduler(onSessionCreated?: (sessionId: string) => void): 
   if (schedulerInterval) return;
 
   schedulerInterval = setInterval(() => {
+    if (isShuttingDown()) return;
     const now = new Date();
     const minuteKey = now.toISOString().slice(0, 16);
     if (minuteKey === lastFiredMinute) return;
@@ -1691,9 +1867,19 @@ export function startScheduler(onSessionCreated?: (sessionId: string) => void): 
       if (automation.runOnceAt) {
         if (Date.parse(automation.runOnceAt) <= now.getTime()) {
           saveAutomation({ ...automation, runOnceAt: undefined, enabled: false });
-          void runAutomation({ ...automation, runOnceAt: undefined, enabled: false }, onSessionCreated, {
-            trigger: "cron",
-          }).finally(() => deleteAutomation(automation.id));
+          const osSessionId = newSessionId();
+          void runAutomation(
+            { ...automation, runOnceAt: undefined, enabled: false },
+            onSessionCreated,
+            {
+              trigger: "cron",
+              osSessionId,
+              deleteAutomationAfterRun: true,
+            },
+          ).finally(() => {
+            // Pre-launch failure stays durable and retains its disabled config.
+            if (!hasAutomationIntent(osSessionId)) deleteAutomation(automation.id);
+          });
         }
         continue;
       }
@@ -1720,6 +1906,8 @@ export function getWebhookRoutes(
   const routes = new Map<string, (req: Request, url: URL) => Promise<Response>>();
 
   routes.set("POST /automations/*", async (req, url) => {
+    if (isShuttingDown())
+      return Response.json({ error: "Server restarting" }, { status: 503 });
     const m = url.pathname.match(/^\/automations\/([^/]+)\/([^/]+)$/);
     if (!m) return Response.json({ error: "Bad path" }, { status: 400 });
 
@@ -1748,6 +1936,8 @@ export function getWebhookRoutes(
       throw error;
     }
 
+    if (isShuttingDown())
+      return Response.json({ error: "Server restarting" }, { status: 503 });
     console.log(`[automations] Webhook trigger: "${automation.name}"`);
     void runAutomation(automation, onSessionCreated, {
       trigger: "webhook",

@@ -23,6 +23,7 @@ import {
   transitionRunState,
 } from "./run-state";
 import type { StreamEvent, ImageInput } from "./run-events";
+import { isShuttingDown } from "./shutdown-state";
 // Type-only, so the direct engines stay lazily loaded (see the dispatch table
 // below): this pulls in the contract's signatures, never the SDKs.
 // Static import is deliberate: the pi-runner module itself is cheap (the
@@ -1211,7 +1212,7 @@ export function resumeInterruptedRuns(
     let started = false;
     let queuedTooLong: ReturnType<typeof setTimeout> | undefined;
     const start = async () => {
-      if (started) return;
+      if (started || isShuttingDown()) return;
       started = true;
       clearTimeout(queuedTooLong);
       if (settledRunKeys.has(run.runKey)) {
