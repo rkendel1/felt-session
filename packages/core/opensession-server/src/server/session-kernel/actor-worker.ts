@@ -375,7 +375,13 @@ export function startSessionKernelActorWorker(): void {
             result = store.prepareTurnCancel(turn);
           else if (turn.op === "begin_cancel_effect")
             result = store.beginTurnCancelEffect(turn);
-          else result = store.settleTurnCancel(turn);
+          else if (turn.op === "settle_cancel")
+            result = store.settleTurnCancel(turn);
+          else if (turn.op === "prepare_outcome_projection")
+            result = store.prepareTurnOutcomeProjection(turn);
+          else if (turn.op === "begin_outcome_projection")
+            result = store.beginTurnOutcomeProjection(turn);
+          else result = store.settleTurnOutcomeProjection(turn);
         } else {
           const ask = command.request;
           if (ask.op === "snapshot") result = store.askSnapshot(ask.sessionId);

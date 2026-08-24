@@ -41,6 +41,7 @@ import type { UnifiedSession, NativeSessionFile } from "./types";
 import {
   sessionDeliveryProjection,
   sessionKernel,
+  sessionKernelActorActive,
   sessionTurn,
 } from "./session-kernel";
 
@@ -448,7 +449,7 @@ export function updateSessionFile(
 	});
 }
 
-export function touchNativeSession(
+export function touchNativeSessionStrict(
 	bksId: string,
 	patch: Partial<NativeSessionFile>,
 ): Promise<void> {
@@ -456,7 +457,21 @@ export function touchNativeSession(
 		...data,
 		...patch,
 		lastActivity: new Date().toISOString(),
-	})).catch((e) => {
+	}));
+}
+
+function projectNativeRunErrorStrict(
+	bksId: string,
+	lastRunError: NativeSessionFile["lastRunError"],
+): Promise<void> {
+	return updateSessionFile(bksId, (data) => ({ ...data, lastRunError }));
+}
+
+export function touchNativeSession(
+	bksId: string,
+	patch: Partial<NativeSessionFile>,
+): Promise<void> {
+	return touchNativeSessionStrict(bksId, patch).catch((e) => {
 		console.error(`Failed to update opensession session ${bksId}:`, e);
 	});
 }
@@ -631,13 +646,28 @@ function persistRunFailureNotice(
 	engineSessionId: string | null | undefined,
 	message: string,
 	label: string,
+	projectionId?: string,
+	projectedAt?: string,
+	strict = false,
 ): void {
 	try {
 		const m = require("./transcript-persistence") as typeof import("./transcript-persistence");
-		m.applyForwardedTranscript(sessionId, engineSessionId || sessionId, [
-			m.transcriptLineRunnerNotice(`${label}: ${message}`),
-		]);
-	} catch {}
+		const line = m.transcriptLineRunnerNotice(
+			`${label}: ${message}`,
+			projectionId,
+			projectedAt,
+		);
+		if (strict)
+			m.applyForwardedTranscriptStrict(
+				sessionId,
+				engineSessionId || sessionId,
+				[line],
+			);
+		else
+			m.applyForwardedTranscript(sessionId, engineSessionId || sessionId, [line]);
+	} catch (error) {
+		if (strict) throw error;
+	}
 }
 
 /**
@@ -651,42 +681,76 @@ function persistRunFailureNotice(
  * file's id for a run that rotated to a fresh engine session mid-turn;
  * `opts.noticeLabel` re-words it for stops that were not errors.
  */
+export type RunOutcomeProjectionOptions = {
+	noticePersisted?: boolean;
+	engineSessionId?: string;
+	noticeLabel?: string;
+	/** Immutable physical owner for a durable terminal projection. */
+	runId?: string;
+	runGeneration?: number;
+	projectionId?: string;
+	projectedAt?: string;
+};
+
 export function recordRunOutcome(
 	sessionId: string,
 	errorMessage: string | null,
-	opts?: {
-		noticePersisted?: boolean;
-		engineSessionId?: string;
-		noticeLabel?: string;
-    /** Immutable owner for recovered terminal projection. */
-    runId?: string;
-	},
+	opts?: RunOutcomeProjectionOptions,
 ): void {
 	const session = findSession(sessionId);
 	const id = session?.id || sessionId;
-  if (opts?.runId) {
-    const cancel = sessionTurn({ op: "snapshot", sessionId: id }).cancel;
-    const current = sessionKernel(id).runState();
-    // A cancelled predecessor or any replaced generation cannot project its
-    // terminal outcome onto the successor's transcript/session file.
-    if (cancel?.runId === opts.runId || current.currentRunId !== opts.runId)
-      return;
-  }
 	// runAgent settles every journal-owned run on its terminal event. Keep this
 	// persistence choke point compatible with non-runner callers without
 	// emitting a false double-teardown rejection for the normal path.
 	if (isRunStateUnsettled(getRunState(id)))
-    transitionRunState(id, errorMessage ? "run_failed" : "turn_end", {
-      ...(opts?.runId ? { run_key: opts.runId } : {}),
-    });
+		transitionRunState(id, errorMessage ? "run_failed" : "turn_end", {
+			...(opts?.runId ? { run_key: opts.runId } : {}),
+		});
+	if (opts?.projectionId && opts.runId && sessionKernelActorActive()) {
+		const runGeneration =
+			opts.runGeneration ?? sessionKernel(id).runState().generation;
+		sessionTurn({
+			op: "prepare_outcome_projection",
+			sessionId: id,
+			projectionId: opts.projectionId,
+			runId: opts.runId,
+			runGeneration,
+			errorMessage: errorMessage?.slice(0, 500) ?? null,
+			...(opts.engineSessionId
+				? { engineSessionId: opts.engineSessionId }
+				: {}),
+			noticePersisted: opts.noticePersisted === true,
+			...(opts.noticeLabel ? { noticeLabel: opts.noticeLabel } : {}),
+			projectedAt: opts.projectedAt || new Date().toISOString(),
+		});
+		return;
+	}
+	if (
+		opts?.projectionId &&
+		opts.runId &&
+		process.env.NODE_ENV !== "test" &&
+		!process.env.OPENSESSION_RUN_JOURNAL
+	)
+		throw new Error("Turn outcome projection requires the authoritative actor");
+	void applyRunOutcomeProjection(id, errorMessage, opts);
+}
+
+/** Idempotent destination-side implementation for actor-issued projections. */
+export async function applyRunOutcomeProjection(
+	sessionId: string,
+	errorMessage: string | null,
+	opts?: RunOutcomeProjectionOptions,
+	strict = false,
+): Promise<void> {
+	const session = findSession(sessionId);
+	const id = session?.id || sessionId;
+	const projectedAt = opts?.projectedAt || new Date().toISOString();
 	if (errorMessage) {
 		const entry = {
 			message: errorMessage.slice(0, 500),
-			at: new Date().toISOString(),
+			at: projectedAt,
 		};
 		runErrors.set(id, entry);
-		// The transcript append is synchronous. Commit the visible notice before
-		// starting the asynchronous session-file projection.
 		if (!opts?.noticePersisted) {
 			const provider =
 				session?.lastEngineProvider ||
@@ -701,22 +765,33 @@ export function recordRunOutcome(
 					(session ? engineSessionIdFor(session, provider) : undefined),
 				errorMessage,
 				opts?.noticeLabel || "Run failed",
+				opts?.projectionId,
+				projectedAt,
+				strict,
 			);
 		}
-		if (session?.source === "opensession")
-			void touchNativeSession(id, { lastRunError: entry });
-		// A worker that dies can't report back, and its parent is usually idle
-		// (spawn_task returns immediately), so nothing polls either — the server
-		// says it instead. Fire-and-forget, dynamic import to keep this module
-		// free of the delivery/git graph. No-ops for anything without a parent.
-		void import("./handoff-evidence")
-			.then((m) => m.notifyParentOfFailedRun(id, entry.message))
-			.catch(() => {});
+		if (session?.source === "opensession") {
+			if (strict) await projectNativeRunErrorStrict(id, entry);
+			else await touchNativeSession(id, { lastRunError: entry });
+		}
+		try {
+			const handoff = await import("./handoff-evidence");
+			const outcome = await handoff.notifyParentOfFailedRun(
+				id,
+				entry.message,
+				undefined,
+				opts?.projectionId,
+			);
+			if (strict && outcome === "failed")
+				throw new Error("Worker failure notification projection failed");
+		} catch (error) {
+			if (strict) throw error;
+		}
 	} else {
-		// Only rewrite the session file when there's actually a flag to clear
-		// (the in-memory map, or one persisted by a previous process).
 		const had = runErrors.delete(id) || !!session?.lastRunError;
-		if (had && session?.source === "opensession")
-			touchNativeSession(id, { lastRunError: undefined });
+		if (had && session?.source === "opensession") {
+			if (strict) await projectNativeRunErrorStrict(id, undefined);
+			else await touchNativeSession(id, { lastRunError: undefined });
+		}
 	}
 }

@@ -94,6 +94,7 @@ import { setServiceReadiness } from "./src/server/service-readiness";
 import {
 	reconcileSessionKernelOwnership,
 	reconcileCompatibleCreationBranchEffects,
+  sessionKernel,
 	startSessionKernelActor,
 	startSessionKernelRuntime,
 	stopSessionKernelRuntime,
@@ -798,7 +799,13 @@ if (!g.__opensessionBooted) {
 						// persists that id — so name it here, or the failure chip is
 						// written into the transcript the conversation left behind.
 						{
-              runId: recoveredRun?.runKey,
+              ...(recoveredRun?.runKey
+                ? {
+                    runId: recoveredRun.runKey,
+                    runGeneration: sessionKernel(bksSessionId).runState().generation,
+                    projectionId: `outcome:${recoveredRun.runKey}`,
+                  }
+                : {}),
 							engineSessionId: terminalEvent.sessionId,
 							noticeLabel: terminalEvent.usageLimitExhausted
 								? "Run stopped"

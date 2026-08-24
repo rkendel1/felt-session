@@ -311,6 +311,69 @@ describe("session kernel actor boundary", () => {
     ]);
   });
 
+  test("owns terminal outcome projection and settlement while gateway work is active", async () => {
+    const host = await actor();
+    host.decideRunEvent({
+      sessionId: "turn-outcome",
+      event: "prompt",
+      runKey: "run-one",
+    });
+    host.decideRunEvent({
+      sessionId: "turn-outcome",
+      event: "run_registered",
+      runKey: "run-one",
+    });
+    host.decideRunEvent({
+      sessionId: "turn-outcome",
+      event: "run_failed",
+      runKey: "run-one",
+    });
+    expect(
+      host.decideTurn({
+        op: "prepare_outcome_projection",
+        sessionId: "turn-outcome",
+        projectionId: "outcome:run-one",
+        runId: "run-one",
+        runGeneration: 1,
+        errorMessage: "failed",
+        noticePersisted: false,
+        projectedAt: "2026-08-24T18:00:00.000Z",
+      }),
+    ).toMatchObject({ phase: "pending", runGeneration: 1 });
+    expect(
+      host.store.pendingOutbox(Date.now(), 10, ["turn_outcome_project"]),
+    ).toEqual([
+      expect.objectContaining({
+        kind: "turn_outcome_project",
+        effectKey: "outcome:run-one",
+      }),
+    ]);
+    expect(
+      host.decideTurn({
+        op: "begin_outcome_projection",
+        sessionId: "turn-outcome",
+        projectionId: "outcome:run-one",
+        runGeneration: 1,
+      }),
+    ).toBe("execute");
+    expect(
+      host.decideTurn({
+        op: "settle_outcome_projection",
+        sessionId: "turn-outcome",
+        projectionId: "outcome:run-one",
+        runGeneration: 1,
+      }),
+    ).toBe(true);
+    expect(
+      host.decideTurn({
+        op: "begin_outcome_projection",
+        sessionId: "turn-outcome",
+        projectionId: "outcome:run-one",
+        runGeneration: 1,
+      }),
+    ).toBe("completed");
+  });
+
   test("reduces creation events while gateway work is active", async () => {
     const host = await actor();
     const active = await host.begin(

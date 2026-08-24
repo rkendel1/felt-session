@@ -417,6 +417,19 @@ export function appendTranscriptEntries(
   if (lines.length) appendLines(engineSessionId, lines);
 }
 
+export function applyForwardedTranscriptStrict(
+  sessionId: string,
+  engineSessionId: string,
+  lines: JsonlLine[],
+): void {
+  if (!sessionId || !lines.length)
+    throw new Error("Invalid forwarded transcript projection");
+  if (engineSessionId && engineSessionId !== sessionId)
+    recordEngineSessionOwner(engineSessionId, sessionId);
+  const entries = parseJsonlLines(lines.map((line) => JSON.stringify(line)));
+  if (entries.length) transcriptStore().appendTranscriptEvents(sessionId, entries);
+}
+
 export function applyForwardedTranscript(
   sessionId: string,
   engineSessionId: string,

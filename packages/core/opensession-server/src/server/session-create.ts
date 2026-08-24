@@ -1164,6 +1164,9 @@ export async function openCreatedSession(
 				recordRunOutcome(bksId, runFailure, {
 					engineSessionId,
 					noticePersisted: failureNoticePersisted,
+					runId: startToken,
+					runGeneration: sessionKernel(bksId).runState().generation,
+					projectionId: `outcome:${startToken}`,
 				});
 				// This runs in the terminal event's consumer body, before requesting
 				// the generator's next item. Backend generator finally blocks may now

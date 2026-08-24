@@ -267,17 +267,23 @@ describe("formatHandoffEvidence", () => {
 function beacon(
 	file: Record<string, unknown> | null,
 	over: Partial<BeaconDeps> = {},
-): { deps: BeaconDeps; delivered: { to: string; content: string }[]; stamped: string[] } {
-	const delivered: { to: string; content: string }[] = [];
+): {
+	deps: BeaconDeps;
+	delivered: { to: string; content: string; deliveryId: string }[];
+	stamped: string[];
+} {
+	const delivered: { to: string; content: string; deliveryId: string }[] = [];
 	const stamped: string[] = [];
 	return {
 		delivered,
 		stamped,
 		deps: {
 			readSessionFile: () => file,
-			stamp: (id) => stamped.push(id),
-			deliver: async (to, content) => {
-				delivered.push({ to, content });
+			stamp: (id) => {
+				stamped.push(id);
+			},
+			deliver: async (to, content, deliveryId) => {
+				delivered.push({ to, content, deliveryId });
 			},
 			evidence: async () => null,
 			now: () => Date.parse("2026-07-24T12:00:00Z"),
@@ -350,6 +356,117 @@ describe("notifyParentOfFailedRun", () => {
 			parentNotifiedAt: "2026-07-24T11:00:00Z",
 		});
 		expect(await notifyParentOfFailedRun("bks-child", "boom", b.deps)).toBe("sent");
+	});
+
+	it("does not stamp a failed delivery and can retry the stable destination", async () => {
+		let attempts = 0;
+		const b = beacon(
+			{ parentSessionId: "bks-parent", reportBack: true },
+			{
+				deliver: async () => {
+					attempts += 1;
+					if (attempts === 1) throw new Error("temporary delivery failure");
+				},
+			},
+		);
+		expect(await notifyParentOfFailedRun("bks-child", "boom", b.deps)).toBe(
+			"failed",
+		);
+		expect(b.stamped).toEqual([]);
+		expect(await notifyParentOfFailedRun("bks-child", "boom", b.deps)).toBe(
+			"sent",
+		);
+		expect(attempts).toBe(2);
+		expect(b.stamped).toEqual(["bks-child"]);
+	});
+
+	it("keeps a projected beacon payload immutable after delivery succeeds", async () => {
+		const accepted = new Map<string, string>();
+		let stampAttempts = 0;
+		let evidenceCalls = 0;
+		const b = beacon(
+			{ parentSessionId: "bks-parent", reportBack: true },
+			{
+				evidence: async () => {
+					evidenceCalls += 1;
+					return {
+						sessionId: "bks-child",
+						state: "error",
+						failures: [],
+						commands: [`mutable-${evidenceCalls}`],
+					};
+				},
+				deliver: async (_to, content, deliveryId) => {
+					const prior = accepted.get(deliveryId);
+					if (prior !== undefined && prior !== content)
+						throw new Error("delivery identity payload changed");
+					accepted.set(deliveryId, content);
+				},
+				stamp: () => {
+					stampAttempts += 1;
+					if (stampAttempts === 1) throw new Error("stamp failed after delivery");
+				},
+			},
+		);
+		expect(
+			await notifyParentOfFailedRun(
+				"bks-child",
+				"boom",
+				b.deps,
+				"outcome:run-one",
+			),
+		).toBe("failed");
+		expect(
+			await notifyParentOfFailedRun(
+				"bks-child",
+				"boom",
+				b.deps,
+				"outcome:run-one",
+			),
+		).toBe("sent");
+		expect(accepted.size).toBe(1);
+		expect(evidenceCalls).toBe(0);
+	});
+
+	it("uses a new destination for a later projected failure after throttle", async () => {
+		let now = Date.parse("2026-07-24T12:00:00Z");
+		const file: Record<string, unknown> = {
+			parentSessionId: "bks-parent",
+			reportBack: true,
+		};
+		const deliveryIds: string[] = [];
+		const deps: BeaconDeps = {
+			readSessionFile: () => file,
+			stamp: (_id, at) => {
+				file.parentNotifiedAt = at;
+			},
+			deliver: async (_to, _content, deliveryId) => {
+				deliveryIds.push(deliveryId);
+			},
+			evidence: async () => null,
+			now: () => now,
+		};
+		expect(
+			await notifyParentOfFailedRun(
+				"bks-child",
+				"first failure",
+				deps,
+				"outcome:run-one",
+			),
+		).toBe("sent");
+		now += 11 * 60_000;
+		expect(
+			await notifyParentOfFailedRun(
+				"bks-child",
+				"different second failure",
+				deps,
+				"outcome:run-two",
+			),
+		).toBe("sent");
+		expect(deliveryIds).toEqual([
+			"worker-failure:bks-child:outcome:run-one",
+			"worker-failure:bks-child:outcome:run-two",
+		]);
 	});
 
 	it("never throws out of a run-end path", async () => {

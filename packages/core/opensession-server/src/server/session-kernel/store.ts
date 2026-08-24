@@ -102,6 +102,18 @@ export type DurableTurnState = {
   updatedAt: number;
 };
 
+export type DurableTurnOutcomeProjection = {
+  projectionId: string;
+  phase: "pending" | "completed" | "superseded";
+  runId: string;
+  runGeneration: number;
+  errorMessage: string | null;
+  engineSessionId?: string;
+  noticePersisted: boolean;
+  noticeLabel?: string;
+  projectedAt: string;
+};
+
 export interface DurableOutboxItem {
 	id: number;
 	effectId: string;
@@ -198,7 +210,7 @@ const PROCESS_OWNER_ID = (ownerGlobal.__opensessionSessionKernelOwnerId ??=
 		bootId: linuxBootId(),
 		start: linuxProcessStart(process.pid),
 	} satisfies ProcessOwnerIdentity));
-export const SESSION_KERNEL_SCHEMA_VERSION = 13;
+export const SESSION_KERNEL_SCHEMA_VERSION = 14;
 export const SESSION_KERNEL_MAX_CREATION_EFFECT_RECEIPTS = 256;
 export const SESSION_KERNEL_MAX_OPENING_PLAN_BYTES = 16 * 1024 * 1024;
 
@@ -417,6 +429,16 @@ export class SessionKernelStore {
         revision INTEGER NOT NULL DEFAULT 0,
         cancel TEXT,
         updated_at INTEGER NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS session_kernel_turn_projections (
+        session_id TEXT NOT NULL,
+        projection_id TEXT NOT NULL,
+        generation INTEGER NOT NULL,
+        phase TEXT NOT NULL,
+        payload TEXT NOT NULL,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY (session_id, projection_id),
+        UNIQUE (session_id, generation)
       );
 			CREATE TABLE IF NOT EXISTS session_kernel_commands (
 				session_id TEXT NOT NULL,
@@ -1562,6 +1584,7 @@ export class SessionKernelStore {
         "session_kernel_asks",
         "session_kernel_delivery",
         "session_kernel_turn",
+        "session_kernel_turn_projections",
 				"session_kernel_commands",
 				"session_kernel_changes",
 				"session_kernel_timers",
@@ -1587,6 +1610,7 @@ export class SessionKernelStore {
         "session_kernel_asks",
         "session_kernel_delivery",
         "session_kernel_turn",
+        "session_kernel_turn_projections",
 				"session_kernel_commands",
 				"session_kernel_changes",
 				"session_kernel_timers",
@@ -2220,6 +2244,239 @@ export class SessionKernelStore {
       phase: "settled",
       outcome: input.outcome,
     });
+    return true;
+  }
+
+  private turnOutcomeProjection(
+    sessionId: string,
+    projectionId: string,
+  ): DurableTurnOutcomeProjection | undefined {
+    const row = this.db
+      .query(
+        `SELECT phase, payload FROM session_kernel_turn_projections
+         WHERE session_id = ? AND projection_id = ?`,
+      )
+      .get(sessionId, projectionId) as
+      | { phase: "pending" | "completed" | "superseded"; payload: string }
+      | null;
+    if (!row) return undefined;
+    return {
+      ...(parsed(row.payload) as Omit<DurableTurnOutcomeProjection, "phase">),
+      phase: row.phase,
+    };
+  }
+
+  prepareTurnOutcomeProjection(input: {
+    sessionId: string;
+    projectionId: string;
+    runId: string;
+    runGeneration: number;
+    errorMessage: string | null;
+    engineSessionId?: string;
+    noticePersisted: boolean;
+    noticeLabel?: string;
+    projectedAt: string;
+  }): DurableTurnOutcomeProjection | "stale" {
+    if (
+      !input.projectionId ||
+      input.projectionId.length > 256 ||
+      !input.runId ||
+      input.runId.length > 256 ||
+      !Number.isSafeInteger(input.runGeneration) ||
+      input.runGeneration < 1 ||
+      (input.errorMessage !== null && input.errorMessage.length > 500) ||
+      (input.engineSessionId !== undefined &&
+        (!input.engineSessionId || input.engineSessionId.length > 256)) ||
+      typeof input.noticePersisted !== "boolean" ||
+      (input.noticeLabel !== undefined &&
+        (!input.noticeLabel || input.noticeLabel.length > 100)) ||
+      !input.projectedAt ||
+      input.projectedAt.length > 64 ||
+      !Number.isFinite(Date.parse(input.projectedAt))
+    ) throw new Error("Invalid turn outcome projection");
+    if (this.isTombstoned(input.sessionId))
+      throw new Error(`Session ${input.sessionId} was deleted`);
+    const payload: Omit<DurableTurnOutcomeProjection, "phase"> = {
+      projectionId: input.projectionId,
+      runId: input.runId,
+      runGeneration: input.runGeneration,
+      errorMessage: input.errorMessage,
+      ...(input.engineSessionId ? { engineSessionId: input.engineSessionId } : {}),
+      noticePersisted: input.noticePersisted,
+      ...(input.noticeLabel ? { noticeLabel: input.noticeLabel } : {}),
+      projectedAt: input.projectedAt,
+    };
+    const existing = this.turnOutcomeProjection(
+      input.sessionId,
+      input.projectionId,
+    );
+    if (existing) {
+      const { phase: _phase, ...existingPayload } = existing;
+      if (JSON.stringify(existingPayload) !== JSON.stringify(payload))
+        throw new Error("Turn outcome projection identity was reused with another payload");
+      return existing;
+    }
+    const priorRun = this.runState(input.sessionId);
+    const cancel = this.turnSnapshot(input.sessionId).cancel;
+    if (
+      priorRun.generation !== input.runGeneration ||
+      (priorRun.currentRunId !== undefined && priorRun.currentRunId !== input.runId) ||
+      (cancel?.runId === input.runId &&
+        cancel.runGeneration === input.runGeneration &&
+        cancel.phase === "settled" &&
+        cancel.outcome === "confirmed")
+    ) return "stale";
+    const generationOwner = this.db
+      .query(
+        `SELECT projection_id FROM session_kernel_turn_projections
+         WHERE session_id = ? AND generation = ? LIMIT 1`,
+      )
+      .get(input.sessionId, input.runGeneration) as
+      | { projection_id: string }
+      | null;
+    if (generationOwner)
+      throw new Error("Turn outcome projection generation is already owned");
+
+    const now = Date.now();
+    const changeSeq = priorRun.changeSeq + 1;
+    const tx = this.db.transaction(() => {
+      this.db.run(
+        `INSERT INTO session_kernel_turn_projections
+         (session_id, projection_id, generation, phase, payload, updated_at)
+         VALUES (?, ?, ?, 'pending', ?, ?)`,
+        [
+          input.sessionId,
+          input.projectionId,
+          input.runGeneration,
+          json(payload),
+          now,
+        ],
+      );
+      this.db.run(
+        `UPDATE session_kernel_state SET change_seq = ?, updated_at = ?
+         WHERE session_id = ?`,
+        [changeSeq, now, input.sessionId],
+      );
+      this.db.run(
+        `INSERT INTO session_kernel_changes
+         (session_id, change_seq, kind, payload, created_at)
+         VALUES (?, ?, 'turn_outcome_projection_prepared', ?, ?)`,
+        [input.sessionId, changeSeq, json(payload), now],
+      );
+      this.enqueueOutbox(
+        input.sessionId,
+        "turn_outcome_project",
+        payload,
+        input.projectionId,
+      );
+    });
+    tx.immediate();
+    this.runStateCache.set(input.sessionId, { ...priorRun, changeSeq });
+    this.dirtyChangeSessions.add(input.sessionId);
+    return { ...payload, phase: "pending" };
+  }
+
+  beginTurnOutcomeProjection(input: {
+    sessionId: string;
+    projectionId: string;
+    runGeneration: number;
+  }): "execute" | "wait" | "completed" | "missing" {
+    if (this.isTombstoned(input.sessionId)) return "missing";
+    const projection = this.turnOutcomeProjection(
+      input.sessionId,
+      input.projectionId,
+    );
+    if (!projection || projection.runGeneration !== input.runGeneration)
+      return "missing";
+    if (projection.phase === "completed") return "completed";
+    if (projection.phase === "superseded") return "missing";
+    const higherCompleted = this.db
+      .query(
+        `SELECT 1 FROM session_kernel_turn_projections
+         WHERE session_id = ? AND generation > ? AND phase = 'completed'
+         LIMIT 1`,
+      )
+      .get(input.sessionId, input.runGeneration);
+    if (higherCompleted) {
+      this.db.run(
+        `UPDATE session_kernel_turn_projections
+         SET phase = 'superseded', updated_at = ?
+         WHERE session_id = ? AND projection_id = ? AND phase = 'pending'`,
+        [Date.now(), input.sessionId, input.projectionId],
+      );
+      return "missing";
+    }
+    this.db.run(
+      `UPDATE session_kernel_turn_projections AS p
+       SET phase = 'superseded', updated_at = ?
+       WHERE p.session_id = ? AND p.generation < ? AND p.phase = 'pending'
+         AND NOT EXISTS (
+           SELECT 1 FROM session_kernel_outbox o
+           WHERE o.session_id = p.session_id
+             AND o.kind = 'turn_outcome_project'
+             AND o.effect_key = p.projection_id
+             AND o.dead_lettered_at IS NULL
+         )`,
+      [Date.now(), input.sessionId, input.runGeneration],
+    );
+    const predecessor = this.db
+      .query(
+        `SELECT 1 FROM session_kernel_turn_projections p
+         JOIN session_kernel_outbox o
+           ON o.session_id = p.session_id
+          AND o.kind = 'turn_outcome_project'
+          AND o.effect_key = p.projection_id
+         WHERE p.session_id = ? AND p.phase = 'pending'
+           AND p.generation < ? AND o.dead_lettered_at IS NULL
+         LIMIT 1`,
+      )
+      .get(input.sessionId, input.runGeneration);
+    return predecessor ? "wait" : "execute";
+  }
+
+  settleTurnOutcomeProjection(input: {
+    sessionId: string;
+    projectionId: string;
+    runGeneration: number;
+  }): boolean {
+    const projection = this.turnOutcomeProjection(
+      input.sessionId,
+      input.projectionId,
+    );
+    if (!projection || projection.runGeneration !== input.runGeneration)
+      return false;
+    if (projection.phase === "completed") return true;
+    if (projection.phase === "superseded") return false;
+    const priorRun = this.runState(input.sessionId);
+    const now = Date.now();
+    const changeSeq = priorRun.changeSeq + 1;
+    const tx = this.db.transaction(() => {
+      this.db.run(
+        `UPDATE session_kernel_turn_projections
+         SET phase = 'completed', updated_at = ?
+         WHERE session_id = ? AND projection_id = ? AND generation = ?`,
+        [
+          now,
+          input.sessionId,
+          input.projectionId,
+          input.runGeneration,
+        ],
+      );
+      this.db.run(
+        `UPDATE session_kernel_state SET change_seq = ?, updated_at = ?
+         WHERE session_id = ?`,
+        [changeSeq, now, input.sessionId],
+      );
+      this.db.run(
+        `INSERT INTO session_kernel_changes
+         (session_id, change_seq, kind, payload, created_at)
+         VALUES (?, ?, 'turn_outcome_projection_completed', ?, ?)`,
+        [input.sessionId, changeSeq, json(projection), now],
+      );
+    });
+    tx.immediate();
+    this.runStateCache.set(input.sessionId, { ...priorRun, changeSeq });
+    this.dirtyChangeSessions.add(input.sessionId);
     return true;
   }
 
@@ -3313,6 +3570,15 @@ export class SessionKernelStore {
 	ackOutbox(id: number): void {
 		this.db.run("DELETE FROM session_kernel_outbox WHERE id = ?", [id]);
 	}
+
+  deferOutbox(id: number, delayMs = 250): void {
+    const delay = Number.isFinite(delayMs) ? Math.max(1, delayMs) : 250;
+    this.db.run(
+      `UPDATE session_kernel_outbox SET next_attempt_at = ?
+       WHERE id = ? AND dead_lettered_at IS NULL`,
+      [Date.now() + delay, id],
+    );
+  }
 
   noteOutboxFailure(
     id: number,

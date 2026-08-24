@@ -122,6 +122,7 @@ import {
 	persistAutoModelSwitch,
 	retryAutoFallbackModel,
 	recordRunOutcome,
+	applyRunOutcomeProjection,
 	touchNativeSession,
 	SESSIONS_DIR,
 } from "./session-cache";
@@ -172,6 +173,7 @@ import { automationSessionMcp, interactiveMcpServers } from "./interactive-mcp";
 import { makeAskHandler, settleRestoredAskAfterRecovery } from "./asks";
 import {
 	registerSessionEffectExecutor,
+  SessionEffectDeferredError,
 	settleCreationFailed,
 	settleCreationSucceeded,
 	sessionKernel,
@@ -181,7 +183,37 @@ import {
 const interruptExecutorGlobal = globalThis as typeof globalThis & {
 	__opensessionInterruptExecutorRegistered?: boolean;
   __opensessionTurnCancelExecutorRegistered?: boolean;
+  __opensessionTurnOutcomeProjectionExecutorRegistered?: boolean;
 };
+if (!interruptExecutorGlobal.__opensessionTurnOutcomeProjectionExecutorRegistered) {
+  registerSessionEffectExecutor("turn_outcome_project", async (item) => {
+    const projection = item.payload;
+    const decision = sessionTurn({
+      op: "begin_outcome_projection",
+      sessionId: item.sessionId,
+      projectionId: projection.projectionId,
+      runGeneration: projection.runGeneration,
+    });
+    if (decision === "missing" || decision === "completed") return;
+    if (decision === "wait")
+      throw new SessionEffectDeferredError("Earlier turn outcome is still pending");
+    await applyRunOutcomeProjection(
+      item.sessionId,
+      projection.errorMessage,
+      projection,
+      true,
+    );
+    const settled = sessionTurn({
+      op: "settle_outcome_projection",
+      sessionId: item.sessionId,
+      projectionId: projection.projectionId,
+      runGeneration: projection.runGeneration,
+    });
+    if (!settled)
+      throw new Error("Turn outcome projection ownership changed before settlement");
+  });
+  interruptExecutorGlobal.__opensessionTurnOutcomeProjectionExecutorRegistered = true;
+}
 if (!interruptExecutorGlobal.__opensessionInterruptExecutorRegistered) {
 	registerSessionEffectExecutor("delivery_interrupt_cancel", (item) => {
     const { interruptId, dispatchId, runIds, runGeneration } = item.payload;
@@ -2430,7 +2462,17 @@ async function runSessionPromptInner(
 				? " Daytona: if the launch failed because the sandbox could not dial back, check callbackBaseUrl and your org tier's egress (docs/self-hosting-sandboxes.md)."
 				: "");
 		broadcastToSession(sessionId, { type: "error", sessionId, message: msg });
-		recordRunOutcome(session.id, msg);
+		recordRunOutcome(
+			session.id,
+			msg,
+			startToken
+				? {
+						runId: startToken,
+						runGeneration: sessionKernel(session.id).runState().generation,
+						projectionId: `outcome:${startToken}`,
+					}
+				: undefined,
+		);
 		broadcastToSession(sessionId, { type: "stream_done", sessionId });
 		broadcastToSession(sessionId, {
 			type: "session_status",
@@ -2918,6 +2960,13 @@ async function runSessionPromptInner(
 		engineSessionId: finalSessionId || session.claudeSessionId || undefined,
 		noticePersisted: failureNoticePersisted,
 		noticeLabel: failureNoticeLabel,
+		...(startToken
+			? {
+					runId: startToken,
+					runGeneration: sessionKernel(session.id).runState().generation,
+					projectionId: `outcome:${startToken}`,
+				}
+			: {}),
 	});
 
 	// On a clean finish any steered messages already landed in the transcript, so

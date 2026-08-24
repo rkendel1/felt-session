@@ -326,6 +326,11 @@ export class SessionKernelActorClient {
         Extract<TurnActorRequest, { op: "prepare_cancel" }>
       >;
       (this.store as RemoteStore).noteRunState(request.sessionId, prepared.runState);
+    } else if (
+      request.op === "prepare_outcome_projection" ||
+      request.op === "settle_outcome_projection"
+    ) {
+      (this.store as RemoteStore).noteChange(request.sessionId);
     }
     return result;
   }
@@ -688,6 +693,30 @@ class RemoteStore implements SessionKernelStoreApi {
       SessionKernelStoreApi["settleTurnCancel"]
     >;
   }
+  prepareTurnOutcomeProjection(
+    input: Parameters<SessionKernelStoreApi["prepareTurnOutcomeProjection"]>[0],
+  ): ReturnType<SessionKernelStoreApi["prepareTurnOutcomeProjection"]> {
+    return this.actor.decideTurn({
+      op: "prepare_outcome_projection",
+      ...input,
+    }) as ReturnType<SessionKernelStoreApi["prepareTurnOutcomeProjection"]>;
+  }
+  beginTurnOutcomeProjection(
+    input: Parameters<SessionKernelStoreApi["beginTurnOutcomeProjection"]>[0],
+  ): ReturnType<SessionKernelStoreApi["beginTurnOutcomeProjection"]> {
+    return this.actor.decideTurn({
+      op: "begin_outcome_projection",
+      ...input,
+    }) as ReturnType<SessionKernelStoreApi["beginTurnOutcomeProjection"]>;
+  }
+  settleTurnOutcomeProjection(
+    input: Parameters<SessionKernelStoreApi["settleTurnOutcomeProjection"]>[0],
+  ): ReturnType<SessionKernelStoreApi["settleTurnOutcomeProjection"]> {
+    return this.actor.decideTurn({
+      op: "settle_outcome_projection",
+      ...input,
+    }) as ReturnType<SessionKernelStoreApi["settleTurnOutcomeProjection"]>;
+  }
   deliverySnapshot(sessionId: string) {
     return this.actor.decideDelivery({ op: "snapshot", sessionId });
   }
@@ -872,6 +901,9 @@ class RemoteStore implements SessionKernelStoreApi {
   }
   ackOutbox(id: number) {
     this.call("ackOutbox", id);
+  }
+  deferOutbox(id: number, delayMs?: number) {
+    this.call("deferOutbox", id, delayMs);
   }
   noteTimerFailure(
     sessionId: string,

@@ -10,6 +10,7 @@ import type { DurableOutboxItem, DurableTimer } from "./store";
 import {
 	executeSessionEffect,
 	registeredSessionEffectKinds,
+  SessionEffectDeferredError,
 } from "./effect-executors";
 import { legacyGatewayEffect } from "./lifecycle-protocol";
 import { pruneCreatePlans } from "../session-create-plan";
@@ -168,6 +169,10 @@ export async function drainSessionKernelRuntime(): Promise<void> {
 					if (executed) sessionKernelStore().ackOutbox(item.id);
 				})
 				.catch((error) => {
+          if (error instanceof SessionEffectDeferredError) {
+            sessionKernelStore().deferOutbox(item.id);
+            return;
+          }
 					const message =
 						error instanceof Error ? error.message : String(error);
 					const settled = sessionKernelStore().noteOutboxFailure(

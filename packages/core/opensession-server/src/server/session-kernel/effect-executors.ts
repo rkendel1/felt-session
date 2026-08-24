@@ -18,6 +18,9 @@ type EffectExecutors = {
   [K in SessionActorEffectKind]?: EffectExecutor<K>;
 };
 
+/** Causal predecessor is still pending. Retry without consuming poison budget. */
+export class SessionEffectDeferredError extends Error {}
+
 function recordPayload(kind: string, payload: unknown): Record<string, unknown> {
   if (!payload || typeof payload !== "object" || Array.isArray(payload))
     throw new Error(`Invalid ${kind} effect payload`);
@@ -64,7 +67,10 @@ function creationBase(kind: string, value: Record<string, unknown>) {
 
 function creationPayload<K extends Exclude<
   SessionActorEffectKind,
-  "human_ask_deliver" | "delivery_interrupt_cancel" | "turn_cancel"
+  | "human_ask_deliver"
+  | "delivery_interrupt_cancel"
+  | "turn_cancel"
+  | "turn_outcome_project"
 >>(
   kind: K,
   payload: unknown,
@@ -253,6 +259,41 @@ function turnCancelPayload(
   };
 }
 
+function turnOutcomeProjectPayload(
+  payload: unknown,
+): SessionActorEffectFor<"turn_outcome_project">["payload"] {
+  const kind = "turn_outcome_project";
+  const value = recordPayload(kind, payload);
+  if (
+    !Number.isSafeInteger(value.runGeneration) ||
+    Number(value.runGeneration) < 1 ||
+    (value.errorMessage !== null && typeof value.errorMessage !== "string") ||
+    typeof value.noticePersisted !== "boolean" ||
+    typeof value.projectedAt !== "string" ||
+    !Number.isFinite(Date.parse(value.projectedAt))
+  ) throw new Error(`Invalid ${kind} effect payload: outcome fence`);
+  return {
+    projectionId: requiredString(kind, value.projectionId, "projectionId"),
+    runId: requiredString(kind, value.runId, "runId"),
+    runGeneration: Number(value.runGeneration),
+    errorMessage: value.errorMessage as string | null,
+    ...(value.engineSessionId === undefined
+      ? {}
+      : {
+          engineSessionId: requiredString(
+            kind,
+            value.engineSessionId,
+            "engineSessionId",
+          ),
+        }),
+    noticePersisted: value.noticePersisted,
+    ...(value.noticeLabel === undefined
+      ? {}
+      : { noticeLabel: requiredString(kind, value.noticeLabel, "noticeLabel") }),
+    projectedAt: value.projectedAt,
+  };
+}
+
 function humanAskDeliverPayload(
   payload: unknown,
 ): SessionActorEffectFor<"human_ask_deliver">["payload"] {
@@ -270,6 +311,7 @@ const payloadDecoders: {
   human_ask_deliver: humanAskDeliverPayload,
   delivery_interrupt_cancel: deliveryInterruptCancelPayload,
   turn_cancel: turnCancelPayload,
+  turn_outcome_project: turnOutcomeProjectPayload,
   creation_workspace_prepare: (payload) =>
     creationPayload("creation_workspace_prepare", payload),
   creation_branch_prepare: (payload) =>

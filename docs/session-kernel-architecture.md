@@ -229,6 +229,19 @@ responsive even while a gateway command is waiting on external work.
 Registering a new run id increments the session generation. Registering the
 same logical run again, such as a detached host reconnect, keeps its generation.
 
+Schema 14 moves normal and opening-turn terminal outcome persistence behind the
+typed `turn_outcome_project` effect. The actor validates the immutable run id and
+generation, durably stores one receipt per generation, and commits the outbox row
+in the same transaction. Stable projection ids and timestamps make transcript
+notices and session-file patches destination-idempotent. Multiple completed turns
+may await projection without overwriting accepted work; execution defers later
+generations behind an earlier live projection without consuming dead-letter
+attempts. The executor commits the transcript, `lastRunError`, and worker-failure
+notification before settling the exact actor receipt and acknowledging the
+outbox. Replays of completed, stale, cancelled, replaced, or tombstoned owners do
+not project onto a successor. Compatibility-only callers without a physical run
+fence still use the old facade while their launch paths migrate.
+
 Detached host events and direct side-effect frames (transcript, asks and failed
 steers) are accepted only while their stable logical run id is current. An
 input from an older physical host is audited, ignored, and that host is asked

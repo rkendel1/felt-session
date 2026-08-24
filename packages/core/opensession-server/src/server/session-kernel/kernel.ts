@@ -112,7 +112,13 @@ export function sessionTurn<T extends TurnActorRequest>(
     return store.prepareTurnCancel(request) as TurnActorResult<T>;
   if (request.op === "begin_cancel_effect")
     return store.beginTurnCancelEffect(request) as TurnActorResult<T>;
-  return store.settleTurnCancel(request) as TurnActorResult<T>;
+  if (request.op === "settle_cancel")
+    return store.settleTurnCancel(request) as TurnActorResult<T>;
+  if (request.op === "prepare_outcome_projection")
+    return store.prepareTurnOutcomeProjection(request) as TurnActorResult<T>;
+  if (request.op === "begin_outcome_projection")
+    return store.beginTurnOutcomeProjection(request) as TurnActorResult<T>;
+  return store.settleTurnOutcomeProjection(request) as TurnActorResult<T>;
 }
 
 export function sessionDelivery<T extends DeliveryActorRequest>(
@@ -192,6 +198,10 @@ export function sessionDeliveryProjection(sessionId: string): DurableDeliverySta
   const cached = projection.get(sessionId);
   if (cached) return cached;
   return sessionDelivery({ op: "snapshot", sessionId });
+}
+
+export function sessionKernelActorActive(): boolean {
+  return !!state.actor;
 }
 
 export function sessionKernelStore(): SessionKernelStoreApi {

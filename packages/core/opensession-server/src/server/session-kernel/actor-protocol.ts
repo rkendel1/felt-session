@@ -8,7 +8,7 @@ import type {
   RunEventDecisionResult,
 } from "./store";
 
-export const SESSION_KERNEL_ACTOR_VERSION = 13;
+export const SESSION_KERNEL_ACTOR_VERSION = 14;
 export const SESSION_KERNEL_MAX_WAITERS_PER_COMMAND = 64;
 export const SESSION_KERNEL_MAX_WAITERS_TOTAL = 4096;
 export const SESSION_KERNEL_MAX_EXECUTIONS_PER_SESSION = 128;

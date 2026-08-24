@@ -135,10 +135,25 @@ export type TurnCancelEffect = {
   };
 };
 
+export type TurnOutcomeProjectEffect = {
+  kind: "turn_outcome_project";
+  payload: {
+    projectionId: string;
+    runId: string;
+    runGeneration: number;
+    errorMessage: string | null;
+    engineSessionId?: string;
+    noticePersisted: boolean;
+    noticeLabel?: string;
+    projectedAt: string;
+  };
+};
+
 export type SessionActorEffect =
   | HumanAskDeliverEffect
   | DeliveryInterruptCancelEffect
   | TurnCancelEffect
+  | TurnOutcomeProjectEffect
   | CreationActorEffect;
 export type SessionActorEffectKind = SessionActorEffect["kind"];
 export type SessionActorEffectFor<K extends SessionActorEffectKind> = Extract<

@@ -1383,6 +1383,309 @@ describe("SessionKernel", () => {
     });
   });
 
+  test("durably projects one exact terminal outcome through the actor outbox", () => {
+    const dir = mkdtempSync(join(tmpdir(), "session-kernel-outcome-"));
+    const path = join(dir, "kernel.sqlite");
+    const first = new SessionKernelStore(path);
+    let effectId = -1;
+    let generation = -1;
+    try {
+      first.applyRunEvent({
+        sessionId: "outcome-restart",
+        event: "prompt",
+        runKey: "run-one",
+      });
+      first.applyRunEvent({
+        sessionId: "outcome-restart",
+        event: "run_registered",
+        runKey: "run-one",
+      });
+      generation = first.runState("outcome-restart").generation;
+      first.applyRunEvent({
+        sessionId: "outcome-restart",
+        event: "run_failed",
+        runKey: "run-one",
+      });
+      const input = {
+        sessionId: "outcome-restart",
+        projectionId: "outcome:run-one",
+        runId: "run-one",
+        runGeneration: generation,
+        errorMessage: "terminal failure",
+        engineSessionId: "engine-one",
+        noticePersisted: false,
+        noticeLabel: "Run failed",
+        projectedAt: "2026-08-24T18:00:00.000Z",
+      } as const;
+      expect(first.prepareTurnOutcomeProjection(input)).toMatchObject({
+        phase: "pending",
+        runId: "run-one",
+        runGeneration: generation,
+      });
+      expect(first.prepareTurnOutcomeProjection(input)).toMatchObject({
+        phase: "pending",
+      });
+      expect(() =>
+        first.prepareTurnOutcomeProjection({
+          ...input,
+          errorMessage: "crossed payload",
+        }),
+      ).toThrow("reused with another payload");
+      const [effect] = first.pendingOutbox(Date.now(), 10);
+      effectId = effect.id;
+      expect(effect).toMatchObject({
+        kind: "turn_outcome_project",
+        effectKey: "outcome:run-one",
+        payload: {
+          projectionId: "outcome:run-one",
+          runId: "run-one",
+          runGeneration: generation,
+          errorMessage: "terminal failure",
+          projectedAt: "2026-08-24T18:00:00.000Z",
+        },
+      });
+    } finally {
+      first.close();
+    }
+
+    const recovered = new SessionKernelStore(path);
+    try {
+      recovered.applyRunEvent({
+        sessionId: "outcome-restart",
+        event: "prompt",
+        runKey: "run-two",
+      });
+      recovered.applyRunEvent({
+        sessionId: "outcome-restart",
+        event: "run_registered",
+        runKey: "run-two",
+      });
+      const secondGeneration = recovered.runState("outcome-restart").generation;
+      recovered.applyRunEvent({
+        sessionId: "outcome-restart",
+        event: "turn_end",
+        runKey: "run-two",
+      });
+      expect(
+        recovered.prepareTurnOutcomeProjection({
+          sessionId: "outcome-restart",
+          projectionId: "outcome:run-two",
+          runId: "run-two",
+          runGeneration: secondGeneration,
+          errorMessage: null,
+          noticePersisted: false,
+          projectedAt: "2026-08-24T18:01:00.000Z",
+        }),
+      ).toMatchObject({ phase: "pending", runGeneration: secondGeneration });
+      const secondEffect = recovered
+        .pendingOutbox(Date.now(), 10)
+        .find((item) => item.effectKey === "outcome:run-two");
+      expect(secondEffect).toBeDefined();
+      expect(
+        recovered.beginTurnOutcomeProjection({
+          sessionId: "outcome-restart",
+          projectionId: "outcome:run-two",
+          runGeneration: secondGeneration,
+        }),
+      ).toBe("wait");
+      expect(
+        recovered.beginTurnOutcomeProjection({
+          sessionId: "outcome-restart",
+          projectionId: "outcome:run-one",
+          runGeneration: generation,
+        }),
+      ).toBe("execute");
+      expect(
+        recovered.settleTurnOutcomeProjection({
+          sessionId: "outcome-restart",
+          projectionId: "outcome:run-one",
+          runGeneration: generation,
+        }),
+      ).toBe(true);
+      expect(
+        recovered.beginTurnOutcomeProjection({
+          sessionId: "outcome-restart",
+          projectionId: "outcome:run-one",
+          runGeneration: generation,
+        }),
+      ).toBe("completed");
+      recovered.ackOutbox(effectId);
+      expect(recovered.pendingOutbox(Date.now(), 10)).toEqual([
+        expect.objectContaining({ effectKey: "outcome:run-two" }),
+      ]);
+      expect(
+        recovered.prepareTurnOutcomeProjection({
+          sessionId: "outcome-restart",
+          projectionId: "outcome:run-one",
+          runId: "run-one",
+          runGeneration: generation,
+          errorMessage: "terminal failure",
+          engineSessionId: "engine-one",
+          noticePersisted: false,
+          noticeLabel: "Run failed",
+          projectedAt: "2026-08-24T18:00:00.000Z",
+        }),
+      ).toMatchObject({ phase: "completed" });
+      expect(
+        recovered.settleTurnOutcomeProjection({
+          sessionId: "outcome-restart",
+          projectionId: "outcome:run-two",
+          runGeneration: secondGeneration,
+        }),
+      ).toBe(true);
+      recovered.ackOutbox(secondEffect?.id ?? -1);
+      expect(recovered.pendingOutbox(Date.now(), 10)).toEqual([]);
+
+      expect(
+        recovered.prepareTurnOutcomeProjection({
+          sessionId: "outcome-restart",
+          projectionId: "outcome:stale-run-one",
+          runId: "run-one",
+          runGeneration: generation,
+          errorMessage: null,
+          noticePersisted: false,
+          projectedAt: "2026-08-24T18:01:00.000Z",
+        }),
+      ).toBe("stale");
+      expect(
+        recovered.beginTurnOutcomeProjection({
+          sessionId: "outcome-restart",
+          projectionId: "missing",
+          runGeneration: generation,
+        }),
+      ).toBe("missing");
+
+      const deadSession = "outcome-dead-predecessor";
+      recovered.applyRunEvent({
+        sessionId: deadSession,
+        event: "prompt",
+        runKey: "dead-run-one",
+      });
+      recovered.applyRunEvent({
+        sessionId: deadSession,
+        event: "run_registered",
+        runKey: "dead-run-one",
+      });
+      const deadGeneration = recovered.runState(deadSession).generation;
+      recovered.applyRunEvent({
+        sessionId: deadSession,
+        event: "run_failed",
+        runKey: "dead-run-one",
+      });
+      recovered.prepareTurnOutcomeProjection({
+        sessionId: deadSession,
+        projectionId: "outcome:dead-run-one",
+        runId: "dead-run-one",
+        runGeneration: deadGeneration,
+        errorMessage: "old failure",
+        noticePersisted: false,
+        projectedAt: "2026-08-24T18:02:00.000Z",
+      });
+      const deadEffect = recovered.pendingOutbox(Date.now(), 10).find(
+        (item) => item.effectKey === "outcome:dead-run-one",
+      );
+      expect(deadEffect).toBeDefined();
+      expect(
+        recovered.noteOutboxFailure(deadEffect?.id ?? -1, "poison", 1),
+      ).toMatchObject({ deadLetteredNow: true });
+      recovered.applyRunEvent({
+        sessionId: deadSession,
+        event: "prompt",
+        runKey: "dead-run-two",
+      });
+      recovered.applyRunEvent({
+        sessionId: deadSession,
+        event: "run_registered",
+        runKey: "dead-run-two",
+      });
+      const newerGeneration = recovered.runState(deadSession).generation;
+      recovered.applyRunEvent({
+        sessionId: deadSession,
+        event: "turn_end",
+        runKey: "dead-run-two",
+      });
+      recovered.prepareTurnOutcomeProjection({
+        sessionId: deadSession,
+        projectionId: "outcome:dead-run-two",
+        runId: "dead-run-two",
+        runGeneration: newerGeneration,
+        errorMessage: null,
+        noticePersisted: false,
+        projectedAt: "2026-08-24T18:03:00.000Z",
+      });
+      expect(
+        recovered.beginTurnOutcomeProjection({
+          sessionId: deadSession,
+          projectionId: "outcome:dead-run-two",
+          runGeneration: newerGeneration,
+        }),
+      ).toBe("execute");
+      expect(
+        recovered.settleTurnOutcomeProjection({
+          sessionId: deadSession,
+          projectionId: "outcome:dead-run-two",
+          runGeneration: newerGeneration,
+        }),
+      ).toBe(true);
+      expect(recovered.retryDeadOutbox(deadEffect?.id ?? -1)).toBe(true);
+      expect(
+        recovered.beginTurnOutcomeProjection({
+          sessionId: deadSession,
+          projectionId: "outcome:dead-run-one",
+          runGeneration: deadGeneration,
+        }),
+      ).toBe("missing");
+      expect(
+        recovered.settleTurnOutcomeProjection({
+          sessionId: deadSession,
+          projectionId: "outcome:dead-run-one",
+          runGeneration: deadGeneration,
+        }),
+      ).toBe(false);
+
+      const cancelledSession = "outcome-cancelled-predecessor";
+      recovered.applyRunEvent({
+        sessionId: cancelledSession,
+        event: "prompt",
+        runKey: "cancelled-run",
+      });
+      recovered.applyRunEvent({
+        sessionId: cancelledSession,
+        event: "run_registered",
+        runKey: "cancelled-run",
+      });
+      const cancelledGeneration = recovered.runState(cancelledSession).generation;
+      recovered.prepareTurnCancel({
+        sessionId: cancelledSession,
+        cancelId: "cancel-outcome",
+        expectedRunId: "cancelled-run",
+        expectedGeneration: cancelledGeneration,
+        dispatchId: "cancelled-run",
+        requeueIds: [],
+        source: "test",
+      });
+      recovered.settleTurnCancel({
+        sessionId: cancelledSession,
+        cancelId: "cancel-outcome",
+        outcome: "confirmed",
+      });
+      expect(
+        recovered.prepareTurnOutcomeProjection({
+          sessionId: cancelledSession,
+          projectionId: "outcome:cancelled-run",
+          runId: "cancelled-run",
+          runGeneration: cancelledGeneration,
+          errorMessage: "must not project",
+          noticePersisted: false,
+          projectedAt: "2026-08-24T18:04:00.000Z",
+        }),
+      ).toBe("stale");
+    } finally {
+      recovered.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   test("durably prepares, retries, and generation-fences explicit turn cancellation", () => {
     const dir = mkdtempSync(join(tmpdir(), "session-kernel-cancel-"));
     const path = join(dir, "kernel.sqlite");
