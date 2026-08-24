@@ -100,6 +100,9 @@ function makeLocalSandbox(cwd: string): Sandbox {
           osSessionId: spec.osSessionId,
           kind: spec.journalKind || "prompt",
         },
+        // spec.hostId is the admitted run token (see maybeLaunchSandboxedRun);
+        // carrying it keeps exact-token Stop latching working in-process.
+        startToken: spec.hostId,
         onAskUser: cb?.onAskUser,
       });
       // In-process runs register their own control handles keyed by session

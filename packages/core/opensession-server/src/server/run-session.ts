@@ -1670,7 +1670,10 @@ export async function maybeLaunchSandboxedRun(
 			? portableWorkspacePresetRun(workspacePreset)
 			: undefined;
 		const spec: RunHostSpec = {
-			hostId: `rh-${randomUUIDv7()}`,
+			// Bind the physical sandbox host to the admitted run token, exactly like
+			// the Runner and local paths: exact-token Stop must reach the live host,
+			// and restart adoption must reattach under the same durable identity.
+			hostId: opts.startToken || `rh-${randomUUIDv7()}`,
 			osSessionId: session.id,
 			prompt: opts.prompt,
 			promptEntryId: opts.promptEntryId,

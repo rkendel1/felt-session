@@ -616,6 +616,14 @@ describe("single session ownership", () => {
 		expect(create).toContain("startToken = markSessionStarting(");
 		expect(create).toContain("hostId: startToken");
 		expect(create).toContain("isAgentSessionCancelled(bksId, startToken)");
+		// Sandbox launches bind the physical host to the admitted token so
+		// exact-token Stop reaches the live host (mirrors the Runner path).
+		expect(read("run-session.ts")).toContain(
+			"hostId: opts.startToken || `rh-${randomUUIDv7()}`",
+		);
+		expect(read("sandbox/local.ts")).toContain(
+			"startToken: spec.hostId",
+		);
 		const runSession = read("run-session.ts");
 		const cancelPrepared = runSession.indexOf('op: "prepare_cancel"');
 		const creationCancelled = runSession.indexOf(
