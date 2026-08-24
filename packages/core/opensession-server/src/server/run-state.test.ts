@@ -274,6 +274,40 @@ describe("transitionRunState (stateful wrapper)", () => {
 		}
 	});
 
+	test("parked prompts during recovery reject silently; other rejections warn", () => {
+		const id = sid();
+		const events: Record<string, unknown>[] = [];
+		const warnings: string[] = [];
+		const original = console.warn;
+		console.warn = (...args: unknown[]) => {
+			warnings.push(args.join(" "));
+		};
+		try {
+			transitionRunState(id, "boot_journal_found", undefined, (e) =>
+				events.push(e),
+			);
+			expect(getRunState(id)).toBe("interrupted");
+			// The designed park: rejected, audited, but not warned.
+			transitionRunState(id, "prompt", undefined, (e) => events.push(e));
+			expect(getRunState(id)).toBe("interrupted");
+			expect(events.at(-1)).toMatchObject({
+				msg: "run_state_rejected",
+				state: "interrupted",
+				event: "prompt",
+			});
+			expect(warnings).toHaveLength(0);
+			// Unexpected rejections still warn.
+			transitionRunState(id, "ask_resolved", undefined, (e) =>
+				events.push(e),
+			);
+			expect(warnings).toHaveLength(1);
+			expect(warnings[0]).toContain("ask_resolved while interrupted");
+		} finally {
+			console.warn = original;
+			clearRunState(id);
+		}
+	});
+
 	test("unknown session defaults to idle; clearRunState drops tracking", () => {
 		const id = sid();
 		expect(getRunState(id)).toBe("idle");

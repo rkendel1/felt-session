@@ -113,9 +113,18 @@ export function decideRunStateTransition(
 				state: decision.from,
 			});
 		} else {
-			console.warn(
-				`[run-state] rejected: ${event} while ${decision.from} (session ${sessionId})`,
-			);
+			// Boot-drained prompts park here while restart recovery still owns
+			// the session (interrupted/reattaching). That is the designed
+			// fail-closed fence, not a defect — one warning per parked prompt
+			// per boot is noise, so only unexpected rejections warn.
+			const parkedPrompt =
+				event === "prompt" &&
+				(decision.from === "interrupted" ||
+					decision.from === "reattaching");
+			if (!parkedPrompt)
+				console.warn(
+					`[run-state] rejected: ${event} while ${decision.from} (session ${sessionId})`,
+				);
 			emit({
 				msg: "run_state_rejected",
 				session_id: sessionId,
