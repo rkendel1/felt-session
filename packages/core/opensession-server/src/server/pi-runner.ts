@@ -1423,8 +1423,13 @@ async function* runPiAttempt(
   const isAsk = mode === "ask";
   const isScratch = mode === "scratch";
 
-  const runKey = opts.sessionId || journal?.osSessionId || crypto.randomUUID();
+  // The start token is the immutable physical dispatch identity. Engine and
+  // Open Session ids are reusable aliases, so they must never fence a delayed
+  // cancel against a successor turn.
+  const runKey =
+    opts.startToken || opts.sessionId || journal?.osSessionId || crypto.randomUUID();
   const registeredKeys = new Set<string>([runKey]);
+  if (opts.sessionId) registeredKeys.add(opts.sessionId);
   if (journal?.osSessionId) registeredKeys.add(journal.osSessionId);
   if (opts.transcriptSessionId) registeredKeys.add(opts.transcriptSessionId);
   if ([...registeredKeys].some((key) => activeRuns.has(key))) {

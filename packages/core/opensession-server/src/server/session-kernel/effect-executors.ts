@@ -64,7 +64,7 @@ function creationBase(kind: string, value: Record<string, unknown>) {
 
 function creationPayload<K extends Exclude<
   SessionActorEffectKind,
-  "human_ask_deliver" | "delivery_interrupt_cancel"
+  "human_ask_deliver" | "delivery_interrupt_cancel" | "turn_cancel"
 >>(
   kind: K,
   payload: unknown,
@@ -219,15 +219,36 @@ function deliveryInterruptCancelPayload(
   const kind = "delivery_interrupt_cancel";
   const value = recordPayload(kind, payload);
   const runIds = optionalStringList(kind, value.runIds, "runIds");
+  const dispatchId =
+    value.dispatchId === undefined
+      ? undefined
+      : requiredString(kind, value.dispatchId, "dispatchId");
   if (
-    !runIds?.length ||
-    runIds.length > 8 ||
+    (!dispatchId && !runIds?.length) ||
+    (runIds?.length ?? 0) > 8 ||
     !Number.isSafeInteger(value.runGeneration) ||
     Number(value.runGeneration) < 0
   ) throw new Error(`Invalid ${kind} effect payload: run fence`);
   return {
     interruptId: requiredString(kind, value.interruptId, "interruptId"),
-    runIds,
+    ...(dispatchId ? { dispatchId } : {}),
+    ...(runIds?.length ? { runIds } : {}),
+    runGeneration: Number(value.runGeneration),
+  };
+}
+
+function turnCancelPayload(
+  payload: unknown,
+): SessionActorEffectFor<"turn_cancel">["payload"] {
+  const kind = "turn_cancel";
+  const value = recordPayload(kind, payload);
+  if (
+    !Number.isSafeInteger(value.runGeneration) ||
+    Number(value.runGeneration) < 0
+  ) throw new Error(`Invalid ${kind} effect payload: run fence`);
+  return {
+    cancelId: requiredString(kind, value.cancelId, "cancelId"),
+    dispatchId: requiredString(kind, value.dispatchId, "dispatchId"),
     runGeneration: Number(value.runGeneration),
   };
 }
@@ -248,6 +269,7 @@ const payloadDecoders: {
 } = {
   human_ask_deliver: humanAskDeliverPayload,
   delivery_interrupt_cancel: deliveryInterruptCancelPayload,
+  turn_cancel: turnCancelPayload,
   creation_workspace_prepare: (payload) =>
     creationPayload("creation_workspace_prepare", payload),
   creation_branch_prepare: (payload) =>

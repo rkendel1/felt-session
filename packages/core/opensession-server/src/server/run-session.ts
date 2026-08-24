@@ -18,6 +18,10 @@ import {
 	unmarkSessionStarting,
 	isAgentSessionCancelled,
 	cancelAgentRun,
+  cancelAgentRunToken,
+  cancelAgentRunTokenAndWait,
+  currentAgentRunToken,
+  isAgentRunTokenAdmitted,
 	steerAgentRun,
 	engineFamily,
 	interruptAndSteerAgentRun,
@@ -25,6 +29,7 @@ import {
 	type StreamEvent,
 } from "./agent-runner";
 import { syncAgentSessionEngine } from "./agent-session-sync";
+import { cancelAgentWait } from "./agent-waits";
 import { runAgentHosted } from "./host-client";
 import { getRunState, transitionRunState } from "./run-state";
 import { getAutomation } from "./automations";
@@ -58,6 +63,7 @@ import { wrapContext, stripContext, isContextOnly } from "./prompt-context";
 import { takeVoiceHandoff } from "./desk-voice";
 import {
 	activeRunRecords,
+  journalClearIfLineage,
 	setJournalSetListener,
 	type ActiveRunRecord,
 } from "./run-journal";
@@ -144,6 +150,7 @@ import {
 	requeueSteerReceipts,
 	restorePersistedQueueState,
 	steeredReceipts,
+  isUserStopped,
 	stoppedSessions,
 	takeSteerReceiptForText,
 	undeliveredSteers,
@@ -167,14 +174,16 @@ import {
 	settleCreationFailed,
 	settleCreationSucceeded,
 	sessionKernel,
+  sessionTurn,
 } from "./session-kernel";
 
 const interruptExecutorGlobal = globalThis as typeof globalThis & {
 	__opensessionInterruptExecutorRegistered?: boolean;
+  __opensessionTurnCancelExecutorRegistered?: boolean;
 };
 if (!interruptExecutorGlobal.__opensessionInterruptExecutorRegistered) {
 	registerSessionEffectExecutor("delivery_interrupt_cancel", (item) => {
-		const { interruptId, runIds, runGeneration } = item.payload;
+    const { interruptId, dispatchId, runIds, runGeneration } = item.payload;
 		const decision = beginPromptInterruptEffect(
 			item.sessionId,
 			interruptId,
@@ -185,7 +194,9 @@ if (!interruptExecutorGlobal.__opensessionInterruptExecutorRegistered) {
 			settlePromptInterrupt(item.sessionId, interruptId, "confirmed");
 			return;
 		}
-		const aborted = cancelAgentRun(...runIds);
+    const aborted = dispatchId
+      ? cancelAgentRunToken(dispatchId)
+      : cancelAgentRun(...(runIds || []));
 		// A retry follows a durably recorded executing phase. False then means
 		// either the first attempt already cancelled the owner or this retry found
 		// it terminal, so the accepted interrupt is conservatively confirmed.
@@ -196,6 +207,96 @@ if (!interruptExecutorGlobal.__opensessionInterruptExecutorRegistered) {
 		);
 	});
 	interruptExecutorGlobal.__opensessionInterruptExecutorRegistered = true;
+}
+if (!interruptExecutorGlobal.__opensessionTurnCancelExecutorRegistered) {
+  registerSessionEffectExecutor("turn_cancel", async (item) => {
+    const { cancelId, dispatchId, runGeneration } = item.payload;
+    const retireAbsentInProcessOwner = () => {
+      const owner = activeRunRecords().find(
+        (run) => run.osSessionId === item.sessionId && run.runKey === dispatchId,
+      );
+      if (
+        owner &&
+        !owner.hostId &&
+        !owner.runnerId &&
+        !owner.sandboxId &&
+        !isAgentRunTokenAdmitted(dispatchId)
+      ) journalClearIfLineage(owner);
+    };
+    const decision = sessionTurn({
+      op: "begin_cancel_effect",
+      sessionId: item.sessionId,
+      cancelId,
+      runGeneration,
+    });
+    if (decision === "settled") {
+      retireAbsentInProcessOwner();
+      return;
+    }
+    const settle = (outcome: "confirmed" | "not_aborted") => {
+      sessionTurn({
+        op: "settle_cancel",
+        sessionId: item.sessionId,
+        cancelId,
+        outcome,
+      });
+      // An explicit prompt may already be parked behind this cancellation.
+      // Re-arm delivery only after actor settlement removes the cancel gate.
+      watchExternalRunAndDrain(item.sessionId);
+    };
+    if (decision === "adopt_confirmed") {
+      settle("confirmed");
+      return;
+    }
+    const cancelledWait = cancelAgentWait(item.sessionId);
+    const cancelledRun = await cancelAgentRunTokenAndWait(dispatchId);
+    if (!cancelledRun && decision === "retry")
+      throw new Error(
+        `Could not reconcile executing cancellation ${cancelId} for ${dispatchId}`,
+      );
+    settle(cancelledWait || cancelledRun ? "confirmed" : "not_aborted");
+    // A pre-engine in-process journal cannot have survived this gateway boot.
+    // Retire it only after actor settlement. Detached host/Runner/sandbox
+    // records stay for their attached source to complete naturally.
+    retireAbsentInProcessOwner();
+  });
+  interruptExecutorGlobal.__opensessionTurnCancelExecutorRegistered = true;
+}
+
+export type TurnCancelRequest = {
+  cancelId: string;
+  expectedRunId: string;
+  expectedGeneration: number;
+  source: string;
+  user?: string;
+};
+
+/** Commit Stop ownership before its physical cancel, atomically parking any
+ * undelivered steer receipts with the stopped run generation. */
+export function requestTurnCancel(
+  sessionId: string,
+  session: UnifiedSession,
+  request: TurnCancelRequest,
+): { requeued: number } {
+  const steered = steeredReceipts.get(sessionId) || [];
+  const requeued = undeliveredSteers(steered, engineUserTexts(session));
+  sessionTurn({
+    op: "prepare_cancel",
+    sessionId,
+    cancelId: request.cancelId,
+    expectedRunId: request.expectedRunId,
+    expectedGeneration: request.expectedGeneration,
+    dispatchId: request.expectedRunId,
+    requeueIds: requeued
+      .map((item) => item.id)
+      .filter((id): id is string => typeof id === "string" && id.length > 0),
+    source: request.source,
+    ...(request.user ? { user: request.user } : {}),
+  });
+  stoppedSessions.add(sessionId);
+  persistQueues();
+  broadcastQueue(sessionId);
+  return { requeued: requeued.length };
 }
 
 export function creationOwnsPrompt(sessionId: string, promptEntryId: string): boolean {
@@ -1000,7 +1101,7 @@ async function drainQueueInner(sessionId: string): Promise<void> {
 	while ((queue = promptQueues.get(sessionId)) && queue.length > 0) {
 		// The user pressed stop: leave the queue visible-but-parked until their
 		// next explicit action instead of restarting the run they just stopped.
-		if (stoppedSessions.has(sessionId)) return;
+    if (isUserStopped(sessionId)) return;
 		// Graceful shutdown: park the queue instead of starting a turn. A turn
 		// started after the shutdown snapshot races the drain deadline (an
 		// in-process one is SIGKILLed there and redone from the journal), and
@@ -1108,7 +1209,20 @@ export async function runSessionPromptAndDrain(
 	contextSessions?: string[],
 	slackReplyTo?: { channel: string; threadTs: string },
 ): Promise<void> {
-	await runSessionPrompt(sessionId, content, user, images, rawFiles, contextSessions, slackReplyTo);
+  try {
+    await runSessionPrompt(
+      sessionId,
+      content,
+      user,
+      images,
+      rawFiles,
+      contextSessions,
+      slackReplyTo,
+    );
+  } catch (error) {
+    if (error instanceof RunPreparationDeferredError) return;
+    throw error;
+  }
 	await drainQueue(sessionId);
 }
 
@@ -1176,10 +1290,11 @@ export function abortTurnAndDrain(
 	// Actor preparation and its outbox effect commit before physical cancel.
 	// The effect retries against the fenced run generation after a crash, while
 	// the queue anchor prevents a stale result from crossing into later work.
-	const ids = [session.claudeSessionId, session.codexThreadId, session.id].filter(
-		(id): id is string => !!id,
-	);
-	preparePromptInterrupt(sessionId, interruptAnchorId, ids, soloId);
+  const dispatchId =
+    sessionKernel(sessionId).runState().currentRunId ||
+    currentAgentRunToken(sessionId);
+  if (!dispatchId) return false;
+  preparePromptInterrupt(sessionId, interruptAnchorId, dispatchId, soloId);
 	stoppedSessions.delete(sessionId);
 	watchExternalRunAndDrain(sessionId);
 	return true;
@@ -1640,7 +1755,7 @@ export function maybeQueueAutoContinue(opts: {
 		if (
 			session.source === "opensession" &&
 			!session.automation &&
-			!stoppedSessions.has(sessionId)
+      !isUserStopped(sessionId)
 		) {
 			const trailing = trailingUserTexts(session).filter(
 				(t) =>
@@ -1711,7 +1826,7 @@ export function maybeQueueAutoContinue(opts: {
 	if (runFailure) return suppressed("run_failure");
 	if (session.source !== "opensession") return suppressed(`source_${session.source}`);
 	if (session.automation) return suppressed("automation_session");
-	if (stoppedSessions.has(sessionId)) return suppressed("user_stop");
+  if (isUserStopped(sessionId)) return suppressed("user_stop");
 	if (autoContinueNudged.has(sessionId)) return suppressed("already_nudged");
 	if (!(announcesNextAction(assistantText) || endedOnFabricatedTranscript)) return false;
 	autoContinueNudged.add(sessionId);
@@ -1746,6 +1861,12 @@ export function maybeQueueAutoContinue(opts: {
 		{ front: true },
 	);
 	return true;
+}
+
+class RunPreparationDeferredError extends Error {
+  constructor(sessionId: string) {
+    super(`Session ${sessionId} already has an accepted run preparation`);
+  }
 }
 
 /** Run a prompt against an existing session, broadcasting to all watchers. */
@@ -1788,6 +1909,32 @@ export async function runSessionPrompt(
 	// racing prompts both pass isAgentSessionBusy and the loser's message is
 	// dropped as a "Session is busy" error toast.
 	const startToken = markSessionStarting(sessionId);
+  if (currentAgentRunToken(sessionId) !== startToken) {
+    // A queue-drain caller restores its own claimed dispatch in the catch
+    // below. A direct sandbox dispatch was created here and must be restored
+    // before surfacing the deferral.
+    if (!promptEntryId && durablePromptEntryId) {
+      failPromptDispatch(sessionId, durablePromptEntryId);
+    } else if (!durablePromptEntryId) {
+      enqueuePrompt(sessionId, {
+        content,
+        user,
+        ...(images?.length
+          ? {
+              images: images.map(
+                (image) => `data:${image.mediaType};base64,${image.data}`,
+              ),
+            }
+          : {}),
+        ...(rawFiles !== undefined ? { files: rawFiles } : {}),
+        ...(contextSessions?.length ? { contextSessions } : {}),
+        ...(slackReplyTo ? { slackReplyTo } : {}),
+      });
+    }
+    unmarkSessionStarting(sessionId, startToken);
+    watchExternalRunAndDrain(sessionId);
+    throw new RunPreparationDeferredError(sessionId);
+  }
 	try {
 		await runSessionPromptInner(
 			sessionId,
@@ -2224,8 +2371,11 @@ async function runSessionPromptInner(
 					await readEngineTranscriptAsync(cwd, engineSessionId, "pi")
 				).filter((entry) => entry.id !== durablePromptEntryId)
 			: undefined;
+  if (isAgentSessionCancelled(session.id, startToken)) return;
 	const runnerRun = await maybeLaunchRunnerRun(session, {
 		prompt,
+    hostId: startToken,
+    shouldCancel: () => isAgentSessionCancelled(session.id, startToken),
 		engineSessionId: engineSessionId || undefined,
 		images,
 		mcpServers: mcpServers ?? "all",
@@ -2285,6 +2435,9 @@ async function runSessionPromptInner(
 					osSessionId: session.id,
 					prompt,
 					promptEntryId: durablePromptEntryId,
+          startToken,
+          shouldCancel: () =>
+            isAgentSessionCancelled(session.id, startToken),
 					seedTranscriptEntries: piHostSeedEntries,
 					sessionId: engineSessionId || undefined,
 					cwd,

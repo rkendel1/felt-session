@@ -13,9 +13,12 @@ import {
 	durableSessionCommand,
 	passivateIdleSessionKernels,
 	DeliveryOwnedMap,
+  deliveryInterruptForAnchor,
 	sessionKernel,
 	tombstoneSessionKernel,
 	legacyGatewayEffect,
+  targetForDeliveryInterrupt,
+  targetForTurnCancel,
 	type LegacyGatewayEffect,
 	type LegacyGatewayEffectInput,
 } from ".";
@@ -59,6 +62,46 @@ test("refuses an unsafe schema downgrade", () => {
 	} finally {
 		rmSync(dir, { recursive: true, force: true });
 	}
+});
+
+test("durable cancel and interrupt receipts restore their original command target", () => {
+  expect(targetForTurnCancel({
+    cancelId: "stop:request-one",
+    phase: "settled",
+    outcome: "confirmed",
+    runId: "dispatch-one",
+    runGeneration: 7,
+    requeueIds: [],
+    source: "test",
+  }, "stop:request-one")).toEqual({ runId: "dispatch-one", generation: 7 });
+  expect(targetForTurnCancel(undefined, "stop:request-one")).toBeUndefined();
+  expect(targetForDeliveryInterrupt({
+    interruptId: "interrupt-one",
+    phase: "confirmed",
+    runGeneration: 8,
+    dispatchId: "dispatch-two",
+    anchorId: "request-two",
+  }, "request-two")).toEqual({ runId: "dispatch-two", generation: 8 });
+  expect(targetForDeliveryInterrupt(undefined, "request-two")).toBeUndefined();
+  expect(deliveryInterruptForAnchor({
+    revision: 1,
+    queued: [],
+    dispatch: {
+      interrupt: {
+        interruptId: "interrupt-two",
+        phase: "confirmed",
+        runGeneration: 9,
+        dispatchId: "dispatch-three",
+        anchorId: "request-three",
+      },
+    },
+    steered: [],
+    pendingSteers: [],
+    updatedAt: 1,
+  }, "request-three")).toMatchObject({
+    interruptId: "interrupt-two",
+    dispatchId: "dispatch-three",
+  });
 });
 
 test("boot maintenance compacts change history in bounded batches", () => {
@@ -196,6 +239,26 @@ describe("SessionKernel", () => {
 		expect(calls).toBe(1);
 		expect(durableSessionCommand("s1", "stable")?.status).toBe("completed");
 	});
+
+  test("retains the original run target for command replay", async () => {
+    await sessionKernel("run-target-replay").dispatchLegacy(
+      legacyGatewayEffect("cancel_session", {
+        requestId: "cancel-request",
+        payload: {
+          targetRunId: "dispatch-one",
+          targetRunGeneration: 4,
+        },
+        replaySafe: true,
+      }),
+      () => true,
+    );
+    expect(
+      durableSessionCommand("run-target-replay", "cancel-request")?.payload,
+    ).toEqual({
+      targetRunId: "dispatch-one",
+      targetRunGeneration: 4,
+    });
+  });
 
 	test("keeps completed receipts for clients that reconnect after compaction", async () => {
 		let calls = 0;
@@ -1128,7 +1191,7 @@ describe("SessionKernel", () => {
 			sessionId: "next-delivery",
 			interruptId: "interrupt-next-delivery",
 			anchorId: "solo",
-			runIds: ["run-owner"],
+			dispatchId: "run-owner",
 			soloId: "solo",
 		});
 		store.settleDeliveryInterrupt({
@@ -1178,7 +1241,7 @@ describe("SessionKernel", () => {
 			sessionId: "steered-interrupt",
 			interruptId: "steered-interrupt-one",
 			anchorId: "target",
-			runIds: ["run-owner"],
+			dispatchId: "run-owner",
 			soloId: "target",
 		});
 		expect(store.deliverySnapshot("steered-interrupt")).toMatchObject({
@@ -1209,7 +1272,7 @@ describe("SessionKernel", () => {
 			sessionId: "interrupt-behind-retry",
 			interruptId: "interrupt-behind-retry",
 			anchorId: "anchor",
-			runIds: ["run-owner"],
+			dispatchId: "run-owner",
 			soloId: "anchor",
 		});
 		store.settleDeliveryInterrupt({
@@ -1251,7 +1314,7 @@ describe("SessionKernel", () => {
 			sessionId: "stale-solo-interrupt",
 			interruptId: "interrupt-stale-solo-interrupt",
 			anchorId: "removed",
-			runIds: ["run-owner"],
+			dispatchId: "run-owner",
 			soloId: "removed",
 		});
 		store.setDeliverySlot("stale-solo-interrupt", "queued", [
@@ -1265,6 +1328,188 @@ describe("SessionKernel", () => {
 		expect(store.deliverySnapshot("stale-solo-interrupt").interrupt).toBeUndefined();
 	});
 
+  test("cancels an admitted starting dispatch before its journal registers", async () => {
+    store.applyRunEvent({ sessionId: "cancel-starting", event: "prompt" });
+    const generation = store.runState("cancel-starting").generation;
+    expect(store.prepareTurnCancel({
+      sessionId: "cancel-starting",
+      cancelId: "cancel-starting",
+      expectedRunId: "dispatch-starting",
+      expectedGeneration: generation,
+      dispatchId: "dispatch-starting",
+      requeueIds: [],
+      source: "test",
+    })).toMatchObject({
+      cancel: { phase: "prepared", runId: "dispatch-starting" },
+      runState: { state: "stopped" },
+    });
+    expect(store.pendingOutbox(Date.now(), 10, ["turn_cancel"])).toEqual([
+      expect.objectContaining({
+        payload: expect.objectContaining({ dispatchId: "dispatch-starting" }),
+      }),
+    ]);
+    const { isUserStopped, liftUserStop } = await import("../queue-state");
+    expect(isUserStopped("cancel-starting")).toBe(true);
+    liftUserStop("cancel-starting");
+    expect(store.runState("cancel-starting").state).toBe("starting");
+    expect(isUserStopped("cancel-starting")).toBe(true);
+    expect(store.applyRunEvent({
+      sessionId: "cancel-starting",
+      event: "run_registered",
+      runKey: "dispatch-starting",
+    })).toMatchObject({ accepted: false, reason: "stale_run" });
+    store.settleTurnCancel({
+      sessionId: "cancel-starting",
+      cancelId: "cancel-starting",
+      outcome: "confirmed",
+    });
+    expect(isUserStopped("cancel-starting")).toBe(false);
+    expect(store.applyRunEvent({
+      sessionId: "cancel-starting",
+      event: "run_registered",
+      runKey: "dispatch-successor",
+    })).toMatchObject({
+      accepted: true,
+      state: { state: "running", currentRunId: "dispatch-successor" },
+    });
+    expect(store.applyRunEvent({
+      sessionId: "cancel-starting",
+      event: "turn_end",
+      runKey: "dispatch-starting",
+    })).toMatchObject({
+      accepted: false,
+      reason: "stale_run",
+      state: { state: "running", currentRunId: "dispatch-successor" },
+    });
+  });
+
+  test("durably prepares, retries, and generation-fences explicit turn cancellation", () => {
+    const dir = mkdtempSync(join(tmpdir(), "session-kernel-cancel-"));
+    const path = join(dir, "kernel.sqlite");
+    const first = new SessionKernelStore(path);
+    try {
+      first.applyRunEvent({ sessionId: "cancel-restart", event: "prompt" });
+      first.applyRunEvent({
+        sessionId: "cancel-restart",
+        event: "run_registered",
+        runKey: "run-one",
+      });
+      first.setDeliverySlot("cancel-restart", "queued", [
+        { id: "already-queued", content: "later" },
+      ]);
+      first.setDeliverySlot("cancel-restart", "steered", [
+        { id: "landed", content: "already landed" },
+        { id: "unconfirmed", content: "return me" },
+      ]);
+      const generation = first.runState("cancel-restart").generation;
+      expect(first.prepareTurnCancel({
+        sessionId: "cancel-restart",
+        cancelId: "cancel-one",
+        expectedRunId: "run-one",
+        expectedGeneration: generation,
+        dispatchId: "run-one",
+        requeueIds: ["unconfirmed"],
+        source: "test",
+      })).toMatchObject({
+        cancel: {
+          phase: "prepared",
+          runId: "run-one",
+          runGeneration: generation,
+        },
+        runState: { state: "stopped", generation },
+      });
+      expect(first.prepareTurnCancel({
+        sessionId: "cancel-restart",
+        cancelId: "cancel-one",
+        expectedRunId: "run-one",
+        expectedGeneration: generation,
+        dispatchId: "run-one",
+        requeueIds: ["unconfirmed"],
+        source: "test",
+      })).toMatchObject({ cancel: { phase: "prepared" } });
+      expect(() => first.prepareTurnCancel({
+        sessionId: "cancel-restart",
+        cancelId: "cancel-one",
+        expectedRunId: "run-one",
+        expectedGeneration: generation,
+        dispatchId: "run-one",
+        requeueIds: ["unconfirmed"],
+        source: "another-source",
+      })).toThrow("reused with another payload");
+      expect(first.runState("cancel-restart")).toMatchObject({
+        state: "stopped",
+        generation,
+        currentRunId: undefined,
+      });
+      expect(first.deliverySnapshot("cancel-restart")).toMatchObject({
+        queued: [
+          { id: "unconfirmed", content: "return me" },
+          { id: "already-queued", content: "later" },
+        ],
+        steered: [],
+      });
+      expect(first.pendingOutbox(Date.now(), 10)).toEqual([
+        expect.objectContaining({
+          kind: "turn_cancel",
+          effectKey: "cancel-one",
+          payload: expect.objectContaining({ runGeneration: generation }),
+        }),
+      ]);
+    } finally {
+      first.close();
+    }
+
+    const beforePhysicalCancel = new SessionKernelStore(path);
+    try {
+      const cancel = beforePhysicalCancel.turnSnapshot("cancel-restart").cancel;
+      expect(cancel).toMatchObject({ phase: "prepared", cancelId: "cancel-one" });
+      expect(beforePhysicalCancel.beginTurnCancelEffect({
+        sessionId: "cancel-restart",
+        cancelId: "cancel-one",
+        runGeneration: cancel?.runGeneration ?? -1,
+      })).toBe("execute");
+    } finally {
+      beforePhysicalCancel.close();
+    }
+
+    const duringPhysicalCancel = new SessionKernelStore(path);
+    try {
+      const cancel = duringPhysicalCancel.turnSnapshot("cancel-restart").cancel;
+      expect(cancel).toMatchObject({ phase: "executing" });
+      expect(duringPhysicalCancel.beginTurnCancelEffect({
+        sessionId: "cancel-restart",
+        cancelId: "cancel-one",
+        runGeneration: cancel?.runGeneration ?? -1,
+      })).toBe("retry");
+      duringPhysicalCancel.applyRunEvent({
+        sessionId: "cancel-restart",
+        event: "prompt",
+      });
+      duringPhysicalCancel.applyRunEvent({
+        sessionId: "cancel-restart",
+        event: "run_registered",
+        runKey: "run-two",
+      });
+      expect(duringPhysicalCancel.beginTurnCancelEffect({
+        sessionId: "cancel-restart",
+        cancelId: "cancel-one",
+        runGeneration: cancel?.runGeneration ?? -1,
+      })).toBe("adopt_confirmed");
+      expect(duringPhysicalCancel.settleTurnCancel({
+        sessionId: "cancel-restart",
+        cancelId: "cancel-one",
+        outcome: "confirmed",
+      })).toBe(true);
+      expect(duringPhysicalCancel.turnSnapshot("cancel-restart").cancel).toMatchObject({
+        phase: "settled",
+        outcome: "confirmed",
+      });
+    } finally {
+      duringPhysicalCancel.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
 	test("recovers prepared and claimed interrupts across crashes", () => {
 		const dir = mkdtempSync(join(tmpdir(), "session-kernel-interrupt-"));
 		const path = join(dir, "kernel.sqlite");
@@ -1277,7 +1522,7 @@ describe("SessionKernel", () => {
 				sessionId: "restart-interrupt",
 				interruptId: "interrupt-restart-interrupt",
 				anchorId: "held",
-				runIds: ["run-owner"],
+				dispatchId: "run-owner",
 			});
 			expect(first.stats().pendingOutbox).toBe(1);
 		} finally {
@@ -1377,7 +1622,7 @@ describe("SessionKernel", () => {
 			sessionId: "failed-multi-dispatch",
 			interruptId: "interrupt-failed-multi-dispatch",
 			anchorId: "two",
-			runIds: ["run-owner"],
+			dispatchId: "run-owner",
 			soloId: "two",
 		});
 		store.settleDeliveryInterrupt({
@@ -1421,7 +1666,7 @@ describe("SessionKernel", () => {
 			sessionId: "failed-multi-dispatch",
 			interruptId: "interrupt-failed-multi-dispatch",
 			anchorId: "two",
-			runIds: ["run-owner"],
+			dispatchId: "run-owner",
 			soloId: "two",
 		});
 		store.settleDeliveryInterrupt({

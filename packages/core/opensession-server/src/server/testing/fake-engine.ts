@@ -172,7 +172,7 @@ export function makeFakeEngine(
     const unifiedId = bks || opts.transcriptSessionId;
     if (options.persistTranscript && unifiedId)
       recordEngineSessionOwner(engineSessionId, unifiedId);
-    const runKey = bks ? `fake-${bks}` : null;
+    const runKey = bks ? opts.startToken || `fake-${bks}` : null;
     if (runKey) {
       journalSet({
         runKey,

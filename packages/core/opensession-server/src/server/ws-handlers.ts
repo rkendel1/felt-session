@@ -8,10 +8,9 @@
 import type { WebSocketHandler } from "bun";
 import type { WSClientData } from "./ws-hub";
 
-import { cancelAgentRun, interruptAndSteerAgentRun, isAgentSessionBusy, retractAgentSteer, steerAgentRun } from "./agent-runner";
+import { currentAgentRunToken, interruptAndSteerAgentRun, isAgentSessionBusy, retractAgentSteer, steerAgentRun } from "./agent-runner";
 
 import { audit } from "./audit";
-import { cancelAgentWait } from "./agent-waits";
 import { pendingAskAwaitingAnswer } from "./asks";
 import { resendPendingSlackComposer } from "./slack-compose";
 import { notifyMentions } from "./mentions";
@@ -20,10 +19,9 @@ import { INIT_WIRE_CLAMP_BYTES, entriesForWire, parseTranscriptAsync, parseTrans
 import { providerFor } from "./models";
 
 import { appendTranscriptEntries, clearTranscriptStoreDegraded, transcriptLineRunnerNotice } from "./transcript-persistence";
-import { deleteQueuedPrompt, editableSteerReceipt, liftUserStop, persistQueues, promptQueues, queueDisplayState, durableQueueItem, queueItem, acceptQueuedSteer, prepareQueuedSteer, rejectQueuedSteer, reorderQueuedPrompt, requeueSteerReceipts, steeredReceipts, stoppedSessions, takeQueuedPrompt, takeSteeredPrompt, updateQueuedPrompt } from "./queue-state";
+import { deleteQueuedPrompt, editableSteerReceipt, liftUserStop, persistQueues, promptQueues, queueDisplayState, durableQueueItem, queueItem, acceptQueuedSteer, prepareQueuedSteer, rejectQueuedSteer, reorderQueuedPrompt, steeredReceipts, stoppedSessions, takeQueuedPrompt, takeSteeredPrompt, updateQueuedPrompt } from "./queue-state";
 
-import { transitionRunState } from "./run-state";
-import { abortTurnAndDrain, drainQueue, enqueuePrompt, interruptQueuedPrompt, runSessionPrompt, runSessionPromptAndDrain, steerQueuedPrompt, watchExternalRunAndDrain, } from "./run-session";
+import { abortTurnAndDrain, drainQueue, enqueuePrompt, interruptQueuedPrompt, requestTurnCancel, runSessionPrompt, runSessionPromptAndDrain, steerQueuedPrompt, watchExternalRunAndDrain, } from "./run-session";
 import { sandboxWsClose, sandboxWsMessage, sandboxWsOpen } from "./run-ws";
 import { handleCreateSessionMessage } from "./session-create";
 import { sessionIdForRequest } from "./session-request-id";
@@ -36,7 +34,7 @@ import {
 	maybePersistEffort,
 	maybePersistFastMode,
 } from "./session-cache";
-import { engineUserTexts, mergedSessionTranscript, mergedSessionTranscriptAsync, v2MirrorFiles, v2TranscriptHasDrift, } from "./sessions";
+import { mergedSessionTranscript, mergedSessionTranscriptAsync, v2MirrorFiles, v2TranscriptHasDrift, } from "./sessions";
 import { handleSlashCommand } from "./slash-commands";
 import { maybeRecapOnReturn } from "./recap";
 import { maybeSuggestRepliesOnReturn, resendReplySuggestions, } from "./reply-suggestions";
@@ -57,9 +55,15 @@ import { join } from "node:path";
 import { isInternalKernelDispatch } from "./session-kernel/ws-command-bridge";
 import {
 	acknowledgeSessionCommand,
+  deliveryInterruptForAnchor,
+  durableSessionCommand,
 	isRetryableSessionCommandError,
 	legacyGatewayEffect,
+  sessionDelivery,
 	sessionKernel,
+  sessionTurn,
+  targetForDeliveryInterrupt,
+  targetForTurnCancel,
 } from "./session-kernel";
 
 // Who likely triggered the restart that booted THIS process — read once from
@@ -575,10 +579,60 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 			// Cancel and interrupt target the run that existed when the command was
 			// first admitted. Replaying after a successor starts must fail payload
 			// identity instead of stopping the successor.
-			const targetRunId =
-				msg.type === "cancel" || msg.type === "interrupt_prompt"
-					? sessionKernel(commandSessionId).runState().currentRunId || null
-					: undefined;
+      const targetsRun =
+        msg.type === "cancel" || msg.type === "interrupt_prompt";
+      const targetRun = targetsRun
+        ? sessionKernel(commandSessionId).runState()
+        : undefined;
+      const persistedCancel =
+        msg.type === "cancel"
+          ? sessionTurn({ op: "snapshot", sessionId: commandSessionId }).cancel
+          : undefined;
+      const persistedInterrupt =
+        msg.type === "interrupt_prompt"
+          ? deliveryInterruptForAnchor(
+              sessionDelivery({
+                op: "snapshot",
+                sessionId: commandSessionId,
+              }),
+              requestId,
+            )
+          : undefined;
+      const priorCommandPayload = durableSessionCommand(
+        commandSessionId,
+        requestId,
+      )?.payload as
+        | {
+            command?: string;
+            targetRunId?: string | null;
+            targetRunGeneration?: number;
+          }
+        | undefined;
+      const commandTarget =
+        !!priorCommandPayload &&
+        priorCommandPayload.command === msg.type &&
+        priorCommandPayload.targetRunId !== undefined &&
+        priorCommandPayload.targetRunGeneration !== undefined
+          ? {
+              runId: priorCommandPayload.targetRunId,
+              generation: priorCommandPayload.targetRunGeneration,
+            }
+          : undefined;
+      const replayedTarget =
+        commandTarget ||
+        targetForTurnCancel(persistedCancel, `stop:${requestId}`) ||
+        targetForDeliveryInterrupt(persistedInterrupt, requestId);
+      const targetRunId = targetRun
+        ? replayedTarget
+          ? replayedTarget.runId
+          : targetRun.currentRunId ||
+          (targetRun.state === "starting" || targetRun.state === "preparing"
+            ? currentAgentRunToken(commandSessionId)
+              : undefined) ||
+            null
+        : undefined;
+      const targetRunGeneration =
+        replayedTarget?.generation ?? targetRun?.generation;
 			const kernelToken = crypto.randomUUID();
 			kernelDispatchTokens.add(kernelToken);
 				try {
@@ -589,25 +643,54 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 					payload: {
 						command: msg.type,
 						messageHash,
-						...(targetRunId !== undefined ? { targetRunId } : {}),
+            ...(targetRunId !== undefined
+              ? { targetRunId, targetRunGeneration }
+              : {}),
 					},
 					source: "websocket",
 					replaySafe: true,
 				}),
 				async () => {
-					if (
-						targetRunId !== undefined &&
-						(sessionKernel(commandSessionId).runState().currentRunId || null) !==
-							targetRunId
-					)
-						throw new Error("The run targeted by this command has already changed");
+          if (targetRunId !== undefined) {
+            const current = sessionKernel(commandSessionId).runState();
+            const currentTargetId =
+              current.currentRunId ||
+              (current.state === "starting" || current.state === "preparing"
+                ? currentAgentRunToken(commandSessionId)
+                : undefined) ||
+              null;
+            if (
+              currentTargetId !== targetRunId ||
+              current.generation !== targetRunGeneration
+            ) {
+              const cancelReplayMatches =
+                persistedCancel?.cancelId === `stop:${requestId}` &&
+                persistedCancel.runId === targetRunId &&
+                persistedCancel.runGeneration === targetRunGeneration;
+              const interruptReplayMatches =
+                !!persistedInterrupt &&
+                persistedInterrupt.anchorId === requestId &&
+                persistedInterrupt.dispatchId === targetRunId &&
+                persistedInterrupt.runGeneration === targetRunGeneration;
+              if (!cancelReplayMatches && !interruptReplayMatches)
+                throw new Error(
+                  "The run targeted by this command has already changed",
+                );
+            }
+          }
 					await websocketHandlers.message?.(
 						ws,
 						JSON.stringify({
 							...msg,
 							sessionId: commandSessionId,
-							requestId,
-							__sessionKernelToken: kernelToken,
+              requestId,
+              ...(targetRunId !== undefined
+                ? {
+                    __targetRunId: targetRunId,
+                    __targetRunGeneration: targetRunGeneration,
+                  }
+                : {}),
+              __sessionKernelToken: kernelToken,
 						}),
 					);
 					const dispatchError = kernelDispatchErrors.get(kernelToken);
@@ -1410,62 +1493,49 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 			case "cancel": {
 				const data = ws.data;
 				const sessionId = msg.sessionId || data.watchingSessionId;
-				if (sessionId) {
-					const session = await findSessionAsync(sessionId);
-					// Park the queue until the user's next explicit action —
-					// otherwise the drain would deliver the requeued steers into a
-					// fresh run the moment the stopped one winds down.
-					stoppedSessions.add(sessionId);
-					cancelAgentWait(sessionId);
-					if (session) {
-						// Abort the turn. This reaches the engine on every path
-						// (pi's session.abort, pi's liveSession.abort, a run
-						// host's cancel frame), but lands at the next await, so a
-						// tool call already in flight finishes first. The composer
-						// says "Stopping…" for exactly that window rather than
-						// claiming the agent has already stopped.
-						cancelAgentRun(
-							session.claudeSessionId,
-							session.codexThreadId,
-							session.id,
-						);
-						// A stopped run's only trace is the runner's anonymous
-						// "cancelled" turn event — record who pulled the plug (stop
-						// button / Esc), or diagnosing "why did it go silent?" means
-						// inferring the gesture by elimination.
-						console.log(
-							`[ws] run stopped on ${sessionId} by ${data.user || "unknown"}`,
-						);
-						audit({
-							msg: "run_cancelled",
-							session_id: sessionId,
-							source: "ui_stop",
-							user: data.user,
-						});
-						transitionRunState(sessionId, "cancel", {
-							source: "ui_stop",
-							user: data.user,
-						});
-						// Durable trace in the transcript too: a stopped turn otherwise
-						// just goes silent mid-tool-call, and readers can't tell a
-						// deliberate stop from a crash (the audit line answers it for
-						// the agent, this chip answers it for everyone reading the UI).
-						if (session.claudeSessionId) {
-							try {
-								appendTranscriptEntries(session.claudeSessionId, [
-									transcriptLineRunnerNotice(
-										`Stopped by ${data.user || "someone"}.`,
-										`stop-${msg.requestId}`,
-									),
-								]);
-							} catch {}
-						}
-					}
-					const requeued = requeueSteerReceipts(
-						sessionId,
-						session ? engineUserTexts(session) : undefined,
-					);
-					if (requeued > 0) {
+        if (sessionId) {
+          const session = await findSessionAsync(sessionId);
+          const target = msg as typeof msg & {
+            __targetRunId?: string | null;
+            __targetRunGeneration?: number;
+          };
+          const expectedRunId = target.__targetRunId;
+          const expectedGeneration = target.__targetRunGeneration;
+          let requeued = 0;
+          if (
+            session &&
+            expectedRunId &&
+            expectedGeneration !== undefined
+          ) {
+            ({ requeued } = requestTurnCancel(sessionId, session, {
+              cancelId: `stop:${msg.requestId}`,
+              expectedRunId,
+              expectedGeneration,
+              source: "ui_stop",
+              user: data.user || undefined,
+            }));
+            console.log(
+              `[ws] run stop prepared on ${sessionId} by ${data.user || "unknown"}`,
+            );
+            audit({
+              msg: "run_cancelled",
+              session_id: sessionId,
+              source: "ui_stop",
+              user: data.user,
+            });
+            // Projection remains idempotent by its stable request-derived id.
+            if (session.claudeSessionId) {
+              try {
+                appendTranscriptEntries(session.claudeSessionId, [
+                  transcriptLineRunnerNotice(
+                    `Stopped by ${data.user || "someone"}.`,
+                    `stop-${msg.requestId}`,
+                  ),
+                ]);
+              } catch {}
+            }
+          }
+          if (requeued > 0) {
 						broadcastToSession(sessionId, {
 							type: "notice",
 							message: `Stopped — ${requeued} steered message${requeued === 1 ? "" : "s"} returned to the queue.`,

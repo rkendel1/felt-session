@@ -38,7 +38,13 @@ describe("takeQueuedPrompt", () => {
 	});
 
 	test("selects and claims through the compatibility actor store", () => {
-		const interruptId = preparePromptInterrupt(SESSION, "q2", [SESSION], "q2");
+		const interruptId = preparePromptInterrupt(SESSION, "q2", SESSION, "q2");
+    expect(preparePromptInterrupt(SESSION, "q2", SESSION, "q2")).toBe(
+      interruptId,
+    );
+    expect(() =>
+      preparePromptInterrupt(SESSION, "q2", "another-dispatch", "q2"),
+    ).toThrow("reused with another payload");
 		settlePromptInterrupt(SESSION, interruptId, "confirmed");
 		const claim = beginNextPromptDispatch(
 			SESSION,
@@ -68,7 +74,7 @@ describe("takeQueuedPrompt", () => {
 		const interruptId = preparePromptInterrupt(
 			SESSION,
 			"steered",
-			[SESSION],
+			SESSION,
 			"steered",
 		);
 		expect(promptQueues.get(SESSION)).toMatchObject([{ id: "steered" }]);

@@ -275,6 +275,42 @@ describe("session kernel actor boundary", () => {
     await host.complete(active.executionId!, "done", []);
   });
 
+  test("owns turn cancellation and its physical effect while gateway work is active", async () => {
+    const host = await actor();
+    host.decideRunEvent({ sessionId: "turn-cancel", event: "prompt" });
+    host.decideRunEvent({
+      sessionId: "turn-cancel",
+      event: "run_registered",
+      runKey: "run-one",
+    });
+    host.decideDelivery({
+      op: "set",
+      sessionId: "turn-cancel",
+      slot: "steered",
+      value: [{ id: "steer-one", content: "return me" }],
+    });
+    expect(host.decideTurn({
+      op: "prepare_cancel",
+      sessionId: "turn-cancel",
+      cancelId: "cancel-one",
+      expectedRunId: "run-one",
+      expectedGeneration: 1,
+      dispatchId: "run-one",
+      requeueIds: ["steer-one"],
+      source: "test",
+    })).toMatchObject({
+      cancel: { phase: "prepared", runId: "run-one" },
+      runState: { state: "stopped" },
+    });
+    expect(host.store.runState("turn-cancel")).toMatchObject({
+      state: "stopped",
+    });
+    expect(host.store.runState("turn-cancel").currentRunId).toBeUndefined();
+    expect(host.store.pendingOutbox(Date.now(), 10, ["turn_cancel"])).toEqual([
+      expect.objectContaining({ kind: "turn_cancel", effectKey: "cancel-one" }),
+    ]);
+  });
+
   test("reduces creation events while gateway work is active", async () => {
     const host = await actor();
     const active = await host.begin(
@@ -529,7 +565,7 @@ describe("session kernel actor boundary", () => {
       sessionId: "actor-next-dispatch",
       interruptId: "interrupt-one",
       anchorId: "solo",
-      runIds: ["run-owner"],
+      dispatchId: "run-owner",
       soloId: "solo",
     });
     host.decideDelivery({

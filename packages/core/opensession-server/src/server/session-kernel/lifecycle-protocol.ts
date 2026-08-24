@@ -1,6 +1,7 @@
 import type { AskActorRequest } from "./ask-protocol";
 import type { DeliveryActorRequest } from "./delivery-protocol";
 import type { CreationActorEffect } from "./creation-effect-protocol";
+import type { TurnActorRequest } from "./turn-protocol";
 import type {
   CreationEventDecision,
   RunEventDecision,
@@ -76,6 +77,11 @@ export type SessionActorReducerCommand =
       kind: "ask";
       commandId: string;
       request: AskActorRequest;
+    }
+  | {
+      kind: "turn";
+      commandId: string;
+      request: TurnActorRequest;
     };
 
 export type SessionActorCommand =
@@ -112,7 +118,19 @@ export type DeliveryInterruptCancelEffect = {
   kind: "delivery_interrupt_cancel";
   payload: {
     interruptId: string;
-    runIds: string[];
+    /** Exact dispatch identity for schema 13+. */
+    dispatchId?: string;
+    /** Schema-12 compatibility for already-durable effects. */
+    runIds?: string[];
+    runGeneration: number;
+  };
+};
+
+export type TurnCancelEffect = {
+  kind: "turn_cancel";
+  payload: {
+    cancelId: string;
+    dispatchId: string;
     runGeneration: number;
   };
 };
@@ -120,6 +138,7 @@ export type DeliveryInterruptCancelEffect = {
 export type SessionActorEffect =
   | HumanAskDeliverEffect
   | DeliveryInterruptCancelEffect
+  | TurnCancelEffect
   | CreationActorEffect;
 export type SessionActorEffectKind = SessionActorEffect["kind"];
 export type SessionActorEffectFor<K extends SessionActorEffectKind> = Extract<

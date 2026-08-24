@@ -23,6 +23,7 @@ import {
   type DeliveryMutationReply,
 } from "./delivery-protocol";
 import type { AskActorRequest, AskActorResult } from "./ask-protocol";
+import type { TurnActorRequest, TurnActorResult } from "./turn-protocol";
 import {
   SESSION_KERNEL_ACTOR_VERSION,
   type KernelActorAsyncRequest,
@@ -309,6 +310,24 @@ export class SessionKernelActorClient {
       `ask ${request.op}`,
       request.op === "snapshot" || request.op === "entries",
     );
+  }
+
+  decideTurn<T extends TurnActorRequest>(request: T): TurnActorResult<T> {
+    const result = this.callSync<TurnActorResult<T>>(
+      {
+        t: "reduce",
+        command: { kind: "turn", commandId: crypto.randomUUID(), request },
+      },
+      `turn ${request.op}`,
+      request.op === "snapshot",
+    );
+    if (request.op === "prepare_cancel") {
+      const prepared = result as TurnActorResult<
+        Extract<TurnActorRequest, { op: "prepare_cancel" }>
+      >;
+      (this.store as RemoteStore).noteRunState(request.sessionId, prepared.runState);
+    }
+    return result;
   }
 
   decideDelivery<T extends DeliveryActorRequest>(
@@ -643,6 +662,31 @@ class RemoteStore implements SessionKernelStoreApi {
   }
   markDeliveryMigrationComplete() {
     this.call("markDeliveryMigrationComplete");
+  }
+  turnSnapshot(sessionId: string) {
+    return this.actor.decideTurn({ op: "snapshot", sessionId });
+  }
+  prepareTurnCancel(
+    input: Parameters<SessionKernelStoreApi["prepareTurnCancel"]>[0],
+  ): ReturnType<SessionKernelStoreApi["prepareTurnCancel"]> {
+    return this.actor.decideTurn({ op: "prepare_cancel", ...input }) as ReturnType<
+      SessionKernelStoreApi["prepareTurnCancel"]
+    >;
+  }
+  beginTurnCancelEffect(
+    input: Parameters<SessionKernelStoreApi["beginTurnCancelEffect"]>[0],
+  ): ReturnType<SessionKernelStoreApi["beginTurnCancelEffect"]> {
+    return this.actor.decideTurn({
+      op: "begin_cancel_effect",
+      ...input,
+    }) as ReturnType<SessionKernelStoreApi["beginTurnCancelEffect"]>;
+  }
+  settleTurnCancel(
+    input: Parameters<SessionKernelStoreApi["settleTurnCancel"]>[0],
+  ): ReturnType<SessionKernelStoreApi["settleTurnCancel"]> {
+    return this.actor.decideTurn({ op: "settle_cancel", ...input }) as ReturnType<
+      SessionKernelStoreApi["settleTurnCancel"]
+    >;
   }
   deliverySnapshot(sessionId: string) {
     return this.actor.decideDelivery({ op: "snapshot", sessionId });

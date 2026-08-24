@@ -126,6 +126,8 @@ export interface HostedRunOpts {
   /** Transcript uuid of the server's already-written user line (see
    *  RunHostSpec.promptEntryId). */
   promptEntryId?: string;
+  /** Immutable dispatch identity shared with pending-start cancellation. */
+  startToken?: string;
   seedTranscriptEntries?: TranscriptEntry[];
   /** Engine session id to resume (claude session id / codex thread id). */
   sessionId?: string;
@@ -168,6 +170,8 @@ export interface HostedRunOpts {
   resumeAttempts?: number;
   lastResumeAt?: string;
   onAskUser?: RunAgentOpts["onAskUser"];
+  /** Fences cancellation admitted while the detached host is still launching. */
+  shouldCancel?: () => boolean;
   /** A steer arrived too late at the host — queue it so it isn't dropped. */
   onSteerFailed?: (text: string) => void;
   /** Rebuilds the in-process SDK MCP servers if we fall back to runAgent. */
@@ -180,6 +184,7 @@ export interface HostedRunOpts {
  * the spawn fails — a run should never be lost to infrastructure.
  */
 export async function* runAgentHosted(opts: HostedRunOpts): AsyncGenerator<StreamEvent> {
+  if (opts.shouldCancel?.()) return;
   if (runHostsEnabled()) {
     let spawned: { handle: HostHandle; spec: RunHostSpec } | null = null;
     try {
@@ -190,6 +195,13 @@ export async function* runAgentHosted(opts: HostedRunOpts): AsyncGenerator<Strea
     }
     if (spawned) {
       try {
+        if (opts.shouldCancel?.()) {
+          spawned.handle.requestCancel();
+          // Drain through the host's `end`, not merely its terminal event: the
+          // source owns cleanup and may still be waiting to close its transport.
+          for await (const _event of spawned.handle.events()) {}
+          return;
+        }
         yield* hostedEventsWithJournal(spawned.handle, spawned.spec);
       } finally {
         activeHostedRunKeys.delete(spawned.spec.hostId);
@@ -200,6 +212,7 @@ export async function* runAgentHosted(opts: HostedRunOpts): AsyncGenerator<Strea
   yield* runAgent({
     prompt: opts.prompt,
     promptEntryId: opts.promptEntryId,
+    startToken: opts.startToken,
     seedTranscriptEntries: opts.seedTranscriptEntries,
     sessionId: opts.sessionId,
     cwd: opts.cwd,
@@ -234,6 +247,7 @@ export async function* runAgentHosted(opts: HostedRunOpts): AsyncGenerator<Strea
       lastResumeAt: opts.lastResumeAt,
     },
     onAskUser: opts.onAskUser,
+    shouldCancel: opts.shouldCancel,
   });
 }
 
@@ -347,7 +361,7 @@ function hostedRunRecord(spec: RunHostSpec): ActiveRunRecord {
 async function spawnHostRun(
   opts: HostedRunOpts,
 ): Promise<{ handle: HostHandle; spec: RunHostSpec }> {
-  const hostId = `rh-${Bun.randomUUIDv7()}`;
+  const hostId = opts.startToken || `rh-${Bun.randomUUIDv7()}`;
   const dir = `${HOSTS_DIR}/${hostId}`;
   mkdirSync(dir, { recursive: true });
 

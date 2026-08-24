@@ -1,4 +1,25 @@
 import type { DeliverySlot, DurableDeliveryState } from "./store";
+import type { DurableRunTarget } from "./turn-protocol";
+
+export function deliveryInterruptForAnchor(
+  state: DurableDeliveryState,
+  anchorId: string,
+): DurableDeliveryState["interrupt"] {
+  const dispatchInterrupt = (
+    state.dispatch as { interrupt?: DurableDeliveryState["interrupt"] } | undefined
+  )?.interrupt;
+  const interrupt = state.interrupt || dispatchInterrupt;
+  return interrupt?.anchorId === anchorId ? interrupt : undefined;
+}
+
+export function targetForDeliveryInterrupt(
+  interrupt: DurableDeliveryState["interrupt"],
+  anchorId: string,
+): DurableRunTarget | undefined {
+  return interrupt?.anchorId === anchorId && interrupt.dispatchId
+    ? { runId: interrupt.dispatchId, generation: interrupt.runGeneration }
+    : undefined;
+}
 
 type DeliveryItem = {
   id?: string;
@@ -21,7 +42,7 @@ export type DeliveryActorRequest =
       sessionId: string;
       interruptId: string;
       anchorId: string;
-      runIds: string[];
+      dispatchId: string;
       soloId?: string;
     }
   | {

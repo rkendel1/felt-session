@@ -192,7 +192,7 @@ describe("steer receipt restart persistence", () => {
 		const interruptId = preparePromptInterrupt(
 			SESSION,
 			"ordinary-two",
-			[SESSION],
+			SESSION,
 			"ordinary-two",
 		);
 		settlePromptInterrupt(SESSION, interruptId, "confirmed");
@@ -218,7 +218,7 @@ describe("steer receipt restart persistence", () => {
 		const interruptId = preparePromptInterrupt(
 			SESSION,
 			"interrupt",
-			[SESSION],
+			SESSION,
 			"interrupt",
 		);
 		settlePromptInterrupt(SESSION, interruptId, "confirmed");

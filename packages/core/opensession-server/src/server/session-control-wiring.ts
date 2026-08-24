@@ -16,15 +16,14 @@
  */
 
 import { AUTO_CONTINUE_USER } from "./auto-continue";
-import { cancelAgentWait } from "./agent-waits";
 import { personaName } from "./config";
-import { cancelAgentRun, isAgentSessionBusy, steerAgentRun } from "./agent-runner";
+import { currentAgentRunToken, isAgentSessionBusy, steerAgentRun } from "./agent-runner";
 import { pendingAskAwaitingAnswer } from "./asks";
 import { relinkAskThreads } from "./human-asks";
 import { SESSION_EFFORTS, type SessionEffort, providerFor, resolveModel } from "./models";
 import { configuredInteractiveDefaultModel } from "./model-catalog";
-import { deliveryQueueState, durableQueueItem, liftUserStop, promptQueues, acceptQueuedSteer, prepareQueuedSteer, rejectQueuedSteer, requeueSteerReceipts, stoppedSessions } from "./queue-state";
-import { drainQueue, enqueuePrompt, runSessionPrompt, sessionMentionsNote, watchExternalRunAndDrain } from "./run-session";
+import { deliveryQueueState, durableQueueItem, liftUserStop, promptQueues, acceptQueuedSteer, prepareQueuedSteer, rejectQueuedSteer } from "./queue-state";
+import { drainQueue, enqueuePrompt, requestTurnCancel, runSessionPrompt, sessionMentionsNote, watchExternalRunAndDrain } from "./run-session";
 import { creationAttachmentPath, parseImageDataUrls, prepareCreationAttachmentSources, withUploadsNote } from "./uploads";
 import { type Sandbox } from "./sandbox";
 import { isRemoteSandboxProvider, resolveRequestedSandbox } from "./sandbox/config";
@@ -40,7 +39,7 @@ import {
 } from "./session-control";
 import { type ResolvedCreate, actorCreationSetupPlan, forkHandoffContext, runOpeningCreateOnce, resolveForkContext, resolvePinnedAccountId, waitForCreatedSessionProjection } from "./session-create";
 import { resolveSessionRepoContext, workspaceOwningWorktree } from "./session-repos";
-import { engineUserTexts, getAllSessions, mergedSessionTranscript } from "./sessions";
+import { getAllSessions, mergedSessionTranscript } from "./sessions";
 import { rebuildIndex } from "./slack-links";
 import { handleSlashCommand } from "./slash-commands";
 import { type UnifiedSession } from "./types";
@@ -50,6 +49,7 @@ import { ensureAskCheckout, ensureScratchDir, getRepo, isRegisteredWorktree, lis
 import { broadcastToSession } from "./ws-hub";
 import { randomUUIDv7 } from "bun";
 import {
+  durableSessionCommand,
 	legacyGatewayEffect,
 	patchCreationSetupPlan,
 	requestCreationAttachment,
@@ -58,6 +58,8 @@ import {
 	requestCreationWorkspace,
 	sessionKernel,
 	sessionKernelOwnsCurrentCommand,
+  sessionTurn,
+  targetForTurnCancel,
 } from "./session-kernel";
 import {
 	canonicalCommandPayload,
@@ -376,29 +378,67 @@ registerSessionControl({
 
 	cancelSession: async (id, opts) => {
 		const requestId = opts?.requestId || randomUUIDv7();
-		const targetRunId = sessionKernel(id).runState().currentRunId || null;
+    const targetRun = sessionKernel(id).runState();
+    const persistedCancel = sessionTurn({ op: "snapshot", sessionId: id }).cancel;
+    const priorCommandPayload = durableSessionCommand(id, requestId)?.payload as
+      | { targetRunId?: string | null; targetRunGeneration?: number }
+      | undefined;
+    const commandTarget =
+      priorCommandPayload?.targetRunId !== undefined &&
+      priorCommandPayload.targetRunGeneration !== undefined
+        ? {
+            runId: priorCommandPayload.targetRunId,
+            generation: priorCommandPayload.targetRunGeneration,
+          }
+        : undefined;
+    const replayedTarget =
+      commandTarget ||
+      targetForTurnCancel(persistedCancel, `stop:${requestId}`);
+    const targetRunId = replayedTarget
+      ? replayedTarget.runId
+      : targetRun.currentRunId ||
+      (targetRun.state === "starting" || targetRun.state === "preparing"
+        ? currentAgentRunToken(id)
+          : undefined) ||
+        null;
+    const targetRunGeneration =
+      replayedTarget?.generation ?? targetRun.generation;
 		const accepted = await sessionKernel(id).dispatchLegacy(
 			legacyGatewayEffect("cancel_session", {
 				requestId,
-				payload: { targetRunId },
+        payload: { targetRunId, targetRunGeneration },
 				source: "session_control",
 				replaySafe: true,
 			}),
-			() => {
-				if ((sessionKernel(id).runState().currentRunId || null) !== targetRunId)
-					throw new Error("The run targeted by this command has already changed");
-				const session = findSession(id);
-				if (!session) return false;
-				stoppedSessions.add(id);
-				const cancelledWait = cancelAgentWait(id);
-				const cancelled = cancelAgentRun(
-					session.claudeSessionId,
-					session.codexThreadId,
-					session.id,
-				);
-				requeueSteerReceipts(id, engineUserTexts(session));
-				return cancelled || cancelledWait;
-			},
+      () => {
+        const current = sessionKernel(id).runState();
+        const currentTargetId =
+          current.currentRunId ||
+          (current.state === "starting" || current.state === "preparing"
+            ? currentAgentRunToken(id)
+            : undefined) ||
+          null;
+        if (
+          currentTargetId !== targetRunId ||
+          current.generation !== targetRunGeneration
+        ) {
+          const replayedCancel = sessionTurn({ op: "snapshot", sessionId: id }).cancel;
+          const cancelReplayMatches =
+            replayedCancel?.cancelId === `stop:${requestId}` &&
+            replayedCancel.runId === targetRunId &&
+            replayedCancel.runGeneration === targetRunGeneration;
+          if (!cancelReplayMatches) throw new Error("The run targeted by this command has already changed");
+        }
+        const session = findSession(id);
+        if (!session || !targetRunId) return false;
+        requestTurnCancel(id, session, {
+          cancelId: `stop:${requestId}`,
+          expectedRunId: targetRunId,
+          expectedGeneration: targetRunGeneration,
+          source: "session_control",
+        });
+        return true;
+      },
 		);
 		return accepted.result;
 	},

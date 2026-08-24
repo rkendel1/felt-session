@@ -97,8 +97,9 @@ only live policy facts such as whether child workers remain. The actor prepares
 a stable interrupt identity and fenced cancel outbox effect before physical
 cancellation, then records the explicit `confirmed` or `not_aborted` result. An
 `executing` receipt makes cancellation retryable against only the same run
-generation; ambiguous retry conservatively confirms instead of crossing into a
-successor. Claiming waits for confirmation and atomically moves
+generation and an immutable physical dispatch identity; ambiguous retry
+conservatively confirms instead of crossing into a successor that reused the
+same session or engine alias. Claiming waits for confirmation and atomically moves
 the interrupt with its selected batch into dispatch ownership. A crash or
 launch failure restores the exact batch and confirmed interrupt together, so
 restart cannot lose the solo target or separate hold bypass from steer framing.
@@ -113,7 +114,19 @@ an unresolved checkpoint as ambiguous acceptance and reconciles it through the
 receipt and transcript path instead of delivering a duplicate turn. The old queue and ask JSON formats are imported once under
 durable migration markers, then deleted. Default-path writers no-op after the
 marker commits; only explicit test/migration fixture paths retain JSON output.
-Resolver closures, timeout handles and the explicit Stop latch
+Explicit Stop is also actor-owned. Preparation atomically records the target run
+and generation, moves only unconfirmed steer receipts back to the queue, parks
+the run state, and emits a `turn_cancel` effect keyed to the immutable physical
+dispatch. `prepared`, `executing`, and settled receipts survive gateway crashes;
+settlement precedes outbox acknowledgement, retries cannot cancel a successor,
+and the durable `stopped` state keeps the queue parked across restart until an
+explicit prompt advances the reducer. Boot recovery preserves and attaches an
+exact journal owner named by a cancel receipt instead of treating `stopped` as
+proof of absence. The effect reissues cancellation when that control appears;
+an executing retry with no positive reconciliation remains failed closed. Small
+run-targeting command payloads remain with their permanent receipts so reconnect
+replay reconstructs the original run id and generation even after actor state
+moves on. Resolver closures and timeout handles
 remain process-local executor state because they are not durable decisions.
 
 ## Creation ownership
@@ -224,7 +237,8 @@ uncertain journals, refuses to replay persisted `starting` launches with
 execution evidence, and settles durable kernel state only when no recoverable
 journal owner exists. Stop retains that journal until the host reports terminal
 or its launcher proves absence. Cancel and interrupt receipts bind to the run
-generation present at admission, so replay cannot affect a successor.
+generation and immutable dispatch identity present at admission, so replay
+cannot affect a successor that reused its session or engine aliases.
 
 ## Mutation boundaries
 

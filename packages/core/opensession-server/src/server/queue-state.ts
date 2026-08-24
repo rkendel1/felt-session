@@ -219,9 +219,21 @@ export const steeredReceipts: Map<string, QueueItem[]> = new DeliveryOwnedMap(
 // Sessions whose run the user explicitly stopped. The queue drain skips these:
 // without the flag, stop would requeue the held steers and drainQueue would
 // immediately deliver them into a fresh run — "stop then instantly resume".
-// Cleared by the next explicit action (any new runSessionPrompt). In-memory
-// only: after a real restart a stop is stale anyway, and boot re-drains.
+// The actor's durable `stopped` run state is authoritative across restart;
+// this in-memory projection keeps existing hot-path checks immediate.
 export const stoppedSessions = new EphemeralSessionSet();
+
+/** Durable Stop ownership survives a gateway restart until an explicit prompt
+ * advances the actor run state out of `stopped`. */
+export function isUserStopped(sessionId: string): boolean {
+  const cancel = sessionKernelStore().turnSnapshot(sessionId).cancel;
+  return (
+    stoppedSessions.has(sessionId) ||
+    sessionKernelStore().runState(sessionId).state === "stopped" ||
+    cancel?.phase === "prepared" ||
+    cancel?.phase === "executing"
+  );
+}
 
 /**
  * Lift a Stop so this session's queue can drain again. Call this on any
@@ -232,7 +244,9 @@ export const stoppedSessions = new EphemeralSessionSet();
  * the opening turn is stopped before it settles).
  */
 export function liftUserStop(sessionId: string): void {
-	stoppedSessions.delete(sessionId);
+  stoppedSessions.delete(sessionId);
+  if (sessionKernelStore().runState(sessionId).state === "stopped")
+    sessionKernelStore().applyRunEvent({ sessionId, event: "prompt" });
 }
 
 // Both maps are persisted to disk so a real restart/crash (not just a hot
@@ -572,16 +586,18 @@ export function restorePersistedQueueState(options: {
 export function preparePromptInterrupt(
 	sessionId: string,
 	anchorId: string,
-	runIds: string[],
+  dispatchId: string,
 	soloId?: string,
 ): string {
-	const interruptId = crypto.randomUUID();
+  const interruptId = `interrupt:${new Bun.CryptoHasher("sha256")
+    .update(`${sessionId}\0${anchorId}`)
+    .digest("hex")}`;
 	sessionDelivery({
 		op: "prepare_interrupt",
 		sessionId,
 		interruptId,
 		anchorId,
-		runIds,
+    dispatchId,
 		...(soloId ? { soloId } : {}),
 	});
 	return interruptId;

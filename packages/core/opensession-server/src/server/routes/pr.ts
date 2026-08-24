@@ -1047,12 +1047,19 @@ export async function handlePrRoutes(
 			);
 
 		if (kind === "cancel-review") {
-			const [{ cancelAgentRun }, { bksIdFor }, { requestActiveRunCancellation }] =
-				await Promise.all([
-					import("../agent-runner"),
-					import("../../agents/github/run"),
-					import("../../agents/github/state"),
-				]);
+      const [
+        { currentAgentRunToken },
+        { bksIdFor },
+        { requestActiveRunCancellation },
+        { requestTurnCancel },
+        { sessionKernel },
+      ] = await Promise.all([
+        import("../agent-runner"),
+        import("../../agents/github/run"),
+        import("../../agents/github/state"),
+        import("../run-session"),
+        import("../session-kernel"),
+      ]);
 			const bksId = bksIdFor(details.number, "review", target.ghRepo);
 			const reviewSession = await findSessionAsync(bksId);
 			const requested = requestActiveRunCancellation(
@@ -1061,11 +1068,22 @@ export async function handlePrRoutes(
 				"review",
 				target.ghRepo,
 			);
-			const stopped = cancelAgentRun(
-				reviewSession?.claudeSessionId,
-				reviewSession?.codexThreadId,
-				bksId,
-			);
+      const runTarget = sessionKernel(bksId).runState();
+      const targetRunId =
+        runTarget.currentRunId ||
+        (runTarget.state === "starting" || runTarget.state === "preparing"
+          ? currentAgentRunToken(bksId)
+          : undefined);
+      let stopped = false;
+      if (reviewSession && targetRunId) {
+        requestTurnCancel(bksId, reviewSession, {
+          cancelId: `pr-review-stop:${runTarget.generation}:${targetRunId}`,
+          expectedRunId: targetRunId,
+          expectedGeneration: runTarget.generation,
+          source: "pr_cancel",
+        });
+        stopped = true;
+      }
 			invalidateSessionsCache();
 			return Response.json({ ok: true, cancelled: requested || stopped });
 		}

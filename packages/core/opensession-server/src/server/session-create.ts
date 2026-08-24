@@ -22,7 +22,7 @@
 import type { ServerWebSocket } from "bun";
 import { randomUUIDv7 } from "bun";
 import { existsSync } from "node:fs";
-import { type StreamEvent, markSessionStarting, runAgent, unmarkSessionStarting, } from "./agent-runner";
+import { currentAgentRunToken, type StreamEvent, markSessionStarting, runAgent, unmarkSessionStarting, } from "./agent-runner";
 import {
 	activeRunRecords,
 	journalClearIfLineage,
@@ -931,6 +931,10 @@ export async function openCreatedSession(
 		// window from double-starting a run (same race as
 		// runSessionPrompt).
 		const startToken = markSessionStarting(bksId);
+    if (currentAgentRunToken(bksId) !== startToken) {
+      unmarkSessionStarting(bksId, startToken);
+      throw new Error("Opening turn is already owned by another preparation");
+    }
 		const pendingAttach = spec.attachRepos?.repos.length
 			? spec.attachRepos
 			: null;

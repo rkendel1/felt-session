@@ -19,6 +19,7 @@ import type {
   DeliveryActorRequest,
   DeliveryActorResult,
 } from "./delivery-protocol";
+import type { TurnActorRequest, TurnActorResult } from "./turn-protocol";
 import { AsyncLocalStorage } from "node:async_hooks";
 import {
 	SessionKernelActorError,
@@ -73,7 +74,9 @@ type CommandContext = {
 };
 const commandContext = new AsyncLocalStorage<CommandContext>();
 
-function compatibilityStoreForTest(domain: "ask" | "creation" | "delivery") {
+function compatibilityStoreForTest(
+  domain: "ask" | "creation" | "delivery" | "turn",
+) {
 	if (process.env.NODE_ENV !== "test")
 		throw new Error(
 			`Session ${domain} mutation requires the authoritative actor`,
@@ -95,6 +98,21 @@ export function sessionAsk<T extends AskActorRequest>(
     result = store.deleteAskRecord(request.sessionId);
   else result = store.clearAskRecords();
   return result as AskActorResult<T>;
+}
+
+export function sessionTurn<T extends TurnActorRequest>(
+  request: T,
+): TurnActorResult<T> {
+  const actor = state.actor;
+  if (actor) return actor.decideTurn(request);
+  const store = compatibilityStoreForTest("turn");
+  if (request.op === "snapshot")
+    return store.turnSnapshot(request.sessionId) as TurnActorResult<T>;
+  if (request.op === "prepare_cancel")
+    return store.prepareTurnCancel(request) as TurnActorResult<T>;
+  if (request.op === "begin_cancel_effect")
+    return store.beginTurnCancelEffect(request) as TurnActorResult<T>;
+  return store.settleTurnCancel(request) as TurnActorResult<T>;
 }
 
 export function sessionDelivery<T extends DeliveryActorRequest>(

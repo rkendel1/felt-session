@@ -798,6 +798,7 @@ if (!g.__opensessionBooted) {
 						// persists that id — so name it here, or the failure chip is
 						// written into the transcript the conversation left behind.
 						{
+              runId: recoveredRun?.runKey,
 							engineSessionId: terminalEvent.sessionId,
 							noticeLabel: terminalEvent.usageLimitExhausted
 								? "Run stopped"

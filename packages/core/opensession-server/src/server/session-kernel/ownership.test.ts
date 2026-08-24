@@ -176,7 +176,7 @@ describe("single session ownership", () => {
 			'registerSessionEffectExecutor("delivery_interrupt_cancel"',
 		);
 		const beginEffect = run.indexOf("beginPromptInterruptEffect(");
-		const cancel = run.indexOf("cancelAgentRun(...runIds)", beginEffect);
+    const cancel = run.indexOf("cancelAgentRunToken(dispatchId)", beginEffect);
 		const settle = run.indexOf("settlePromptInterrupt(", cancel);
 		expect(run).toContain("preparePromptInterrupt(sessionId");
 		expect(beginEffect).toBeGreaterThan(-1);
@@ -423,8 +423,58 @@ describe("single session ownership", () => {
 		expect(ws).toContain("The run targeted by this command has already changed");
 		expect(ws).toContain("sessionId: commandSessionId");
 		expect(ws).toContain('`stop-${msg.requestId}`');
+    expect(ws).toContain("requestTurnCancel(sessionId, session");
+    expect(ws.indexOf("const persistedCancel =")).toBeLessThan(
+      ws.indexOf('legacyGatewayEffect("websocket_command"'),
+    );
+    expect(ws.indexOf("const priorCommandPayload = durableSessionCommand(")).toBeLessThan(
+      ws.indexOf('legacyGatewayEffect("websocket_command"'),
+    );
+    expect(ws.indexOf("const persistedInterrupt =")).toBeLessThan(
+      ws.indexOf('legacyGatewayEffect("websocket_command"'),
+    );
+    expect(ws).not.toContain("cancelAgentRun(");
+    const runSession = read("run-session.ts");
+    expect(runSession).toContain('registerSessionEffectExecutor("turn_cancel"');
+    expect(runSession).toContain("cancelAgentRunToken(dispatchId)");
+    expect(runSession).toContain("cancelAgentRunTokenAndWait(dispatchId)");
+    const agentRunner = read("agent-runner.ts");
+    expect(agentRunner).toContain(
+      'if (cancelOwnership === "unknown") {',
+    );
+    expect(agentRunner).toMatch(
+      /if \(cancelOwnership === "unknown"\) \{[\s\S]*?return true;/,
+    );
+    expect(agentRunner).toContain(
+      'while (ownership === "unknown")',
+    );
+    expect(agentRunner).toContain(
+      "ownershipBackoffMs = Math.min(5_000, ownershipBackoffMs * 2)",
+    );
+    const runnerSession = read("runner-session.ts");
+    const runnerLaunch = runnerSession.indexOf("await launcher.launch(hostId, hostDir)");
+    expect(runnerSession.indexOf("opts.shouldCancel?.()", runnerSession.indexOf("new HostHandle"))).toBeLessThan(runnerLaunch);
+    expect(runnerSession.indexOf("opts.shouldCancel?.()", runnerLaunch)).toBeGreaterThan(runnerLaunch);
+    expect(runnerSession.indexOf("opts.shouldCancel?.()", runnerSession.indexOf("await handle.connectWithWait"))).toBeGreaterThan(
+      runnerSession.indexOf("await handle.connectWithWait"),
+    );
+    expect(runnerSession).toContain("journalClearIfLineage(run)");
+    expect(runnerSession).not.toContain("journalClear(session.id)");
+    const wiring = read("session-control-wiring.ts");
+    expect(wiring).toContain("requestTurnCancel(id, session");
+    expect(wiring.indexOf("const persistedCancel =")).toBeLessThan(
+      wiring.indexOf('legacyGatewayEffect("cancel_session"'),
+    );
+    expect(wiring.indexOf("const priorCommandPayload = durableSessionCommand(")).toBeLessThan(
+      wiring.indexOf('legacyGatewayEffect("cancel_session"'),
+    );
+    expect(wiring).not.toContain("cancelAgentRun(");
 		const routes = read("routes/sessions.ts");
 		expect(routes).toContain("await cancelAgentRunAndWait(runIds)");
+    expect(routes).toContain("requestTurnCancel(session.id, session");
+    const prRoutes = read("routes/pr.ts");
+    expect(prRoutes).toContain("requestTurnCancel(bksId, reviewSession");
+    expect(prRoutes).not.toContain("cancelAgentRun(");
 		expect(routes).toMatch(/\.runExclusive\(\s*"delete_session"/);
 	});
 
@@ -434,8 +484,11 @@ describe("single session ownership", () => {
 		expect(queue).toContain("options.creationOwnsPrompt?.(");
 		const runSession = read("run-session.ts");
 		expect(runSession).toContain("resumePlannedCreate(sessionId)");
+    const boot = read("../../opensession.ts");
+    expect(boot).toContain("runId: recoveredRun?.runKey");
+    const cache = read("session-cache.ts");
+    expect(cache).toContain("current.currentRunId !== opts.runId");
 		expect(runSession).toContain("creationOwnsPrompt(record.osSessionId");
-		const boot = read("../../opensession.ts");
 		expect(boot).toContain(
 			"creationOwnsPrompt(run.osSessionId, run.promptEntryId)",
 		);

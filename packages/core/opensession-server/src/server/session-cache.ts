@@ -38,7 +38,11 @@ import {
 } from "./models";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import type { UnifiedSession, NativeSessionFile } from "./types";
-import { sessionDeliveryProjection, sessionKernel } from "./session-kernel";
+import {
+  sessionDeliveryProjection,
+  sessionKernel,
+  sessionTurn,
+} from "./session-kernel";
 
 export const SESSIONS_DIR = OPENSESSION_SESSIONS_DIR;
 
@@ -654,15 +658,27 @@ export function recordRunOutcome(
 		noticePersisted?: boolean;
 		engineSessionId?: string;
 		noticeLabel?: string;
+    /** Immutable owner for recovered terminal projection. */
+    runId?: string;
 	},
 ): void {
 	const session = findSession(sessionId);
 	const id = session?.id || sessionId;
+  if (opts?.runId) {
+    const cancel = sessionTurn({ op: "snapshot", sessionId: id }).cancel;
+    const current = sessionKernel(id).runState();
+    // A cancelled predecessor or any replaced generation cannot project its
+    // terminal outcome onto the successor's transcript/session file.
+    if (cancel?.runId === opts.runId || current.currentRunId !== opts.runId)
+      return;
+  }
 	// runAgent settles every journal-owned run on its terminal event. Keep this
 	// persistence choke point compatible with non-runner callers without
 	// emitting a false double-teardown rejection for the normal path.
 	if (isRunStateUnsettled(getRunState(id)))
-		transitionRunState(id, errorMessage ? "run_failed" : "turn_end");
+    transitionRunState(id, errorMessage ? "run_failed" : "turn_end", {
+      ...(opts?.runId ? { run_key: opts.runId } : {}),
+    });
 	if (errorMessage) {
 		const entry = {
 			message: errorMessage.slice(0, 500),

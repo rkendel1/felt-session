@@ -50,6 +50,24 @@ describe("session effect executor registry", () => {
     });
   });
 
+  test("decodes generation-fenced turn cancellation effects", async () => {
+    const registry = new SessionEffectExecutorRegistry();
+    let cancel: unknown;
+    registry.register("turn_cancel", (item) => {
+      cancel = item.payload;
+    });
+    expect(await registry.execute(outbox({
+      cancelId: "cancel-one",
+      dispatchId: "dispatch-one",
+      runGeneration: 4,
+    }, "turn_cancel"))).toBe(true);
+    expect(cancel).toEqual({
+      cancelId: "cancel-one",
+      dispatchId: "dispatch-one",
+      runGeneration: 4,
+    });
+  });
+
   test("decodes creation references without forwarding durable secrets or bodies", async () => {
     const registry = new SessionEffectExecutorRegistry();
     let credential: unknown;

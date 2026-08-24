@@ -33,6 +33,7 @@ import type { ImageInput } from "./run-events";
 import {
 	activeRunRecords,
 	journalClear,
+  journalClearIfLineage,
 	journalQuarantine,
 	journalRecordAbnormalCompletion,
 	journalSet,
@@ -49,6 +50,7 @@ type RunnerLaunchOpts = {
 	mcpServers?: McpScope;
 	user?: string;
 	reposNote?: string;
+  shouldCancel?: () => boolean;
 };
 
 type RunnerEvents = AsyncGenerator<StreamEvent> & { runnerId: string };
@@ -157,7 +159,9 @@ export async function maybeLaunchRunnerRun(
 	const wsToken = spec.wsToken;
 	let run: ActiveRunRecord = {
 		...priorRun,
-		runKey: session.id,
+    // Host identity is immutable for one physical dispatch; the session id is
+    // a reusable alias and cannot fence delayed cancellation from a successor.
+    runKey: hostId,
 		osSessionId: session.id,
 		prompt: spec.prompt,
 		cwd: session.worktreeDir,
@@ -210,6 +214,10 @@ export async function maybeLaunchRunnerRun(
 	let handle: HostHandle | undefined;
 	try {
 		handle = new HostHandle(hostDir, spec, callbacks, launcher);
+    if (opts.shouldCancel?.() && run.launchPhase === "prepared")
+      throw new RunnerHostLaunchRejectedError(
+        `Runner dispatch ${hostId} was cancelled before launch`,
+      );
 		if (launchState.phase === "rejected")
 			throw new RunnerHostLaunchRejectedError(
 				`Runner opening ${hostId} was durably rejected before dispatch`,
@@ -223,6 +231,7 @@ export async function maybeLaunchRunnerRun(
 			run = { ...run, launchPhase: "launching" };
 			journalSet(run);
 			await launcher.launch(hostId, hostDir);
+      if (opts.shouldCancel?.()) handle.requestCancel();
 			launchState = { ...launchState, phase: "started" };
 			writeJsonAtomic(launchStatePath, launchState);
 			run = { ...run, launchPhase: "started" };
@@ -249,6 +258,7 @@ export async function maybeLaunchRunnerRun(
 			}
 		}
 		await handle.connectWithWait(20_000);
+    if (opts.shouldCancel?.()) handle.requestCancel();
 		const events = (async function* (): AsyncGenerator<StreamEvent> {
 			let sourceCompleted = false;
 			let sawTerminal = false;
@@ -260,7 +270,7 @@ export async function maybeLaunchRunnerRun(
 				}
 				sourceCompleted = true;
 			} finally {
-				if (sourceCompleted && sawTerminal) journalClear(session.id);
+        if (sourceCompleted && sawTerminal) journalClear(run.runKey);
 				else if (sourceCompleted) journalRecordAbnormalCompletion(run);
 				setRunnerWorkload(runner.id, undefined, session.id);
 			}
@@ -278,7 +288,7 @@ export async function maybeLaunchRunnerRun(
 			// sent. Fence retries durably before retiring the prepared journal.
 			launchState = { ...launchState, phase: "rejected" };
 			writeJsonAtomic(launchStatePath, launchState);
-			journalClear(session.id);
+      journalClearIfLineage(run);
 		} else {
 			// Once launch admission may have crossed the Runner connection, absence
 			// is not proof of non-execution. Remove the record from boot recovery but

@@ -9,6 +9,7 @@ import * as shared from "./runner-shared";
 import type { StreamEvent } from "./run-events";
 import { makeFakeEngine } from "./testing/fake-engine";
 import { stripContext } from "./prompt-context";
+import { sessionKernelStore } from "./session-kernel/kernel";
 
 // __setActiveRunsPathForTest repoints the LIVE ACTIVE_RUNS_PATH binding, so
 // agent-runner.ts's own (already-cached, possibly earlier-imported-with-the-
@@ -116,7 +117,7 @@ describe("run journal", () => {
 		}
 	});
 
-	it("cancels a journal-owned recovery before its queued worker starts", () => {
+	it("keeps an unclaimed journal owner fenced until recovery proves it absent", () => {
 		const sessionId = `queued-recovery-${crypto.randomUUID()}`;
 		const runKey = `run-${crypto.randomUUID()}`;
 		try {
@@ -131,12 +132,53 @@ describe("run journal", () => {
 
 			expect(agent.cancelAgentRun(sessionId)).toBe(true);
 
-			expect(agent.isAgentSessionBusy(sessionId)).toBe(false);
-			expect(mod.activeRunRecords().some((run) => run.runKey === runKey)).toBe(false);
+      expect(agent.isAgentSessionBusy(sessionId)).toBe(true);
+      expect(mod.activeRunRecords().some((run) => run.runKey === runKey)).toBe(true);
 		} finally {
+      mod.journalClear(runKey);
 			clearRunState(sessionId);
 		}
 	});
+
+  it("preserves a stopped journal owned by a durable cancel effect", () => {
+    const sessionId = `durable-stop-recovery-${crypto.randomUUID()}`;
+    const runKey = `rh-${crypto.randomUUID()}`;
+    const store = sessionKernelStore();
+    try {
+      store.applyRunEvent({ sessionId, event: "prompt" });
+      store.applyRunEvent({ sessionId, event: "run_registered", runKey });
+      const generation = store.runState(sessionId).generation;
+      store.prepareTurnCancel({
+        sessionId,
+        cancelId: `stop:${runKey}`,
+        expectedRunId: runKey,
+        expectedGeneration: generation,
+        dispatchId: runKey,
+        requeueIds: [],
+        source: "test",
+      });
+      const recovery = {
+        runKey,
+        hostId: runKey,
+        osSessionId: sessionId,
+        cwd: "/tmp",
+        startedAt: new Date().toISOString(),
+      };
+      expect(agent.durableCancelOwnsRecovery(recovery)).toBe(true);
+      store.settleTurnCancel({
+        sessionId,
+        cancelId: `stop:${runKey}`,
+        outcome: "confirmed",
+      });
+      // A boot after actor settlement still restores the exact cancellation
+      // latch before the detached control reconnects.
+      expect(agent.reissueDurableRecoveryCancel(recovery)).toBe(false);
+      expect(agent.isAgentSessionCancelled(sessionId, runKey)).toBe(true);
+    } finally {
+      agent.unmarkSessionStarting(sessionId, runKey);
+      store.clearSession(sessionId);
+    }
+  });
 
 	it("keeps an active cancelled recovery reserved until its worker exits", async () => {
 		const sessionId = `active-recovery-${crypto.randomUUID()}`;
@@ -176,6 +218,86 @@ describe("run journal", () => {
 			clearRunState(sessionId);
 		}
 	});
+
+  it("settles a pre-journal terminal against its reserved dispatch token", () => {
+    const sessionId = `pre-journal-terminal-${crypto.randomUUID()}`;
+    const token = agent.markSessionStarting(sessionId);
+    try {
+      expect(sessionKernelStore().runState(sessionId)).toMatchObject({
+        state: "starting",
+        currentRunId: token,
+      });
+      transitionRunState(sessionId, "run_failed", {
+        run_key: token,
+        source: "pre_journal_failure",
+      });
+      expect(getRunState(sessionId)).toBe("failed");
+    } finally {
+      agent.unmarkSessionStarting(sessionId, token);
+      clearRunState(sessionId);
+    }
+  });
+
+  it("keeps process and actor ownership on the first concurrent preparation", () => {
+    const sessionId = `preparation-winner-${crypto.randomUUID()}`;
+    const firstToken = agent.markSessionStarting(sessionId);
+    const secondToken = agent.markSessionStarting(sessionId);
+    const store = sessionKernelStore();
+    try {
+      expect(secondToken).not.toBe(firstToken);
+      expect(agent.isAgentSessionCancelled(sessionId, secondToken)).toBe(true);
+      expect(agent.currentAgentRunToken(sessionId)).toBe(firstToken);
+      expect(store.runState(sessionId)).toMatchObject({
+        state: "starting",
+        currentRunId: firstToken,
+      });
+      expect(store.prepareTurnCancel({
+        sessionId,
+        cancelId: `stop:${firstToken}`,
+        expectedRunId: firstToken,
+        expectedGeneration: store.runState(sessionId).generation,
+        dispatchId: firstToken,
+        requeueIds: [],
+        source: "test",
+      })).toMatchObject({
+        cancel: { runId: firstToken, phase: "prepared" },
+        runState: { state: "stopped" },
+      });
+    } finally {
+      agent.unmarkSessionStarting(sessionId, firstToken);
+      agent.unmarkSessionStarting(sessionId, secondToken);
+      store.clearSession(sessionId);
+    }
+  });
+
+  it("never launches a rejected concurrent preparation before the actor winner", async () => {
+    const sessionId = `preparation-engine-winner-${crypto.randomUUID()}`;
+    const fake = makeFakeEngine([{ kind: "clean" }]);
+    agent.__setEngineForTest(fake.engine);
+    const firstToken = agent.markSessionStarting(sessionId);
+    const rejectedToken = agent.markSessionStarting(sessionId);
+    const run = (startToken: string) => agent.runAgent({
+      prompt: "continue",
+      cwd: "/tmp",
+      mcpServers: [],
+      model: "claude-fable-5",
+      fallbackModel: "none",
+      journal: { osSessionId: sessionId, kind: "prompt" },
+      startToken,
+    });
+    try {
+      for await (const _event of run(rejectedToken)) {}
+      expect(fake.calls).toHaveLength(0);
+      agent.unmarkSessionStarting(sessionId, rejectedToken);
+      for await (const _event of run(firstToken)) {}
+      expect(fake.calls).toHaveLength(1);
+      expect(getRunState(sessionId)).toBe("idle");
+    } finally {
+      agent.unmarkSessionStarting(sessionId, rejectedToken);
+      agent.unmarkSessionStarting(sessionId, firstToken);
+      clearRunState(sessionId);
+    }
+  });
 
 	it("latches Stop while a prompt is still preparing", async () => {
 		const sessionId = `preparing-${crypto.randomUUID()}`;
@@ -236,6 +358,94 @@ describe("run journal", () => {
 			clearRunState(sessionId);
 		}
 	});
+
+  it("an old dispatch token cannot cancel a successor using the same session alias", async () => {
+    const sessionId = `dispatch-fence-${crypto.randomUUID()}`;
+    const fake = makeFakeEngine([{ kind: "clean" }, { kind: "clean" }]);
+    agent.__setEngineForTest(fake.engine);
+    const run = (startToken: string) => agent.runAgent({
+      prompt: "continue",
+      cwd: "/tmp",
+      mcpServers: [],
+      model: "claude-fable-5",
+      fallbackModel: "none",
+      journal: { osSessionId: sessionId, kind: "prompt" },
+      startToken,
+    });
+    const firstToken = agent.markSessionStarting(sessionId);
+    for await (const _event of run(firstToken)) {}
+    agent.unmarkSessionStarting(sessionId, firstToken);
+    const successorToken = agent.markSessionStarting(sessionId);
+    try {
+      expect(agent.cancelAgentRunToken(firstToken)).toBe(false);
+      expect(agent.isAgentSessionCancelled(sessionId, successorToken)).toBe(false);
+      for await (const _event of run(successorToken)) {}
+      expect(fake.calls).toHaveLength(2);
+    } finally {
+      agent.unmarkSessionStarting(sessionId, successorToken);
+      clearRunState(sessionId);
+    }
+  });
+
+  it("confirms an exact cancel without crossing or retiring source ownership", async () => {
+    const sessionId = `dispatch-wait-${crypto.randomUUID()}`;
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const fake = makeFakeEngine([{ kind: "clean", gate }]);
+    agent.__setEngineForTest(fake.engine);
+    const token = agent.markSessionStarting(sessionId);
+    const running = (async () => {
+      try {
+        for await (const _event of agent.runAgent({
+          prompt: "continue",
+          cwd: "/tmp",
+          mcpServers: [],
+          model: "claude-fable-5",
+          fallbackModel: "none",
+          journal: { osSessionId: sessionId, kind: "prompt" },
+          startToken: token,
+        })) {}
+      } finally {
+        agent.unmarkSessionStarting(sessionId, token);
+      }
+    })();
+    try {
+      while (fake.calls.length === 0) await Bun.sleep(1);
+      expect(await agent.cancelAgentRunTokenAndWait(token, 1_000)).toBe(true);
+      expect(agent.isAgentSessionBusy(sessionId)).toBe(true);
+      release();
+      await running;
+      expect(agent.isAgentSessionBusy(sessionId)).toBe(false);
+    } finally {
+      release();
+      await running;
+      agent.unmarkSessionStarting(sessionId, token);
+      clearRunState(sessionId);
+    }
+  });
+
+  it("does not confirm an unreachable detached dispatch from journal evidence alone", async () => {
+    const sessionId = `detached-cancel-${crypto.randomUUID()}`;
+    const runKey = `rh-${crypto.randomUUID()}`;
+    try {
+      mod.journalSet({
+        runKey,
+        hostId: runKey,
+        osSessionId: sessionId,
+        cwd: "/tmp",
+        startedAt: new Date().toISOString(),
+      });
+      await expect(agent.cancelAgentRunTokenAndWait(runKey, 10)).rejects.toThrow(
+        "Timed out reconciling cancelled dispatch",
+      );
+      expect(mod.activeRunRecords().some((run) => run.runKey === runKey)).toBe(true);
+    } finally {
+      mod.journalClear(runKey);
+      clearRunState(sessionId);
+    }
+  });
 
 	it("bridges pending preparations left by the pre-token hot-reload global", () => {
 		const sessionId = `legacy-preparing-${crypto.randomUUID()}`;
@@ -1017,6 +1227,103 @@ describe("restart recovery reattach", () => {
 			clearRunState(sessionId);
 		}
 	});
+
+  it("keeps the old lineage when a missing local host falls back in-process", async () => {
+    const sessionId = `local-host-fallback-lineage-${crypto.randomUUID()}`;
+    const hostId = `rh-${crypto.randomUUID()}`;
+    const fake = makeFakeEngine([{ kind: "error", content: "replacement failed" }]);
+    agent.__setEngineForTest(fake.engine);
+    agent.__setLocalHostResumeForTest(async () => null);
+    const snapshotRun: mod.ActiveRunRecord = {
+      runKey: hostId,
+      hostId,
+      osSessionId: sessionId,
+      claudeSessionId: `pi-${crypto.randomUUID()}`,
+      prompt: "resume with same lineage",
+      cwd: "/tmp",
+      model: "pi/anthropic/claude-sonnet-5",
+      kind: "prompt",
+      startedAt: new Date().toISOString(),
+    };
+    const terminal = Promise.withResolvers<StreamEvent>();
+    try {
+      agent.resumeInterruptedRuns(
+        (_id, event) => event && terminal.resolve(event),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        [snapshotRun],
+      );
+      await expect(terminal.promise).resolves.toMatchObject({
+        type: "error",
+        content: "replacement failed",
+      });
+      expect(fake.calls).toHaveLength(1);
+      expect(fake.calls[0].opts.startToken).toBe(hostId);
+    } finally {
+      mod.journalClear(hostId);
+      clearRunState(sessionId);
+    }
+  });
+
+  it("does not re-prompt a durably cancelled local host proven absent", async () => {
+    const sessionId = `local-host-cancelled-absent-${crypto.randomUUID()}`;
+    const hostId = `rh-${crypto.randomUUID()}`;
+    const fake = makeFakeEngine([{ kind: "clean" }]);
+    agent.__setEngineForTest(fake.engine);
+    let resumeCalls = 0;
+    agent.__setLocalHostResumeForTest(async () => {
+      resumeCalls++;
+      return null;
+    });
+    const snapshotRun: mod.ActiveRunRecord = {
+      runKey: hostId,
+      hostId,
+      osSessionId: sessionId,
+      claudeSessionId: `pi-${crypto.randomUUID()}`,
+      prompt: "must not run again",
+      cwd: "/tmp",
+      model: "pi/anthropic/claude-sonnet-5",
+      kind: "prompt",
+      startedAt: new Date().toISOString(),
+    };
+    const store = sessionKernelStore();
+    try {
+      store.applyRunEvent({ sessionId, event: "prompt" });
+      store.applyRunEvent({ sessionId, event: "run_registered", runKey: hostId });
+      const generation = store.runState(sessionId).generation;
+      store.prepareTurnCancel({
+        sessionId,
+        cancelId: `stop:${hostId}`,
+        expectedRunId: hostId,
+        expectedGeneration: generation,
+        dispatchId: hostId,
+        requeueIds: [],
+        source: "test",
+      });
+      store.settleTurnCancel({
+        sessionId,
+        cancelId: `stop:${hostId}`,
+        outcome: "confirmed",
+      });
+      agent.resumeInterruptedRuns(
+        () => {},
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        [snapshotRun],
+      );
+      while (resumeCalls === 0) await Bun.sleep(5);
+      await Bun.sleep(10);
+      expect(fake.calls).toHaveLength(0);
+      expect(mod.activeRunRecords().some((run) => run.runKey === hostId)).toBe(false);
+    } finally {
+      mod.journalClear(hostId);
+      store.clearSession(sessionId);
+    }
+  });
 
 	it("claims a snapshot-only local host before the generic wake can re-prompt", async () => {
 		const sessionId = `local-host-snapshot-${crypto.randomUUID()}`;
