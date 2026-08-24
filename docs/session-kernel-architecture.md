@@ -217,7 +217,9 @@ turn. The creation actor records a `cancelled` receipt for the exact effect,
 clears its recovery plan, and fences late success. Opening recovery checks the
 durable stopped turn or its retained cancel receipt before launch and while
 awaiting a detached local owner, so a restart cannot resurrect a cancelled
-opening prompt.
+opening prompt. Runner, sandbox, and local openings use the same stable token
+for actor admission and physical control, letting Stop reach the exact backend
+without giving up restart adoption.
 Non-image create attachments are durably spooled to bounded source references,
 then copied or adopted at deterministic session-owned paths by
 `creation_attachment_stage`; digest crossover fails closed and inline bodies

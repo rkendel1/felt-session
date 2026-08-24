@@ -380,6 +380,26 @@ describe("run journal", () => {
     }
   });
 
+  it("uses one stable physical token without admitting a concurrent duplicate", () => {
+    const sessionId = `stable-preparation-${crypto.randomUUID()}`;
+    const stableToken = `rh-opening-${crypto.randomUUID()}`;
+    const admitted = agent.markSessionStarting(sessionId, stableToken);
+    const rejected = agent.markSessionStarting(sessionId, stableToken);
+    try {
+      expect(admitted).toBe(stableToken);
+      expect(rejected).not.toBe(stableToken);
+      expect(agent.isAgentSessionCancelled(sessionId, rejected)).toBe(true);
+      expect(agent.currentAgentRunToken(sessionId)).toBe(stableToken);
+      expect(sessionKernelStore().runState(sessionId)).toMatchObject({
+        currentRunId: stableToken,
+      });
+    } finally {
+      agent.unmarkSessionStarting(sessionId, rejected);
+      agent.unmarkSessionStarting(sessionId, stableToken);
+      clearRunState(sessionId);
+    }
+  });
+
   it("does not let a stale gateway projection replace the actor's start owner", () => {
     const sessionId = `actor-preparation-winner-${crypto.randomUUID()}`;
     const firstToken = agent.markSessionStarting(sessionId);

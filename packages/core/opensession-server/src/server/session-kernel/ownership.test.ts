@@ -613,6 +613,8 @@ describe("single session ownership", () => {
 			'throw new Error("Opening run ended without a terminal event")',
 		);
 		expect(create).toContain("openingJournal?.terminalFailure");
+		expect(create).toContain("startToken = markSessionStarting(");
+		expect(create).toContain("hostId: startToken");
 		const runSession = read("run-session.ts");
 		const cancelPrepared = runSession.indexOf('op: "prepare_cancel"');
 		const creationCancelled = runSession.indexOf(

@@ -975,7 +975,12 @@ export async function openCreatedSession(
 		// engine is up. The starting mark keeps a prompt typed in that
 		// window from double-starting a run (same race as
 		// runSessionPrompt).
-		startToken = markSessionStarting(bksId);
+		startToken = markSessionStarting(
+			bksId,
+			openingRun
+				? runnerOpeningHostId(openingRun.runId, openingRun.generation)
+				: undefined,
+		);
     if (currentAgentRunToken(bksId) !== startToken) {
       unmarkSessionStarting(bksId, startToken);
       throw new Error("Opening turn is already owned by another preparation");
@@ -1163,14 +1168,7 @@ export async function openCreatedSession(
 					? await maybeLaunchRunnerRun(created, {
 						prompt: openingPromptForRun,
 						promptEntryId: openingPromptEntryId,
-						...(openingRun
-							? {
-								hostId: runnerOpeningHostId(
-									openingRun.runId,
-									openingRun.generation,
-								),
-							}
-							: {}),
+						hostId: startToken,
 						images: spec.images,
 						mcpServers: spec.runMcpServers ?? [],
 						user: spec.user,

@@ -878,8 +878,18 @@ function untrackRecovery(run: ActiveRunRecord): void {
 }
 
 /** Mark a session as starting a run (call synchronously, before any await). */
-export function markSessionStarting(id: string): string {
-  const token = `rh-${crypto.randomUUID()}`;
+export function markSessionStarting(
+  id: string,
+  token = `rh-${crypto.randomUUID()}`,
+): string {
+  if (
+    sessionRunOwners.get(id) === token ||
+    pendingStarts.get(id)?.has(token)
+  ) {
+    const rejected = `rh-${crypto.randomUUID()}`;
+    cancelledRunTokens.add(rejected);
+    return rejected;
+  }
   const decision = decideRunStateTransition(id, "prompt", { run_key: token });
   if (!decision.accepted) {
     // Return a distinct rejected token so the caller can requeue without
