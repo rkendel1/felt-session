@@ -1234,6 +1234,40 @@ describe("SessionKernel durable runtime", () => {
 			sharedPayload,
 			"different-failure",
 		);
+		const ownEffect = (
+			sessionId: string,
+			effectKey: string,
+			payload: Record<string, unknown>,
+		) => {
+			store.applyCreationEvent({
+				sessionId,
+				identity: String(payload.creationIdentity),
+				event: "plan",
+			});
+			store.applyCreationEvent({
+				sessionId,
+				identity: String(payload.creationIdentity),
+				event: "preparation_started",
+				nextEffectId: effectKey,
+				effect: {
+					kind: "creation_branch_prepare",
+					effectKey,
+					payload: payload as any,
+				},
+			});
+		};
+		ownEffect("shared-session", "shared-branch", sharedPayload);
+		ownEffect("ordinary-session", "ordinary-branch", {
+			...sharedPayload,
+			worktreePath: "/srv/ordinary",
+		});
+		ownEffect("legacy-session", "legacy-empty-base", {
+			...sharedPayload,
+			project: "tella-fusion",
+			worktreePath: "/srv/tella-fusion-feature",
+			baseBranch: "",
+		});
+		ownEffect("different-session", "different-failure", sharedPayload);
 		store.noteOutboxFailure(
 			matching,
 			"Worktree destination /srv/opensession exists without a registered branch",

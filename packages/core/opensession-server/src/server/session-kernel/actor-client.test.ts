@@ -55,6 +55,30 @@ describe("session kernel actor boundary", () => {
       },
       "shared-branch",
     );
+    host.store.applyCreationEvent({
+      sessionId: "shared-session",
+      identity: "creation-one",
+      event: "plan",
+    });
+    host.store.applyCreationEvent({
+      sessionId: "shared-session",
+      identity: "creation-one",
+      event: "preparation_started",
+      nextEffectId: "shared-branch",
+      effect: {
+        kind: "creation_branch_prepare",
+        effectKey: "shared-branch",
+        payload: {
+          creationIdentity: "creation-one",
+          creationGeneration: 1,
+          project: "opensession",
+          branch: "feature",
+          worktreePath: "/srv/opensession",
+          isolated: false,
+          mode: "adopt_or_create",
+        },
+      },
+    });
     host.store.noteOutboxFailure(
       id,
       "Worktree destination /srv/opensession exists without a registered branch",

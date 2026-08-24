@@ -2396,11 +2396,15 @@ export class SessionKernelStore {
 		);
 		const rows = this.db
 			.query(
-				`SELECT id, session_id, payload, last_error
-				 FROM session_kernel_outbox
-				 WHERE kind = 'creation_branch_prepare'
-				   AND dead_lettered_at IS NOT NULL
-				 ORDER BY id
+				`SELECT outbox.id, outbox.session_id, outbox.payload, outbox.last_error
+				 FROM session_kernel_outbox AS outbox
+				 JOIN session_kernel_creation AS creation
+				   ON creation.session_id = outbox.session_id
+				  AND creation.state = 'preparing'
+				  AND creation.current_effect_id = outbox.effect_key
+				 WHERE outbox.kind = 'creation_branch_prepare'
+				   AND outbox.dead_lettered_at IS NOT NULL
+				 ORDER BY outbox.id
 				 LIMIT 1000`,
 			)
 			.all() as Array<{
