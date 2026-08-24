@@ -607,7 +607,7 @@ export function beginPromptInterruptEffect(
 	sessionId: string,
 	interruptId: string,
 	runGeneration: number,
-): "execute" | "retry" | "adopt_confirmed" | "settled" {
+): "execute" | "retry" | "adopt_confirmed" | "confirmed" | "settled" {
 	return sessionDelivery({
 		op: "begin_interrupt_effect",
 		sessionId,

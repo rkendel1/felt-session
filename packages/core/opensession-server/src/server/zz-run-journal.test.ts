@@ -185,6 +185,111 @@ describe("run journal", () => {
     }
   });
 
+  it("retires abnormal ownership when actor settlement wins the reverse race", () => {
+    const sessionId = `cancel-abnormal-reverse-${crypto.randomUUID()}`;
+    const runKey = `rh-${crypto.randomUUID()}`;
+    const store = sessionKernelStore();
+    const record: mod.ActiveRunRecord = {
+      runKey,
+      hostId: runKey,
+      osSessionId: sessionId,
+      cwd: "/tmp",
+      startedAt: new Date().toISOString(),
+    };
+    try {
+      store.applyRunEvent({ sessionId, event: "prompt" });
+      store.applyRunEvent({ sessionId, event: "run_registered", runKey });
+      const generation = store.runState(sessionId).generation;
+      store.prepareTurnCancel({
+        sessionId,
+        cancelId: `stop:${runKey}`,
+        expectedRunId: runKey,
+        expectedGeneration: generation,
+        dispatchId: runKey,
+        requeueIds: [],
+        source: "test",
+      });
+      expect(store.beginTurnCancelEffect({
+        sessionId,
+        cancelId: `stop:${runKey}`,
+        runGeneration: generation,
+      })).toBe("execute");
+      mod.journalSet(record);
+      mod.journalRecordAbnormalCompletion(record);
+      expect(mod.activeRunRecords().some((run) => run.runKey === runKey)).toBe(true);
+      store.settleTurnCancel({
+        sessionId,
+        cancelId: `stop:${runKey}`,
+        outcome: "confirmed",
+      });
+      expect(mod.journalRetireSettledCancelAbnormal(sessionId, runKey)).toBe(true);
+      expect(mod.activeRunRecords().some((run) => run.runKey === runKey)).toBe(false);
+    } finally {
+      mod.journalClear(runKey);
+      store.clearSession(sessionId);
+    }
+  });
+
+  it("retires confirmed interrupt abnormal ownership in both race orders", () => {
+    const store = sessionKernelStore();
+    for (const sourceFirst of [true, false]) {
+      const sessionId = `interrupt-abnormal-${sourceFirst}-${crypto.randomUUID()}`;
+      const runKey = `rh-${crypto.randomUUID()}`;
+      const interruptId = `interrupt-${crypto.randomUUID()}`;
+      const record: mod.ActiveRunRecord = {
+        runKey,
+        hostId: runKey,
+        osSessionId: sessionId,
+        cwd: "/tmp",
+        startedAt: new Date().toISOString(),
+      };
+      try {
+        store.applyRunEvent({ sessionId, event: "prompt" });
+        store.applyRunEvent({ sessionId, event: "run_registered", runKey });
+        store.setDeliverySlot(sessionId, "queued", [
+          { id: "anchor", content: "interrupt now" },
+        ]);
+        const prepared = store.prepareDeliveryInterrupt({
+          sessionId,
+          interruptId,
+          anchorId: "anchor",
+          dispatchId: runKey,
+        });
+        if (sourceFirst) {
+          expect(store.beginDeliveryInterruptEffect({
+            sessionId,
+            interruptId,
+            runGeneration: prepared.runGeneration,
+          })).toBe("execute");
+          mod.journalSet(record);
+          mod.journalRecordAbnormalCompletion(record);
+          expect(mod.activeRunRecords().some((run) => run.runKey === runKey)).toBe(
+            true,
+          );
+        }
+        store.settleDeliveryInterrupt({
+          sessionId,
+          interruptId,
+          outcome: "confirmed",
+        });
+        if (sourceFirst) {
+          expect(
+            mod.journalRetireCancelledAbnormalAfterSettlement(sessionId, runKey),
+          ).toBe(true);
+        } else {
+          mod.journalSet(record);
+          mod.journalRecordAbnormalCompletion(record);
+        }
+        expect(mod.activeRunRecords().some((run) => run.runKey === runKey)).toBe(
+          false,
+        );
+      } finally {
+        mod.journalClear(runKey);
+        store.clearSession(sessionId);
+      }
+    }
+  });
+
 	it("keeps an active cancelled recovery reserved until its worker exits", async () => {
 		const sessionId = `active-recovery-${crypto.randomUUID()}`;
 		let release!: () => void;

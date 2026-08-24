@@ -2349,15 +2349,18 @@ export class SessionKernelStore {
     sessionId: string;
     interruptId: string;
     runGeneration: number;
-  }): "execute" | "retry" | "adopt_confirmed" | "settled" {
+  }): "execute" | "retry" | "adopt_confirmed" | "confirmed" | "settled" {
     return this.mutateDelivery(
       input.sessionId,
       "delivery_interrupt_effect_started",
       (state) => {
-        const interrupt = state.interrupt;
+        const dispatchInterrupt = (
+          state.dispatch as { interrupt?: DurableDeliveryState["interrupt"] } | undefined
+        )?.interrupt;
+        const interrupt = state.interrupt || dispatchInterrupt;
         if (!interrupt || interrupt.interruptId !== input.interruptId)
           return "settled" as const;
-        if (interrupt.phase === "confirmed") return "settled" as const;
+        if (interrupt.phase === "confirmed") return "confirmed" as const;
         if (
           interrupt.runGeneration !== input.runGeneration ||
           this.runState(input.sessionId).generation !== input.runGeneration
@@ -2366,7 +2369,12 @@ export class SessionKernelStore {
         state.interrupt = { ...interrupt, phase: "executing" };
         return "execute" as const;
       },
-    ).result as "execute" | "retry" | "adopt_confirmed" | "settled";
+    ).result as
+      | "execute"
+      | "retry"
+      | "adopt_confirmed"
+      | "confirmed"
+      | "settled";
   }
 
   settleDeliveryInterrupt(input: {

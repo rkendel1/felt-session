@@ -438,6 +438,16 @@ describe("single session ownership", () => {
     expect(runSession).toContain('registerSessionEffectExecutor("turn_cancel"');
     expect(runSession).toContain("cancelAgentRunToken(dispatchId)");
     expect(runSession).toContain("cancelAgentRunTokenAndWait(dispatchId)");
+    expect(runSession).toContain(
+      "journalRetireCancelledAbnormalAfterSettlement(",
+    );
+    const interruptSettle = runSession.indexOf(
+      "settlePromptInterrupt(",
+      runSession.indexOf("beginPromptInterruptEffect("),
+    );
+    expect(runSession.indexOf("retireConfirmedAbnormal();", interruptSettle)).toBeGreaterThan(
+      interruptSettle,
+    );
     const agentRunner = read("agent-runner.ts");
     expect(agentRunner).toContain(
       'if (cancelOwnership === "unknown") {',

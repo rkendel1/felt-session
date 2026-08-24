@@ -9,7 +9,7 @@ import { existsSync, readFileSync } from "fs";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
 import { } from "./paths";
 import { transitionRunState } from "./run-state";
-import { sessionTurn } from "./session-kernel/kernel";
+import { sessionDelivery, sessionTurn } from "./session-kernel/kernel";
 import { writeJsonAtomic } from "./shared/atomic-write";
 
 // Overridable so a detached run host (src/runner-host/host.ts) journals to its
@@ -357,22 +357,60 @@ export function journalRecordAbnormalCompletion(
     },
   };
   journalSet(failed);
-  if (!process.env.OPENSESSION_RUN_JOURNAL && failed.osSessionId) {
-    try {
-      const cancel = sessionTurn({
-        op: "snapshot",
-        sessionId: failed.osSessionId,
-      }).cancel;
-      // Source completion is positive physical evidence. Once the matching
-      // actor cancel is already settled, retain no zombie owner merely because
-      // the engine omitted its terminal event.
-      if (cancel?.runId === failed.runKey && cancel.phase === "settled")
-        journalClearIfLineage(failed);
-    } catch {
-      // Actor uncertainty retains the abnormal-completion evidence fail closed.
-    }
-  }
+  journalRetireSettledCancelAbnormal(failed.osSessionId, failed.runKey);
   return failed;
+}
+
+/** Retire an exact abnormal-completion owner only after its actor cancel has
+ * settled. Called from both sides of the race: source completion and actor
+ * settlement. Private detached-host journals never consult gateway actor state. */
+function retireCancelAbnormalEvidence(
+  sessionId: string | undefined,
+  runKey: string,
+): boolean {
+  if (process.env.OPENSESSION_RUN_JOURNAL || !sessionId) return false;
+  const current = readRunJournal()[runKey];
+  if (!current?.terminalFailure || current.osSessionId !== sessionId)
+    return false;
+  return journalClearIfLineage(current);
+}
+
+/** Source-side race participant: actor uncertainty retains evidence because
+ * the durable effect will perform the authoritative settlement-side check. */
+export function journalRetireSettledCancelAbnormal(
+  sessionId: string | undefined,
+  runKey: string,
+): boolean {
+  if (process.env.OPENSESSION_RUN_JOURNAL || !sessionId) return false;
+  try {
+    const cancel = sessionTurn({ op: "snapshot", sessionId }).cancel;
+    if (cancel?.runId === runKey && cancel.phase === "settled")
+      return retireCancelAbnormalEvidence(sessionId, runKey);
+  } catch {
+    // The independent interrupt owner may still positively prove settlement.
+  }
+  try {
+    const delivery = sessionDelivery({ op: "snapshot", sessionId });
+    const dispatchedInterrupt = (
+      delivery.dispatch as { interrupt?: typeof delivery.interrupt } | undefined
+    )?.interrupt;
+    const interrupt = delivery.interrupt || dispatchedInterrupt;
+    if (interrupt?.dispatchId === runKey && interrupt.phase === "confirmed")
+      return retireCancelAbnormalEvidence(sessionId, runKey);
+  } catch {
+    // Neither independent actor domain proved settlement; retain evidence.
+  }
+  return false;
+}
+
+/** Settlement-side race participant. The caller has just committed settlement
+ * or read an authoritative `settled` decision, so no second actor snapshot may
+ * turn a successful durable effect into an acknowledged cleanup gap. */
+export function journalRetireCancelledAbnormalAfterSettlement(
+  sessionId: string,
+  runKey: string,
+): boolean {
+  return retireCancelAbnormalEvidence(sessionId, runKey);
 }
 
 export function journalClear(runKey: string): void {

@@ -1565,6 +1565,11 @@ describe("SessionKernel", () => {
 				interruptId: "interrupt-restart-interrupt",
 				outcome: "confirmed",
 			})).toBe(true);
+      expect(recoveredDuringCancel.beginDeliveryInterruptEffect({
+        sessionId: "restart-interrupt",
+        interruptId: "interrupt-restart-interrupt",
+        runGeneration: interrupt?.runGeneration ?? -1,
+      })).toBe("confirmed");
 			expect(recoveredDuringCancel.claimNextDeliveryDispatch({
 				sessionId: "restart-interrupt",
 				promptEntryId: "restart-entry",
@@ -1588,6 +1593,16 @@ describe("SessionKernel", () => {
 				promptEntryId: "retry-entry",
 				stillWorking: true,
 			})).toMatchObject({ kind: "deliver", interrupted: true });
+      const claimedInterrupt = (
+        recoveredAfterClaim.deliverySnapshot("restart-interrupt").dispatch as {
+          interrupt?: { runGeneration: number };
+        }
+      ).interrupt;
+      expect(recoveredAfterClaim.beginDeliveryInterruptEffect({
+        sessionId: "restart-interrupt",
+        interruptId: "interrupt-restart-interrupt",
+        runGeneration: claimedInterrupt?.runGeneration ?? -1,
+      })).toBe("confirmed");
 		} finally {
 			recoveredAfterClaim.close();
 			rmSync(dir, { recursive: true, force: true });

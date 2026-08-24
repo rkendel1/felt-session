@@ -64,6 +64,7 @@ import { takeVoiceHandoff } from "./desk-voice";
 import {
 	activeRunRecords,
   journalClearIfLineage,
+  journalRetireCancelledAbnormalAfterSettlement,
 	setJournalSetListener,
 	type ActiveRunRecord,
 } from "./run-journal";
@@ -184,14 +185,26 @@ const interruptExecutorGlobal = globalThis as typeof globalThis & {
 if (!interruptExecutorGlobal.__opensessionInterruptExecutorRegistered) {
 	registerSessionEffectExecutor("delivery_interrupt_cancel", (item) => {
     const { interruptId, dispatchId, runIds, runGeneration } = item.payload;
+    const retireConfirmedAbnormal = () => {
+      if (dispatchId)
+        journalRetireCancelledAbnormalAfterSettlement(
+          item.sessionId,
+          dispatchId,
+        );
+    };
 		const decision = beginPromptInterruptEffect(
 			item.sessionId,
 			interruptId,
 			runGeneration,
 		);
-		if (decision === "settled") return;
+    if (decision === "settled") return;
+    if (decision === "confirmed") {
+      retireConfirmedAbnormal();
+      return;
+    }
 		if (decision === "adopt_confirmed") {
 			settlePromptInterrupt(item.sessionId, interruptId, "confirmed");
+      retireConfirmedAbnormal();
 			return;
 		}
     const aborted = dispatchId
@@ -200,11 +213,10 @@ if (!interruptExecutorGlobal.__opensessionInterruptExecutorRegistered) {
 		// A retry follows a durably recorded executing phase. False then means
 		// either the first attempt already cancelled the owner or this retry found
 		// it terminal, so the accepted interrupt is conservatively confirmed.
-		settlePromptInterrupt(
-			item.sessionId,
-			interruptId,
-			aborted || decision === "retry" ? "confirmed" : "not_aborted",
-		);
+    const outcome =
+      aborted || decision === "retry" ? "confirmed" : "not_aborted";
+		settlePromptInterrupt(item.sessionId, interruptId, outcome);
+    if (outcome === "confirmed") retireConfirmedAbnormal();
 	});
 	interruptExecutorGlobal.__opensessionInterruptExecutorRegistered = true;
 }
@@ -230,6 +242,10 @@ if (!interruptExecutorGlobal.__opensessionTurnCancelExecutorRegistered) {
       runGeneration,
     });
     if (decision === "settled") {
+      journalRetireCancelledAbnormalAfterSettlement(
+        item.sessionId,
+        dispatchId,
+      );
       retireAbsentInProcessOwner();
       return;
     }
@@ -240,6 +256,10 @@ if (!interruptExecutorGlobal.__opensessionTurnCancelExecutorRegistered) {
         cancelId,
         outcome,
       });
+      journalRetireCancelledAbnormalAfterSettlement(
+        item.sessionId,
+        dispatchId,
+      );
       // An explicit prompt may already be parked behind this cancellation.
       // Re-arm delivery only after actor settlement removes the cancel gate.
       watchExternalRunAndDrain(item.sessionId);

@@ -125,7 +125,7 @@ export type DeliveryActorResult<T extends DeliveryActorRequest> =
                     soloId?: string;
                   }
                 : T extends { op: "begin_interrupt_effect" }
-                  ? "execute" | "retry" | "adopt_confirmed" | "settled"
+                  ? "execute" | "retry" | "adopt_confirmed" | "confirmed" | "settled"
                   : T extends { op: "settle_interrupt" }
                     ? boolean
                   : void;
