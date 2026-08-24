@@ -241,6 +241,7 @@ if (!interruptExecutorGlobal.__opensessionTurnCancelExecutorRegistered) {
       cancelId,
       runGeneration,
     });
+    if (decision === "missing") return;
     if (decision === "settled") {
       journalRetireCancelledAbnormalAfterSettlement(
         item.sessionId,
@@ -249,13 +250,14 @@ if (!interruptExecutorGlobal.__opensessionTurnCancelExecutorRegistered) {
       retireAbsentInProcessOwner();
       return;
     }
-    const settle = (outcome: "confirmed" | "not_aborted") => {
-      sessionTurn({
+    const settle = (outcome: "confirmed" | "not_aborted"): boolean => {
+      const settled = sessionTurn({
         op: "settle_cancel",
         sessionId: item.sessionId,
         cancelId,
         outcome,
       });
+      if (!settled) return false;
       journalRetireCancelledAbnormalAfterSettlement(
         item.sessionId,
         dispatchId,
@@ -263,6 +265,7 @@ if (!interruptExecutorGlobal.__opensessionTurnCancelExecutorRegistered) {
       // An explicit prompt may already be parked behind this cancellation.
       // Re-arm delivery only after actor settlement removes the cancel gate.
       watchExternalRunAndDrain(item.sessionId);
+      return true;
     };
     if (decision === "adopt_confirmed") {
       settle("confirmed");
@@ -274,7 +277,10 @@ if (!interruptExecutorGlobal.__opensessionTurnCancelExecutorRegistered) {
       throw new Error(
         `Could not reconcile executing cancellation ${cancelId} for ${dispatchId}`,
       );
-    settle(cancelledWait || cancelledRun ? "confirmed" : "not_aborted");
+    const settled = settle(
+      cancelledWait || cancelledRun ? "confirmed" : "not_aborted",
+    );
+    if (!settled) return;
     // A pre-engine in-process journal cannot have survived this gateway boot.
     // Retire it only after actor settlement. Detached host/Runner/sandbox
     // records stay for their attached source to complete naturally.

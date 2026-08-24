@@ -1504,6 +1504,31 @@ describe("SessionKernel", () => {
         phase: "settled",
         outcome: "confirmed",
       });
+      expect(duringPhysicalCancel.beginTurnCancelEffect({
+        sessionId: "cancel-restart",
+        cancelId: "cancel-one",
+        runGeneration: cancel?.runGeneration ?? -1,
+      })).toBe("settled");
+      const successor = duringPhysicalCancel.runState("cancel-restart");
+      duringPhysicalCancel.prepareTurnCancel({
+        sessionId: "cancel-restart",
+        cancelId: "cancel-two",
+        expectedRunId: "run-two",
+        expectedGeneration: successor.generation,
+        dispatchId: "run-two",
+        requeueIds: [],
+        source: "test",
+      });
+      expect(duringPhysicalCancel.beginTurnCancelEffect({
+        sessionId: "cancel-restart",
+        cancelId: "cancel-one",
+        runGeneration: cancel?.runGeneration ?? -1,
+      })).toBe("missing");
+      expect(duringPhysicalCancel.settleTurnCancel({
+        sessionId: "cancel-restart",
+        cancelId: "cancel-one",
+        outcome: "confirmed",
+      })).toBe(false);
     } finally {
       duringPhysicalCancel.close();
       rmSync(dir, { recursive: true, force: true });

@@ -441,6 +441,20 @@ describe("single session ownership", () => {
     expect(runSession).toContain(
       "journalRetireCancelledAbnormalAfterSettlement(",
     );
+    const turnExecutor = runSession.indexOf(
+      'registerSessionEffectExecutor("turn_cancel"',
+    );
+    const missingCancel = runSession.indexOf(
+      'if (decision === "missing") return;',
+      turnExecutor,
+    );
+    expect(missingCancel).toBeLessThan(
+      runSession.indexOf(
+        "journalRetireCancelledAbnormalAfterSettlement(",
+        missingCancel,
+      ),
+    );
+    expect(runSession).toContain("if (!settled) return false;");
     const interruptSettle = runSession.indexOf(
       "settlePromptInterrupt(",
       runSession.indexOf("beginPromptInterruptEffect("),

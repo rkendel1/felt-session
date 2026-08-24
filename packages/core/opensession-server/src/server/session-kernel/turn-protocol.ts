@@ -46,7 +46,7 @@ export type TurnActorResult<T extends TurnActorRequest> =
           runState: DurableRunState;
         }
       : T extends { op: "begin_cancel_effect" }
-        ? "execute" | "retry" | "adopt_confirmed" | "settled"
+        ? "execute" | "retry" | "adopt_confirmed" | "settled" | "missing"
         : T extends { op: "settle_cancel" }
           ? boolean
           : never;

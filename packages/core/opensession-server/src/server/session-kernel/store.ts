@@ -2194,10 +2194,10 @@ export class SessionKernelStore {
     sessionId: string;
     cancelId: string;
     runGeneration: number;
-  }): "execute" | "retry" | "adopt_confirmed" | "settled" {
+  }): "execute" | "retry" | "adopt_confirmed" | "settled" | "missing" {
     const prior = this.turnSnapshot(input.sessionId).cancel;
-    if (!prior || prior.cancelId !== input.cancelId || prior.phase === "settled")
-      return "settled";
+    if (!prior || prior.cancelId !== input.cancelId) return "missing";
+    if (prior.phase === "settled") return "settled";
     if (
       prior.runGeneration !== input.runGeneration ||
       this.runState(input.sessionId).generation !== input.runGeneration
