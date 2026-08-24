@@ -2175,7 +2175,13 @@ export function makeRemoteSandbox(parts: RemoteSandboxParts): Sandbox {
         await handle.connectWithWait(45_000);
         mark("host attached");
       } catch (error) {
-        if (record.launchPhase === "prepared") {
+        // A cancelled launch is provably absent (startup marker or stop
+        // backstop), exactly like a never-dispatched one: retire it instead
+        // of handing an ended handle to uncertain-launch reconciliation.
+        if (
+          record.launchPhase === "prepared" ||
+          error instanceof HostLaunchNotDispatchedError
+        ) {
           journalClearIfLineage(record);
           handle?.abandon();
           unregisterRunToken(spec.rpcToken);
