@@ -1908,16 +1908,27 @@ export class SessionKernelStore {
         if (state.dispatch) throw new Error("A prompt dispatch is already active");
         const queued = state.queued as QueueItem[];
         if (!queued.length) return { kind: "empty" as const };
-        const plan = selectQueueBatch(queued, {
-          soloId: input.soloId,
-          interruptMark: input.interruptMark,
-          stillWorking: input.stillWorking,
-        });
+        const retryDispatchId = queued.find(
+          (item) => item.retryDispatchId,
+        )?.retryDispatchId;
+        const plan = retryDispatchId
+          ? {
+              kind: "deliver" as const,
+              batch: queued.filter(
+                (item) => item.retryDispatchId === retryDispatchId,
+              ),
+              rest: queued.filter(
+                (item) => item.retryDispatchId !== retryDispatchId,
+              ),
+            }
+          : selectQueueBatch(queued, {
+              soloId: input.soloId,
+              interruptMark: input.interruptMark,
+              stillWorking: input.stillWorking,
+            });
         if (plan.kind === "hold") return plan;
         const promptEntryId =
-          plan.batch.length === 1 && plan.batch[0]?.promptEntryId
-            ? plan.batch[0].promptEntryId
-            : input.promptEntryId;
+          retryDispatchId || plan.batch[0]?.promptEntryId || input.promptEntryId;
         if (!promptEntryId || promptEntryId.length > 256)
           throw new Error("Invalid claimed prompt dispatch identity");
         state.queued = plan.rest;
@@ -2036,7 +2047,15 @@ export class SessionKernelStore {
         { promptEntryId?: string; items?: unknown[] } | undefined;
       if (dispatch?.promptEntryId !== promptEntryId)
         throw new Error("Prompt dispatch changed before failure settlement");
-      const restored = dispatch.items ?? [];
+      const restored = (dispatch.items ?? []).map((item, index) =>
+        item && typeof item === "object" && !Array.isArray(item)
+          ? {
+              ...(item as Record<string, unknown>),
+              retryDispatchId: promptEntryId,
+              ...(index === 0 ? { promptEntryId } : {}),
+            }
+          : item,
+      );
       const restoredIds = new Set(
         (restored as Array<{ id?: string }>)
           .map((item) => item.id)

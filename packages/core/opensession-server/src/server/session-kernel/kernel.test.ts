@@ -1121,6 +1121,76 @@ describe("SessionKernel", () => {
 		});
 	});
 
+	test("reuses a failed multi-item dispatch identity", () => {
+		store.setDeliverySlot("failed-multi-dispatch", "queued", [
+			{ id: "one", content: "first" },
+			{ id: "two", content: "second" },
+		]);
+		expect(store.claimNextDeliveryDispatch({
+			sessionId: "failed-multi-dispatch",
+			promptEntryId: "stable-batch-entry",
+		})).toMatchObject({
+			kind: "deliver",
+			promptEntryId: "stable-batch-entry",
+			items: [{ id: "one" }, { id: "two" }],
+		});
+		expect(
+			store.failDeliveryDispatch(
+				"failed-multi-dispatch",
+				"stable-batch-entry",
+			),
+		).toBe(true);
+		const restored = store.deliverySnapshot("failed-multi-dispatch").queued;
+		store.setDeliverySlot("failed-multi-dispatch", "queued", [
+			...restored,
+			{ id: "later", content: "must stay later" },
+		]);
+		expect(store.claimNextDeliveryDispatch({
+			sessionId: "failed-multi-dispatch",
+			promptEntryId: "replacement-must-not-win",
+			soloId: "two",
+			interruptMark: true,
+		})).toMatchObject({
+			kind: "deliver",
+			promptEntryId: "stable-batch-entry",
+			items: [
+				{
+					id: "one",
+					promptEntryId: "stable-batch-entry",
+					retryDispatchId: "stable-batch-entry",
+				},
+				{ id: "two", retryDispatchId: "stable-batch-entry" },
+			],
+		});
+		expect(store.deliverySnapshot("failed-multi-dispatch").queued).toEqual([
+			{ id: "later", content: "must stay later" },
+		]);
+
+		expect(
+			store.failDeliveryDispatch(
+				"failed-multi-dispatch",
+				"stable-batch-entry",
+			),
+		).toBe(true);
+		store.setDeliverySlot(
+			"failed-multi-dispatch",
+			"queued",
+			store
+				.deliverySnapshot("failed-multi-dispatch")
+				.queued.filter((item) => (item as { id?: string }).id !== "one"),
+		);
+		expect(store.claimNextDeliveryDispatch({
+			sessionId: "failed-multi-dispatch",
+			promptEntryId: "replacement-still-must-not-win",
+			soloId: "two",
+			interruptMark: true,
+		})).toMatchObject({
+			kind: "deliver",
+			promptEntryId: "stable-batch-entry",
+			items: [{ id: "two", retryDispatchId: "stable-batch-entry" }],
+		});
+	});
+
 	test("recovers an ambiguous prepared steer without duplicate queue delivery", () => {
 		store.setDeliverySlot("steer-recovery", "queued", [
 			{ id: "steer-one", content: "fold me in" },

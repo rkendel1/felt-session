@@ -36,6 +36,9 @@ export type QueueItem = {
    * Reusing it lets a recovery upsert the existing visible user line instead
    * of rendering the message twice. */
 	promptEntryId?: string;
+	/** Actor-internal identity for a previously accepted multi-item dispatch.
+	 * The restored group drains atomically before later queue policy can split it. */
+	retryDispatchId?: string;
 	content: string;
 	user?: string;
 	images?: string[];
@@ -453,9 +456,11 @@ export function restorePersistedQueueState(options: {
 		) {
 			continue;
 		}
-		const items = dispatch.items.map((item, index) =>
-			index === 0 ? { ...item, promptEntryId: dispatch.promptEntryId } : item,
-		);
+		const items = dispatch.items.map((item, index) => ({
+			...item,
+			retryDispatchId: dispatch.promptEntryId,
+			...(index === 0 ? { promptEntryId: dispatch.promptEntryId } : {}),
+		}));
 		queued.set(sessionId, [...items, ...(queued.get(sessionId) || [])]);
 	}
 
