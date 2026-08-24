@@ -227,7 +227,7 @@ interface Props {
   onPageChange?: (page: PrReviewPage) => void;
   /** Move file controls into the identity row and omit the secondary row. */
   compactToolbar?: boolean;
-  /** Remove the desktop inset when no workspace tab strip precedes Review. */
+  /** Legacy caller hint; Review now keeps its desktop top inset either way. */
   flushToolbarTop?: boolean;
 }
 
@@ -340,7 +340,6 @@ export function PrPanel({
   page: controlledPage,
   onPageChange,
   compactToolbar = false,
-  flushToolbarTop = false,
 }: Props) {
   // Local copy of the linked-PR list so link/unlink applies instantly; the
   // sessions list catches up on its next refresh.
@@ -1618,7 +1617,7 @@ export function PrPanel({
         className={`selectable relative flex h-full min-h-0 flex-col bg-surface ${compactToolbar ? "overflow-x-hidden overflow-y-auto" : "overflow-hidden"}`}
         data-review-canvas="true"
       >
-        <ReviewToolbar compact={compactToolbar} flushTop={flushToolbarTop}>
+        <ReviewToolbar compact={compactToolbar}>
           <div className={PR_NO_PR_BAR}>
             {targetPicker}
             {/* Opening the PR is what this state is for, so its action leads
@@ -1910,7 +1909,7 @@ export function PrPanel({
       {/* Desktop always keeps file controls in the identity row, so opening
           the summary only relocates page navigation. Phone keeps one
           edge-to-edge navigation and controls row below the identity. */}
-      <ReviewToolbar compact={compactToolbar} flushTop={flushToolbarTop}>
+      <ReviewToolbar compact={compactToolbar}>
       <TopBar as="header" className="h-10 shrink-0 gap-2.5 px-4 phone:px-3">
         {/* State, in the app's own PR language, filled rather than drawn: the
             tone washes the whole chip and the glyph and word share its ink.

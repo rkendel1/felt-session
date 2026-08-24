@@ -10,26 +10,18 @@ import { WS_SUMMARY_REVIEW_BAR_CLEARANCE } from "../../lib/workspace-summary-cla
 export function ReviewToolbar({
   children,
   compact,
-  flushTop = false,
 }: {
   children: ReactNode;
   compact: boolean;
-  /** A lone workspace tab has no strip between the pane header and Review. */
-  flushTop?: boolean;
 }) {
   const placement = compact
     ? `sticky top-0 z-20 desktop:mb-0 desktop:ml-2 desktop:pb-2 ${WS_SUMMARY_REVIEW_BAR_CLEARANCE}`
     : "desktop:mx-2 desktop:mb-2";
-  // File headers pin 61px below the scroll edge. Fill everything between the
-  // toolbar and that edge so its code cannot scroll above its own header.
-  const fileMask = flushTop
-    ? "top-[42px] h-5 -mb-5"
-    : "top-[52px] h-2.5 -mb-2.5";
 
   return (
     <>
       <div
-        className={`relative shrink-0 bg-surface ${flushTop ? "" : "desktop:pt-2.5"} ${placement}`}
+        className={`relative shrink-0 bg-surface desktop:pt-2.5 ${placement}`}
       >
         <div
           className={`relative bg-surface desktop:rounded-lg desktop:border desktop:border-line ${compact ? "desktop:overflow-hidden" : "desktop:overflow-visible"}`}
@@ -38,8 +30,10 @@ export function ReviewToolbar({
         </div>
       </div>
       {compact && (
+        // File headers pin 61px below the scroll edge. Fill everything between
+        // the toolbar and that edge so code cannot scroll above its own header.
         <div
-          className={`pointer-events-none sticky z-[5] mx-2 hidden overflow-clip rounded-t-lg bg-surface desktop:block ${fileMask}`}
+          className="pointer-events-none sticky top-[52px] z-[5] mx-2 hidden h-2.5 -mb-2.5 overflow-clip rounded-t-lg bg-surface desktop:block"
           aria-hidden="true"
         />
       )}
