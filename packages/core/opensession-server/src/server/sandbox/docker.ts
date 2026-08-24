@@ -1208,6 +1208,10 @@ function makeDockerSandbox(
         record.launchPhase = "started";
         journalSet(record);
         mark("host exec dispatched");
+        if (handle.cancelled)
+          throw new HostLaunchNotDispatchedError(
+            `${spec.hostId} was cancelled while launching`,
+          );
         await handle.connectWithWait(30_000);
         mark("host attached");
       } catch (error) {

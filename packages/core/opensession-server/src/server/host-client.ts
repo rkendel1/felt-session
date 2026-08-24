@@ -799,6 +799,13 @@ export class HostHandle {
     return this.ctl.hostId;
   }
 
+  /** True once cancellation was requested (stop backstop may still be
+   *  running) or the handle already finished. Launchers check this right
+   *  after dispatch so a cancelled launch never attaches. */
+  get cancelled(): boolean {
+    return this.stopRequested || this.endedClean;
+  }
+
   setHostChangeHandler(handler: (hostId: string) => void): void {
     this.onHostChanged = handler;
   }

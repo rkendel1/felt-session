@@ -104,6 +104,7 @@ import { writeJsonAtomic } from "../../shared/atomic-write";
 import { createWorkloadIdentityEnv, type WorkloadIdentityContext } from "../../workload-identity";
 import {
   HostHandle,
+  HostLaunchNotDispatchedError,
   reconcileUncertainHostEvents,
   type HandleCallbacks,
   type HostLauncher,
@@ -2167,6 +2168,10 @@ export function makeRemoteSandbox(parts: RemoteSandboxParts): Sandbox {
         });
         record.launchPhase = "started";
         journalSet(record);
+        if (handle.cancelled)
+          throw new HostLaunchNotDispatchedError(
+            `${spec.hostId} was cancelled while launching`,
+          );
         await handle.connectWithWait(45_000);
         mark("host attached");
       } catch (error) {
