@@ -2,7 +2,7 @@ import {afterEach, describe, expect, test} from "bun:test";
 import {mkdtempSync, rmSync, writeFileSync} from "fs";
 import {tmpdir} from "os";
 import {join} from "path";
-import {bootstrapRemoteSandbox, bootstrapSignature, remoteRunnerHostCommand, REMOTE_RUNNER_BINARY, type RemoteDriver} from "./bootstrap";
+import {bootstrapRemoteSandbox, bootstrapSignature, remoteRunnerHostCommand, REMOTE_REPO, REMOTE_RUNNER_BINARY, type RemoteDriver} from "./bootstrap";
 
 const originalConfig = process.env.OPENSESSION_SANDBOX_CONFIG;
 const scratch: string[] = [];
@@ -14,6 +14,10 @@ afterEach(() => {
 });
 
 describe("remote runner bootstrap", () => {
+  test("keeps the guest checkout independent from the host release path", () => {
+    expect(REMOTE_REPO).toBe("/home/ubuntu/projects/opensession");
+  });
+
   test("repairs the workload identity client after a provider resume", async () => {
     const commands: string[] = [];
     const driver: RemoteDriver = {

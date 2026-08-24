@@ -148,7 +148,9 @@ const REMOTE_NODE_MAJOR = Number(REMOTE_NODE_VERSION.split(".")[0]);
 const REMOTE_JUST_VERSION = "1.43.1";
 const REMOTE_GH_VERSION = "2.83.1";
 const REMOTE_RUNTIME_REVISION = "workspace-runtime-v8";
-const REMOTE_REPO = REPO_ROOT; // /home/ubuntu/projects/opensession
+// This path exists inside every remote sandbox. It must not inherit the host
+// service's checkout path (for example a dedicated production release tree).
+export const REMOTE_REPO = `${REMOTE_HOME}/projects/opensession`;
 export const REMOTE_RUNNER_BINARY = `${REMOTE_HOME}/.local/bin/opensession-runner`;
 const BOOTSTRAP_MARKER = `${REMOTE_HOME}/.bks-bootstrapped`;
 /** Where per-launch openai seed material lands in-sandbox — threaded to the
