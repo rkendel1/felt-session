@@ -783,3 +783,63 @@ export function removeMcpOauthGrant(name: string, forUser?: string): boolean {
   writeStore(store);
   return true;
 }
+
+// ── Manual token connect ──────────────────────────────────────────────────
+// Some providers gate OAuth client registration (Vercel approves only its
+// own list of AI clients), but every user can mint a personal API token.
+// A validated pasted token is stored as a grant, so it rides the exact same
+// per-run injection path as an OAuth grant — no separate plumbing.
+
+const TOKEN_VALIDATORS: Record<
+  string,
+  (token: string) => Promise<{ ok: true } | { ok: false; error: string }>
+> = {
+  vercel: async (token) => {
+    const res = await fetch("https://api.vercel.com/v2/user", {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (res.status === 401 || res.status === 403)
+      return { ok: false, error: "Vercel rejected that token. Create a new one at vercel.com/account/settings/tokens and paste it again." };
+    if (!res.ok)
+      return { ok: false, error: `Could not check the token with Vercel (HTTP ${res.status})` };
+    return { ok: true };
+  },
+};
+
+/** Can this server be connected by pasting a personal API token? */
+export function supportsManualToken(name: string): boolean {
+  return !!TOKEN_VALIDATORS[name];
+}
+
+/** Validate a pasted API token live, then store it as a grant. */
+export async function saveManualMcpGrant(
+  name: string,
+  serverUrl: string,
+  token: string,
+  opts: { connectedBy?: string; forUser?: string } = {},
+): Promise<void> {
+  const validate = TOKEN_VALIDATORS[name];
+  if (!validate) throw new Error(`${name} has no token connect flow`);
+  const checked = await validate(token);
+  if (!checked.ok) throw new Error(checked.error);
+  const teamName = opts.forUser
+    ? resolveTeammate(opts.forUser)?.name
+    : undefined;
+  if (opts.forUser && !teamName)
+    throw new Error(`"${opts.forUser}" doesn't resolve to a configured teammate`);
+  const store = readStore();
+  const entry = store[name] ?? {
+    serverUrl,
+    endpoints: { authorize: "", token: "" },
+    clientInfo: { clientId: "manual-token" },
+  };
+  entry.serverUrl = serverUrl;
+  store[name] = entry;
+  writeGrant(entry, slotFor(teamName), {
+    tokens: { accessToken: token },
+    updatedAt: new Date().toISOString(),
+    ...(opts.connectedBy ? { connectedBy: opts.connectedBy } : {}),
+  });
+  writeStore(store);
+}

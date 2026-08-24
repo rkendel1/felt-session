@@ -223,9 +223,12 @@ export async function handleConnectionsRoutes(
 	// has probed yet comes back null, and `pending` is the client's cue to ask
 	// again once the background probe lands.
 	if (path === "/api/connections/mcp-oauth" && req.method === "GET") {
-		const { cachedOauthCapable, mcpOauthStatus, oauthPresetFor } = await import(
-			"../mcp-oauth"
-		);
+		const {
+			cachedOauthCapable,
+			mcpOauthStatus,
+			oauthPresetFor,
+			supportsManualToken,
+		} = await import("../mcp-oauth");
 		const servers = Object.entries(readMcpConfig().mcpServers).map(
 			([name, cfg]: [string, any]) => {
 				const status = mcpOauthStatus(name);
@@ -242,7 +245,12 @@ export async function handleConnectionsRoutes(
 						: oauthTarget
 							? cachedOauthCapable(oauthTarget)
 							: false;
-				return { name, capable: capable ?? null, ...status };
+				return {
+					name,
+					capable: capable ?? null,
+					manualToken: supportsManualToken(name) && !!cfg?.url,
+					...status,
+				};
 			},
 		);
 		return Response.json({
@@ -340,6 +348,52 @@ export async function handleConnectionsRoutes(
 				{ status: 502 },
 			);
 		}
+	}
+
+	// Connect by pasting a personal API token (providers that gate OAuth
+	// client registration but let any user mint a token, e.g. Vercel).
+	const mcpTokenMatch = path.match(
+		/^\/api\/connections\/mcp\/([^/]+)\/token$/,
+	);
+	if (mcpTokenMatch && req.method === "POST") {
+		const name = decodeURIComponent(mcpTokenMatch[1]);
+		const body = (await req.json().catch(() => ({}))) as {
+			token?: string;
+			scope?: string;
+		};
+		const token = typeof body.token === "string" ? body.token.trim() : "";
+		if (!token) return Response.json({ error: "Paste an API token" }, { status: 400 });
+		const cfg = readMcpConfig().mcpServers[name] as
+			| { url?: string; oauthUrl?: string }
+			| undefined;
+		const target = cfg?.url || cfg?.oauthUrl;
+		if (!target)
+			return Response.json(
+				{ error: "Not a remote MCP server" },
+				{ status: 400 },
+			);
+		const forUser =
+			body.scope === "me"
+				? ctx.authUser?.login || ctx.authUser?.name || undefined
+				: undefined;
+		if (body.scope === "me" && !forUser)
+			return Response.json(
+				{ error: "Sign in to connect your own account" },
+				{ status: 401 },
+			);
+		try {
+			const { saveManualMcpGrant } = await import("../mcp-oauth");
+			await saveManualMcpGrant(name, target, token, {
+				connectedBy: ctx.authUser?.login || ctx.authUser?.name,
+				...(forUser ? { forUser } : {}),
+			});
+		} catch (e: any) {
+			return Response.json(
+				{ error: e?.message || String(e) },
+				{ status: 400 },
+			);
+		}
+		return Response.json({ ok: true });
 	}
 
 	const mcpDelMatch = path.match(
