@@ -174,6 +174,11 @@ describe("run journal", () => {
       // latch before the detached control reconnects.
       expect(agent.reissueDurableRecoveryCancel(recovery)).toBe(false);
       expect(agent.isAgentSessionCancelled(sessionId, runKey)).toBe(true);
+      mod.journalSet(recovery);
+      mod.journalRecordAbnormalCompletion(recovery);
+      expect(mod.activeRunRecords().some((run) => run.runKey === runKey)).toBe(
+        false,
+      );
     } finally {
       agent.unmarkSessionStarting(sessionId, runKey);
       store.clearSession(sessionId);

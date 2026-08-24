@@ -9,6 +9,7 @@ import { existsSync, readFileSync } from "fs";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
 import { } from "./paths";
 import { transitionRunState } from "./run-state";
+import { sessionTurn } from "./session-kernel/kernel";
 import { writeJsonAtomic } from "./shared/atomic-write";
 
 // Overridable so a detached run host (src/runner-host/host.ts) journals to its
@@ -356,6 +357,21 @@ export function journalRecordAbnormalCompletion(
     },
   };
   journalSet(failed);
+  if (!process.env.OPENSESSION_RUN_JOURNAL && failed.osSessionId) {
+    try {
+      const cancel = sessionTurn({
+        op: "snapshot",
+        sessionId: failed.osSessionId,
+      }).cancel;
+      // Source completion is positive physical evidence. Once the matching
+      // actor cancel is already settled, retain no zombie owner merely because
+      // the engine omitted its terminal event.
+      if (cancel?.runId === failed.runKey && cancel.phase === "settled")
+        journalClearIfLineage(failed);
+    } catch {
+      // Actor uncertainty retains the abnormal-completion evidence fail closed.
+    }
+  }
   return failed;
 }
 
