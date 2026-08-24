@@ -2180,7 +2180,11 @@ export function makeRemoteSandbox(parts: RemoteSandboxParts): Sandbox {
         // of handing an ended handle to uncertain-launch reconciliation.
         if (
           record.launchPhase === "prepared" ||
-          error instanceof HostLaunchNotDispatchedError
+          error instanceof HostLaunchNotDispatchedError ||
+          // A stop backstop that proved absence during the launch/connect
+          // await already finished this handle: retire it like a
+          // never-dispatched launch instead of reconciling an ended owner.
+          handle?.ended === true
         ) {
           journalClearIfLineage(record);
           handle?.abandon();

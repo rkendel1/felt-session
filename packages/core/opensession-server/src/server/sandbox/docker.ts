@@ -1217,7 +1217,11 @@ function makeDockerSandbox(
       } catch (error) {
         const definitelyNotDispatched =
           record.launchPhase === "prepared" ||
-          error instanceof HostLaunchNotDispatchedError;
+          error instanceof HostLaunchNotDispatchedError ||
+          // A stop backstop that proved absence during the launch/connect
+          // await already finished this handle: retire it like a
+          // never-dispatched launch instead of reconciling an ended owner.
+          handle?.ended === true;
         if (definitelyNotDispatched) {
           journalClearIfLineage(record);
           handle?.abandon();
