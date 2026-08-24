@@ -2156,13 +2156,17 @@ export function makeRemoteSandbox(parts: RemoteSandboxParts): Sandbox {
         mark("spec written");
         // A crash after journal admission must recover from the full spec.
         journalSet(record);
+        // Construct (and register) the control BEFORE dispatch so exact-token
+        // Stop reaches the launching host: cancelAgentRunTokenAndWait sees
+        // hostRunBusy(token) during the launch await, and cancelHost's stop
+        // backstop plus the cancelled startup marker fence the dispatch race.
+        handle = new HostHandle(dir, spec, callbacks, launcher);
         await launcher.launch(spec.hostId, dir, () => {
           record.launchPhase = "launching";
           journalSet(record);
         });
         record.launchPhase = "started";
         journalSet(record);
-        handle = new HostHandle(dir, spec, callbacks, launcher);
         await handle.connectWithWait(45_000);
         mark("host attached");
       } catch (error) {
