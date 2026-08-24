@@ -251,6 +251,17 @@ async function ensureServerAuth(
         "Figma does not currently allow Open Session to connect. Its remote MCP server accepts only clients listed in the Figma MCP Catalog.",
       );
     }
+    if (
+      registrationResponse.status === 400 &&
+      registrationText.includes("invalid_redirect_uri") &&
+      registrationUrl.hostname === "vercel.com"
+    ) {
+      // Vercel MCP is a closed program: only clients Vercel has reviewed get
+      // their redirect URI approved (docs/agent-resources/vercel-mcp).
+      throw new Error(
+        "Vercel MCP only connects to AI clients Vercel has approved (Claude Code, ChatGPT, Cursor, …), so it rejects Open Session's callback URL.",
+      );
+    }
     const detail = registrationText.trim().slice(0, 200);
     throw new Error(
       `${name}: client registration failed (HTTP ${registrationResponse.status})${detail ? `: ${detail}` : ""}`,
