@@ -164,7 +164,12 @@ export function startDeviceLogin(
   let proc: ChildProcess;
   try {
     proc = spawn("codex", ["login", "--device-auth"], {
-      env: { HOME, PATH: process.env.PATH || "/usr/local/bin:/usr/bin:/bin", CODEX_HOME: dir },
+      env: {
+        HOME,
+        PATH: process.env.PATH || "/usr/local/bin:/usr/bin:/bin",
+        CODEX_HOME: dir,
+        NODE_ENV: process.env.NODE_ENV || "production",
+      },
       stdio: ["ignore", "pipe", "pipe"],
     });
   } catch (e: any) {
