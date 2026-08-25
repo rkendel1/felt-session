@@ -1,4 +1,8 @@
-import { SessionKernelStoreHost } from "./store-host";
+import {
+  isSessionKernelCentralStoreFailure,
+  isSessionKernelInfrastructureFailure,
+  SessionKernelStoreHost,
+} from "./store-host";
 import {
   SESSION_KERNEL_ACTOR_VERSION,
   SESSION_KERNEL_MAX_RESPONSE_BYTES,
@@ -64,17 +68,6 @@ function storeMutationSessionId(
   if (["ackOutbox", "deferOutbox", "noteOutboxFailure", "discardDeadOutbox", "retryDeadOutbox"].includes(method))
     return typeof args[0] === "number" ? host.outboxSessionId(args[0]) : undefined;
   return undefined;
-}
-
-function infrastructureFailure(error: unknown): boolean {
-  const code =
-    error && typeof error === "object" && "code" in error
-      ? String((error as { code?: unknown }).code ?? "")
-      : "";
-  if (code.startsWith("SQLITE_") && !code.startsWith("SQLITE_CONSTRAINT"))
-    return true;
-  const message = error instanceof Error ? error.message : String(error);
-  return /database is locked|disk i\/o|disk full|database.*(?:malformed|corrupt)|not a database|readonly database/i.test(message);
 }
 
 export function startSessionKernelActorWorker(): void {
@@ -284,11 +277,15 @@ export function startSessionKernelActorWorker(): void {
       let responseCode: "actor_fatal" | "session_quarantined" | undefined;
       let responseSessionId: string | undefined;
       const sessionId = requestSessionId;
-      const infrastructure = infrastructureFailure(error);
+      const infrastructure = isSessionKernelInfrastructureFailure(error);
       const critical = request.t === "reduce" &&
         isCriticalSettlementCommand(request.command);
       if (infrastructure || critical) {
-        if (!sessionId || (infrastructure && !host.isIsolated(sessionId))) {
+        if (
+          !sessionId ||
+          isSessionKernelCentralStoreFailure(error) ||
+          (infrastructure && !host.isIsolated(sessionId))
+        ) {
           failStop = true;
           responseCode = "actor_fatal";
         } else {
@@ -416,7 +413,9 @@ export function startSessionKernelActorWorker(): void {
     } catch (error) {
       const sessionId = request.t === "acknowledge" ? request.sessionId : undefined;
       const isolatedFailure =
-        !!sessionId && infrastructureFailure(error) && host.isIsolated(sessionId);
+        !!sessionId &&
+        isSessionKernelInfrastructureFailure(error) &&
+        host.isIsolated(sessionId);
       if (isolatedFailure) {
         try {
           host.quarantineSession(

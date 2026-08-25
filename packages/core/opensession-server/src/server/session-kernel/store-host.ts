@@ -116,6 +116,32 @@ function minDefined(values: Array<number | undefined>): number | undefined {
   return present.length === 0 ? undefined : Math.min(...present);
 }
 
+const CENTRAL_STORE_FAILURE = "SESSION_KERNEL_CENTRAL_STORE_FAILURE";
+
+export function isSessionKernelCentralStoreFailure(error: unknown): boolean {
+  return !!error && typeof error === "object" && "code" in error &&
+    (error as { code?: unknown }).code === CENTRAL_STORE_FAILURE;
+}
+
+export function isSessionKernelInfrastructureFailure(error: unknown): boolean {
+  if (isSessionKernelCentralStoreFailure(error)) return true;
+  const code = error && typeof error === "object" && "code" in error
+    ? String((error as { code?: unknown }).code ?? "")
+    : "";
+  if (code.startsWith("SQLITE_") && !code.startsWith("SQLITE_CONSTRAINT")) return true;
+  const message = error instanceof Error ? error.message : String(error);
+  return /database is locked|disk i\/o|disk full|database.*(?:malformed|corrupt)|not a database|readonly database/i.test(message);
+}
+
+function centralStoreFailure(error: unknown): Error & { code: string } {
+  const wrapped = new Error(
+    error instanceof Error ? error.message : String(error),
+    { cause: error },
+  ) as Error & { code: string };
+  wrapped.code = CENTRAL_STORE_FAILURE;
+  return wrapped;
+}
+
 /**
  * Routes one session to exactly one authoritative SQLite store.
  *
@@ -151,9 +177,13 @@ export class SessionKernelStoreHost {
   quarantinedSession(sessionId: string): DurableSessionQuarantine | undefined {
     const infrastructure = this.central.quarantinedSession(sessionId);
     if (infrastructure) return infrastructure;
-    return this.isIsolated(sessionId)
-      ? this.openIsolated(sessionId).quarantinedSession(sessionId)
-      : undefined;
+    if (!this.isIsolated(sessionId)) return undefined;
+    const isolated = this.containIsolated(
+      sessionId,
+      "storage:quarantine-read",
+      () => this.openIsolated(sessionId).quarantinedSession(sessionId),
+    );
+    return isolated.ok ? isolated.value : this.central.quarantinedSession(sessionId);
   }
 
   quarantineSession(
@@ -206,9 +236,15 @@ export class SessionKernelStoreHost {
       );
     if (method === "releaseQuarantine") {
       const sessionId = String(args[0] ?? "");
-      let isolatedStore: SessionKernelStore | undefined;
-      if (this.isIsolated(sessionId)) isolatedStore = this.openIsolated(sessionId);
-      const isolatedReleased = isolatedStore?.releaseQuarantine(sessionId) ?? false;
+      let isolatedReleased = false;
+      if (this.isIsolated(sessionId)) {
+        const isolated = this.containIsolated(
+          sessionId,
+          "storage:quarantine-release",
+          () => this.openIsolated(sessionId).releaseQuarantine(sessionId),
+        );
+        if (isolated.ok) isolatedReleased = isolated.value;
+      }
       const centralReleased = this.central.releaseQuarantine(sessionId);
       return centralReleased || isolatedReleased;
     }
@@ -243,20 +279,23 @@ export class SessionKernelStoreHost {
   }
 
   allRunStates(): Array<DurableRunState & { sessionId: string }> {
-    return this.allStores().flatMap((store) => store.runStates());
+    return this.mapStores("global:run-states", (store) => store.runStates()).flat();
   }
 
   allAskEntries(): Array<[string, unknown]> {
-    return this.allStores().flatMap((store) => store.askEntries());
+    return this.mapStores("global:ask-entries", (store) => store.askEntries()).flat();
   }
 
   allDeliveryEntries(slot: Parameters<SessionKernelStoreApi["deliveryEntries"]>[0]) {
-    return this.allStores().flatMap((store) => store.deliveryEntries(slot));
+    return this.mapStores("global:delivery-entries", (store) => store.deliveryEntries(slot)).flat();
   }
 
   allQuarantinedSessions(limit = 100, offset = 0): DurableSessionQuarantine[] {
-    return this.allStores()
-      .flatMap((store) => store.quarantinedSessions(Number.MAX_SAFE_INTEGER, 0))
+    const isolated = this.mapIsolatedStores(
+      "global:quarantined-sessions",
+      (store) => store.quarantinedSessions(Number.MAX_SAFE_INTEGER, 0),
+    ).flat();
+    return [...this.central.quarantinedSessions(Number.MAX_SAFE_INTEGER, 0), ...isolated]
       .sort((a, b) => b.quarantinedAt - a.quarantinedAt)
       .slice(offset, offset + limit);
   }
@@ -282,42 +321,40 @@ export class SessionKernelStoreHost {
       candidates = [...candidates, ...wrapped.filter((sessionId) => !seen.has(sessionId))];
     }
     if (candidates.length > 0) this.runtimeCursor = candidates.at(-1)!;
-    const isolatedStores: Array<{ sessionId: string; store: SessionKernelStore }> = [];
+    const quota = Math.max(1, Math.ceil(limit / (candidates.length + 1)));
+    const timers = this.central.dueTimers(now, Math.min(quota, limit), timerKinds);
+    const outbox = this.central.pendingOutbox(now, Math.min(quota, limit), effectKinds);
     for (const sessionId of candidates) {
-      try {
-        isolatedStores.push({ sessionId, store: this.openIsolated(sessionId) });
-      } catch (error) {
-        this.central.quarantineSession(
-          sessionId,
-          error instanceof Error ? error.message : String(error),
-          "storage:open",
-        );
-      }
-    }
-    const stores = [this.central, ...isolatedStores.map((entry) => entry.store)];
-    const quota = Math.max(1, Math.ceil(limit / stores.length));
-    const timers: DurableTimer[] = [];
-    const outbox: DurableOutboxItem[] = [];
-    for (let index = 0; index < stores.length; index += 1) {
-      const store = stores[index];
-      const sessionId = index === 0 ? undefined : isolatedStores[index - 1]?.sessionId;
-      if (timers.length < limit)
-        timers.push(...store.dueTimers(now, Math.min(quota, limit - timers.length), timerKinds));
-      if (outbox.length < limit)
-        outbox.push(...store.pendingOutbox(now, Math.min(quota, limit - outbox.length), effectKinds));
-      if (sessionId)
-        this.central.settleIsolatedSessionWake(
-          sessionId,
-          store.nextTimerWakeAt(),
-          store.nextOutboxWakeAt(),
-        );
+      const scanned = this.containIsolated(sessionId, "runtime:scan", () => {
+        const store = this.openIsolated(sessionId);
+        return {
+          timers: timers.length < limit
+            ? store.dueTimers(now, Math.min(quota, limit - timers.length), timerKinds)
+            : [],
+          outbox: outbox.length < limit
+            ? store.pendingOutbox(now, Math.min(quota, limit - outbox.length), effectKinds)
+            : [],
+          nextTimerWakeAt: store.nextTimerWakeAt(),
+          nextOutboxWakeAt: store.nextOutboxWakeAt(),
+        };
+      });
+      if (!scanned.ok) continue;
+      timers.push(...scanned.value.timers);
+      outbox.push(...scanned.value.outbox);
+      this.central.settleIsolatedSessionWake(
+        sessionId,
+        scanned.value.nextTimerWakeAt,
+        scanned.value.nextOutboxWakeAt,
+      );
       if (timers.length >= limit && outbox.length >= limit) break;
     }
     return { timers, outbox };
   }
 
   stats(): ReturnType<SessionKernelStoreApi["stats"]> {
-    const parts = this.allStores().map((store) => store.stats());
+    const isolated = this.mapIsolatedStores("global:stats", (store) => store.stats());
+    // Include quarantines created during this scan in the same response.
+    const parts = [this.central.stats(), ...isolated];
     const sum = (key: keyof ReturnType<SessionKernelStoreApi["stats"]>) =>
       parts.reduce((total, part) => total + Number(part[key] ?? 0), 0);
     return {
@@ -337,7 +374,7 @@ export class SessionKernelStoreHost {
       walBytes: sum("walBytes"),
       pageCount: sum("pageCount"),
       freePages: sum("freePages"),
-      schemaVersion: this.central.stats().schemaVersion,
+      schemaVersion: parts[0].schemaVersion,
     };
   }
 
@@ -353,19 +390,17 @@ export class SessionKernelStoreHost {
     for (const route of routes) {
       this.outboxRouteMaintenanceCursor = route.id;
       if (this.central.quarantinedSession(route.sessionId)) continue;
-      try {
-        if (this.openIsolated(route.sessionId).outboxSessionId(route.id) !== route.sessionId)
-          this.central.forgetIsolatedOutboxRoute(route.id);
-      } catch (error) {
-        this.central.quarantineSession(
-          route.sessionId,
-          error instanceof Error ? error.message : String(error),
-          "storage:open",
-        );
-      }
+      const routedSession = this.containIsolated(
+        route.sessionId,
+        "maintenance:outbox-route",
+        () => this.openIsolated(route.sessionId).outboxSessionId(route.id),
+      );
+      if (routedSession.ok && routedSession.value !== route.sessionId)
+        this.central.forgetIsolatedOutboxRoute(route.id);
     }
-    let pending = routes.length === 50;
-    for (const store of this.allStores()) pending = store.maintain() || pending;
+    let pending = routes.length === 50 || this.central.maintain();
+    for (const result of this.mapIsolatedStores("maintenance:store", (store) => store.maintain()))
+      pending = result || pending;
     return pending;
   }
 
@@ -376,31 +411,77 @@ export class SessionKernelStoreHost {
       this.centralPath === ":memory:"
         ? ":memory:"
         : sessionKernelSessionDbPath(sessionId, this.isolatedRoot),
-      { allocateOutboxId: (owner) => this.central.allocateIsolatedOutboxId(owner) },
+      {
+        allocateOutboxId: (owner) => {
+          try {
+            return this.central.allocateIsolatedOutboxId(owner);
+          } catch (error) {
+            throw centralStoreFailure(error);
+          }
+        },
+      },
     );
     this.isolated.set(sessionId, store);
     return store;
   }
 
-  private allStores(): SessionKernelStore[] {
+  private isolatedStoreEntries(): Array<{ sessionId: string; store: SessionKernelStore }> {
+    const entries: Array<{ sessionId: string; store: SessionKernelStore }> = [];
     for (const placement of this.central.isolatedSessionPlacements()) {
-      if (this.central.quarantinedSession(placement.sessionId)) continue;
-      try {
-        this.openIsolated(placement.sessionId);
-      } catch (error) {
-        this.central.quarantineSession(
-          placement.sessionId,
-          error instanceof Error ? error.message : String(error),
-          "storage:open",
-        );
-      }
+      const { sessionId } = placement;
+      if (this.central.quarantinedSession(sessionId)) continue;
+      const opened = this.containIsolated(
+        sessionId,
+        "storage:open",
+        () => this.openIsolated(sessionId),
+      );
+      if (opened.ok) entries.push({ sessionId, store: opened.value });
     }
-    return [
-      this.central,
-      ...[...this.isolated].flatMap(([sessionId, store]) =>
-        this.central.quarantinedSession(sessionId) ? [] : [store],
-      ),
-    ];
+    return entries;
+  }
+
+  private containIsolated<T>(
+    sessionId: string,
+    commandKind: string,
+    operation: () => T,
+  ): { ok: true; value: T } | { ok: false } {
+    try {
+      return { ok: true, value: operation() };
+    } catch (error) {
+      if (
+        isSessionKernelCentralStoreFailure(error) ||
+        !isSessionKernelInfrastructureFailure(error)
+      ) throw error;
+      this.central.quarantineSession(
+        sessionId,
+        error instanceof Error ? error.message : String(error),
+        commandKind,
+      );
+      return { ok: false };
+    }
+  }
+
+  private mapIsolatedStores<T>(
+    commandKind: string,
+    operation: (store: SessionKernelStore, sessionId: string) => T,
+  ): T[] {
+    const results: T[] = [];
+    for (const { sessionId, store } of this.isolatedStoreEntries()) {
+      const result = this.containIsolated(
+        sessionId,
+        commandKind,
+        () => operation(store, sessionId),
+      );
+      if (result.ok) results.push(result.value);
+    }
+    return results;
+  }
+
+  private mapStores<T>(
+    commandKind: string,
+    operation: (store: SessionKernelStore, sessionId?: string) => T,
+  ): T[] {
+    return [operation(this.central), ...this.mapIsolatedStores(commandKind, operation)];
   }
 
   private isMutation(method: string): boolean {
@@ -436,49 +517,56 @@ export class SessionKernelStoreHost {
     if (method === "quarantinedSessions")
       return this.allQuarantinedSessions(Number(args[0] ?? 100), Number(args[1] ?? 0));
     if (method === "dueTimers")
-      return this.allStores().flatMap((store) => store.dueTimers(
+      return this.mapStores("global:due-timers", (store) => store.dueTimers(
         args[0] as number | undefined,
         args[1] as number | undefined,
         args[2] as readonly string[] | undefined,
-      )).slice(0, Number(args[1] ?? 100));
+      )).flat().slice(0, Number(args[1] ?? 100));
     if (method === "pendingOutbox")
-      return this.allStores().flatMap((store) => store.pendingOutbox(
+      return this.mapStores("global:pending-outbox", (store) => store.pendingOutbox(
         args[0] as number | undefined,
         args[1] as number | undefined,
         args[2] as readonly string[] | undefined,
-      )).slice(0, Number(args[1] ?? 100));
+      )).flat().slice(0, Number(args[1] ?? 100));
     if (method === "stats") return this.stats();
     if (method === "maintain") return this.maintain();
     if (method === "compact") {
-      for (const store of this.allStores()) store.compact(
+      this.mapStores("global:compact", (store) => store.compact(
         args[0] as number | undefined,
         args[1] as number | undefined,
         args[2] as number | undefined,
-      );
+      ));
       return;
     }
     if (method === "clearAskRecords") {
-      for (const store of this.allStores()) store.clearAskRecords();
+      this.mapStores("global:clear-asks", (store) => store.clearAskRecords());
       return;
     }
     if (method === "clearDeliverySlot") {
-      for (const store of this.allStores())
-        store.clearDeliverySlot(args[0] as Parameters<SessionKernelStoreApi["clearDeliverySlot"]>[0]);
+      this.mapStores("global:clear-delivery", (store) =>
+        store.clearDeliverySlot(args[0] as Parameters<SessionKernelStoreApi["clearDeliverySlot"]>[0]));
       return;
     }
     if (method === "settlePendingSteers")
-      return this.allStores().reduce((total, store) => total + store.settlePendingSteers(), 0);
+      return this.mapStores(
+        "global:settle-pending-steers",
+        (store) => store.settlePendingSteers(),
+      ).reduce((total, settled) => total + settled, 0);
     if (method === "retryCompatibleCreationBranchDeadLetters")
-      return this.allStores().flatMap((store) =>
+      return this.mapStores("global:retry-creation-branches", (store) =>
         store.retryCompatibleCreationBranchDeadLetters(
           args[0] as Parameters<SessionKernelStoreApi["retryCompatibleCreationBranchDeadLetters"]>[0],
           args[1] as number | undefined,
         ),
-      );
+      ).flat();
     if (method === "deadLetters") {
       const limit = Number(args[0] ?? 100);
       const offset = Number(args[1] ?? 0);
-      const parts = this.allStores().map((store) => store.deadLetters(Number.MAX_SAFE_INTEGER, 0));
+      const isolated = this.mapIsolatedStores(
+        "global:dead-letters",
+        (store) => store.deadLetters(Number.MAX_SAFE_INTEGER, 0),
+      );
+      const parts = [this.central.deadLetters(Number.MAX_SAFE_INTEGER, 0), ...isolated];
       const byDeadLetter = (a: { deadLetteredAt: number }, b: { deadLetteredAt: number }) =>
         b.deadLetteredAt - a.deadLetteredAt;
       const quarantines = parts.flatMap((part) => part.quarantines)

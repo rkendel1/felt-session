@@ -16,6 +16,17 @@ function paths() {
   };
 }
 
+function failWithSqliteIo(store: SessionKernelStore, method: string): void {
+  Object.defineProperty(store, method, {
+    configurable: true,
+    value: () => {
+      const error = new Error("disk I/O error");
+      Object.assign(error, { code: "SQLITE_IOERR" });
+      throw error;
+    },
+  });
+}
+
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
@@ -106,6 +117,80 @@ describe("per-session session kernel storage", () => {
     expect(recovered.storeForSession("healthy-session").runState("healthy-session").state)
       .toBe("running");
     recovered.close();
+  });
+
+  test("releases the catalog quarantine while an isolated store still fails", () => {
+    const path = paths();
+    const host = new SessionKernelStoreHost(path.central, path.isolated);
+    host.call("setRunState", [{
+      sessionId: "repair-session",
+      state: "running",
+      event: "prompt",
+    }]);
+    failWithSqliteIo(host.storeForSession("repair-session"), "releaseQuarantine");
+    host.central.quarantineSession(
+      "repair-session",
+      "disk I/O error",
+      "runtime:scan",
+    );
+
+    expect(host.call("releaseQuarantine", ["repair-session"])).toBe(true);
+    expect(host.central.quarantinedSession("repair-session")).toBeUndefined();
+    expect(host.storeForSession("repair-session").runState("repair-session").state)
+      .toBe("running");
+    host.close();
+  });
+
+  test("contains failures from already-open isolated databases per session", () => {
+    const path = paths();
+    const host = new SessionKernelStoreHost(path.central, path.isolated);
+    for (const sessionId of [
+      "runtime-broken",
+      "stats-broken",
+      "maintenance-broken",
+      "fanout-broken",
+      "healthy-session",
+    ]) {
+      host.call("setRunState", [{ sessionId, state: "running", event: "prompt" }]);
+    }
+
+    failWithSqliteIo(host.storeForSession("runtime-broken"), "dueTimers");
+    failWithSqliteIo(host.storeForSession("stats-broken"), "stats");
+    failWithSqliteIo(host.storeForSession("maintenance-broken"), "maintain");
+    failWithSqliteIo(host.storeForSession("fanout-broken"), "runStates");
+
+    expect(() => host.runtimeWork(Date.now(), [], [], 100)).not.toThrow();
+    expect(host.quarantinedSession("runtime-broken")).toMatchObject({
+      commandKind: "runtime:scan",
+    });
+    expect(host.stats()).toMatchObject({ sessions: 3, quarantinedSessions: 2 });
+    expect(host.quarantinedSession("stats-broken")).toMatchObject({
+      commandKind: "global:stats",
+    });
+    expect(() => host.maintain()).not.toThrow();
+    expect(host.quarantinedSession("maintenance-broken")).toMatchObject({
+      commandKind: "maintenance:store",
+    });
+    expect(host.allRunStates()).toEqual([
+      expect.objectContaining({ sessionId: "healthy-session", state: "running" }),
+    ]);
+    expect(host.quarantinedSession("fanout-broken")).toMatchObject({
+      commandKind: "global:run-states",
+    });
+    expect(host.storeForSession("healthy-session").runState("healthy-session").state)
+      .toBe("running");
+
+    // A failure in the central identity allocator is not misattributed to the
+    // isolated session. It must escape so the actor can fail-stop globally.
+    failWithSqliteIo(host.central, "allocateIsolatedOutboxId");
+    expect(() => host.call("enqueueOutbox", [
+      "healthy-session",
+      "known_effect",
+      null,
+      "central-failure",
+    ])).toThrow("disk I/O error");
+    expect(host.quarantinedSession("healthy-session")).toBeUndefined();
+    host.close();
   });
 
   test("pages wake candidates in the catalog instead of rotating a fixed prefix", () => {
