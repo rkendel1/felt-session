@@ -20,6 +20,7 @@ import {
   ensureCreationEffectExecutors,
 } from "./creation-effect-executors";
 import { audit } from "../audit";
+import { SessionKernelQuarantinedError } from "./actor-client";
 
 type TimerHandler = (timer: DurableTimer) => void | Promise<void>;
 
@@ -226,27 +227,43 @@ export async function drainSessionKernelRuntime(): Promise<void> {
 					if (executed) sessionCore({ op: "ack_outbox", id: item.id });
 				})
 				.catch((error) => {
-          if (error instanceof SessionEffectDeferredError) {
-            sessionCore({ op: "defer_outbox", id: item.id });
+          if (error instanceof SessionKernelQuarantinedError) {
+            console.error(
+              `[session-kernel] outbox ${item.kind}/${item.id} frozen with quarantined session ${item.sessionId}:`,
+              error,
+            );
             return;
           }
-					const message =
-						error instanceof Error ? error.message : String(error);
-					const settled = sessionCore({
-            op: "fail_outbox",
-            id: item.id,
-            error: message,
-            maxAttempts: error instanceof CreationEffectIndeterminateError ? 1 : 20,
-          });
-					if (settled.deadLetteredNow) {
-						failDeadCreationEffect(item, message);
-						audit({ msg: "session_kernel_dead_lettered", kind: "outbox", session_id: item.sessionId, outbox_id: item.id, error: message });
-					}
-					console.error(
-						`[session-kernel] outbox ${item.kind}/${item.id} failed:`,error,
-					);
-				}
-				)
+          try {
+            if (error instanceof SessionEffectDeferredError) {
+              sessionCore({ op: "defer_outbox", id: item.id });
+              return;
+            }
+            const message =
+              error instanceof Error ? error.message : String(error);
+            const settled = sessionCore({
+              op: "fail_outbox",
+              id: item.id,
+              error: message,
+              maxAttempts: error instanceof CreationEffectIndeterminateError ? 1 : 20,
+            });
+            if (settled.deadLetteredNow) {
+              failDeadCreationEffect(item, message);
+              audit({ msg: "session_kernel_dead_lettered", kind: "outbox", session_id: item.sessionId, outbox_id: item.id, error: message });
+            }
+            console.error(
+              `[session-kernel] outbox ${item.kind}/${item.id} failed:`, error,
+            );
+          } catch (settlementError) {
+            // Session quarantine freezes accepted work in place. Catalog/actor
+            // failures are handled by the actor client's fail-closed callback;
+            // neither may escape this detached promise as an unhandled rejection.
+            console.error(
+              `[session-kernel] outbox ${item.kind}/${item.id} could not settle its failure:`,
+              settlementError,
+            );
+          }
+				})
 				.finally(() => active.delete(item.id));
 		}
 		passivateIdleSessionKernels();
