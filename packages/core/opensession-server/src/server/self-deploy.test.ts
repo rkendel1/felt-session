@@ -158,9 +158,28 @@ describe("deploy/self-deploy.sh", () => {
 		expect(proc.exitCode).toBe(0);
 	});
 
+	test("passes configured storage paths to the offline actor migration", async () => {
+		const script = await Bun.file(
+			resolve(import.meta.dir, "../../../../../deploy/self-deploy.sh"),
+		).text();
+		expect(script).toContain("read_env_value OPENSESSION_STATE_DIR");
+		expect(script).toContain("read_env_value OPENSESSION_SESSIONS_DIR");
+		expect(script).toContain('migration_env+=("OPENSESSION_STATE_DIR=');
+		expect(script).toContain('migration_env+=("OPENSESSION_SESSIONS_DIR=');
+		expect(script).toContain("migrate-session-kernel-storage.ts");
+	});
+
 	test("the server launches through the fixed privileged helper", async () => {
 		const source = await Bun.file(resolve(import.meta.dir, "self-deploy.ts")).text();
 		expect(source).toContain('RUN_HOST_HELPER, "self-deploy"');
 		expect(source).toContain("Migration path for instances upgrading");
+		expect(source).toContain("Environment=OPENSESSION_BUN_BIN=${process.execPath}");
+		expect(source).toContain("Environment=OPENSESSION_STATE_DIR=");
+		expect(source).toContain("Environment=OPENSESSION_SESSIONS_DIR=");
+		const helper = await Bun.file(
+			resolve(import.meta.dir, "../../../../../deploy/opensession-run-host"),
+		).text();
+		expect(helper).toContain('-p "EnvironmentFile=$env_file"');
+		expect(helper).toContain('-p "Environment=OPENSESSION_BUN_BIN=$bun_bin"');
 	});
 });

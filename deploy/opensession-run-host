@@ -88,8 +88,10 @@ if [ "$action" = "self-deploy" ]; then
     "--uid=$service_uid" \
     "--gid=$service_gid" \
     -p "WorkingDirectory=$deploy_checkout" \
+    -p "EnvironmentFile=$env_file" \
     -p "Environment=HOME=$home_dir" \
     -p "Environment=PATH=$service_path" \
+    -p "Environment=OPENSESSION_BUN_BIN=$bun_bin" \
     -p "Environment=OPENSESSION_DEPLOY_CHECKOUT=$deploy_checkout" \
     -p "Environment=OPENSESSION_DEPLOY_STATE=$deploy_state" \
     -p "StandardOutput=journal" \

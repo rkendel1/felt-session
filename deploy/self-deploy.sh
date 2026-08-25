@@ -36,6 +36,21 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="${OPENSESSION_DEPLOY_CHECKOUT:-$(dirname "$SCRIPT_DIR")}"
+
+read_env_value() {
+  local name="$1" file="$2" value
+  [ -r "$file" ] || return 0
+  value="$(sed -n "s/^${name}=//p" "$file" | tail -n 1)"
+  case "$value" in
+    \"*\") value="${value#\"}"; value="${value%\"}" ;;
+    \'*\') value="${value#\'}"; value="${value%\'}" ;;
+  esac
+  printf '%s' "$value"
+}
+
+GATEWAY_ENV_FILE="$(sed -n 's/^EnvironmentFile=//p' "$REPO_DIR/opensession.service" | tail -n 1)"
+MIGRATION_STATE_DIR="${OPENSESSION_STATE_DIR:-$(read_env_value OPENSESSION_STATE_DIR "$GATEWAY_ENV_FILE")}"
+MIGRATION_SESSIONS_DIR="${OPENSESSION_SESSIONS_DIR:-$(read_env_value OPENSESSION_SESSIONS_DIR "$GATEWAY_ENV_FILE")}"
 if [ -n "${OPENSESSION_DEPLOY_STATE:-}" ]; then
   STATE_DIR="$OPENSESSION_DEPLOY_STATE"
 elif [ -e "$HOME/.opensession/deploy" ] || [ ! -e "$HOME/.opensession-deploy" ]; then
@@ -184,7 +199,16 @@ refresh_session_kernel() {
   fi
   run_systemctl stop "$SESSION_KERNEL_SERVICE_NAME"
   log "migrating legacy session-kernel rows offline"
-  "$BUN_BIN" "$REPO_DIR/scripts/migrate-session-kernel-storage.ts"
+  local -a migration_env
+  migration_env=("HOME=$HOME")
+  if [ -n "$MIGRATION_STATE_DIR" ]; then
+    migration_env+=("OPENSESSION_STATE_DIR=$MIGRATION_STATE_DIR")
+  fi
+  if [ -n "$MIGRATION_SESSIONS_DIR" ]; then
+    migration_env+=("OPENSESSION_SESSIONS_DIR=$MIGRATION_SESSIONS_DIR")
+  fi
+  env "${migration_env[@]}" \
+    "$BUN_BIN" "$REPO_DIR/scripts/migrate-session-kernel-storage.ts"
   run_systemctl start "$SESSION_KERNEL_SERVICE_NAME"
   local i
   for i in $(seq 1 30); do

@@ -172,8 +172,15 @@ async function launchDeployUnit(unit: string, targetSha: string): Promise<void> 
 				"-p", `WorkingDirectory=${checkout}`,
 				"-p", `Environment=HOME=${homeDir()}`,
 				"-p", `Environment=PATH=${process.env.PATH || "/usr/local/bin:/usr/bin:/bin"}`,
+				"-p", `Environment=OPENSESSION_BUN_BIN=${process.execPath}`,
 				"-p", `Environment=OPENSESSION_DEPLOY_CHECKOUT=${checkout}`,
 				"-p", `Environment=OPENSESSION_DEPLOY_STATE=${stateDir}`,
+				...(process.env.OPENSESSION_STATE_DIR
+					? ["-p", `Environment=OPENSESSION_STATE_DIR=${process.env.OPENSESSION_STATE_DIR}`]
+					: []),
+				...(process.env.OPENSESSION_SESSIONS_DIR
+					? ["-p", `Environment=OPENSESSION_SESSIONS_DIR=${process.env.OPENSESSION_SESSIONS_DIR}`]
+					: []),
 				...(process.env.OPENSESSION_DEPLOY_ALLOW_RESET === "1"
 					? ["-p", "Environment=OPENSESSION_DEPLOY_ALLOW_RESET=1"]
 					: []),
