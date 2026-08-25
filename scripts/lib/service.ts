@@ -584,6 +584,7 @@ export function renderLauncher(): string {
     `# macOS shows this file's name in Login Items & Extensions; hence "OpenSession".\n` +
     `cd ${serviceWorkdir()} || exit 1\n` +
     `set -a; [ -f ${ENV_PATH} ] && . ${ENV_PATH}; set +a\n` +
+    `export OPENSESSION_SESSION_KERNEL_TOKEN_FILE=${USER_SESSION_KERNEL_TOKEN_PATH}\n` +
     `exec ${exec.cmd}\n`
   );
 }

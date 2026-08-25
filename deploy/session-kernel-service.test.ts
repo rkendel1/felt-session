@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { resolve } from "node:path";
 import {
+  renderLauncher,
   renderSessionKernelLauncher,
   renderSessionKernelPlist,
   renderSessionKernelUnit,
@@ -86,12 +87,16 @@ describe("session kernel service deployment", () => {
   test("supervises a separate minimal actor process on launchd", () => {
     const plist = renderSessionKernelPlist();
     const launcher = renderSessionKernelLauncher();
+    const gatewayLauncher = renderLauncher();
     expect(plist).toContain("dev.opensession.session-kernel");
     expect(plist).toContain("OPENSESSION_SESSION_KERNEL_TOKEN_FILE");
     expect(plist).not.toContain("PLAIN_API_KEY");
     expect(plist).not.toContain("EnvironmentFile");
     expect(launcher).toContain("session-kernel-service.ts");
     expect(launcher).not.toContain("opensession.env");
+    expect(gatewayLauncher).toContain(
+      "OPENSESSION_SESSION_KERNEL_TOKEN_FILE=",
+    );
   });
 
   test("renders the same credential into both sides of the gateway boundary", async () => {
