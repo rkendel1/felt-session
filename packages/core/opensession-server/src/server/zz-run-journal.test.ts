@@ -92,6 +92,34 @@ describe("run journal", () => {
 		}
 	});
 
+	it("leaves an actor-quarantined run journal unclaimed during boot recovery", () => {
+		const sessionId = `quarantined-recovery-${crypto.randomUUID()}`;
+		const runKey = `run-${crypto.randomUUID()}`;
+		const store = sessionKernelStore();
+		try {
+			mod.journalSet({
+				runKey,
+				osSessionId: sessionId,
+				claudeSessionId: `engine-${crypto.randomUUID()}`,
+				cwd: "/tmp",
+				kind: "prompt",
+				startedAt: new Date().toISOString(),
+			});
+			clearRunState(sessionId);
+			store.quarantineSession(sessionId, "ambiguous prompt acknowledgement", "test");
+
+			expect(agent.resumeInterruptedRuns()).toEqual([]);
+			expect(mod.activeRunRecords()).toContainEqual(
+				expect.objectContaining({ runKey, osSessionId: sessionId }),
+			);
+			expect(getRunState(sessionId)).toBe("idle");
+		} finally {
+			store.releaseQuarantine(sessionId);
+			mod.journalClear(runKey);
+			clearRunState(sessionId);
+		}
+	});
+
 	it("leaves a detached GitHub review journal for its posting workflow", () => {
 		const sessionId = `github-review-${crypto.randomUUID()}`;
 		const runKey = `rh-${crypto.randomUUID()}`;
