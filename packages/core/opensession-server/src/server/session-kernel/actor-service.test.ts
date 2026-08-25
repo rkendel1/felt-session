@@ -33,6 +33,7 @@ beforeAll(async () => {
   service = await startSessionKernelService({
     port: 0,
     token,
+    responseTimeoutMs: 700,
     databasePath: join(stateDir, "sessions", "session-kernel.sqlite"),
   });
 });
@@ -358,6 +359,217 @@ describe("session kernel actor service", () => {
       await blocked;
       expect(await Promise.race([ordinary, stop])).toBe("stop");
       await Promise.all([ordinary, stop]);
+    } finally {
+      try {
+        lock.exec("ROLLBACK;");
+      } catch {}
+      lock.close();
+    }
+  });
+
+  test("a global barrier cannot deadlock a later priority turn", async () => {
+    const sessionId = "barrier-priority-session";
+    await rpc({
+      t: "call",
+      rpcId: "barrier-seed",
+      outputBytes: 256 * 1024,
+      request: {
+        t: "store",
+        method: "setRunState",
+        args: [{ sessionId, state: "idle", event: "seed" }],
+      },
+    });
+    const isolatedRoot = join(stateDir, "sessions", "session-kernel-sessions");
+    const lock = new Database(sessionKernelSessionDbPath(sessionId, isolatedRoot));
+    lock.exec("PRAGMA busy_timeout = 50; BEGIN IMMEDIATE;");
+    const order: string[] = [];
+    try {
+      const active = rpc({
+        t: "call",
+        rpcId: "barrier-active",
+        outputBytes: 256 * 1024,
+        request: {
+          t: "store",
+          method: "setRunState",
+          args: [{ sessionId, state: "idle", event: "active" }],
+        },
+      });
+      await Bun.sleep(25);
+      const ordinary = rpc({
+        t: "call",
+        rpcId: "barrier-ordinary",
+        outputBytes: 256 * 1024,
+        request: {
+          t: "store",
+          method: "setRunState",
+          args: [{ sessionId, state: "idle", event: "ordinary" }],
+        },
+      }).then(() => { order.push("ordinary"); });
+      const global = rpc({
+        t: "stats",
+        rpcId: "barrier-global",
+      }).then(() => { order.push("global"); });
+      const stop = rpc({
+        t: "call",
+        rpcId: "barrier-stop",
+        outputBytes: 256 * 1024,
+        request: {
+          t: "reduce",
+          command: {
+            kind: "turn",
+            commandId: "barrier-stop-command",
+            request: {
+              op: "request_cancel_command",
+              sessionId,
+              requestId: "barrier-stop-request",
+              fallbackRunId: null,
+            },
+          },
+        },
+      }).then(() => { order.push("stop"); });
+      await Bun.sleep(50);
+      lock.exec("COMMIT;");
+      await Promise.all([active, ordinary, global, stop]);
+      expect(order).toEqual(["ordinary", "global", "stop"]);
+    } finally {
+      try {
+        lock.exec("ROLLBACK;");
+      } catch {}
+      lock.close();
+    }
+  });
+
+  test("priority bursts yield to an ordinary turn", async () => {
+    const sessionId = "priority-fairness-session";
+    await rpc({
+      t: "call",
+      rpcId: "fairness-seed",
+      outputBytes: 256 * 1024,
+      request: {
+        t: "store",
+        method: "setRunState",
+        args: [{ sessionId, state: "idle", event: "seed" }],
+      },
+    });
+    const isolatedRoot = join(stateDir, "sessions", "session-kernel-sessions");
+    const lock = new Database(sessionKernelSessionDbPath(sessionId, isolatedRoot));
+    lock.exec("PRAGMA busy_timeout = 50; BEGIN IMMEDIATE;");
+    const order: string[] = [];
+    try {
+      const active = rpc({
+        t: "call",
+        rpcId: "fairness-active",
+        outputBytes: 256 * 1024,
+        request: {
+          t: "store",
+          method: "setRunState",
+          args: [{ sessionId, state: "idle", event: "active" }],
+        },
+      });
+      await Bun.sleep(25);
+      const ordinary = rpc({
+        t: "call",
+        rpcId: "fairness-ordinary",
+        outputBytes: 256 * 1024,
+        request: {
+          t: "store",
+          method: "setRunState",
+          args: [{ sessionId, state: "idle", event: "ordinary" }],
+        },
+      }).then(() => { order.push("ordinary"); });
+      const priority = Array.from({ length: 8 }, (_, index) => rpc({
+        t: "call",
+        rpcId: `fairness-priority-${index}`,
+        outputBytes: 256 * 1024,
+        request: {
+          t: "reduce",
+          command: {
+            kind: "turn",
+            commandId: `fairness-command-${index}`,
+            request: {
+              op: "request_cancel_command",
+              sessionId,
+              requestId: `fairness-request-${index}`,
+              fallbackRunId: null,
+            },
+          },
+        },
+      }).then(() => { order.push(`priority-${index}`); }));
+      await Bun.sleep(50);
+      lock.exec("COMMIT;");
+      await Promise.all([active, ordinary, ...priority]);
+      expect(order.indexOf("ordinary")).toBe(4);
+    } finally {
+      try {
+        lock.exec("ROLLBACK;");
+      } catch {}
+      lock.close();
+    }
+  });
+
+  test("an ambiguous critical settlement quarantines only its session", async () => {
+    const sessionId = "ambiguous-critical-session";
+    await rpc({
+      t: "call",
+      rpcId: "critical-admit",
+      outputBytes: 256 * 1024,
+      request: {
+        t: "reduce",
+        command: {
+          kind: "gateway",
+          commandId: "critical-request-command",
+          request: {
+            op: "request",
+            sessionId,
+            requestId: "critical-request",
+            operation: "websocket_command",
+            identity: { command: "prompt" },
+          },
+        },
+      },
+    });
+    const isolatedRoot = join(stateDir, "sessions", "session-kernel-sessions");
+    const dbPath = sessionKernelSessionDbPath(sessionId, isolatedRoot);
+    const lock = new Database(dbPath);
+    lock.exec("PRAGMA busy_timeout = 50; BEGIN IMMEDIATE;");
+    try {
+      const settlement = rpc({
+        t: "call",
+        rpcId: "critical-settlement",
+        outputBytes: 256 * 1024,
+        request: {
+          t: "reduce",
+          command: {
+            kind: "gateway",
+            commandId: "critical-complete-command",
+            request: {
+              op: "complete",
+              sessionId,
+              requestId: "critical-request",
+              operation: "websocket_command",
+              result: "done",
+            },
+          },
+        },
+      });
+      await Bun.sleep(750);
+      lock.exec("COMMIT;");
+      const response = await settlement;
+      expect(response).toMatchObject({ t: "call_result", status: -1 });
+      expect(JSON.parse(response.body)).toMatchObject({
+        ok: false,
+        code: "session_quarantined",
+        sessionId,
+      });
+      const evidence = new Database(
+        join(stateDir, "sessions", "session-kernel.sqlite"),
+        { readonly: true },
+      );
+      expect(evidence.query(
+        "SELECT reason FROM session_kernel_quarantine WHERE session_id = ?",
+      ).get(sessionId)).toBeTruthy();
+      evidence.close();
+      expect((await fetch(`${service.url}/ready`)).status).toBe(200);
     } finally {
       try {
         lock.exec("ROLLBACK;");

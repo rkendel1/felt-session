@@ -76,12 +76,24 @@ export class SessionKernelStoreHost {
     this.central.close();
   }
 
+  private centralOperation<T>(operation: () => T): T {
+    try {
+      return operation();
+    } catch (error) {
+      throw centralStoreFailure(error);
+    }
+  }
+
   isIsolated(sessionId: string): boolean {
-    return this.central.sessionPlacement(sessionId)?.placement === "isolated";
+    return this.centralOperation(
+      () => this.central.sessionPlacement(sessionId)?.placement === "isolated",
+    );
   }
 
   quarantinedSession(sessionId: string): DurableSessionQuarantine | undefined {
-    const infrastructure = this.central.quarantinedSession(sessionId);
+    const infrastructure = this.centralOperation(
+      () => this.central.quarantinedSession(sessionId),
+    );
     if (infrastructure) return infrastructure;
     if (!this.isIsolated(sessionId)) return undefined;
     const isolated = this.containIsolated(
@@ -89,7 +101,9 @@ export class SessionKernelStoreHost {
       "storage:quarantine-read",
       () => this.openIsolated(sessionId).quarantinedSession(sessionId),
     );
-    return isolated.ok ? isolated.value : this.central.quarantinedSession(sessionId);
+    return isolated.ok
+      ? isolated.value
+      : this.centralOperation(() => this.central.quarantinedSession(sessionId));
   }
 
   quarantineSession(
@@ -99,7 +113,9 @@ export class SessionKernelStoreHost {
     infrastructure = false,
   ): DurableSessionQuarantine {
     if (infrastructure && this.isIsolated(sessionId))
-      return this.central.quarantineSession(sessionId, reason, commandKind);
+      return this.centralOperation(
+        () => this.central.quarantineSession(sessionId, reason, commandKind),
+      );
     return this.storeForSession(sessionId, true).quarantineSession(
       sessionId,
       reason,
@@ -108,27 +124,44 @@ export class SessionKernelStoreHost {
   }
 
   storeForSession(sessionId: string, mutation = false): SessionKernelStore {
-    const placement = this.central.sessionPlacement(sessionId);
+    const placement = this.centralOperation(
+      () => this.central.sessionPlacement(sessionId),
+    );
     if (placement) {
-      if (mutation) this.central.markIsolatedSessionDirty(sessionId);
+      if (mutation)
+        this.centralOperation(() => this.central.markIsolatedSessionDirty(sessionId));
       return this.openIsolated(sessionId);
     }
-    if (!mutation || this.central.hasSessionDurableState(sessionId))
-      return this.central;
-    this.central.claimIsolatedSession(sessionId);
+    if (
+      !mutation ||
+      this.centralOperation(() => this.central.hasSessionDurableState(sessionId))
+    ) return this.central;
+    this.centralOperation(() => this.central.claimIsolatedSession(sessionId));
     return this.openIsolated(sessionId);
   }
 
+  private outboxRoute(id: number): { central?: string; isolated?: string } {
+    const central = this.centralOperation(() => this.central.outboxSessionId(id));
+    const isolated = this.centralOperation(
+      () => this.central.isolatedOutboxSessionId(id),
+    );
+    if (central && isolated)
+      throw centralStoreFailure(new Error(
+        `Outbox ${id} has conflicting central and isolated route evidence`,
+      ));
+    return { central, isolated };
+  }
+
   storeForOutbox(id: number, mutation = false): SessionKernelStore {
-    const centralSession = this.central.outboxSessionId(id);
-    if (centralSession) return this.central;
-    const sessionId = this.central.isolatedOutboxSessionId(id);
-    if (!sessionId) return this.central;
-    return this.storeForSession(sessionId, mutation);
+    const route = this.outboxRoute(id);
+    if (route.central) return this.central;
+    if (!route.isolated) return this.central;
+    return this.storeForSession(route.isolated, mutation);
   }
 
   outboxSessionId(id: number): string | undefined {
-    return this.central.outboxSessionId(id) ?? this.central.isolatedOutboxSessionId(id);
+    const route = this.outboxRoute(id);
+    return route.central ?? route.isolated;
   }
 
   call(method: string, args: unknown[]): unknown {
@@ -151,7 +184,9 @@ export class SessionKernelStoreHost {
         );
         if (isolated.ok) isolatedReleased = isolated.value;
       }
-      const centralReleased = this.central.releaseQuarantine(sessionId);
+      const centralReleased = this.centralOperation(
+        () => this.central.releaseQuarantine(sessionId),
+      );
       return centralReleased || isolatedReleased;
     }
     const route = sessionKernelStoreRoute(method, args);
@@ -164,7 +199,7 @@ export class SessionKernelStoreHost {
         (method === "ackOutbox" ||
           (method === "discardDeadOutbox" && result === true)) &&
         this.central.isolatedOutboxSessionId(route.id)
-      ) this.central.forgetIsolatedOutboxRoute(route.id);
+      ) this.centralOperation(() => this.central.forgetIsolatedOutboxRoute(route.id));
       return result;
     }
     return this.invoke(
@@ -365,11 +400,11 @@ export class SessionKernelStoreHost {
         isSessionKernelCentralStoreFailure(error) ||
         !isSessionKernelInfrastructureFailure(error)
       ) throw error;
-      this.central.quarantineSession(
+      this.centralOperation(() => this.central.quarantineSession(
         sessionId,
         error instanceof Error ? error.message : String(error),
         commandKind,
-      );
+      ));
       return { ok: false };
     }
   }

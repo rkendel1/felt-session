@@ -1,3 +1,4 @@
+import { Database } from "bun:sqlite";
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -235,6 +236,40 @@ describe("per-session session kernel storage", () => {
     expect(second).toHaveLength(100);
     expect(new Set([...first, ...second]).size).toBe(200);
     expect(second[0]).toBe("due-100");
+    host.close();
+  });
+
+  test("fails closed on conflicting central and isolated outbox routes", () => {
+    const path = paths();
+    const host = new SessionKernelStoreHost(path.central, path.isolated);
+    const id = host.call("enqueueOutbox", [
+      "isolated-route-session",
+      "known_effect",
+      null,
+      "isolated-effect",
+    ]) as number;
+    const central = new Database(path.central);
+    central.run(`
+      INSERT INTO session_kernel_outbox
+        (id, effect_id, effect_key, session_id, kind, payload, attempts,
+         next_attempt_at, created_at)
+      VALUES (?, ?, ?, ?, ?, 'null', 0, 0, ?)
+    `, [
+      id,
+      "central-conflict:known_effect:central-effect",
+      "central-effect",
+      "central-conflict",
+      "known_effect",
+      Date.now(),
+    ]);
+    central.close();
+
+    expect(() => host.outboxSessionId(id)).toThrow(
+      "conflicting central and isolated route evidence",
+    );
+    expect(() => host.storeForOutbox(id)).toThrow(
+      "conflicting central and isolated route evidence",
+    );
     host.close();
   });
 
