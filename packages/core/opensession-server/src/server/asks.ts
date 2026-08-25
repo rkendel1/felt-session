@@ -61,6 +61,10 @@ export interface PendingAsk {
 	escalationWaitStarted?: boolean;
 	answerReceived?: boolean;
 	earlyAnswer?: Record<string, string> | null;
+	/** Durable answer receipt recorded by the actor before the gateway
+	 * resolver ran. Preserved through restore so retry identity and the
+	 * committed payload survive a restart. */
+	answer?: { requestId: string; answers: Record<string, string> | null };
 	restored?: boolean;
 	/** Test/isolated-instance seam; live asks use pendingAskStorePath(). */
 	storePath?: string;
@@ -96,6 +100,7 @@ type PersistedPendingAsk = {
 	escalatedPersonName?: string;
 	answerReceived?: boolean;
 	earlyAnswer?: Record<string, string> | null;
+	answer?: { requestId: string; answers: Record<string, string> | null };
 };
 
 type PendingAskTimer = {
@@ -582,8 +587,9 @@ export function restorePendingAsks(
           : {}),
         // A crash between the actor's durable answer commit and the gateway
         // resolver leaves answerReceived unset; project the committed answer
-        // so recovery consumes it instead of re-asking.
-        ...((ask as { answer?: { answers: Record<string, string> | null } })
+        // so recovery consumes it instead of re-asking. The answer rides the
+        // restored record so its retry identity survives the rewrite.
+        ...((ask as { answer?: { requestId: string; answers: Record<string, string> | null } })
           .answer && !ask.answerReceived
           ? {
               answerReceived: true,
@@ -639,6 +645,7 @@ export function restorePendingAsks(
 						earlyAnswer: saved.earlyAnswer ?? null,
 					}
 				: {}),
+			...(saved.answer ? { answer: saved.answer } : {}),
 			restored: true,
 			storePath,
 			resolve: (answers) =>

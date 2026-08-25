@@ -48,6 +48,9 @@ describe("single session ownership", () => {
 		expect(read("queue-state.ts")).toContain("new EphemeralSessionSet");
 		expect(read("asks.ts")).toContain("new AskOwnedMap");
 		expect(read("asks.ts")).toContain("new EphemeralSessionMap");
+		// A committed durable answer survives restore: the projection maps it
+		// to answered state and the rewrite carries its retry identity.
+		expect(read("asks.ts")).toContain("saved.answer ? { answer: saved.answer }");
 		expect(read("queue-state.ts") + read("asks.ts")).not.toContain("SessionOwnedMap");
 		expect(read("session-kernel/kernel.ts")).not.toContain("getRuntime<");
 		expect(read("session-kernel/kernel.ts")).not.toContain("setRuntime<");
