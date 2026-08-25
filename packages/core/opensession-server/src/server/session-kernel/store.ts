@@ -2398,6 +2398,12 @@ export class SessionKernelStore {
     return items.length;
   }
 
+  hasPendingSteers(): boolean {
+    return !!this.db.query(
+      "SELECT 1 FROM session_kernel_delivery WHERE pending_steers != '[]' LIMIT 1",
+    ).get();
+  }
+
   settlePendingSteers(): number {
     const rows = this.db.query(
       "SELECT session_id FROM session_kernel_delivery WHERE pending_steers != '[]'",
@@ -4627,6 +4633,7 @@ export class SessionKernelStore {
 export type SessionKernelStoreApi = Omit<
 	SessionKernelStore,
 	| "hasSessionDurableState"
+	| "hasPendingSteers"
 	| "legacySessionIds"
 	| "migrateLegacySession"
 	| "sessionPlacement"

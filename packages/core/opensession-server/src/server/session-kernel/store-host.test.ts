@@ -326,6 +326,35 @@ describe("per-session session kernel storage", () => {
     host.close();
   });
 
+  test("settles only isolated stores that contain pending steers", () => {
+    const path = paths();
+    const host = new SessionKernelStoreHost(path.central, path.isolated);
+    host.call("setRunState", [{
+      sessionId: "empty-session",
+      state: "idle",
+      event: "seed",
+    }]);
+    host.call("prepareSteerDelivery", [
+      "pending-session",
+      "steer-one",
+      { id: "steer-one", content: "recover me" },
+    ]);
+    Object.defineProperty(host.storeForSession("empty-session"), "settlePendingSteers", {
+      configurable: true,
+      value: () => {
+        throw new Error("empty stores must not enter the mutation sweep");
+      },
+    });
+
+    expect(host.call("settlePendingSteers", [])).toBe(1);
+    expect(host.storeForSession("pending-session").deliverySnapshot("pending-session"))
+      .toMatchObject({
+        pendingSteers: [],
+        steered: [{ id: "steer-one", content: "recover me" }],
+      });
+    host.close();
+  });
+
   test("recovers isolated wake work from the durable dirty placement", () => {
     const path = paths();
     const first = new SessionKernelStoreHost(path.central, path.isolated);

@@ -550,11 +550,22 @@ export class SessionKernelStoreHost {
         store.clearDeliverySlot(args[0] as Parameters<SessionKernelStoreApi["clearDeliverySlot"]>[0]));
       return;
     }
-    if (method === "settlePendingSteers")
-      return this.mapStores(
-        "global:settle-pending-steers",
-        (store) => store.settlePendingSteers(),
-      ).reduce((total, settled) => total + settled, 0);
+    if (method === "settlePendingSteers") {
+      let settled = this.central.settlePendingSteers();
+      const candidates = this.mapIsolatedReadStores(
+        "global:find-pending-steers",
+        (store, sessionId) => store.hasPendingSteers() ? sessionId : undefined,
+      ).filter((sessionId): sessionId is string => sessionId !== undefined);
+      for (const sessionId of candidates) {
+        const result = this.containIsolated(
+          sessionId,
+          "global:settle-pending-steers",
+          () => this.storeForSession(sessionId, true).settlePendingSteers(),
+        );
+        if (result.ok) settled += result.value;
+      }
+      return settled;
+    }
     if (method === "retryCompatibleCreationBranchDeadLetters")
       return this.mapStores("global:retry-creation-branches", (store) =>
         store.retryCompatibleCreationBranchDeadLetters(
