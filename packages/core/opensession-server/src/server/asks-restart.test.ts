@@ -7,6 +7,7 @@ import {
 	pendingAskAwaitingAnswer,
 	pendingAsks,
 	pendingAskTimers,
+	persistPendingAsks,
 	restorePendingAsks,
 	settleRestoredAskAfterRecovery,
 } from "./asks";
@@ -17,6 +18,8 @@ import {
 	type SessionControl,
 } from "./session-control";
 import { setTranscriptForwarder } from "./transcript-forward";
+import { __setSessionsDirForTest, sessionsDir } from "./paths";
+import { sessionAsk } from "./session-kernel";
 import { stripContext } from "./prompt-context";
 
 const SESSION = "os-pending-ask-restart-test";
@@ -284,5 +287,72 @@ describe("pending ask restart persistence", () => {
 		expect(pendingAsks.has(SESSION)).toBe(false);
 		expect(pendingAskTimers.has(SESSION)).toBe(false);
 		expect(JSON.parse(readFileSync(storePath, "utf8"))).toEqual({ asks: [] });
+	});
+
+	test("commit \u2192 crash \u2192 restore \u2192 adopt \u2192 retry keeps answer identity", () => {
+		scratch = mkdtempSync(join(tmpdir(), "os-asks-crash-retry-"));
+		const previousSessionsDir = sessionsDir();
+		__setSessionsDirForTest(scratch);
+		try {
+			const resultPromise = makeAskHandler(SESSION)({ questions: [QUESTION] });
+			const questionId = pendingAsks.get(SESSION)?.questionId ?? null;
+
+			// The actor commits the answer durably; the process crashes before
+			// the gateway resolver runs, so nothing retires the record.
+			expect(
+				sessionAsk({
+					op: "answer",
+					sessionId: SESSION,
+					questionId,
+					answers: { "Which option?": "One" },
+					answeredVia: "req-original",
+				}),
+			).toEqual({ matched: true });
+			// Process loss drops timers and closures, never the durable record.
+			clearTimeout(pendingAskTimers.get(SESSION)?.handle);
+			pendingAskTimers.delete(SESSION);
+
+			// Restart: recovery reads actor authority and projects the
+			// committed answer as answered instead of re-asking.
+			restorePendingAsks({ sessionExists: () => true });
+			restorePendingAsks({ sessionExists: () => true });
+			const restored = pendingAsks.get(SESSION);
+			expect(restored?.answerReceived).toBe(true);
+			expect(restored?.earlyAnswer).toEqual({ "Which option?": "One" });
+			expect(restored?.answer?.requestId).toBe("req-original");
+
+			// The recovered engine re-emits its ask; adoption rewrites the
+			// record and must carry the receipt with it.
+			void makeAskHandler(SESSION)({ questions: [QUESTION] });
+			expect(pendingAsks.get(SESSION)?.answer?.requestId).toBe("req-original");
+
+			// The exact caller retries: replay matched with committed answers.
+			expect(
+				sessionAsk({
+					op: "answer",
+					sessionId: SESSION,
+					questionId,
+					answers: { "Which option?": "Something else" },
+					answeredVia: "req-original",
+				}),
+			).toEqual({
+				matched: true,
+				answers: { "Which option?": "One" },
+			});
+			expect(
+				sessionAsk({
+					op: "answer",
+					sessionId: SESSION,
+					questionId,
+					answers: { "Which option?": "Two" },
+					answeredVia: "req-other",
+				}),
+			).toEqual({ matched: false });
+
+			// The adopted live waiter still wakes with the committed answers.
+			pendingAsks.get(SESSION)?.resolve({ "Which option?": "One" });
+		} finally {
+			__setSessionsDirForTest(previousSessionsDir);
+		}
 	});
 });
