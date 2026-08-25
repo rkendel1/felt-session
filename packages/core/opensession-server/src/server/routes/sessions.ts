@@ -6,6 +6,7 @@
  * next handler (see routes/index.ts for the dispatch order).
  */
 
+import { executeSessionProjection } from "../session-projection-executor";
 import { requestUser, type RouteContext } from "./context";
 import {
 	cancelAgentRunAndWait,
@@ -1494,7 +1495,7 @@ export async function handleSessionsRoutes(
         }
       }
     }
-		sessionKernel(sessionId).applySync("archive_override", () =>
+		executeSessionProjection(sessionId, "archive_override", () =>
 			setArchived(sessionId, archived),
 		);
 		// Plain done-tickets are archived via a file-level flag, not the
@@ -1525,7 +1526,7 @@ export async function handleSessionsRoutes(
 		const body = await req.json().catch(() => ({}));
 		const title =
 			typeof body?.title === "string" ? body.title.trim().slice(0, 80) : "";
-		sessionKernel(sessionId).applySync("title_override", () =>
+		executeSessionProjection(sessionId, "title_override", () =>
 			setTitleOverride(sessionId, title || null),
 		);
 		invalidateSessionsCache();
@@ -1545,7 +1546,7 @@ export async function handleSessionsRoutes(
 			return Response.json({ error: "Session not found" }, { status: 404 });
 		const body = await req.json().catch(() => ({}));
 		const status = isManualStatus(body?.status) ? body.status : null;
-		sessionKernel(sessionId).applySync("status_override", () =>
+		executeSessionProjection(sessionId, "status_override", () =>
 			setStatusOverride(sessionId, status),
 		);
 		invalidateSessionsCache();
@@ -1682,7 +1683,7 @@ export async function handleSessionsRoutes(
 				} else mirroredToGithub = true;
 			}
 		}
-		sessionKernel(sessionId).applySync("review_request", () =>
+		executeSessionProjection(sessionId, "review_request", () =>
 			setReviewRequest(
 				sessionId,
 				reviewer

@@ -357,13 +357,12 @@ rather than attaching an actor-held waiter. Typed completion and failure
 reductions settle immutable receipts; settlement ambiguity fail-stops the actor
 client rather than committing over a successor.
 
-Synchronous transcript and session-file compatibility callbacks use their own
-short execution IDs against the same physical SQLite writer. They can run while an
-async effect is suspended without borrowing its ownership. Session JSON and the
-transcript database remain specialized effect stores, but their writes are admitted
-and receipted by the actor. Moving the Worker to an independently supervised Unix
-process is therefore a transport and failure-isolation change, not an ownership
-migration; no fallback writer is permitted.
+Transcript and session-file projections use typed admission and settlement
+receipts, then mutate their specialized destination stores on the gateway thread.
+The actor returns from admission before that destination work begins and retains
+no execution waiter or callback. Moving the Worker to an independently supervised
+local process is therefore a transport and failure-isolation change, not an
+ownership migration; no fallback writer is permitted.
 
 ## Tests
 

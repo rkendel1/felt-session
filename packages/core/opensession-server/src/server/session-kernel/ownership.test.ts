@@ -192,8 +192,9 @@ describe("single session ownership", () => {
 			"transcript_replace",
 			"transcript_delete",
 		]) {
-			expect(source).toContain(`applySync("${operation}"`);
+			expect(source).toContain(`executeSessionProjection(sessionId, "${operation}"`);
 		}
+    expect(read("session-kernel/kernel.ts")).not.toContain("applySync");
 	});
 
 	test("all shared prompt delivery uses the typed delivery actor", () => {

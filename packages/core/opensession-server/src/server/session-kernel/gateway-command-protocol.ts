@@ -1,7 +1,19 @@
 export type GatewayCommandOperation =
   | "websocket_command"
   | "delete_session"
-  | "session_file_updated";
+  | "session_file_updated"
+  | "plain_archive_clear"
+  | "plain_archive_set"
+  | "archive_override"
+  | "title_override"
+  | "status_override"
+  | "review_request"
+  | "model_migration"
+  | "session_delete"
+  | "transcript_append"
+  | "transcript_import"
+  | "transcript_replace"
+  | "transcript_delete";
 
 export type GatewayCommandRequest =
   | {

@@ -1817,7 +1817,7 @@ export class SessionKernelStore {
   requestGatewayCommand(input: {
     sessionId: string;
     requestId: string;
-    operation: "websocket_command" | "delete_session" | "session_file_updated";
+    operation: import("./gateway-command-protocol").GatewayCommandOperation;
     identity?: unknown;
   }):
     | { status: "execute" }
@@ -1825,8 +1825,13 @@ export class SessionKernelStore {
     | { status: "completed"; result: unknown; duplicate: true } {
     if (!input.requestId || input.requestId.length > 256)
       throw new Error("Invalid gateway command intent");
-    if (this.isTombstoned(input.sessionId) && input.operation !== "delete_session")
+    if (this.isTombstoned(input.sessionId)) {
+      if (
+        input.operation === "delete_session" ||
+        input.operation === "transcript_delete"
+      ) return { status: "execute" };
       throw new Error(`Session ${input.sessionId} was deleted`);
+    }
     const record = this.acceptCommand({
       sessionId: input.sessionId,
       requestId: input.requestId,
@@ -1848,13 +1853,16 @@ export class SessionKernelStore {
   completeGatewayCommand(input: {
     sessionId: string;
     requestId: string;
-    operation: "websocket_command" | "delete_session" | "session_file_updated";
+    operation: import("./gateway-command-protocol").GatewayCommandOperation;
     result: unknown;
   }): unknown {
     const record = this.command(input.sessionId, input.requestId);
     if (!record || record.type !== input.operation) {
-      if (input.operation === "delete_session" && this.isTombstoned(input.sessionId))
-        return input.result;
+      if (
+        (input.operation === "delete_session" ||
+          input.operation === "transcript_delete") &&
+        this.isTombstoned(input.sessionId)
+      ) return input.result;
       throw new Error("Gateway command receipt is missing");
     }
     if (record.status === "completed") return record.result;
@@ -1867,14 +1875,17 @@ export class SessionKernelStore {
   failGatewayCommand(input: {
     sessionId: string;
     requestId: string;
-    operation: "websocket_command" | "delete_session" | "session_file_updated";
+    operation: import("./gateway-command-protocol").GatewayCommandOperation;
     error: string;
     retryable: boolean;
   }): void {
     const record = this.command(input.sessionId, input.requestId);
     if (!record || record.type !== input.operation) {
-      if (input.operation === "delete_session" && this.isTombstoned(input.sessionId))
-        return;
+      if (
+        (input.operation === "delete_session" ||
+          input.operation === "transcript_delete") &&
+        this.isTombstoned(input.sessionId)
+      ) return;
       throw new Error("Gateway command receipt is missing");
     }
     if (record.status === "completed") return;

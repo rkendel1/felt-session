@@ -1,3 +1,4 @@
+import { executeSessionProjection } from "./session-projection-executor";
 import { readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "fs";
 import { opendir } from "fs/promises";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
@@ -7,7 +8,6 @@ import { slackIdToFirstName } from "./shared/user-mappings";
 import { isArchivedId, getArchiveReason } from "./archive";
 import { purgeDraftsForSessions } from "./drafts";
 import { removeSessionScratch } from "./session-scratch";
-import { sessionKernel } from "./session-kernel";
 import { getTitleOverride } from "./title-overrides";
 import { getStatusOverride } from "./status-overrides";
 import { getReviewRequest } from "./review-requests";
@@ -1390,7 +1390,7 @@ function removeSessionArtifacts(session: UnifiedSession): void {
 }
 
 export function deleteSession(session: UnifiedSession): void {
-  sessionKernel(session.id).applySync("session_delete", () => {
+  executeSessionProjection(session.id, "session_delete", () => {
     removeSessionArtifacts(session);
   });
 }

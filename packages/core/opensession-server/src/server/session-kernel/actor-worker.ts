@@ -1,8 +1,6 @@
 import { SessionKernelStore } from "./store";
 import {
   SESSION_KERNEL_ACTOR_VERSION,
-  SESSION_KERNEL_MAX_EXECUTIONS_PER_SESSION,
-  SESSION_KERNEL_MAX_EXECUTIONS_TOTAL,
   type KernelActorAsyncRequest,
   type KernelActorAsyncResponse,
   type KernelActorSyncRequest,
@@ -11,113 +9,8 @@ import { isDeliveryReadRequest } from "./delivery-protocol";
 
 export function startSessionKernelActorWorker(): void {
   const store = new SessionKernelStore();
-  type Execution = {
-    executionId: string;
-    sessionId: string;
-    requestId: string;
-    type: string;
-  };
-  const executions = new Map<string, Execution>();
-  const executingRequests = new Map<string, string>();
-  const executionsPerSession = new Map<string, number>();
-
-  const requestKey = (sessionId: string, requestId: string) =>
-    `${sessionId}\u0000${requestId}`;
-
   function post(message: KernelActorAsyncResponse): void {
     self.postMessage(message);
-  }
-
-  function executionFor(executionId: string): Execution {
-    const execution = executions.get(executionId);
-    if (!execution)
-      throw new Error("Session kernel execution is no longer active");
-    return execution;
-  }
-
-  function releaseExecution(execution: Execution): void {
-    executions.delete(execution.executionId);
-    executingRequests.delete(
-      requestKey(execution.sessionId, execution.requestId),
-    );
-    const remaining = (executionsPerSession.get(execution.sessionId) ?? 1) - 1;
-    if (remaining > 0) executionsPerSession.set(execution.sessionId, remaining);
-    else executionsPerSession.delete(execution.sessionId);
-  }
-
-  function beginSync(
-    sessionId: string,
-    command: {
-      requestId: string;
-      type: string;
-      payload?: unknown;
-      replaySafe?: boolean;
-    },
-  ) {
-    if (store.isTombstoned(sessionId))
-      throw new Error(`Session ${sessionId} was deleted`);
-    const persisted = store.acceptCommand({
-      sessionId,
-      requestId: command.requestId,
-      type: command.type,
-      payload: command.payload,
-      replaySafe: command.replaySafe,
-    });
-    if (persisted.status === "completed")
-      return { duplicate: true, result: persisted.result };
-    if (
-      (persisted.status === "failed" &&
-        (!persisted.retryable || !persisted.replaySafe)) ||
-      persisted.status === "indeterminate"
-    )
-      throw new Error(
-        persisted.error || "Session command outcome is indeterminate",
-      );
-    const key = requestKey(sessionId, command.requestId);
-    if (executingRequests.has(key))
-      throw new Error("Session command is already executing");
-    if (
-      (executionsPerSession.get(sessionId) ?? 0) >=
-        SESSION_KERNEL_MAX_EXECUTIONS_PER_SESSION ||
-      executions.size >= SESSION_KERNEL_MAX_EXECUTIONS_TOTAL
-    ) throw new Error("Session effect executor is full");
-    const execution: Execution = {
-      executionId: crypto.randomUUID(),
-      sessionId,
-      requestId: command.requestId,
-      type: command.type,
-    };
-    executions.set(execution.executionId, execution);
-    executingRequests.set(key, execution.executionId);
-    executionsPerSession.set(
-      sessionId,
-      (executionsPerSession.get(sessionId) ?? 0) + 1,
-    );
-    store.markProcessing(sessionId, command.requestId);
-    return { duplicate: false, executionId: execution.executionId };
-  }
-
-  function completeSync(
-    executionId: string,
-    result: unknown,
-    effects: Array<{ kind: string; payload: unknown; effectKey: string }>,
-  ) {
-    const execution = executionFor(executionId);
-    if (!store.isTombstoned(execution.sessionId))
-      store.completeCommandDecision({
-        sessionId: execution.sessionId,
-        requestId: execution.requestId,
-        type: execution.type,
-        result,
-        effects,
-      });
-    releaseExecution(execution);
-  }
-
-  function failSync(executionId: string, error: string) {
-    const execution = executionFor(executionId);
-    store.failCommand(execution.sessionId, execution.requestId, error);
-    releaseExecution(execution);
   }
 
   function syncStore(request: KernelActorSyncRequest): void {
@@ -210,6 +103,17 @@ export function startSessionKernelActorWorker(): void {
           else if (gateway.op === "complete")
             result = store.completeGatewayCommand(gateway);
           else result = store.failGatewayCommand(gateway);
+        } else if (command.kind === "core") {
+          const core = command.request;
+          if (core.op === "enqueue_effect")
+            result = store.enqueueOutbox(
+              core.sessionId,
+              core.kind,
+              core.payload,
+              core.effectKey,
+            );
+          else if (core.op === "clear") result = store.clearSession(core.sessionId);
+          else result = store.tombstoneSession(core.sessionId);
         } else if (command.kind === "turn") {
           const turn = command.request;
           if (turn.op === "snapshot") result = store.turnSnapshot(turn.sessionId);
@@ -232,7 +136,10 @@ export function startSessionKernelActorWorker(): void {
           else result = store.settleTurnOutcomeProjection(turn);
         } else if (command.kind === "timer") {
           const timer = command.request;
-          if (timer.op === "begin") result = store.beginTimerExecution(timer);
+          if (timer.op === "schedule") result = store.scheduleTimer(timer);
+          else if (timer.op === "cancel")
+            result = store.cancelTimer(timer.sessionId, timer.timerId);
+          else if (timer.op === "begin") result = store.beginTimerExecution(timer);
           else if (timer.op === "complete")
             result = store.completeTimerExecution(timer);
           else if (timer.op === "fail") result = store.failTimerExecution(timer);
@@ -254,17 +161,7 @@ export function startSessionKernelActorWorker(): void {
             result = store.deleteAskRecord(ask.sessionId);
           else result = store.clearAskRecords();
         }
-      } else if (request.method === "$beginSync")
-        result = beginSync(request.args[0] as string, request.args[1] as any);
-      else if (request.method === "$completeSync")
-        result = completeSync(
-          request.args[0] as string,
-          request.args[1],
-          request.args[2] as any,
-        );
-      else if (request.method === "$failSync")
-        result = failSync(request.args[0] as string, request.args[1] as string);
-      else {
+      } else {
         const method = (
           store as unknown as Record<string, (...args: unknown[]) => unknown>
         )[request.method];

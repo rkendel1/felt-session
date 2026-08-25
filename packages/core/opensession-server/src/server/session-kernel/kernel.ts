@@ -10,7 +10,6 @@ import type { AskActorRequest, AskActorResult } from "./ask-protocol";
 import {
 	type SessionActorEffectFor,
 	type SessionActorEffectKind,
-	type StagedSessionActorEffect,
 } from "./lifecycle-protocol";
 import type {
   DeliveryActorRequest,
@@ -19,7 +18,7 @@ import type {
 import type { TurnActorRequest, TurnActorResult } from "./turn-protocol";
 import type { TimerActorRequest, TimerActorResult } from "./timer-protocol";
 import type { GatewayCommandRequest, GatewayCommandResult } from "./gateway-command-protocol";
-import { AsyncLocalStorage } from "node:async_hooks";
+import type { CoreActorRequest, CoreActorResult } from "./core-protocol";
 import {
 	SessionKernelActorError,
 	type SessionKernelActorClient,
@@ -57,15 +56,8 @@ const globalState = globalThis as typeof globalThis & {
 	__opensessionSessionKernel?: GlobalKernelState;
 };
 const state = (globalState.__opensessionSessionKernel ??= {});
-type CommandContext = {
-	sessionId: string;
-	requestId: string;
-	effects: StagedSessionActorEffect[];
-};
-const commandContext = new AsyncLocalStorage<CommandContext>();
-
 function compatibilityStoreForTest(
-  domain: "ask" | "creation" | "delivery" | "gateway command" | "turn",
+  domain: "ask" | "core" | "creation" | "delivery" | "gateway command" | "turn",
 ) {
 	if (process.env.NODE_ENV !== "test")
 		throw new Error(
@@ -129,6 +121,10 @@ export function sessionTimer<T extends TimerActorRequest>(
 ): TimerActorResult<T> {
   if (state.actor) return state.actor.decideTimer(request);
   const store = compatibilityStoreForTest("turn");
+  if (request.op === "schedule")
+    return store.scheduleTimer(request) as TimerActorResult<T>;
+  if (request.op === "cancel")
+    return store.cancelTimer(request.sessionId, request.timerId) as TimerActorResult<T>;
   if (request.op === "begin")
     return store.beginTimerExecution(request) as TimerActorResult<T>;
   if (request.op === "complete")
@@ -136,6 +132,23 @@ export function sessionTimer<T extends TimerActorRequest>(
   if (request.op === "fail")
     return store.failTimerExecution(request) as TimerActorResult<T>;
   return store.recordTimerRuntimeFailure(request) as TimerActorResult<T>;
+}
+
+export function sessionCore<T extends CoreActorRequest>(
+  request: T,
+): CoreActorResult<T> {
+  if (state.actor) return state.actor.decideCore(request);
+  const store = compatibilityStoreForTest("core");
+  if (request.op === "enqueue_effect")
+    return store.enqueueOutbox(
+      request.sessionId,
+      request.kind,
+      request.payload,
+      request.effectKey,
+    ) as CoreActorResult<T>;
+  if (request.op === "clear")
+    return store.clearSession(request.sessionId) as CoreActorResult<T>;
+  return store.tombstoneSession(request.sessionId) as CoreActorResult<T>;
 }
 
 export function sessionGatewayCommand<T extends GatewayCommandRequest>(
@@ -266,72 +279,16 @@ export function installSessionKernelActor(
 }
 
 export class SessionKernel {
-	private readonly activeCommandIds = new Set<string>();
 	private lastUsedAt = Date.now();
 
 	constructor(readonly sessionId: string) {}
 
 	get isIdle(): boolean {
-		return this.activeCommandIds.size === 0;
+		return true;
 	}
 
 	get idleSince(): number {
 		return this.lastUsedAt;
-	}
-
-	private mutateSync<TResult>(
-		operation: string,
-		mutate: () => TResult,
-		record = true,
-	): TResult {
-		this.assertWritable(operation);
-		this.touch();
-		const apply = () => {
-			const result = mutate();
-			if (
-				record &&
-				operation !== "session_delete" &&
-				operation !== "transcript_delete"
-			)
-				this.recordChange(operation);
-			return result;
-		};
-		if (this.ownsCurrentCommand()) return apply();
-		if (state.actor) {
-			const requestId = crypto.randomUUID();
-			const admission = state.actor.beginSync(this.sessionId, {
-				requestId,
-				type: `sync:${operation}`,
-				source: "compatibility",
-			});
-			if (admission.duplicate) return admission.result as TResult;
-			if (!admission.executionId)
-				throw new Error("Session kernel actor did not create a sync execution");
-			const context: CommandContext = {
-				sessionId: this.sessionId,
-				requestId,
-				effects: [],
-			};
-			this.activeCommandIds.add(requestId);
-			try {
-				const result = commandContext.run(context, apply);
-				state.actor.completeSync(
-					admission.executionId,
-					result,
-					context.effects,
-				);
-				return result;
-			} catch (error) {
-				state.actor.failSync(
-					admission.executionId,
-					error instanceof Error ? error.message : String(error),
-				);
-				throw error;
-			} finally {
-				this.activeCommandIds.delete(requestId);
-			}
-		}
-		return apply();
 	}
 
 	private assertWritable(operation?: string): void {
@@ -398,15 +355,12 @@ export class SessionKernel {
 		generation?: number;
 		currentRunId?: string;
 	}): DurableRunState {
-		return this.mutateSync(
-			`run_state:${input.event}`,
-			() =>
-				sessionKernelStore().setRunState({
-					sessionId: this.sessionId,
-					...input,
-				}),
-			false,
-		);
+    this.assertWritable(`run_state:${input.event}`);
+    this.touch();
+    return sessionKernelStore().setRunState({
+      sessionId: this.sessionId,
+      ...input,
+    });
 	}
 
 	registerRun(
@@ -415,24 +369,18 @@ export class SessionKernel {
 		event: string,
 		detail?: unknown,
 	): DurableRunState {
-		return this.mutateSync(
-			`register_run:${event}`,
-			() => {
-				const prior = sessionKernelStore().runState(this.sessionId);
-				return sessionKernelStore().setRunState({
-					sessionId: this.sessionId,
-					state: stateName,
-					event,
-					detail,
-					currentRunId: runId,
-					generation:
-						prior.currentRunId === runId
-							? prior.generation
-							: prior.generation + 1,
-				});
-			},
-			false,
-		);
+    this.assertWritable(`register_run:${event}`);
+    this.touch();
+    const prior = sessionKernelStore().runState(this.sessionId);
+    return sessionKernelStore().setRunState({
+      sessionId: this.sessionId,
+      state: stateName,
+      event,
+      detail,
+      currentRunId: runId,
+      generation:
+        prior.currentRunId === runId ? prior.generation : prior.generation + 1,
+    });
 	}
 
 	isCurrentRun(runId: string, generation?: number): boolean {
@@ -444,10 +392,6 @@ export class SessionKernel {
 			current.currentRunId === runId &&
 			(generation === undefined || current.generation === generation)
 		);
-	}
-
-	applySync<TResult>(operation: string, mutate: () => TResult): TResult {
-		return this.mutateSync(operation, mutate);
 	}
 
 	recordChange(kind: string, payload?: unknown): number {
@@ -472,82 +416,34 @@ export class SessionKernel {
 			| "createdAt"
 		>,
 	): void {
-		this.mutateSync(
-			`timer_schedule:${timer.timerId}`,
-			() =>
-        sessionKernelStore().scheduleTimer({
-          sessionId: this.sessionId,
-          ...timer,
-				}),
-			false,
-		);
+    sessionTimer({ op: "schedule", sessionId: this.sessionId, ...timer });
 	}
 
 	cancelTimer(timerId: string): void {
-		this.mutateSync(
-			`timer_cancel:${timerId}`,
-			() => sessionKernelStore().cancelTimer(this.sessionId, timerId),
-			false,
-		);
+    sessionTimer({ op: "cancel", sessionId: this.sessionId, timerId });
 	}
 
 	enqueueEffect<K extends SessionActorEffectKind>(
 		kind: K,
 		payload: SessionActorEffectFor<K>["payload"],
 		effectKey: string = crypto.randomUUID(),
-	): number | undefined {
+	): number {
 		this.touch();
-		const current = commandContext.getStore();
-		if (
-			current?.sessionId === this.sessionId &&
-			this.activeCommandIds.has(current.requestId)
-		) {
-			current.effects.push({ kind, payload, effectKey } as StagedSessionActorEffect);
-			return undefined;
-		}
-		if (state.actor) {
-			this.mutateSync(
-				`effect:${kind}`,
-				() => {
-					const staged = commandContext.getStore();
-          if (!staged)
-            throw new Error("Session effect has no actor decision context");
-					staged.effects.push({ kind, payload, effectKey } as StagedSessionActorEffect);
-				},
-				false,
-			);
-			return undefined;
-		}
-    return sessionKernelStore().enqueueOutbox(
-      this.sessionId,
+    return sessionCore({
+      op: "enqueue_effect",
+      sessionId: this.sessionId,
       kind,
-      payload,
+      payload: payload as SessionActorEffectFor<SessionActorEffectKind>["payload"],
       effectKey,
-    );
-	}
-
-	ownsCurrentCommand(): boolean {
-		const current = commandContext.getStore();
-		return (
-			current?.sessionId === this.sessionId &&
-			this.activeCommandIds.has(current.requestId)
-		);
+    });
 	}
 
 	clear(): void {
-		this.mutateSync(
-			"session_clear",
-			() => sessionKernelStore().clearSession(this.sessionId),
-      false,
-    );
+    sessionCore({ op: "clear", sessionId: this.sessionId });
 	}
 
 	tombstone(): void {
-		this.mutateSync(
-			"session_delete",
-			() => sessionKernelStore().tombstoneSession(this.sessionId),
-      false,
-    );
+    sessionCore({ op: "tombstone", sessionId: this.sessionId });
 	}
 
 	private touch(): void {
@@ -664,10 +560,6 @@ export async function sessionKernelHealth(): Promise<Record<string, unknown>> {
 export async function maintainSessionKernel(): Promise<boolean> {
 	if (state.actor) return state.actor.maintainAsync();
 	return sessionKernelStore().maintain();
-}
-
-export function sessionKernelOwnsCurrentCommand(sessionId: string): boolean {
-	return sessionKernel(sessionId).ownsCurrentCommand();
 }
 
 export function tombstoneSessionKernel(sessionId: string): void {

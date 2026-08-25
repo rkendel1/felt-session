@@ -6,8 +6,6 @@ import type {
 } from "./store";
 
 export const SESSION_KERNEL_ACTOR_VERSION = 19;
-export const SESSION_KERNEL_MAX_EXECUTIONS_PER_SESSION = 128;
-export const SESSION_KERNEL_MAX_EXECUTIONS_TOTAL = 4096;
 
 export type KernelActorAsyncRequest =
   | { t: "hello"; rpcId: string; version: number }

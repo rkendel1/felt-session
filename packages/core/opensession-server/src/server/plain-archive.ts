@@ -3,13 +3,13 @@
  * Two paths: the Plain webhook (status transition events) and a periodic
  * sweep as a safety net in case the webhook subscription misses them.
  */
+import { executeSessionProjection } from "./session-projection-executor";
 import { readdirSync, readFileSync, existsSync } from "fs";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import { plainApiUrl } from "./config";
 import { homeDir, OPENSESSION_SESSIONS_DIR } from "./paths";
 import { invalidateSessionsCache } from "./session-cache";
 import type { NativeSessionFile } from "./types";
-import { sessionKernel } from "./session-kernel";
 
 const HOME = homeDir();
 const SESSIONS_DIR = OPENSESSION_SESSIONS_DIR;
@@ -39,7 +39,7 @@ export function clearSessionFileArchive(id: string): boolean {
   const path = `${SESSIONS_DIR}/${id}.json`;
   if (!existsSync(path)) return false;
   try {
-    return sessionKernel(id).applySync("plain_archive_clear", () => {
+    return executeSessionProjection(id, "plain_archive_clear", () => {
       const data = JSON.parse(readFileSync(path, "utf-8")) as NativeSessionFile;
       if (!data.archived && !data.archivedAt) return false;
       const { archived, archivedAt, archivedReason, ...rest } = data;
@@ -56,7 +56,7 @@ export function archiveSessionsForThread(threadId: string): number {
   let archived = 0;
   for (const { path, data } of activePlainSessions()) {
     if (data.plainThreadId !== threadId) continue;
-    sessionKernel(data.id).applySync("plain_archive_set", () =>
+    executeSessionProjection(data.id, "plain_archive_set", () =>
       writeJsonAtomic(path, {
         ...data,
         archived: true,

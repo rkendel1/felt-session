@@ -1,5 +1,14 @@
 export type TimerActorRequest =
   | {
+      op: "schedule";
+      sessionId: string;
+      timerId: string;
+      kind: string;
+      dueAt: number;
+      payload: unknown;
+    }
+  | { op: "cancel"; sessionId: string; timerId: string }
+  | {
       op: "begin";
       sessionId: string;
       timerId: string;
@@ -30,7 +39,9 @@ export type TimerActorRequest =
     };
 
 export type TimerActorResult<T extends TimerActorRequest> =
-  T extends { op: "begin" }
+  T extends { op: "schedule" | "cancel" }
+    ? void
+    : T extends { op: "begin" }
     ? "execute" | "completed" | "missing"
     : T extends { op: "complete" }
       ? boolean

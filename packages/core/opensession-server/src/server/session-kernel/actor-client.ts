@@ -23,6 +23,7 @@ import type { AskActorRequest, AskActorResult } from "./ask-protocol";
 import type { TurnActorRequest, TurnActorResult } from "./turn-protocol";
 import type { TimerActorRequest, TimerActorResult } from "./timer-protocol";
 import type { GatewayCommandRequest, GatewayCommandResult } from "./gateway-command-protocol";
+import type { CoreActorRequest, CoreActorResult } from "./core-protocol";
 import {
   SESSION_KERNEL_ACTOR_VERSION,
   type KernelActorAsyncRequest,
@@ -57,7 +58,6 @@ type Pending = {
 
 export class SessionKernelActorClient {
   private readonly pending = new Map<string, Pending>();
-  private readonly executions = new Map<string, string>();
   private deadError?: Error;
   // Synchronous calls cannot overlap on the gateway thread: Atomics.wait
   // blocks until the actor finishes. Reuse their shared response buffers
@@ -170,54 +170,6 @@ export class SessionKernelActorClient {
     return { timers: response.timers, outbox: response.outbox };
   }
 
-  beginSync(
-    sessionId: string,
-    command: {
-      requestId: string;
-      type: string;
-      payload?: unknown;
-      source?: string;
-      replaySafe?: boolean;
-    },
-  ): { duplicate: boolean; executionId?: string; result?: unknown } {
-    const admission = this.callStore<{
-      duplicate: boolean;
-      executionId?: string;
-      result?: unknown;
-    }>("$beginSync", [sessionId, command]);
-    if (admission.executionId)
-      this.executions.set(admission.executionId, sessionId);
-    return admission;
-  }
-
-  completeSync(
-    executionId: string,
-    result: unknown,
-    effects: Array<{ kind: string; payload: unknown; effectKey: string }>,
-  ): void {
-    try {
-      this.callStore("$completeSync", [executionId, result, effects]);
-      const sessionId = this.executions.get(executionId);
-      if (sessionId) (this.store as RemoteStore).noteChange(sessionId);
-      this.executions.delete(executionId);
-    } catch (error) {
-      const failure = error instanceof Error ? error : new Error(String(error));
-      this.markDead(failure);
-      throw failure;
-    }
-  }
-
-  failSync(executionId: string, error: string): void {
-    try {
-      this.callStore("$failSync", [executionId, error]);
-      this.executions.delete(executionId);
-    } catch (cause) {
-      const failure = cause instanceof Error ? cause : new Error(String(cause));
-      this.markDead(failure);
-      throw failure;
-    }
-  }
-
   decideAsk<T extends AskActorRequest>(request: T): AskActorResult<T> {
     return this.callSync<AskActorResult<T>>(
       {
@@ -259,6 +211,16 @@ export class SessionKernelActorClient {
         command: { kind: "timer", commandId: crypto.randomUUID(), request },
       },
       `timer ${request.op}`,
+    );
+  }
+
+  decideCore<T extends CoreActorRequest>(request: T): CoreActorResult<T> {
+    return this.callSync<CoreActorResult<T>>(
+      {
+        t: "reduce",
+        command: { kind: "core", commandId: crypto.randomUUID(), request },
+      },
+      `core ${request.op}`,
     );
   }
 

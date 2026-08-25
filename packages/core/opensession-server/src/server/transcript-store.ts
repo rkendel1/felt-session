@@ -46,6 +46,7 @@
  * TranscriptStore(tempPath)` directly and must never call transcriptStore().
  */
 
+import { executeSessionProjection } from "./session-projection-executor";
 import { Database } from "bun:sqlite";
 import { existsSync, mkdirSync } from "fs";
 import { tmpdir } from "os";
@@ -237,7 +238,6 @@ export function __setTranscriptStoreForTest(
   return prev;
 }
 
-import { sessionKernel } from "./session-kernel";
 
 // ── Row shapes ───────────────────────────────────────────────────────────────
 
@@ -382,7 +382,7 @@ export class TranscriptStore {
     entries: TranscriptEntry[],
     opts?: AppendOpts
   ): AppendResult | null {
-    return sessionKernel(sessionId).applySync("transcript_append", () =>
+    return executeSessionProjection(sessionId, "transcript_append", () =>
       this.appendTranscriptEventsOwned(sessionId, entries, opts)
     );
   }
@@ -457,7 +457,7 @@ export class TranscriptStore {
     src: TranscriptImportSrc | string,
     watermark: number | null
   ): { inserted: number; updated: number } {
-    return sessionKernel(sessionId).applySync("transcript_import", () =>
+    return executeSessionProjection(sessionId, "transcript_import", () =>
       this.importLegacyTranscriptOwned(sessionId, entries, src, watermark)
     );
   }
@@ -496,7 +496,7 @@ export class TranscriptStore {
     sessionId: string,
     entries: TranscriptEntry[]
   ): { inserted: number; updated: number } {
-    return sessionKernel(sessionId).applySync("transcript_replace", () =>
+    return executeSessionProjection(sessionId, "transcript_replace", () =>
       this.replaceTranscriptEventsOwned(sessionId, entries)
     );
   }
@@ -816,7 +816,7 @@ export class TranscriptStore {
 
   /** Remove every trace of a session (events + blobs + session row). */
   deleteSessionTranscript(sessionId: string): void {
-    sessionKernel(sessionId).applySync("transcript_delete", () => {
+    executeSessionProjection(sessionId, "transcript_delete", () => {
       this.txDelete.immediate(sessionId);
       this.importedCache.delete(sessionId);
     });

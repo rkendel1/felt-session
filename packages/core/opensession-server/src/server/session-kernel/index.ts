@@ -8,6 +8,7 @@ export * from "./delivery-protocol";
 export * from "./turn-protocol";
 export * from "./timer-protocol";
 export * from "./gateway-command-protocol";
+export * from "./core-protocol";
 export * from "./ask-map";
 export * from "./ask-protocol";
 export * from "./lifecycle-protocol";

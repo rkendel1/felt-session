@@ -1,6 +1,7 @@
 import type { AskActorRequest } from "./ask-protocol";
 import type { DeliveryActorRequest } from "./delivery-protocol";
 import type { GatewayCommandRequest } from "./gateway-command-protocol";
+import type { CoreActorRequest } from "./core-protocol";
 import type { CreationActorEffect } from "./creation-effect-protocol";
 import type { TurnActorRequest } from "./turn-protocol";
 import type { TimerActorRequest } from "./timer-protocol";
@@ -49,6 +50,11 @@ export type SessionActorReducerCommand =
       kind: "gateway";
       commandId: string;
       request: GatewayCommandRequest;
+    }
+  | {
+      kind: "core";
+      commandId: string;
+      request: CoreActorRequest;
     };
 
 export type SessionActorCommand =
