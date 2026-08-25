@@ -373,6 +373,10 @@ registerSessionControl({
 			const result = plan.result as Awaited<ReturnType<typeof deliverOwned>>;
 			return { ...result, duplicate: true };
 		}
+		if (plan.status === "in_progress")
+			throw Object.assign(new Error("Prompt delivery is already in progress"), {
+				retryable: true,
+			});
 		try {
 			const result = await deliverOwned();
 			return sessionDelivery({

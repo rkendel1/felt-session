@@ -16,20 +16,11 @@ import {
   deliveryInterruptForAnchor,
 	sessionKernel,
 	tombstoneSessionKernel,
-	legacyGatewayEffect,
   targetForDeliveryInterrupt,
   targetForTurnCancel,
-	type LegacyGatewayEffect,
-	type LegacyGatewayEffectInput,
 } from ".";
 import { SESSION_KERNEL_ACTOR_VERSION } from "./actor-protocol";
 
-function testEffect(
-	input: LegacyGatewayEffectInput & { type?: string },
-): LegacyGatewayEffect {
-	const { type: _legacyTestLabel, ...effect } = input;
-	return legacyGatewayEffect("websocket_command", effect);
-}
 
 let store: SessionKernelStore;
 let previous: SessionKernelStore | undefined;
@@ -175,176 +166,6 @@ test("schema 6 upgrades create autonomous creation, delivery and ask state", () 
 });
 
 describe("SessionKernel", () => {
-	test("serializes commands for one session", async () => {
-		const order: string[] = [];
-		const kernel = sessionKernel("s1");
-		const first = kernel.dispatchLegacy(
-			testEffect({ requestId: "a", type: "test" }),
-			async () => {
-				order.push("a:start");
-				await Bun.sleep(5);
-				order.push("a:end");
-				return "a";
-			},
-		);
-		const second = kernel.dispatchLegacy(
-			testEffect({ requestId: "b", type: "test" }),
-			() => {
-				order.push("b");
-				return "b";
-			}
-		);
-		expect((await first).result).toBe("a");
-		expect((await second).result).toBe("b");
-		expect(order).toEqual(["a:start", "a:end", "b"]);
-	});
-
-	test("rejects a nested same-session dispatch instead of deadlocking", async () => {
-		const kernel = sessionKernel("nested");
-		await expect(
-			kernel.dispatchLegacy(testEffect({ requestId: "outer", type: "outer" }), async () =>
-				kernel.dispatchLegacy(testEffect({ requestId: "inner", type: "inner" }), () => "inner"),
-			),
-		).rejects.toThrow("Nested SessionKernel dispatch");
-	});
-
-	test("session-file style mutations share the durable command mailbox", async () => {
-		const kernel = sessionKernel("lanes");
-		const order: string[] = [];
-		const command = kernel.dispatchLegacy(
-			testEffect({ requestId: "command", type: "command" }),
-			async () => {
-				order.push("command:start");
-				await Bun.sleep(5);
-				order.push("command:end");
-			},
-		);
-		const write = kernel.runExclusive("session_file_updated", () => order.push("file"));
-		await Promise.all([command, write]);
-		expect(order).toEqual(["command:start", "command:end", "file"]);
-	});
-
-	test("deduplicates a completed command durably", async () => {
-		let calls = 0;
-		const command = testEffect({ requestId: "stable", type: "deliver", payload: { text: "hi" }, });
-		const first = await sessionKernel("s1").dispatchLegacy(command, () => {
-			calls += 1;
-			return { status: "queued" };
-		});
-		expect(first.duplicate).toBe(false);
-		clearSessionKernel("unrelated");
-		const second = await sessionKernel("s1").dispatchLegacy(command, () => {
-			calls += 1;
-			return { status: "started" };
-		});
-		expect(second).toEqual({ result: { status: "queued" }, duplicate: true });
-		expect(calls).toBe(1);
-		expect(durableSessionCommand("s1", "stable")?.status).toBe("completed");
-	});
-
-  test("retains the actor-selected run target through cancel command replay", () => {
-    const sessionId = "run-target-replay";
-    store.applyRunEvent({ sessionId, event: "prompt", runKey: "dispatch-one" });
-    const first = store.requestTurnCancelCommand({
-      sessionId,
-      requestId: "cancel-request",
-      fallbackRunId: null,
-    });
-    expect(first).toEqual({
-      status: "execute",
-      targetRunId: "dispatch-one",
-      targetRunGeneration: 1,
-    });
-    expect(store.requestTurnCancelCommand({
-      sessionId,
-      requestId: "cancel-request",
-      fallbackRunId: "dispatch-two",
-    })).toEqual(first);
-    expect(durableSessionCommand(sessionId, "cancel-request")?.payload).toEqual({
-      targetRunId: "dispatch-one",
-      targetRunGeneration: 1,
-    });
-    store.prepareTurnCancel({
-      sessionId,
-      cancelId: "stop:cancel-request",
-      expectedRunId: "dispatch-one",
-      expectedGeneration: 1,
-      dispatchId: "dispatch-one",
-      requeueIds: [],
-      source: "session_control",
-    });
-    expect(store.completeTurnCancelCommand({
-      sessionId,
-      requestId: "cancel-request",
-      result: true,
-    })).toBe(true);
-    expect(store.requestTurnCancelCommand({
-      sessionId,
-      requestId: "cancel-request",
-      fallbackRunId: "dispatch-successor",
-    })).toEqual({ status: "completed", result: true, duplicate: true });
-  });
-
-  test("recovers an unfinished typed cancel command after actor-store restart", () => {
-    const dir = mkdtempSync(join(tmpdir(), "session-kernel-cancel-command-"));
-    const path = join(dir, "kernel.sqlite");
-    let durableStore = new SessionKernelStore(path);
-    try {
-      durableStore.applyRunEvent({
-        sessionId: "cancel-command-restart",
-        event: "prompt",
-        runKey: "original-run",
-      });
-      expect(durableStore.requestTurnCancelCommand({
-        sessionId: "cancel-command-restart",
-        requestId: "stable-stop",
-        fallbackRunId: null,
-      })).toMatchObject({ status: "execute", targetRunId: "original-run" });
-      durableStore.close();
-      durableStore = new SessionKernelStore(path);
-      expect(durableStore.requestTurnCancelCommand({
-        sessionId: "cancel-command-restart",
-        requestId: "stable-stop",
-        fallbackRunId: "successor-run",
-      })).toEqual({
-        status: "execute",
-        targetRunId: "original-run",
-        targetRunGeneration: 1,
-      });
-      expect(() => durableStore.completeTurnCancelCommand({
-        sessionId: "cancel-command-restart",
-        requestId: "stable-stop",
-        result: true,
-      })).toThrow("without its durable receipt");
-    } finally {
-      durableStore.close();
-      rmSync(dir, { recursive: true, force: true });
-    }
-  });
-
-  test("does not retarget a completed no-op cancel to a later run", () => {
-    const input = {
-      sessionId: "cancel-no-run",
-      requestId: "cancel-no-run-request",
-      fallbackRunId: null,
-    } as const;
-    expect(store.requestTurnCancelCommand(input)).toEqual({
-      status: "completed",
-      result: false,
-      duplicate: false,
-    });
-    store.applyRunEvent({
-      sessionId: input.sessionId,
-      event: "prompt",
-      runKey: "later-run",
-    });
-    expect(store.requestTurnCancelCommand(input)).toEqual({
-      status: "completed",
-      result: false,
-      duplicate: true,
-    });
-  });
-
 	test("replays typed submit-prompt results under one immutable identity", () => {
 		const input = {
 			sessionId: "typed-submit",
@@ -352,7 +173,7 @@ describe("SessionKernel", () => {
 			identity: { content: "hello", attachmentsHash: "none" },
 		};
 		expect(store.requestSubmitPromptCommand(input)).toEqual({ status: "execute" });
-		expect(store.requestSubmitPromptCommand(input)).toEqual({ status: "execute" });
+		expect(store.requestSubmitPromptCommand(input)).toEqual({ status: "in_progress" });
 		expect(() => store.requestSubmitPromptCommand({
 			...input,
 			identity: { content: "changed", attachmentsHash: "none" },
@@ -415,165 +236,6 @@ describe("SessionKernel", () => {
 			});
 		} finally {
 			durableStore.close();
-			rmSync(dir, { recursive: true, force: true });
-		}
-	});
-
-	test("keeps completed receipts for clients that reconnect after compaction", async () => {
-		let calls = 0;
-		const command = testEffect({ requestId: "forever", type: "deliver", payload: { n: 1 } });
-		await sessionKernel("retained").dispatchLegacy(command, () => {
-			calls += 1;
-			return "done";
-		});
-		store.compact(Date.now() + 365 * 24 * 60 * 60_000);
-		const replay = await sessionKernel("retained").dispatchLegacy(command, () => {
-			calls += 1;
-			return "duplicate";
-		});
-		expect(replay).toEqual({ result: "done", duplicate: true });
-		expect(calls).toBe(1);
-	});
-
-	test("compacts large permanent results without forgetting the receipt", async () => {
-		let calls = 0;
-		const command = testEffect({ requestId: "large", type: "take" });
-		await sessionKernel("large-result").dispatchLegacy(command, () => {
-			calls += 1;
-			return { item: "x".repeat(128 * 1024) };
-		});
-		let receipt = store.command("large-result", "large");
-		expect(receipt?.payload).toBeNull();
-		expect(receipt?.payloadHash).toHaveLength(64);
-		expect((receipt?.result as { item: string }).item).toHaveLength(128 * 1024);
-		expect(store.acknowledgeCommand("large-result", "large")).toBe(true);
-		store.compact(Date.now() + 31 * 24 * 60 * 60_000);
-		receipt = store.command("large-result", "large");
-		expect(receipt?.result).toMatchObject({
-			__sessionKernelResultReleased: true,
-			sha256: receipt?.resultHash,
-		});
-		const replay = await sessionKernel("large-result").dispatchLegacy(command, () => {
-			calls += 1;
-		});
-		expect(replay.duplicate).toBe(true);
-		expect(calls).toBe(1);
-	});
-
-	test("keeps terminal failures sticky", async () => {
-		let calls = 0;
-		const command = testEffect({ requestId: "terminal", type: "delete" });
-		await expect(
-			sessionKernel("failed").dispatchLegacy(command, () => {
-				calls += 1;
-				throw new Error("not allowed");
-			}),
-		).rejects.toThrow("not allowed");
-		await expect(
-			sessionKernel("failed").dispatchLegacy(command, () => {
-				calls += 1;
-			}),
-		).rejects.toThrow("not allowed");
-		expect(calls).toBe(1);
-	});
-
-	test("rejects request id reuse with another payload", async () => {
-		await sessionKernel("s1").dispatchLegacy(
-			testEffect({ requestId: "same", type: "deliver", payload: { text: "one" } }),
-			() => "ok",
-		);
-		await expect(
-			sessionKernel("s1").dispatchLegacy(
-				testEffect({ requestId: "same", type: "deliver", payload: { text: "two" } }),
-				() => "bad",
-			),
-		).rejects.toThrow("reused with another payload");
-	});
-
-	test("deduplication and run ownership survive a process replacement", async () => {
-		const dir = mkdtempSync(join(tmpdir(), "session-kernel-restart-"));
-		const path = join(dir, "kernel.sqlite");
-		const firstStore = new SessionKernelStore(path);
-		__setSessionKernelStoreForTest(firstStore);
-		try {
-			await sessionKernel("restart").dispatchLegacy(
-				testEffect({ requestId: "request-1", type: "submit", payload: { text: "once" } }),
-				() => ({ status: "queued" }),
-			);
-			sessionKernel("restart").registerRun(
-				"run-1",
-				"running",
-				"run_registered",
-			);
-			firstStore.close();
-
-			const secondStore = new SessionKernelStore(path);
-			__setSessionKernelStoreForTest(secondStore);
-			let calls = 0;
-			const replay = await sessionKernel("restart").dispatchLegacy(
-				testEffect({ requestId: "request-1", type: "submit", payload: { text: "once" } }),
-				() => {
-					calls += 1;
-					return { status: "started" };
-				},
-			);
-			expect(replay).toEqual({
-				result: { status: "queued" },
-				duplicate: true,
-			});
-			expect(calls).toBe(0);
-			expect(sessionKernel("restart").runState()).toMatchObject({
-				state: "running",
-				currentRunId: "run-1",
-				generation: 1,
-			});
-			secondStore.close();
-		} finally {
-			__setSessionKernelStoreForTest(store);
-			rmSync(dir, { recursive: true, force: true });
-		}
-	});
-
-	test("re-admits an interrupted command under the same durable request id", async () => {
-		const dir = mkdtempSync(join(tmpdir(), "session-kernel-interrupted-"));
-		const path = join(dir, "kernel.sqlite");
-		const firstStore = new SessionKernelStore(path);
-		firstStore.acceptCommand({
-			sessionId: "restart",
-			requestId: "accepted",
-			type: "websocket_command",
-			payload: { text: "once" },
-			replaySafe: true,
-		});
-		firstStore.markProcessing("restart", "accepted");
-		firstStore.close();
-		const secondStore = new SessionKernelStore(path);
-		__setSessionKernelStoreForTest(secondStore);
-		try {
-			expect(secondStore.command("restart", "accepted")).toMatchObject({
-				status: "failed",
-				replaySafe: true,
-				retryable: true,
-				error: "actor restarted before execution admission",
-			});
-			let calls = 0;
-			const accepted = await sessionKernel("restart").dispatchLegacy(
-				testEffect({
-					requestId: "accepted",
-					type: "submit",
-					payload: { text: "once" },
-					replaySafe: true,
-				}),
-				() => {
-					calls += 1;
-					return { queued: true };
-				},
-			);
-			expect(accepted).toEqual({ result: { queued: true }, duplicate: false });
-			expect(calls).toBe(1);
-		} finally {
-			secondStore.close();
-			__setSessionKernelStoreForTest(store);
 			rmSync(dir, { recursive: true, force: true });
 		}
 	});
@@ -656,19 +318,6 @@ describe("SessionKernel", () => {
 		expect(promoted.replaySafe).toBe(true);
 	});
 
-	test("never retries a non-replay-safe timeout", async () => {
-		let calls = 0;
-		const command = testEffect({ requestId: "unsafe-timeout", type: "physical" });
-		for (let attempt = 0; attempt < 2; attempt++)
-			await expect(
-				sessionKernel("unsafe-timeout").dispatchLegacy(command, () => {
-					calls += 1;
-					throw new Error("operation timed out");
-				}),
-			).rejects.toThrow("timed out");
-		expect(calls).toBe(1);
-	});
-
 	test("fails closed on interrupted work that was not declared replay-safe", () => {
 		const dir = mkdtempSync(join(tmpdir(), "session-kernel-indeterminate-"));
 		const path = join(dir, "kernel.sqlite");
@@ -714,19 +363,6 @@ describe("SessionKernel", () => {
 		} finally {
 			clearSessionKernel(id);
 		}
-	});
-
-	test("a deletion tombstone fences late writers", async () => {
-		const id = `deleted-${crypto.randomUUID()}`;
-		store.setDeliverySlot(id, "queued", [{ content: "pending" }]);
-		tombstoneSessionKernel(id);
-		expect(store.isTombstoned(id)).toBe(true);
-		expect(() => sessionKernel(id).applySync("late", () => {})).toThrow(
-			"was deleted",
-		);
-		await expect(
-			sessionKernel(id).dispatchLegacy(testEffect({ requestId: "late", type: "prompt" }), () => {},),
-		).rejects.toThrow("was deleted");
 	});
 
 	test("keeps deletion tombstones permanent", () => {
@@ -2330,54 +1966,12 @@ describe("SessionKernel", () => {
 		});
 	});
 
-	test("commits command completion and its effects in one decision transaction", async () => {
-		await sessionKernel("decision").dispatchLegacy(
-			testEffect({ requestId: "request", type: "notify" }),
-			(kernel) => {
-				kernel.enqueueEffect(
-					"human_ask_deliver",
-					{ askId: "ask-one", skipUi: false },
-					"message-1",
-				);
-				return { accepted: true };
-			},
-		);
-		expect(store.command("decision", "request")).toMatchObject({
-			status: "completed",
-			result: { accepted: true },
-		});
-		expect(store.pendingOutbox()).toEqual([
-			expect.objectContaining({
-				effectId: "decision:human_ask_deliver:message-1",
-				effectKey: "message-1",
-				payload: { askId: "ask-one", skipUi: false },
-			}),
-		]);
-	});
-
 	test("batches compatibility effects in one store transaction", () => {
 		expect(store.enqueueOutboxMany("compatibility", [
 			{ kind: "one", payload: { n: 1 }, effectKey: "a" },
 			{ kind: "two", payload: { n: 2 }, effectKey: "b" },
 		])).toHaveLength(2);
 		expect(store.pendingOutbox().map((effect) => effect.effectKey)).toEqual(["a", "b"]);
-	});
-
-	test("does not publish staged effects when a command fails", async () => {
-		await expect(
-			sessionKernel("decision-failed").dispatchLegacy(
-				testEffect({ requestId: "request", type: "notify" }),
-				(kernel) => {
-					kernel.enqueueEffect(
-						"human_ask_deliver",
-						{ askId: "ask-one", skipUi: false },
-						"message-1",
-					);
-					throw new Error("decision rejected");
-				},
-			),
-		).rejects.toThrow("decision rejected");
-		expect(store.pendingOutbox()).toHaveLength(0);
 	});
 
 	test("actor-owned delivery maps isolate nested mutable values", () => {

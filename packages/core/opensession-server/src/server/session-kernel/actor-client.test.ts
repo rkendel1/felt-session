@@ -6,19 +6,6 @@ import {
   sessionDelivery,
   sessionKernel,
 } from "./kernel";
-import { SESSION_KERNEL_MAX_WAITERS_PER_COMMAND } from "./actor-protocol";
-import {
-  legacyGatewayEffect,
-  type LegacyGatewayEffect,
-  type LegacyGatewayEffectInput,
-} from "./lifecycle-protocol";
-
-function testEffect(
-  input: LegacyGatewayEffectInput & { type?: string },
-): LegacyGatewayEffect {
-  const { type: _legacyTestLabel, ...effect } = input;
-  return legacyGatewayEffect("websocket_command", effect);
-}
 
 let client: SessionKernelActorClient | undefined;
 afterEach(() => {
@@ -97,182 +84,6 @@ describe("session kernel actor boundary", () => {
       },
     ]);
     expect(host.store.pendingOutbox(Date.now() + 1_000)).toHaveLength(1);
-  });
-
-  test("admits independent commands while physical work is active", async () => {
-    const host = await actor();
-    const first = await host.begin("s1", testEffect({ requestId: "first", type: "test" }));
-    const second = await host.begin("s1", testEffect({
-      requestId: "second",
-      type: "test",
-    }));
-    expect(first.executionId).toBeString();
-    expect(second.executionId).toBeString();
-    expect(second.executionId).not.toBe(first.executionId);
-    await host.complete(second.executionId!, "two", []);
-    await host.complete(first.executionId!, "one", []);
-    expect(host.store.command("s1", "second")).toMatchObject({
-      status: "completed",
-      result: "two",
-    });
-  });
-
-  test("coalesces and bounds waiters for the same execution", async () => {
-    const host = await actor();
-    const active = await host.begin("bounded", testEffect({
-      requestId: "same",
-      type: "test",
-      payload: { stable: true },
-    }));
-    const waiting = Array.from(
-      { length: SESSION_KERNEL_MAX_WAITERS_PER_COMMAND },
-      () =>
-        host.begin("bounded", testEffect({
-          requestId: "same",
-          type: "test",
-          payload: { stable: true },
-        })),
-    );
-    await Bun.sleep(25);
-    await expect(
-      host.begin("bounded", testEffect({
-        requestId: "same",
-        type: "test",
-        payload: { stable: true },
-      })),
-    ).rejects.toMatchObject({ retryable: true });
-    await host.complete(active.executionId!, "done", []);
-    expect(
-      (await Promise.all(waiting)).map(({ duplicate, result }) => ({
-        duplicate,
-        result,
-      })),
-    ).toEqual(
-      Array.from({ length: SESSION_KERNEL_MAX_WAITERS_PER_COMMAND }, () => ({
-        duplicate: true,
-        result: "done",
-      })),
-    );
-  });
-
-  test("fail-stops after a failure receipt cannot be settled", async () => {
-    const host = await actor();
-    await expect(
-      host.fail("missing-execution", "disk failed", true),
-    ).rejects.toThrow();
-    await expect(
-      host.begin("s1", testEffect({ requestId: "after-fatal", type: "test" })),
-    ).rejects.toThrow();
-  });
-
-  test("starts compatibility work independently during an async execution", async () => {
-    const host = await actor();
-    const first = await host.begin("s1", testEffect({ requestId: "first", type: "test" }));
-    const syncDuring = host.beginSync("s1", {
-      requestId: "sync",
-      type: "sync:transcript_append",
-    });
-    expect(syncDuring.executionId).toBeString();
-    host.store.setRunState({
-      sessionId: "s1",
-      state: "running",
-      event: "stream_started",
-    });
-    expect(host.store.runState("s1").state).toBe("running");
-    host.completeSync(syncDuring.executionId!, "synced", []);
-    expect(host.store.command("s1", "sync")).toMatchObject({
-      status: "completed",
-      result: "synced",
-    });
-    await host.complete(first.executionId!, null, []);
-
-    const sync = host.beginSync("s1", {
-      requestId: "after",
-      type: "sync:test",
-    });
-    expect(sync.executionId).toBeString();
-    host.completeSync(sync.executionId!, "done", []);
-  });
-
-  test("a tombstone rejects compatibility writes during an active execution", async () => {
-    const host = await actor();
-    const active = await host.begin("deleted", testEffect({
-      requestId: "active",
-      type: "test",
-    }));
-    host.store.tombstoneSession("deleted");
-    expect(() =>
-      host.beginSync("deleted", {
-      requestId: "late",
-      type: "sync:transcript_append",
-      }),
-    ).toThrow("Session deleted was deleted");
-    await host.complete(active.executionId!, null, []);
-  });
-
-  test("persists detached writes while a command effect is active", async () => {
-    const host = await actor();
-    const active = await host.begin("detached", testEffect({
-      requestId: "active",
-      type: "submit_prompt",
-    }));
-    installSessionKernelActor(host);
-    const kernel = sessionKernel("detached");
-
-    kernel.setRunState({ state: "running", event: "stream_started" });
-    kernel.enqueueEffect(
-      "human_ask_deliver",
-      { askId: "detached", skipUi: false },
-      "detached-effect",
-    );
-    expect(kernel.runState().state).toBe("running");
-    expect(
-      host.store.pendingOutbox(Date.now(), 10, ["human_ask_deliver"]),
-    ).toHaveLength(
-      1,
-    );
-
-    await host.complete(active.executionId!, "done", []);
-  });
-
-  test("reduces run events atomically while gateway work is still active", async () => {
-    const host = await actor();
-    const active = await host.begin("autonomous", testEffect({
-      requestId: "physical-work",
-      type: "submit_prompt",
-    }));
-    expect(
-      host.decideRunEvent({ sessionId: "autonomous", event: "prompt" }),
-    ).toMatchObject({ accepted: true, from: "idle", to: "starting" });
-    expect(
-      host.decideRunEvent({
-      sessionId: "autonomous",
-      event: "run_registered",
-      runKey: "run-1",
-      }),
-    ).toMatchObject({
-      accepted: true,
-      from: "starting",
-      to: "running",
-      state: { currentRunId: "run-1", generation: 1 },
-    });
-    expect(
-      host.decideRunEvent({
-      sessionId: "autonomous",
-      event: "run_registered",
-      runKey: "stale-run",
-      }),
-    ).toMatchObject({
-      accepted: false,
-      reason: "stale_run",
-      state: { currentRunId: "run-1", generation: 1 },
-    });
-    expect(host.store.runState("autonomous")).toMatchObject({
-      state: "running",
-      currentRunId: "run-1",
-      generation: 1,
-    });
-    await host.complete(active.executionId!, "done", []);
   });
 
   test("owns turn cancellation and its physical effect while gateway work is active", async () => {
@@ -451,12 +262,8 @@ describe("session kernel actor boundary", () => {
     ).toBe("completed");
   });
 
-  test("reduces creation events while gateway work is active", async () => {
+  test("reduces creation events atomically", async () => {
     const host = await actor();
-    const active = await host.begin(
-      "creating",
-      testEffect({ requestId: "physical-create", type: "create_session" }),
-    );
     expect(host.decideCreationEvent({
       sessionId: "creating",
       identity: "create-request",
@@ -489,7 +296,6 @@ describe("session kernel actor boundary", () => {
       state: "preparing",
       identity: "create-request",
     });
-    await host.complete(active.executionId!, "done", []);
   });
 
   test("resizes creation decisions and snapshots for bounded opening plans", async () => {
@@ -562,39 +368,50 @@ describe("session kernel actor boundary", () => {
     const host = await actor();
     host.terminate();
     client = undefined;
-    await expect(
-      host.begin("s1", testEffect({ requestId: "after-stop", type: "test" })),
-    ).rejects.toThrow("actor stopped");
+    expect(() => host.decideGateway({
+      op: "request",
+      sessionId: "s1",
+      requestId: "after-stop",
+      operation: "websocket_command",
+    })).toThrow("actor stopped");
   });
 
   test("returns a terminal failure instead of re-executing it", async () => {
     const host = await actor();
-    const first = await host.begin("sticky", testEffect({
+    const input = {
+      op: "request" as const,
+      sessionId: "sticky",
       requestId: "same",
-      type: "test",
-    }));
-    await host.complete(
-      first.executionId!,
-      { __sessionKernelFailure: true, message: "not allowed" },
-      [],
-    );
-    let failure: unknown;
-    try {
-      await host.begin("sticky", testEffect({ requestId: "same", type: "test" }));
-    } catch (error) {
-      failure = error;
-    }
-    expect(failure).toBeInstanceOf(Error);
-    expect((failure as Error).message).toContain("not allowed");
+      operation: "websocket_command" as const,
+      identity: { n: 1 },
+    };
+    expect(host.decideGateway(input)).toEqual({ status: "execute" });
+    host.decideGateway({
+      op: "fail",
+      sessionId: input.sessionId,
+      requestId: input.requestId,
+      operation: input.operation,
+      error: "not allowed",
+      retryable: false,
+    });
+    expect(() => host.decideGateway(input)).toThrow("not allowed");
   });
 
   test("acknowledges replay results through async IPC", async () => {
     const host = await actor();
-    const admission = await host.begin("ack", testEffect({
+    host.decideGateway({
+      op: "request",
+      sessionId: "ack",
       requestId: "one",
-      type: "take",
-    }));
-    await host.complete(admission.executionId!, { item: "kept" }, []);
+      operation: "websocket_command",
+    });
+    host.decideGateway({
+      op: "complete",
+      sessionId: "ack",
+      requestId: "one",
+      operation: "websocket_command",
+      result: { item: "kept" },
+    });
     await host.acknowledgeCommand("ack", "one");
     expect(host.store.command("ack", "one")?.acknowledgedAt).toBeNumber();
   });
@@ -633,20 +450,28 @@ describe("session kernel actor boundary", () => {
 
   test("returns a committed result after an uncertain reply", async () => {
     const host = await actor();
-    const first = await host.begin("s1", testEffect({
+    const input = {
+      op: "request" as const,
+      sessionId: "s1",
       requestId: "same",
-      type: "test",
-      payload: { n: 1 },
-    }));
-    await host.complete(first.executionId!, { accepted: true }, []);
-    expect(
-      await host.begin("s1", testEffect({
-        requestId: "same",
-        type: "test",
-        payload: { n: 1 },
-      })),
-    ).toMatchObject({ duplicate: true, result: { accepted: true } });
+      operation: "websocket_command" as const,
+      identity: { n: 1 },
+    };
+    expect(host.decideGateway(input)).toEqual({ status: "execute" });
+    host.decideGateway({
+      op: "complete",
+      sessionId: input.sessionId,
+      requestId: input.requestId,
+      operation: input.operation,
+      result: { accepted: true },
+    });
+    expect(host.decideGateway(input)).toEqual({
+      status: "completed",
+      result: { accepted: true },
+      duplicate: true,
+    });
   });
+
   test("resizes read-only delivery snapshots beyond the initial buffer", async () => {
     const host = await actor();
     const content = "x".repeat(9 * 1024 * 1024);
@@ -734,59 +559,53 @@ describe("session kernel actor boundary", () => {
     });
   });
 
-  test("keeps actor reducers responsive while gateway effects stay ordered", async () => {
+  test("keeps reducers responsive while physical gateway work is blocked", async () => {
     const host = await actor();
-    installSessionKernelActor(host);
-    const kernel = sessionKernel("ordered-effects");
-    let releaseFirst!: () => void;
-    const firstBlocked = new Promise<void>((resolve) => {
-      releaseFirst = resolve;
-    });
-    const order: string[] = [];
-    const first = kernel.dispatchLegacy(
-      testEffect({ requestId: "first-effect", type: "test", replaySafe: true }),
-      async () => {
-        order.push("first-start");
-        await firstBlocked;
-        order.push("first-end");
-        return "first";
-      },
-    );
-    const second = kernel.dispatchLegacy(
-      testEffect({ requestId: "second-effect", type: "test", replaySafe: true }),
-      () => {
-        order.push("second");
-        return "second";
-      },
-    );
-    await Bun.sleep(20);
-    expect(order).toEqual(["first-start"]);
+    const first = {
+      op: "request" as const,
+      sessionId: "responsive",
+      requestId: "first-effect",
+      operation: "websocket_command" as const,
+    };
+    expect(host.decideGateway(first)).toEqual({ status: "execute" });
+    let release!: () => void;
+    const physical = new Promise<void>((resolve) => { release = resolve; });
+
+    // A second command and unrelated reducers are decided immediately. The actor
+    // never waits for the first command's physical continuation.
+    expect(host.decideGateway({
+      ...first,
+      requestId: "second-effect",
+    })).toEqual({ status: "execute" });
     host.decideDelivery({
       op: "set",
-      sessionId: "ordered-effects",
+      sessionId: "responsive",
       slot: "queued",
       value: [{ id: "q1", content: "still responsive" }],
     });
     host.decideAsk({
       op: "set",
-      sessionId: "ordered-effects",
+      sessionId: "responsive",
       value: { questionId: "ask-1", questions: [] },
     });
-    expect(
-      host.decideDelivery({
-        op: "snapshot",
-        sessionId: "ordered-effects",
-      }).queued,
-    ).toHaveLength(1);
-    expect(
-      host.decideAsk({
-        op: "snapshot",
-        sessionId: "ordered-effects",
-      }),
-    ).toMatchObject({ questionId: "ask-1" });
-    releaseFirst();
-    expect(await first).toMatchObject({ result: "first" });
-    expect(await second).toMatchObject({ result: "second" });
-    expect(order).toEqual(["first-start", "first-end", "second"]);
+    expect(host.decideDelivery({
+      op: "snapshot",
+      sessionId: "responsive",
+    }).queued).toHaveLength(1);
+    expect(host.decideAsk({
+      op: "snapshot",
+      sessionId: "responsive",
+    })).toMatchObject({ questionId: "ask-1" });
+
+    release();
+    await physical;
+    host.decideGateway({
+      op: "complete",
+      sessionId: first.sessionId,
+      requestId: first.requestId,
+      operation: first.operation,
+      result: "first",
+    });
   });
+
 });

@@ -64,11 +64,12 @@ import { notifyMentions } from "../mentions";
 import { reviewTeamFor } from "../people";
 import { sendPushToUser } from "../push";
 import {
-	legacyGatewayEffect,
+  sessionGatewayCommand,
 	sessionKernel,
 	sessionKernelStore,
 	tombstoneSessionKernel,
 } from "../session-kernel";
+import { withSessionMutationLock } from "../session-mutation-lock";
 import {
 	sessionIdForRequest,
 } from "../session-request-id";
@@ -1834,10 +1835,26 @@ export async function handleSessionsRoutes(
 		if (sessionKernelStore().isTombstoned(session.id))
 			return recoverTombstonedDeletion();
 
+    const deleteRequestId = `delete:${crypto.randomUUID()}`;
+    let deleteExecuting = false;
 		try {
-			const result = await sessionKernel(session.id).runExclusive(
-				"delete_session",
-			async () => {
+      const plan = sessionGatewayCommand({
+        op: "request",
+        sessionId: session.id,
+        requestId: deleteRequestId,
+        operation: "delete_session",
+        identity: { cleanWorktree },
+      });
+      if (plan.status === "in_progress")
+        throw Object.assign(new Error("Session deletion is already in progress"), {
+          retryable: true,
+        });
+      if (plan.status === "completed") {
+        const replay = plan.result as { status: number; body: unknown };
+        return Response.json(replay.body, { status: replay.status });
+      }
+      deleteExecuting = true;
+			const result = await withSessionMutationLock(session.id, async () => {
 		try {
 			const runIds = [
 				session.claudeSessionId,
@@ -1870,12 +1887,25 @@ export async function handleSessionsRoutes(
 		} catch (e: any) {
 			return { status: 500, body: { error: e.message } };
 		}
-			},
-			);
-			// Actor commands cross a Worker boundary. Keep their result cloneable and
-			// construct the Response only after the mailbox has settled.
+			});
+      sessionGatewayCommand({
+        op: "complete",
+        sessionId: session.id,
+        requestId: deleteRequestId,
+        operation: "delete_session",
+        result,
+      });
 			return Response.json(result.body, { status: result.status });
 		} catch (error) {
+      if (deleteExecuting)
+        sessionGatewayCommand({
+          op: "fail",
+          sessionId: session.id,
+          requestId: deleteRequestId,
+          operation: "delete_session",
+          error: error instanceof Error ? error.message : String(error),
+          retryable: true,
+        });
 			// A concurrent delete can write the tombstone after the check above but
 			// before this request reaches the mailbox. Treat that race as the same
 			// idempotent recovery instead of surfacing a false failure.

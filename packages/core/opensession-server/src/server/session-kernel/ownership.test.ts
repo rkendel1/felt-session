@@ -1,11 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, readdirSync, readFileSync, statSync } from "fs";
 import { join, resolve } from "path";
-import {
-	LEGACY_GATEWAY_EFFECT_OPERATIONS,
-	LEGACY_GATEWAY_EFFECT_SITE_BASELINE,
-} from "./lifecycle-protocol";
-
 const serverDir = resolve(import.meta.dir, "..");
 const read = (relative: string) => readFileSync(join(serverDir, relative), "utf8");
 
@@ -20,21 +15,15 @@ function sourceFiles(dir: string): string[] {
 }
 
 describe("single session ownership", () => {
-	test("legacy gateway effects cannot grow without changing the migration fence", () => {
-		const production = sourceFiles(serverDir).filter(
-			(path) => !path.endsWith(".test.ts"),
-		);
-		const sites = production.reduce((count, path) => {
-			const source = readFileSync(path, "utf8");
-			return count + (source.match(/\.dispatchLegacy\(/g)?.length ?? 0);
-		}, 0);
-		expect(sites).toBe(LEGACY_GATEWAY_EFFECT_SITE_BASELINE);
-		expect(LEGACY_GATEWAY_EFFECT_OPERATIONS).toEqual([
-			"delete_session",
-			"session_file_updated",
-			"websocket_command",
-		]);
-		expect(read("session-kernel/kernel.ts")).not.toContain("async dispatch<");
+	test("production has no legacy gateway mailbox", () => {
+		const production = sourceFiles(serverDir).map((path) =>
+      readFileSync(path, "utf8"),
+    ).join("\n");
+    expect(production).not.toContain(".dispatchLegacy(");
+    expect(production).not.toContain("legacyGatewayEffect(");
+    expect(production).not.toContain(".runExclusive(");
+    expect(read("session-kernel/actor-protocol.ts")).not.toContain('t: "begin"');
+    expect(read("session-kernel/actor-worker.ts")).not.toContain("waiters");
 	});
 
 	test("run, queue, ask and session-file state delegate to SessionKernel", () => {
@@ -52,7 +41,7 @@ describe("single session ownership", () => {
 		expect(read("session-kernel/kernel.ts")).not.toContain("getRuntime<");
 		expect(read("session-kernel/kernel.ts")).not.toContain("setRuntime<");
 		expect(read("session-cache.ts")).toContain(
-			'runExclusive("session_file_updated"',
+			"sessionGatewayCommand",
 		);
 		expect(read("session-cache.ts")).toContain("sessionDeliveryProjection");
 		expect(read("session-cache.ts")).not.toContain("__promptQueues");
@@ -275,7 +264,7 @@ describe("single session ownership", () => {
 
 	test("creation uses its FSM without nesting inside a legacy mailbox", () => {
 		const ws = read("ws-handlers.ts");
-		expect(ws).toContain('legacyGatewayEffect("websocket_command"');
+		expect(ws).toContain('operation: "websocket_command"');
 		expect(ws).toContain("sessionIdForRequest");
 		expect(ws).toContain('typeof msg.sessionId === "string"');
 		const mailboxCommands = ws.slice(
@@ -432,13 +421,13 @@ describe("single session ownership", () => {
 		expect(ws).toContain('`stop-${msg.requestId}`');
     expect(ws).toContain("requestTurnCancel(sessionId, session");
     expect(ws.indexOf("const persistedCancel =")).toBeLessThan(
-      ws.indexOf('legacyGatewayEffect("websocket_command"'),
+      ws.indexOf('operation: "websocket_command"'),
     );
     expect(ws.indexOf("const priorCommandPayload = durableSessionCommand(")).toBeLessThan(
-      ws.indexOf('legacyGatewayEffect("websocket_command"'),
+      ws.indexOf('operation: "websocket_command"'),
     );
     expect(ws.indexOf("const persistedInterrupt =")).toBeLessThan(
-      ws.indexOf('legacyGatewayEffect("websocket_command"'),
+      ws.indexOf('operation: "websocket_command"'),
     );
     expect(ws).not.toContain("cancelAgentRun(");
     const runSession = read("run-session.ts");
@@ -511,7 +500,8 @@ describe("single session ownership", () => {
     const prRoutes = read("routes/pr.ts");
     expect(prRoutes).toContain("requestTurnCancel(bksId, reviewSession");
     expect(prRoutes).not.toContain("cancelAgentRun(");
-		expect(routes).toMatch(/\.runExclusive\(\s*"delete_session"/);
+		expect(routes).toContain('operation: "delete_session"');
+    expect(routes).toContain("withSessionMutationLock(session.id");
 	});
 
 	test("create and sandbox recovery establish one execution owner", () => {
@@ -717,6 +707,8 @@ describe("single session ownership", () => {
 		expect(source).toContain("kernelDispatchTokens.delete(kernelToken)");
 		expect(source).toContain("__sessionKernelToken");
 		expect(source).not.toContain("__sessionKernelOwned");
-		expect(source).toContain('source: "websocket"');
+		expect(source).toContain('operation: "websocket_command"');
+    expect(source).toContain('op: "complete"');
+    expect(source).toContain('op: "fail"');
 	});
 });

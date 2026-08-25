@@ -23,6 +23,7 @@ export function targetForDeliveryInterrupt(
 
 export type SubmitPromptCommandPlan =
   | { status: "execute" }
+  | { status: "in_progress" }
   | { status: "completed"; result: unknown; duplicate: true };
 
 type DeliveryItem = {

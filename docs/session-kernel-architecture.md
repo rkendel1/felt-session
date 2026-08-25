@@ -342,24 +342,20 @@ The writable `SessionKernelStore` and autonomous per-session coordinator run in
 `session-kernel-worker.ts`, a separate JavaScript actor isolate. The gateway
 starts and handshakes that actor before hydrating projections.
 
-A command admission is short: the actor fingerprints and persists the intent,
-allocates a fenced `executionId`, and immediately returns an execution descriptor.
-It does not retain a per-session gateway lease and does not stop reducing run,
-delivery or ask messages while physical work is active. Different command intents
-can be admitted concurrently. The temporary `LegacyGatewayEffect` adapter preserves physical effect
-order for two compatibility call sites, but that queue is not authoritative:
-every item in it is already durable in the actor. Its operation union and exact
-production call-site baseline are structural migration fences. New lifecycle
-work must use typed reducer messages and executors rather than add a callback.
-A restart re-admits replay-safe intent and marks ambiguous non-replay-safe
-execution indeterminate.
+A command admission is a short bounded reduction: the actor fingerprints and
+persists the intent, then immediately returns `execute`, `in_progress`, or the
+committed result. It never awaits filesystem, network, process, sandbox, Runner,
+or model work. Different command intents can therefore be reduced concurrently,
+and Stop or steering remains responsive while physical continuations are queued
+or running. A restart re-admits replay-safe intent and marks ambiguous
+non-replay-safe execution indeterminate.
 
-Retries of an executing request attach as bounded waiters to the same execution;
-they never allocate a second physical effect. Active executions and waiters have
-per-session and process-wide limits. Completion and failure messages carry the
-`executionId`; an unknown or stale id fail-stops the actor rather than committing
-over a successor. Settlement commits the command result and its typed outbox
-effects transactionally, then releases attached waiters.
+Physical continuations run in gateway or executor workers outside the actor.
+Their per-session mutex can queue physical work, but it does not hold the actor
+mailbox. An exact retry of executing work receives `in_progress` immediately
+rather than attaching an actor-held waiter. Typed completion and failure
+reductions settle immutable receipts; settlement ambiguity fail-stops the actor
+client rather than committing over a successor.
 
 Synchronous transcript and session-file compatibility callbacks use their own
 short execution IDs against the same physical SQLite writer. They can run while an

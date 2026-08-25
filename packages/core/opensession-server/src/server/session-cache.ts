@@ -40,10 +40,12 @@ import { writeJsonAtomic } from "./shared/atomic-write";
 import type { UnifiedSession, NativeSessionFile } from "./types";
 import {
   sessionDeliveryProjection,
+  sessionGatewayCommand,
   sessionKernel,
   sessionKernelActorActive,
   sessionTurn,
 } from "./session-kernel";
+import { withSessionMutationLock } from "./session-mutation-lock";
 import { broadcastToAll } from "./ws-hub";
 
 export const SESSIONS_DIR = OPENSESSION_SESSIONS_DIR;
@@ -436,7 +438,17 @@ export function updateSessionFile(
 	sessionId: string,
 	mutator: SessionFileMutator,
 ): Promise<void> {
-	return sessionKernel(sessionId).runExclusive("session_file_updated", () => {
+  return withSessionMutationLock(sessionId, () => {
+    const requestId = `session-file:${crypto.randomUUID()}`;
+    const plan = sessionGatewayCommand({
+      op: "request",
+      sessionId,
+      requestId,
+      operation: "session_file_updated",
+    });
+    if (plan.status !== "execute")
+      throw new Error("Unexpected duplicate session-file command");
+    try {
 		const path = `${SESSIONS_DIR}/${sessionId}.json`;
 		const current: NativeSessionFile = existsSync(path)
 			? JSON.parse(readFileSync(path, "utf-8"))
@@ -451,6 +463,24 @@ export function updateSessionFile(
 			upsertIndexedSession(indexed);
 		}
 		invalidateSessionsCache();
+      sessionGatewayCommand({
+        op: "complete",
+        sessionId,
+        requestId,
+        operation: "session_file_updated",
+        result: null,
+      });
+    } catch (error) {
+      sessionGatewayCommand({
+        op: "fail",
+        sessionId,
+        requestId,
+        operation: "session_file_updated",
+        error: error instanceof Error ? error.message : String(error),
+        retryable: false,
+      });
+      throw error;
+    }
 	});
 }
 

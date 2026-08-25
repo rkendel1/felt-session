@@ -53,12 +53,13 @@ import { BOOT_ID, allClients, broadcastToAll, broadcastToSession, globalPresence
 import { existsSync, readFileSync, statSync, watch } from "fs";
 import { stateDir } from "./paths";
 import { isInternalKernelDispatch } from "./session-kernel/ws-command-bridge";
+import { withSessionMutationLock } from "./session-mutation-lock";
 import {
 	acknowledgeSessionCommand,
   deliveryInterruptForAnchor,
   durableSessionCommand,
 	isRetryableSessionCommandError,
-	legacyGatewayEffect,
+  sessionGatewayCommand,
   sessionDelivery,
 	sessionKernel,
   sessionTurn,
@@ -635,22 +636,29 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
         replayedTarget?.generation ?? targetRun?.generation;
 			const kernelToken = crypto.randomUUID();
 			kernelDispatchTokens.add(kernelToken);
+      let gatewayCommandExecuting = false;
 				try {
-					const accepted =
-			await sessionKernel(commandSessionId).dispatchLegacy(
-				legacyGatewayEffect("websocket_command", {
-					requestId,
-					payload: {
-						command: msg.type,
-						messageHash,
-            ...(targetRunId !== undefined
-              ? { targetRunId, targetRunGeneration }
-              : {}),
-					},
-					source: "websocket",
-					replaySafe: true,
-				}),
-				async () => {
+          const plan = sessionGatewayCommand({
+            op: "request",
+            sessionId: commandSessionId,
+            requestId,
+            operation: "websocket_command",
+            identity: {
+              command: msg.type,
+              messageHash,
+              ...(targetRunId !== undefined
+                ? { targetRunId, targetRunGeneration }
+                : {}),
+            },
+          });
+          if (plan.status === "in_progress")
+            throw Object.assign(new Error("Session command is already in progress"), {
+              retryable: true,
+            });
+          gatewayCommandExecuting = plan.status === "execute";
+          const accepted = plan.status === "completed"
+            ? { result: plan.result, duplicate: true }
+            : await withSessionMutationLock(commandSessionId, async () => {
           if (targetRunId !== undefined) {
             const current = sessionKernel(commandSessionId).runState();
             const currentTargetId =
@@ -695,9 +703,16 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 					);
 					const dispatchError = kernelDispatchErrors.get(kernelToken);
 					if (dispatchError) throw dispatchError;
-					return kernelDispatchResults.get(kernelToken);
-				},
-					);
+					const result = kernelDispatchResults.get(kernelToken);
+            sessionGatewayCommand({
+              op: "complete",
+              sessionId: commandSessionId,
+              requestId,
+              operation: "websocket_command",
+              result,
+            });
+            return { result, duplicate: false };
+				});
 					if (
 						accepted.duplicate &&
 						accepted.result &&
@@ -719,6 +734,15 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 					const message =
 						error instanceof Error ? error.message : String(error);
 					const retryable = isRetryableSessionCommandError(error);
+          if (gatewayCommandExecuting)
+            sessionGatewayCommand({
+              op: "fail",
+              sessionId: commandSessionId,
+              requestId,
+              operation: "websocket_command",
+              error: message,
+              retryable,
+            });
 					ws.send(
 						JSON.stringify({
 							type: "command_result",
