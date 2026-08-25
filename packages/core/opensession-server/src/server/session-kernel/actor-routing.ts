@@ -92,6 +92,10 @@ export function isPrioritySessionActorRequest(
   const command = request.request.command;
   if (command.kind === "creation_event")
     return command.decision.event === "cancelled";
+  if (command.kind === "core")
+    return ["ack_outbox", "defer_outbox", "fail_outbox"].includes(
+      command.request.op,
+    );
   if (command.kind === "turn")
     return [
       "request_cancel_command",

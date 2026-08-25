@@ -554,13 +554,16 @@ export async function startSessionKernelService(
     return response;
   }
 
-  async function resolveOutboxSession(id: number): Promise<string> {
+  async function resolveOutboxSession(
+    id: number,
+    urgent = false,
+  ): Promise<string> {
     const response = await sendToSlot(slots[0], {
       t: "call",
       rpcId: crypto.randomUUID(),
       outputBytes: 256 * 1024,
       request: { t: "store", method: "outboxSessionId", args: [id] },
-    });
+    }, false, urgent);
     if (response.t !== "call_result" || response.status !== 1 || !response.body)
       throw new Error(`Outbox ${id} route could not be resolved`);
     const body = JSON.parse(response.body) as { ok: boolean; result?: unknown; error?: string };
@@ -576,7 +579,13 @@ export async function startSessionKernelService(
     if (route.scope === "session")
       return enqueueSession(route.sessionId, request);
     if (route.scope === "outbox")
-      return enqueueSession(await resolveOutboxSession(route.id), request);
+      return enqueueSession(
+        await resolveOutboxSession(
+          route.id,
+          isPrioritySessionActorRequest(request),
+        ),
+        request,
+      );
 
     if (request.t === "hello") return sendToSlot(slots[0], request);
     if (queuedGlobalTurns >= MAX_GLOBAL_TURNS)
