@@ -99,6 +99,7 @@ export function sessionAsk<T extends AskActorRequest>(
       request.sessionId,
       request.questionId,
       request.answers,
+      request.answeredVia,
     );
   else if (request.op === "delete")
     result = store.deleteAskRecord(request.sessionId);

@@ -393,6 +393,7 @@ export function startSessionKernelActorWorker(): void {
               ask.sessionId,
               ask.questionId,
               ask.answers,
+              ask.answeredVia,
             );
           else if (ask.op === "delete")
             result = store.deleteAskRecord(ask.sessionId);

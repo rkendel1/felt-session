@@ -1741,26 +1741,31 @@ export class SessionKernelStore {
     this.mutateAskRecord(sessionId, value);
   }
 
-  /** Settle one pending ask durably. Idempotent on replay: an already
-   * answered record with the same question reports matched without
-   * re-mutating, so the original caller's true result replays. */
+  /** Settle one pending ask durably under the caller's retry identity.
+   * Idempotent: the same requestId replays matched; a different caller
+   * against an already-answered ask is rejected. The gateway-side
+   * `answerReceived` flag is deliberately left to the resolvers, whose
+   * side effects (escalation cancel, broadcast, persistence) read it. */
   answerAskRecord(
     sessionId: string,
     questionId: string | null,
     answers: Record<string, string> | null,
+    answeredVia: string,
   ): { matched: boolean } {
     const record = this.askSnapshot(sessionId) as
-      | { questionId?: string; answerReceived?: boolean }
+      | {
+          questionId?: string;
+          answer?: { requestId: string; answers: Record<string, string> | null };
+        }
       | undefined;
     if (!record) return { matched: false };
-    if (record.answerReceived)
-      return { matched: (record.questionId ?? null) === questionId };
+    if (record.answer)
+      return { matched: record.answer.requestId === answeredVia };
     if (questionId !== null && (record.questionId ?? null) !== questionId)
       return { matched: false };
     this.setAskRecord(sessionId, {
       ...record,
-      answerReceived: true,
-      earlyAnswer: answers,
+      answer: { requestId: answeredVia, answers },
     });
     return { matched: true };
   }

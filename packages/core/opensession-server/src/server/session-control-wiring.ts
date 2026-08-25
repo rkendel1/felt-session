@@ -153,21 +153,27 @@ registerSessionControl({
 	},
 
 	answerQuestion: async (id, answers, opts) => {
+		const requestId = opts?.requestId || randomUUIDv7();
 		const questionId = pendingAskAwaitingAnswer(id)?.questionId || null;
-		// The actor settles the durable ask aggregate directly; the gateway
-		// waiter is resolved from the committed result. No compatibility
-		// mailbox entry: the aggregate itself makes replay idempotent.
+		// The actor records the answer durably under the caller's retry
+		// identity; the aggregate makes replay idempotent. The gateway-side
+		// resolver then runs its live side effects (escalation cancel,
+		// broadcast, tool-promise wake) — it owns the answerReceived flag.
 		const settled = sessionAsk({
 			op: "answer",
 			sessionId: id,
 			questionId,
 			answers,
+			answeredVia: requestId,
 		});
 		if (!settled.matched) return false;
 		const pending = pendingAsks.get(id) as
 			| { questionId?: string; resolve?: (value: unknown) => void }
 			| undefined;
-		if (pending?.resolve && pending.questionId === questionId)
+		if (
+			pending?.resolve &&
+			(questionId === null || pending.questionId === questionId)
+		)
 			pending.resolve(answers && typeof answers === "object" ? answers : null);
 		return true;
 	},

@@ -660,12 +660,14 @@ class RemoteStore implements SessionKernelStoreApi {
     sessionId: string,
     questionId: string | null,
     answers: Record<string, string> | null,
+    answeredVia: string,
   ) {
     return this.actor.decideAsk({
       op: "answer",
       sessionId,
       questionId,
       answers,
+      answeredVia,
     });
   }
   deleteAskRecord(sessionId: string) {

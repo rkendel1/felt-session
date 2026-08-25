@@ -8,6 +8,7 @@ export type AskActorRequest =
       sessionId: string;
       questionId: string | null;
       answers: Record<string, string> | null;
+      answeredVia: string;
     }
   | { op: "clear" };
 
