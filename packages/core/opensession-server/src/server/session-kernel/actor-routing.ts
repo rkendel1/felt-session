@@ -81,3 +81,45 @@ export function sessionActorServiceRoute(
     return { scope: "session", sessionId: request.sessionId, mutation: true };
   return { scope: "global" };
 }
+
+/** Stop, steer, and interrupt receipts retain reserved mailbox capacity and may
+ * pass ordinary turns that have not started. The currently executing reduction
+ * is never interrupted, so one session still has exactly one writer. */
+export function isPrioritySessionActorRequest(
+  request: KernelActorAsyncRequest | KernelActorServiceCall,
+): boolean {
+  if (request.t !== "call" || request.request.t !== "reduce") return false;
+  const command = request.request.command;
+  if (command.kind === "creation_event")
+    return command.decision.event === "cancelled";
+  if (command.kind === "turn")
+    return [
+      "request_cancel_command",
+      "complete_cancel_command",
+      "fail_cancel_command",
+      "prepare_cancel",
+      "begin_cancel_effect",
+      "settle_cancel",
+    ].includes(command.request.op);
+  if (command.kind === "delivery")
+    return [
+      "prepare_steer",
+      "accept_steer",
+      "reject_steer",
+      "requeue_steers",
+      "prepare_interrupt",
+      "begin_interrupt_effect",
+      "settle_interrupt",
+    ].includes(command.request.op);
+  if (
+    command.kind === "gateway" &&
+    command.request.operation === "websocket_command" &&
+    command.request.op === "request"
+  ) {
+    const identity = command.request.identity;
+    return !!identity && typeof identity === "object" &&
+      "command" in identity &&
+      ["cancel", "steer"].includes(String(identity.command));
+  }
+  return false;
+}

@@ -296,6 +296,76 @@ describe("session kernel actor service", () => {
     }
   });
 
+  test("Stop keeps reserved capacity and passes queued ordinary turns", async () => {
+    const sessionId = "priority-stop-session";
+    await rpc({
+      t: "call",
+      rpcId: "priority-seed",
+      outputBytes: 256 * 1024,
+      request: {
+        t: "store",
+        method: "setRunState",
+        args: [{ sessionId, state: "idle", event: "seed" }],
+      },
+    });
+    const isolatedRoot = join(stateDir, "sessions", "session-kernel-sessions");
+    const lock = new Database(sessionKernelSessionDbPath(sessionId, isolatedRoot));
+    lock.exec("PRAGMA busy_timeout = 50; BEGIN IMMEDIATE;");
+    try {
+      const blocked = rpc({
+        t: "call",
+        rpcId: "priority-blocker",
+        outputBytes: 256 * 1024,
+        request: {
+          t: "store",
+          method: "setRunState",
+          args: [{ sessionId, state: "running", event: "blocked" }],
+        },
+      });
+      await Bun.sleep(25);
+      const ordinary = rpc({
+        t: "call",
+        rpcId: "priority-ordinary",
+        outputBytes: 256 * 1024,
+        request: {
+          t: "reduce",
+          command: {
+            kind: "run_event",
+            commandId: "queued-ordinary",
+            decision: { sessionId, event: "prompt" },
+          },
+        },
+      }).then(() => "ordinary");
+      const stop = rpc({
+        t: "call",
+        rpcId: "priority-stop",
+        outputBytes: 256 * 1024,
+        request: {
+          t: "reduce",
+          command: {
+            kind: "turn",
+            commandId: "queued-stop",
+            request: {
+              op: "request_cancel_command",
+              sessionId,
+              requestId: "priority-stop-request",
+              fallbackRunId: null,
+            },
+          },
+        },
+      }).then(() => "stop");
+
+      await blocked;
+      expect(await Promise.race([ordinary, stop])).toBe("stop");
+      await Promise.all([ordinary, stop]);
+    } finally {
+      try {
+        lock.exec("ROLLBACK;");
+      } catch {}
+      lock.close();
+    }
+  });
+
   test("keeps reductions responsive while an executor owns physical work", async () => {
     const active = await rpc({
       t: "call",

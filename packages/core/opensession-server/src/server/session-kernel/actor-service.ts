@@ -10,13 +10,19 @@ import {
   type KernelActorServiceResponse,
   type KernelActorTransportEnvelope,
 } from "./actor-protocol";
-import { sessionActorServiceRoute } from "./actor-routing";
+import {
+  isPrioritySessionActorRequest,
+  sessionActorServiceRoute,
+} from "./actor-routing";
 import { workerEntry } from "../../runner-host/exe";
 
 const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_PORT = 3849;
 const ACTOR_RESPONSE_TIMEOUT_MS = 10_000;
 const DEFAULT_SESSION_WORKERS = 4;
+const MAX_NORMAL_SESSION_TURNS = 64;
+const MAX_PRIORITY_SESSION_TURNS = 16;
+const MAX_GLOBAL_TURNS = 64;
 
 class RetryableActorHostError extends Error {
   readonly retryable = true;
@@ -36,6 +42,21 @@ type WorkerSlot = {
   worker?: Worker;
   ready: boolean;
   restarting: boolean;
+};
+
+type QueuedSessionTurn = {
+  request: KernelActorTransportEnvelope["request"];
+  gate: Promise<void>;
+  resolve: (response: KernelActorServiceResponse) => void;
+  reject: (error: Error) => void;
+  settled: () => void;
+};
+
+type SessionMailbox = {
+  running: boolean;
+  normal: QueuedSessionTurn[];
+  priority: QueuedSessionTurn[];
+  tail: Promise<void>;
 };
 
 export type SessionKernelServiceOptions = {
@@ -142,7 +163,9 @@ export async function startSessionKernelService(
     }),
   );
   const sessionSlots = slots.slice(1);
-  const sessionMailboxes = new Map<string, Promise<void>>();
+  const sessionMailboxes = new Map<string, SessionMailbox>();
+  let queuedSessionTurns = 0;
+  let queuedGlobalTurns = 0;
   let globalGate = Promise.resolve();
   const serviceEpoch = crypto.randomUUID();
   let server: ReturnType<typeof Bun.serve> | undefined;
@@ -300,23 +323,73 @@ export async function startSessionKernelService(
     return slot;
   }
 
+  function pumpSessionMailbox(sessionId: string, mailbox: SessionMailbox): void {
+    if (mailbox.running) return;
+    const turn = mailbox.priority.shift() ?? mailbox.normal.shift();
+    if (!turn) {
+      if (sessionMailboxes.get(sessionId) === mailbox)
+        sessionMailboxes.delete(sessionId);
+      return;
+    }
+    mailbox.running = true;
+    void turn.gate
+      .then(() => sendToSlot(assignedSessionSlot(sessionId), turn.request))
+      .then(turn.resolve, turn.reject)
+      .finally(() => {
+        queuedSessionTurns -= 1;
+        mailbox.running = false;
+        turn.settled();
+        pumpSessionMailbox(sessionId, mailbox);
+      });
+  }
+
   function enqueueSession(
     sessionId: string,
     request: KernelActorTransportEnvelope["request"],
   ): Promise<KernelActorServiceResponse> {
-    const prior = sessionMailboxes.get(sessionId) ?? Promise.resolve();
-    const gate = globalGate;
-    const turn = prior
-      .catch(() => {})
-      .then(() => gate)
-      .then(() => sendToSlot(assignedSessionSlot(sessionId), request));
-    const tail = turn.then(() => {}, () => {});
-    sessionMailboxes.set(sessionId, tail);
-    void tail.then(() => {
-      if (sessionMailboxes.get(sessionId) === tail)
-        sessionMailboxes.delete(sessionId);
+    let mailbox = sessionMailboxes.get(sessionId);
+    if (!mailbox) {
+      mailbox = {
+        running: false,
+        normal: [],
+        priority: [],
+        tail: Promise.resolve(),
+      };
+      sessionMailboxes.set(sessionId, mailbox);
+    }
+    const priority = isPrioritySessionActorRequest(request);
+    const queuedForClass = priority ? mailbox.priority.length : mailbox.normal.length;
+    const classLimit = priority
+      ? MAX_PRIORITY_SESSION_TURNS
+      : MAX_NORMAL_SESSION_TURNS;
+    if (
+      queuedSessionTurns >= SESSION_KERNEL_MAX_TRANSPORT_REQUESTS ||
+      queuedForClass >= classLimit
+    ) {
+      return Promise.reject(new RetryableActorHostError(
+        priority
+          ? "Session priority mailbox is full"
+          : "Session mailbox is full",
+      ));
+    }
+
+    queuedSessionTurns += 1;
+    let settleTail!: () => void;
+    const settled = new Promise<void>((resolve) => { settleTail = resolve; });
+    mailbox.tail = mailbox.tail.then(() => settled);
+    const response = new Promise<KernelActorServiceResponse>((resolve, reject) => {
+      const turn: QueuedSessionTurn = {
+        request,
+        gate: globalGate,
+        resolve,
+        reject,
+        settled: settleTail,
+      };
+      if (priority) mailbox!.priority.push(turn);
+      else mailbox!.normal.push(turn);
     });
-    return turn;
+    pumpSessionMailbox(sessionId, mailbox);
+    return response;
   }
 
   async function resolveOutboxSession(id: number): Promise<string> {
@@ -344,12 +417,16 @@ export async function startSessionKernelService(
       return enqueueSession(await resolveOutboxSession(route.id), request);
 
     if (request.t === "hello") return sendToSlot(slots[0], request);
-    const active = [...sessionMailboxes.values()];
+    if (queuedGlobalTurns >= MAX_GLOBAL_TURNS)
+      throw new RetryableActorHostError("Session kernel catalog mailbox is full");
+    queuedGlobalTurns += 1;
+    const active = [...sessionMailboxes.values()].map((mailbox) => mailbox.tail);
     const operation = globalGate
       .catch(() => {})
       .then(() => Promise.all(active))
       .then(() => sendToSlot(slots[0], request));
     globalGate = operation.then(() => {}, () => {});
+    void operation.finally(() => { queuedGlobalTurns -= 1; }).catch(() => {});
     return operation;
   }
 
