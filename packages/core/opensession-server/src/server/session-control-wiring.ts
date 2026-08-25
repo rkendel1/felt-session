@@ -387,7 +387,6 @@ registerSessionControl({
 
 	cancelSession: async (id, opts) => {
 		const requestId = opts?.requestId || randomUUIDv7();
-		const session = findSession(id);
 		const plan = sessionTurn({
 			op: "request_cancel_command",
 			sessionId: id,
