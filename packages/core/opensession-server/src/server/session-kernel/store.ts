@@ -18,7 +18,18 @@ import {
   type CreationState,
 } from "./creation-state-machine";
 import type { StagedCreationActorEffect } from "./creation-effect-protocol";
-import { chmodSync, existsSync, mkdirSync, readFileSync, statSync } from "fs";
+import {
+  chmodSync,
+  closeSync,
+  existsSync,
+  fsyncSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  statSync,
+} from "fs";
 import { dirname } from "path";
 import { sessionsDir } from "../paths";
 import { selectQueueBatch } from "./queue-batch-reducer";
@@ -361,6 +372,21 @@ export type SessionKernelStoreOptions = {
 	allocateOutboxId?: (sessionId: string) => number;
   busyTimeoutMs?: number;
 };
+
+const SESSION_KERNEL_SESSION_TABLES = [
+  "session_kernel_tombstones",
+  "session_kernel_quarantine",
+  "session_kernel_state",
+  "session_kernel_creation",
+  "session_kernel_asks",
+  "session_kernel_delivery",
+  "session_kernel_turn",
+  "session_kernel_turn_projections",
+  "session_kernel_commands",
+  "session_kernel_changes",
+  "session_kernel_timers",
+  "session_kernel_outbox",
+] as const;
 
 export type DurableSessionPlacement = {
 	sessionId: string;
@@ -4220,6 +4246,165 @@ export class SessionKernelStore {
 		return row !== null;
 	}
 
+	legacySessionIds(limit = 1): string[] {
+		if (!Number.isInteger(limit) || limit < 1 || limit > 100)
+			throw new Error("Invalid legacy migration limit");
+		return (this.db.query(`
+			SELECT session_id FROM (
+				SELECT session_id FROM session_kernel_tombstones
+				UNION SELECT session_id FROM session_kernel_quarantine
+				UNION SELECT session_id FROM session_kernel_state
+				UNION SELECT session_id FROM session_kernel_creation
+				UNION SELECT session_id FROM session_kernel_asks
+				UNION SELECT session_id FROM session_kernel_delivery
+				UNION SELECT session_id FROM session_kernel_turn
+				UNION SELECT session_id FROM session_kernel_turn_projections
+				UNION SELECT session_id FROM session_kernel_commands
+				UNION SELECT session_id FROM session_kernel_changes
+				UNION SELECT session_id FROM session_kernel_timers
+				UNION SELECT session_id FROM session_kernel_outbox
+			) legacy
+			WHERE NOT EXISTS (
+				SELECT 1 FROM session_kernel_placements placement
+				WHERE placement.session_id = legacy.session_id
+			)
+			ORDER BY session_id
+			LIMIT ?
+		`).all(limit) as Array<{ session_id: string }>).map((row) => row.session_id);
+	}
+
+	migrateLegacySession(sessionId: string, targetPath: string): boolean {
+		if (this.path === ":memory:" || targetPath === ":memory:")
+			throw new Error("Legacy session migration requires durable database paths");
+		if (this.sessionPlacement(sessionId)) return false;
+		if (!this.hasSessionDurableState(sessionId)) return false;
+
+		const temporaryPath = `${targetPath}.migrating-${crypto.randomUUID()}`;
+		for (const path of [targetPath, `${targetPath}-wal`, `${targetPath}-shm`, temporaryPath, `${temporaryPath}-wal`, `${temporaryPath}-shm`])
+			rmSync(path, { force: true });
+		const initialized = new SessionKernelStore(temporaryPath, { busyTimeoutMs: 250 });
+		initialized.close();
+
+		let attached = false;
+		let nextTimerAt: number | undefined;
+		let nextOutboxAt: number | undefined;
+		try {
+			this.db.query("ATTACH DATABASE ? AS session_migration").run(temporaryPath);
+			attached = true;
+			this.db.exec("BEGIN IMMEDIATE");
+			try {
+				for (const table of SESSION_KERNEL_SESSION_TABLES)
+					this.db.query(
+						`INSERT INTO session_migration.${table} SELECT * FROM main.${table} WHERE session_id = ?`,
+					).run(sessionId);
+				this.db.exec("COMMIT");
+			} catch (error) {
+				this.db.exec("ROLLBACK");
+				throw error;
+			}
+
+			for (const table of SESSION_KERNEL_SESSION_TABLES) {
+				const source = this.db.query(
+					`SELECT COUNT(*) AS count FROM main.${table} WHERE session_id = ?`,
+				).get(sessionId) as { count: number };
+				const target = this.db.query(
+					`SELECT COUNT(*) AS count FROM session_migration.${table} WHERE session_id = ?`,
+				).get(sessionId) as { count: number };
+				if (Number(source.count) !== Number(target.count))
+					throw new Error(`Session migration count mismatch for ${table}`);
+				const sourceDifference = this.db.query(`
+					SELECT 1 AS differs FROM (
+						SELECT * FROM main.${table} WHERE session_id = ?
+						EXCEPT
+						SELECT * FROM session_migration.${table} WHERE session_id = ?
+					) LIMIT 1
+				`).get(sessionId, sessionId);
+				const targetDifference = this.db.query(`
+					SELECT 1 AS differs FROM (
+						SELECT * FROM session_migration.${table} WHERE session_id = ?
+						EXCEPT
+						SELECT * FROM main.${table} WHERE session_id = ?
+					) LIMIT 1
+				`).get(sessionId, sessionId);
+				if (sourceDifference || targetDifference)
+					throw new Error(`Session migration row mismatch for ${table}`);
+			}
+			const integrity = this.db.query(
+				"PRAGMA session_migration.integrity_check",
+			).get() as { integrity_check: string };
+			if (integrity.integrity_check !== "ok")
+				throw new Error(`Session migration integrity check failed: ${integrity.integrity_check}`);
+			const timerWake = this.db.query(`
+				SELECT MIN(CASE WHEN next_attempt_at > due_at THEN next_attempt_at ELSE due_at END) AS next_at
+				FROM session_migration.session_kernel_timers
+				WHERE session_id = ? AND dead_lettered_at IS NULL
+			`).get(sessionId) as { next_at: number | null };
+			const outboxWake = this.db.query(`
+				SELECT MIN(next_attempt_at) AS next_at
+				FROM session_migration.session_kernel_outbox
+				WHERE session_id = ? AND dead_lettered_at IS NULL
+			`).get(sessionId) as { next_at: number | null };
+			nextTimerAt = timerWake.next_at === null ? undefined : Number(timerWake.next_at);
+			nextOutboxAt = outboxWake.next_at === null ? undefined : Number(outboxWake.next_at);
+			this.db.exec("PRAGMA session_migration.wal_checkpoint(TRUNCATE)");
+			this.db.exec("DETACH DATABASE session_migration");
+			attached = false;
+
+			for (const suffix of ["-wal", "-shm"])
+				rmSync(`${temporaryPath}${suffix}`, { force: true });
+			const file = openSync(temporaryPath, "r");
+			try {
+				fsyncSync(file);
+			} finally {
+				closeSync(file);
+			}
+			renameSync(temporaryPath, targetPath);
+			const directory = openSync(dirname(targetPath), "r");
+			try {
+				fsyncSync(directory);
+			} finally {
+				closeSync(directory);
+			}
+
+			const publish = this.db.transaction(() => {
+				if (this.sessionPlacement(sessionId)) return false;
+				if (!this.hasSessionDurableState(sessionId))
+					throw new Error("Legacy session state disappeared before cutover");
+				const outboxIds = this.db.query(`
+					SELECT id FROM session_kernel_outbox
+					WHERE session_id = ? ORDER BY id
+				`).all(sessionId) as Array<{ id: number }>;
+				for (const row of outboxIds)
+					this.db.run(`
+						INSERT INTO session_kernel_outbox_routes (id, session_id, created_at)
+						VALUES (?, ?, ?)
+					`, [Number(row.id), sessionId, Date.now()]);
+				this.db.run(`
+					INSERT INTO session_kernel_placements
+						(session_id, placement, needs_scan, next_timer_at, next_outbox_at, updated_at)
+					VALUES (?, 'isolated', 1, ?, ?, ?)
+				`, [sessionId, nextTimerAt ?? null, nextOutboxAt ?? null, Date.now()]);
+				for (const table of SESSION_KERNEL_SESSION_TABLES)
+					this.db.query(`DELETE FROM ${table} WHERE session_id = ?`).run(sessionId);
+				this.runStateCache.delete(sessionId);
+				this.dirtyChangeSessions.delete(sessionId);
+				return true;
+			});
+			return publish.immediate();
+		} catch (error) {
+			if (attached) {
+				try {
+					this.db.exec("DETACH DATABASE session_migration");
+				} catch {}
+			}
+			if (!this.sessionPlacement(sessionId)) {
+				for (const path of [targetPath, `${targetPath}-wal`, `${targetPath}-shm`, temporaryPath, `${temporaryPath}-wal`, `${temporaryPath}-shm`])
+					rmSync(path, { force: true });
+			}
+			throw error;
+		}
+	}
+
 	sessionPlacement(sessionId: string): DurableSessionPlacement | undefined {
 		const row = this.db.query(`
 			SELECT session_id, placement, needs_scan, next_timer_at, next_outbox_at, updated_at
@@ -4418,6 +4603,8 @@ export class SessionKernelStore {
 export type SessionKernelStoreApi = Omit<
 	SessionKernelStore,
 	| "hasSessionDurableState"
+	| "legacySessionIds"
+	| "migrateLegacySession"
 	| "sessionPlacement"
 	| "isolatedSessionPlacements"
 	| "claimIsolatedSession"

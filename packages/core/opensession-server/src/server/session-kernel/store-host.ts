@@ -309,7 +309,25 @@ export class SessionKernelStoreHost {
     };
   }
 
+  migrateLegacySessions(limit = 1): number {
+    if (this.centralPath === ":memory:") return 0;
+    let migrated = 0;
+    for (const sessionId of this.central.legacySessionIds(limit)) {
+      const targetPath = sessionKernelSessionDbPath(sessionId, this.isolatedRoot);
+      if (this.central.migrateLegacySession(sessionId, targetPath)) migrated += 1;
+    }
+    return migrated;
+  }
+
   maintain(): boolean {
+    const configuredMigrationLimit = Number(
+      process.env.OPENSESSION_SESSION_KERNEL_MIGRATION_BATCH ?? 2,
+    );
+    const migrationLimit = Number.isInteger(configuredMigrationLimit) &&
+        configuredMigrationLimit >= 1 && configuredMigrationLimit <= 10
+      ? configuredMigrationLimit
+      : 2;
+    const migrated = this.migrateLegacySessions(migrationLimit);
     let routes = this.central.isolatedOutboxRoutes(
       50,
       this.outboxRouteMaintenanceCursor,
@@ -329,7 +347,8 @@ export class SessionKernelStoreHost {
       if (routedSession.ok && routedSession.value !== route.sessionId)
         this.central.forgetIsolatedOutboxRoute(route.id);
     }
-    let pending = routes.length === 50 || this.central.maintain();
+    let pending = migrated === migrationLimit || routes.length === 50 ||
+      this.central.maintain();
     for (const result of this.mapIsolatedStores("maintenance:store", (store) => store.maintain()))
       pending = result || pending;
     return pending;

@@ -88,6 +88,58 @@ describe("per-session session kernel storage", () => {
     host.close();
   });
 
+  test("cuts a legacy session over without dual authority", () => {
+    const path = paths();
+    const sessionId = "legacy-cutover";
+    const seed = new SessionKernelStore(path.central);
+    seed.setRunState({
+      sessionId,
+      state: "running",
+      event: "prompt",
+      currentRunId: "legacy-run",
+    });
+    seed.setDeliverySlot(sessionId, "queued", [{ id: "queued", content: "later" }]);
+    seed.scheduleTimer({
+      sessionId,
+      timerId: "wake",
+      kind: "known_timer",
+      dueAt: Date.now() - 1,
+      payload: { stable: true },
+    });
+    const outboxId = seed.enqueueOutbox(
+      sessionId,
+      "known_effect",
+      { stable: true },
+      "legacy-effect",
+    );
+    seed.close();
+
+    const host = new SessionKernelStoreHost(path.central, path.isolated);
+    expect(host.migrateLegacySessions(1)).toBe(1);
+    expect(host.central.sessionPlacement(sessionId)).toMatchObject({
+      placement: "isolated",
+      needsScan: true,
+    });
+    expect(host.central.hasSessionDurableState(sessionId)).toBe(false);
+    expect(host.central.isolatedOutboxSessionId(outboxId)).toBe(sessionId);
+    expect(host.storeForSession(sessionId).runState(sessionId)).toMatchObject({
+      state: "running",
+      currentRunId: "legacy-run",
+    });
+    expect(host.storeForSession(sessionId).deliverySnapshot(sessionId).queued)
+      .toEqual([{ id: "queued", content: "later" }]);
+    expect(host.storeForSession(sessionId).timer(sessionId, "wake")).toBeTruthy();
+    expect(host.storeForOutbox(outboxId).outboxSessionId(outboxId)).toBe(sessionId);
+    expect(host.call("ackOutbox", [outboxId])).toBeUndefined();
+    expect(host.central.isolatedOutboxSessionId(outboxId)).toBeUndefined();
+    host.close();
+
+    const reopened = new SessionKernelStoreHost(path.central, path.isolated);
+    expect(reopened.storeForSession(sessionId).runState(sessionId).state).toBe("running");
+    expect(reopened.central.hasSessionDurableState(sessionId)).toBe(false);
+    reopened.close();
+  });
+
   test("quarantines one unreadable session database without blocking global stats", () => {
     const path = paths();
     const first = new SessionKernelStoreHost(path.central, path.isolated);
