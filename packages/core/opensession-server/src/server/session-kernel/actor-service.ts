@@ -198,6 +198,13 @@ export async function startSessionKernelService(
   function scheduleRestart(slot: WorkerSlot, error: Error, generation: number): void {
     if (stopping || serviceError || generation !== slot.generation || slot.restarting)
       return;
+    // The catalog lane owns placement authority. Losing it can make routing
+    // settlement ambiguous, so unlike a session lane it must fail-stop the
+    // service rather than reconnect behind the gateway's negotiated epoch.
+    if (slot.index === 0) {
+      failService(error);
+      return;
+    }
     slot.restarting = true;
     stopSlot(slot, error);
     setTimeout(() => {
