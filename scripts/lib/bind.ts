@@ -19,15 +19,29 @@ import { CONFIG_PATH, ENV_PATH } from "./paths";
 import * as service from "./service";
 import { bold, dim, heading, info, ok, warn, wrote, yellow } from "./ui";
 
-async function responding(host: string, port: number): Promise<boolean> {
-  try {
-    const probeHost = host === "0.0.0.0" ? "127.0.0.1" : host;
-    const res = await fetch(`http://${probeHost}:${port}/api/health`, {
-      signal: AbortSignal.timeout(3000),
-    });
-    return res.ok;
-  } catch {
-    return false;
+export async function responding(
+  host: string,
+  port: number,
+  waitMs = 0,
+  retryIntervalMs = 250,
+): Promise<boolean> {
+  const probeHost = host === "0.0.0.0" ? "127.0.0.1" : host;
+  const deadline = Date.now() + waitMs;
+
+  while (true) {
+    try {
+      const res = await fetch(`http://${probeHost}:${port}/api/health`, {
+        signal: AbortSignal.timeout(3000),
+      });
+      if (res.ok) return true;
+    } catch {
+      // A supervisor can report a successful restart before the new process
+      // has opened its socket. Keep probing during the startup grace period.
+    }
+
+    const remainingMs = deadline - Date.now();
+    if (remainingMs <= 0) return false;
+    await Bun.sleep(Math.min(retryIntervalMs, remainingMs));
   }
 }
 
@@ -91,8 +105,9 @@ export async function bind(address?: string): Promise<number> {
     } else {
       info(dim("restarting the service so the new bind takes effect ..."));
       if ((await service.control("restart")) !== 0) return 1;
-      if (await responding(target, port)) ok(`listening on ${target}:${port}`);
-      else {
+      if (await responding(target, port, 15_000)) {
+        ok(`listening on ${target}:${port}`);
+      } else {
         warn(`nothing answering on ${target}:${port} yet`, "`opensession logs` to see why");
         return 1;
       }
