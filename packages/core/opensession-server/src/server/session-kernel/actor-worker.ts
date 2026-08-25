@@ -393,7 +393,8 @@ export function startSessionKernelActorWorker(): void {
           if (timer.op === "begin") result = store.beginTimerExecution(timer);
           else if (timer.op === "complete")
             result = store.completeTimerExecution(timer);
-          else result = store.failTimerExecution(timer);
+          else if (timer.op === "fail") result = store.failTimerExecution(timer);
+          else result = store.recordTimerRuntimeFailure(timer);
         } else {
           const ask = command.request;
           if (ask.op === "snapshot") result = store.askSnapshot(ask.sessionId);

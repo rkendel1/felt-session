@@ -3139,6 +3139,37 @@ export class SessionKernelStore {
     return settled;
   }
 
+  recordTimerRuntimeFailure(input: {
+    sessionId: string;
+    timerId: string;
+    token: string;
+    error: string;
+    maxAttempts: number;
+    observedAttempts: number;
+  }): { updated: boolean; deadLetteredNow: boolean } {
+    if (
+      !Number.isSafeInteger(input.maxAttempts) ||
+      input.maxAttempts < 1 ||
+      !Number.isSafeInteger(input.observedAttempts) ||
+      input.observedAttempts < 0
+    ) throw new Error("Invalid timer runtime failure intent");
+    const current = this.timer(input.sessionId, input.timerId);
+    if (!current || current.token !== input.token)
+      return { updated: false, deadLetteredNow: false };
+    if (current.attempts !== input.observedAttempts)
+      return {
+        updated: false,
+        deadLetteredNow: current.deadLetteredAt !== undefined,
+      };
+    return this.noteTimerFailure(
+      input.sessionId,
+      input.timerId,
+      input.error,
+      input.maxAttempts,
+      input.token,
+    );
+  }
+
 	scheduleTimer(
     timer: Omit<
       DurableTimer,

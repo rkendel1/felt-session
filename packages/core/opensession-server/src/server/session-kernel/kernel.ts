@@ -144,7 +144,9 @@ export function sessionTimer<T extends TimerActorRequest>(
     return store.beginTimerExecution(request) as TimerActorResult<T>;
   if (request.op === "complete")
     return store.completeTimerExecution(request) as TimerActorResult<T>;
-  return store.failTimerExecution(request) as TimerActorResult<T>;
+  if (request.op === "fail")
+    return store.failTimerExecution(request) as TimerActorResult<T>;
+  return store.recordTimerRuntimeFailure(request) as TimerActorResult<T>;
 }
 
 export function sessionDelivery<T extends DeliveryActorRequest>(

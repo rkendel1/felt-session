@@ -2408,6 +2408,86 @@ describe("SessionKernel durable runtime", () => {
 		expect(store.timer(timer.sessionId, timer.timerId)).toBeUndefined();
 	});
 
+	test("replays a timer when the actor did not commit handler completion", () => {
+		const dir = mkdtempSync(join(tmpdir(), "session-kernel-timer-replay-"));
+		const path = join(dir, "kernel.sqlite");
+		let durableStore = new SessionKernelStore(path);
+		try {
+			durableStore.scheduleTimer({
+				sessionId: "timer-before-completion",
+				timerId: "wake",
+				kind: "test_timer",
+				dueAt: 1,
+				payload: null,
+			});
+			const timer = durableStore.timer("timer-before-completion", "wake")!;
+			expect(durableStore.beginTimerExecution(timer)).toBe("execute");
+			durableStore.close();
+			durableStore = new SessionKernelStore(path);
+			expect(durableStore.beginTimerExecution(timer)).toBe("execute");
+		} finally {
+			durableStore.close();
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	test("accounts timer runtime failures once per observed attempt", () => {
+		store.scheduleTimer({
+			sessionId: "timer-runtime-failure",
+			timerId: "wake",
+			kind: "test_timer",
+			dueAt: Date.now() - 1,
+			payload: null,
+		});
+		const timer = store.timer("timer-runtime-failure", "wake")!;
+		expect(store.recordTimerRuntimeFailure({
+			...timer,
+			error: "actor completion failed",
+			maxAttempts: 20,
+			observedAttempts: 0,
+		})).toEqual({ updated: true, deadLetteredNow: false });
+		expect(store.recordTimerRuntimeFailure({
+			...timer,
+			error: "same failure",
+			maxAttempts: 20,
+			observedAttempts: 0,
+		})).toEqual({ updated: false, deadLetteredNow: false });
+		expect(store.timer(timer.sessionId, timer.timerId)?.attempts).toBe(1);
+	});
+
+	test("stale timer settlement cannot mutate a replacement generation", () => {
+		const sessionId = "timer-stale-settlement";
+		store.scheduleTimer({
+			sessionId,
+			timerId: "wake",
+			kind: "test_timer",
+			dueAt: 1,
+			payload: "first",
+		});
+		const first = store.timer(sessionId, "wake")!;
+		expect(store.beginTimerExecution(first)).toBe("execute");
+		store.scheduleTimer({
+			sessionId,
+			timerId: "wake",
+			kind: "test_timer",
+			dueAt: 1,
+			payload: "second",
+		});
+		const replacement = store.timer(sessionId, "wake")!;
+		expect(store.completeTimerExecution(first)).toBe(false);
+		expect(store.recordTimerRuntimeFailure({
+			...first,
+			error: "stale",
+			maxAttempts: 20,
+			observedAttempts: 0,
+		})).toEqual({ updated: false, deadLetteredNow: false });
+		expect(store.timer(sessionId, "wake")).toMatchObject({
+			token: replacement.token,
+			payload: "second",
+			attempts: 0,
+		});
+	});
+
 	test("same-id same-time replacement gets a distinct firing receipt", async () => {
 		const { fireSessionTimer, registerSessionTimerHandler } = await import("./runtime");
 		const sessionId = "timer-replacement";

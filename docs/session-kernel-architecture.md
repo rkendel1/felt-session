@@ -415,5 +415,6 @@ Explicit Stop requests likewise enter through a typed turn command plan: the
 actor permanently selects the original run id and generation before gateway
 bookkeeping or physical cancellation, and an exact retry cannot target a
 successor. Durable timer tokens also key typed actor begin/complete/fail
-receipts, so a crash after a handler returns retires that generation without
-executing the handler again.
+receipts. Once actor completion commits, recovery retires only that timer
+generation without executing its handler again; a crash before that commit
+remains destination-idempotent at-least-once delivery.

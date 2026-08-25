@@ -871,6 +871,11 @@ class RemoteStore implements SessionKernelStoreApi {
   ): ReturnType<SessionKernelStoreApi["failTimerExecution"]> {
     return this.actor.decideTimer({ op: "fail", ...input });
   }
+  recordTimerRuntimeFailure(
+    input: Parameters<SessionKernelStoreApi["recordTimerRuntimeFailure"]>[0],
+  ): ReturnType<SessionKernelStoreApi["recordTimerRuntimeFailure"]> {
+    return this.actor.decideTimer({ op: "record_runtime_failure", ...input });
+  }
   scheduleTimer(timer: Parameters<SessionKernelStoreApi["scheduleTimer"]>[0]) {
     this.call("scheduleTimer", timer);
   }
