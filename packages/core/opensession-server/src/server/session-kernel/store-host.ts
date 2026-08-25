@@ -445,7 +445,7 @@ export class SessionKernelStoreHost {
         try {
           store = new SessionKernelStore(
             sessionKernelSessionDbPath(sessionId, this.isolatedRoot),
-            { readonly: true },
+            { readonly: true, hydrateRunStateCache: false },
           );
         } catch (error) {
           // The first schema-23 read may encounter an additive schema-22 target

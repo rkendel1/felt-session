@@ -371,6 +371,7 @@ export type SessionKernelStoreOptions = {
 	readonly?: boolean;
 	allocateOutboxId?: (sessionId: string) => number;
   busyTimeoutMs?: number;
+  hydrateRunStateCache?: boolean;
 };
 
 const SESSION_KERNEL_SESSION_TABLES = [
@@ -425,7 +426,7 @@ export class SessionKernelStore {
 				throw new Error(
 					`Session kernel read mirror schema ${schemaVersion} does not match supported ${SESSION_KERNEL_SCHEMA_VERSION}`,
 				);
-			this.hydrateRunStateCache();
+			if (options.hydrateRunStateCache !== false) this.hydrateRunStateCache();
 			return;
 		}
 		if (path !== ":memory:") {
