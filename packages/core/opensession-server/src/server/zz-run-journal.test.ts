@@ -1012,6 +1012,21 @@ describe("run journal", () => {
 		expect(mod.takeInterruptedRuns()).toEqual([]);
 	});
 
+	it("leaves filtered recovery journals unclaimed for a later boot", () => {
+		mod.journalSet({
+			runKey: "quarantined-run",
+			osSessionId: "quarantined-session",
+			prompt: "preserve me",
+			cwd: "/tmp",
+			startedAt: new Date().toISOString(),
+		});
+
+		expect(mod.takeInterruptedRuns([], () => false)).toEqual([]);
+		const [preserved] = mod.activeRunRecords();
+		expect(preserved.runKey).toBe("quarantined-run");
+		expect(preserved.claimedAt).toBeUndefined();
+	});
+
 	it("defers actor-owned opening journals to the durable effect executor", () => {
 		mod.journalSet({
 			runKey: "opening-run",

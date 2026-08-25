@@ -492,7 +492,10 @@ const takenRunKeys: Set<string> = ((globalThis as any).__runJournalTakenKeys ??=
  * losing them. Returned records have claimedAt stripped so a reattach's
  * re-record doesn't persist a stale claim.
  */
-export function takeInterruptedRuns(seedRecords: ActiveRunRecord[] = []): ActiveRunRecord[] {
+export function takeInterruptedRuns(
+  seedRecords: ActiveRunRecord[] = [],
+  shouldTake: (record: ActiveRunRecord) => boolean = () => true,
+): ActiveRunRecord[] {
   const journal = readRunJournal();
   // A graceful-shutdown snapshot can retain a detached local host after its
   // shared record disappeared during process teardown. Fold those records
@@ -507,7 +510,10 @@ export function takeInterruptedRuns(seedRecords: ActiveRunRecord[] = []): Active
     };
   }
   const entries = Object.values(journal).filter(
-    (r) => !isRunActiveInProcess(r.runKey) && !takenRunKeys.has(r.runKey)
+    (r) =>
+      !isRunActiveInProcess(r.runKey) &&
+      !takenRunKeys.has(r.runKey) &&
+      shouldTake(r),
   );
   if (entries.length > 0) {
     const now = new Date().toISOString();

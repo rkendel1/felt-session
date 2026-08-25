@@ -2213,7 +2213,12 @@ export class SessionKernelStore {
       const openingEffectId = dispatch?.promptEntryId
         ? `opening:${dispatch.promptEntryId}`
         : undefined;
-      if (dispatch?.kind === "create" && openingEffectId) {
+      if (
+        kind !== "delivery_dispatch_acknowledged" &&
+        kind !== "delivery_dispatch_failed" &&
+        dispatch?.kind === "create" &&
+        openingEffectId
+      ) {
         const creation = this.creationState(sessionId);
         if (
           creation &&

@@ -1213,8 +1213,19 @@ describe("SessionKernel", () => {
 			effectId,
 		})).toMatchObject({ accepted: true, to: "failed" });
 
-		// This is the first later send. Its queue mutation repairs the missed
-		// creation ack, so claiming the follow-up cannot remain parked forever.
+		// Explicit settlement must observe and clear its own completed creation
+		// dispatch instead of the generic stale-dispatch repair clearing it first.
+		expect(store.ackDeliveryDispatch(sessionId, promptEntryId)).toBe(true);
+		expect(store.deliverySnapshot(sessionId).dispatch).toBeUndefined();
+
+		// If the process died before that explicit ack, the first later send still
+		// repairs the retained dispatch so the follow-up cannot remain parked.
+		store.claimDeliveryDispatch({
+			sessionId,
+			items: [{ id: "opening", content: "start" }],
+			promptEntryId,
+			kind: "create",
+		});
 		store.setDeliverySlot(sessionId, "queued", [
 			{ id: "follow-up", content: "try again" },
 		]);
