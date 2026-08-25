@@ -14,6 +14,13 @@ export type GatewayCommandOperation =
   | "transcript_import"
   | "transcript_replace"
   | "transcript_delete";
+/** Only operations whose destination consumes the same immutable request id may
+ * be re-admitted after an ambiguous process loss. Projection callbacks are not. */
+export const DESTINATION_IDEMPOTENT_GATEWAY_OPERATIONS = new Set<GatewayCommandOperation>([
+  "websocket_command",
+  "delete_session",
+]);
+
 
 export type GatewayCommandRequest =
   | {

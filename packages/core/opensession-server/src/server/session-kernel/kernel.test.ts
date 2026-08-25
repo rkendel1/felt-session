@@ -166,6 +166,71 @@ test("schema 6 upgrades create autonomous creation, delivery and ask state", () 
 });
 
 describe("SessionKernel", () => {
+	test("fails closed non-idempotent projection work after actor restart", () => {
+		const dir = mkdtempSync(join(tmpdir(), "session-kernel-projection-crash-"));
+		const path = join(dir, "kernel.sqlite");
+		let durableStore = new SessionKernelStore(path);
+		try {
+			expect(durableStore.requestGatewayCommand({
+				sessionId: "projection-crash",
+				requestId: "write-one",
+				operation: "session_file_updated",
+			})).toEqual({ status: "execute" });
+			durableStore.close();
+			durableStore = new SessionKernelStore(path);
+			expect(durableStore.command("projection-crash", "write-one")).toMatchObject({
+				status: "indeterminate",
+				error: "actor restarted after execution began",
+			});
+			expect(() => durableStore.requestGatewayCommand({
+				sessionId: "projection-crash",
+				requestId: "write-one",
+				operation: "session_file_updated",
+			})).toThrow("actor restarted after execution began");
+		} finally {
+			durableStore.close();
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	test("re-admits only destination-idempotent gateway work after restart", () => {
+		const dir = mkdtempSync(join(tmpdir(), "session-kernel-gateway-replay-"));
+		const path = join(dir, "kernel.sqlite");
+		let durableStore = new SessionKernelStore(path);
+		const input = {
+			sessionId: "gateway-replay",
+			requestId: "command-one",
+			operation: "websocket_command" as const,
+			identity: { command: "cancel", targetRunId: "run-one" },
+		};
+		try {
+			expect(durableStore.requestGatewayCommand(input)).toEqual({ status: "execute" });
+			durableStore.close();
+			durableStore = new SessionKernelStore(path);
+			expect(durableStore.requestGatewayCommand(input)).toEqual({ status: "execute" });
+		} finally {
+			durableStore.close();
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	test("deduplicates deletion before and after its permanent tombstone", () => {
+		const input = {
+			sessionId: "delete-once",
+			requestId: "delete:delete-once",
+			operation: "delete_session" as const,
+			identity: { cleanWorktree: true },
+		};
+		expect(store.requestGatewayCommand(input)).toEqual({ status: "execute" });
+		expect(store.requestGatewayCommand(input)).toEqual({ status: "in_progress" });
+		store.tombstoneSession(input.sessionId);
+		expect(store.requestGatewayCommand(input)).toEqual({
+			status: "completed",
+			result: { status: 200, body: { ok: true } },
+			duplicate: true,
+		});
+	});
+
 	test("replays typed submit-prompt results under one immutable identity", () => {
 		const input = {
 			sessionId: "typed-submit",
@@ -378,8 +443,9 @@ describe("SessionKernel", () => {
 	test("persists run state and monotonic change sequence", () => {
 		const kernel = sessionKernel("s1");
 		expect(kernel.runState().state).toBe("idle");
-		expect(kernel.setRunState({ state: "starting", event: "prompt" }).changeSeq,).toBe(1);
-		const running = kernel.setRunState({
+		expect(store.setRunState({ sessionId: "a", state: "starting", event: "prompt" }).changeSeq,).toBe(1);
+		const running = store.setRunState({
+      sessionId: "a",
 			state: "running",
 			event: "run_registered",
 			generation: 1,

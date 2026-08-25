@@ -18,7 +18,7 @@ import { transcriptLineUser } from "./transcript-persistence";
 import {
   SessionKernelStore,
   __setSessionKernelStoreForTest,
-  sessionKernel,
+  sessionKernelStore,
 } from "./session-kernel";
 import { hostRunBusy } from "./host-registry";
 import {
@@ -28,6 +28,18 @@ import {
 } from "./run-journal";
 
 const roots: string[] = [];
+
+function registerTestRun(sessionId: string, runId: string): void {
+  const store = sessionKernelStore();
+  const prior = store.runState(sessionId);
+  store.setRunState({
+    sessionId,
+    state: "running",
+    event: "run_registered",
+    currentRunId: runId,
+    generation: prior.currentRunId === runId ? prior.generation : prior.generation + 1,
+  });
+}
 
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
@@ -349,11 +361,7 @@ describe("HostHandle model recovery", () => {
 			prompt: "test",
 			cwd: "/tmp",
 		};
-		sessionKernel(spec.osSessionId).registerRun(
-			spec.hostId,
-			"running",
-			"run_registered",
-		);
+		registerTestRun(spec.osSessionId, spec.hostId);
 		const handle = makeHandle(spec);
 		try {
 			(handle as any).handleMsg({
@@ -386,12 +394,11 @@ describe("HostHandle model recovery", () => {
 			prompt: "test",
 			cwd: "/tmp",
 		};
-		const kernel = sessionKernel(spec.osSessionId);
-		kernel.registerRun(spec.hostId, "running", "run_registered");
+		registerTestRun(spec.osSessionId, spec.hostId);
 		// The restart/settle race: the run goes idle BEFORE the host's
 		// reattach hello replays its transcript history (2026-08-21
 		// os-01a02469 — the turn's closing summary was lost this way).
-		kernel.setRunState({ state: "idle", event: "turn_end" });
+		kernelStore.setRunState({ sessionId: spec.osSessionId, state: "idle", event: "turn_end" });
 		const handle = makeHandle(spec);
 		try {
 			(handle as any).handleMsg({
@@ -423,11 +430,7 @@ describe("HostHandle model recovery", () => {
 			prompt: "test",
 			cwd: "/tmp",
 		};
-		sessionKernel(spec.osSessionId).registerRun(
-			"rh-newer",
-			"running",
-			"run_registered",
-		);
+		registerTestRun(spec.osSessionId, "rh-newer");
 		const handle = makeHandle(spec);
 		try {
 			(handle as any).handleMsg({
@@ -457,11 +460,7 @@ describe("HostHandle model recovery", () => {
 			prompt: "test",
 			cwd: "/tmp",
 		};
-		sessionKernel(spec.osSessionId).registerRun(
-			"rh-current",
-			"running",
-			"run_registered",
-		);
+		registerTestRun(spec.osSessionId, "rh-current");
 		let asks = 0;
 		let steerFailures = 0;
 		const handle = makeHandle(spec);
@@ -524,7 +523,7 @@ describe("HostHandle model recovery", () => {
 			prompt: "test",
 			cwd: "/tmp",
 		};
-		sessionKernel(spec.osSessionId).registerRun(spec.hostId, "running", "run_registered");
+		registerTestRun(spec.osSessionId, spec.hostId);
 		const handle = new HostHandle(
 			dir,
 			spec,
@@ -534,7 +533,7 @@ describe("HostHandle model recovery", () => {
 		try {
 			await handle.connectWithWait(100);
 			handlers!.onMsg({ t: "ask", askId: "ask-1", input: {} });
-			sessionKernel(spec.osSessionId).registerRun("rh-successor", "running", "run_registered");
+			registerTestRun(spec.osSessionId, "rh-successor");
 			answer.resolve({ behavior: "allow", updatedInput: {} });
 			await Bun.sleep(0);
 			expect(sent.some((message) => message.t === "ask_answer")).toBe(false);
@@ -558,7 +557,7 @@ describe("HostHandle model recovery", () => {
     roots.push(kernelRoot);
     const kernelStore = new SessionKernelStore(join(kernelRoot, "kernel.db"));
     const previousKernel = __setSessionKernelStoreForTest(kernelStore);
-    sessionKernel(spec.osSessionId).registerRun(spec.hostId, "running", "run_registered");
+    registerTestRun(spec.osSessionId, spec.hostId);
     const handle = makeHandle(spec);
     const events = handle.events();
 
@@ -653,11 +652,7 @@ describe("HostHandle model recovery", () => {
     const previousTranscript = __setTranscriptStoreForTest(transcriptStore);
     const kernelStore = new SessionKernelStore(join(root, "kernel.db"));
     const previousKernel = __setSessionKernelStoreForTest(kernelStore);
-    sessionKernel(spec.osSessionId).registerRun(
-      spec.hostId,
-      "running",
-      "run_registered",
-    );
+    registerTestRun(spec.osSessionId, spec.hostId);
     const handle = new HostHandle(oldDir, spec, {}, launcher);
     const meta: RunHostMeta = {
       hostId: spec.hostId,

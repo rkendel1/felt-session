@@ -1,6 +1,7 @@
 /** Runtime wake-ups for durable timers and outbox effects. */
 import {
 	passivateIdleSessionKernels,
+  sessionCore,
 	sessionKernel,
 	sessionKernelRuntimeWork,
 	sessionKernelStore,
@@ -222,20 +223,21 @@ export async function drainSessionKernelRuntime(): Promise<void> {
 			active.add(item.id);
 			void executeSessionEffect(item)
 				.then((executed) => {
-					if (executed) sessionKernelStore().ackOutbox(item.id);
+					if (executed) sessionCore({ op: "ack_outbox", id: item.id });
 				})
 				.catch((error) => {
           if (error instanceof SessionEffectDeferredError) {
-            sessionKernelStore().deferOutbox(item.id);
+            sessionCore({ op: "defer_outbox", id: item.id });
             return;
           }
 					const message =
 						error instanceof Error ? error.message : String(error);
-					const settled = sessionKernelStore().noteOutboxFailure(
-						item.id,
-						message,
-						error instanceof CreationEffectIndeterminateError ? 1 : 20,
-					);
+					const settled = sessionCore({
+            op: "fail_outbox",
+            id: item.id,
+            error: message,
+            maxAttempts: error instanceof CreationEffectIndeterminateError ? 1 : 20,
+          });
 					if (settled.deadLetteredNow) {
 						failDeadCreationEffect(item, message);
 						audit({ msg: "session_kernel_dead_lettered", kind: "outbox", session_id: item.sessionId, outbox_id: item.id, error: message });

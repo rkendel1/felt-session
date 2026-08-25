@@ -1,6 +1,7 @@
 import { SessionKernelStore } from "./store";
 import {
   SESSION_KERNEL_ACTOR_VERSION,
+  isCriticalSettlementCommand,
   type KernelActorAsyncRequest,
   type KernelActorAsyncResponse,
   type KernelActorSyncRequest,
@@ -112,6 +113,14 @@ export function startSessionKernelActorWorker(): void {
               core.payload,
               core.effectKey,
             );
+          else if (core.op === "ack_outbox") result = store.ackOutbox(core.id);
+          else if (core.op === "defer_outbox") result = store.deferOutbox(core.id);
+          else if (core.op === "fail_outbox")
+            result = store.noteOutboxFailure(
+              core.id,
+              core.error,
+              core.maxAttempts,
+            );
           else if (core.op === "clear") result = store.clearSession(core.sessionId);
           else result = store.tombstoneSession(core.sessionId);
         } else if (command.kind === "turn") {
@@ -193,6 +202,8 @@ export function startSessionKernelActorWorker(): void {
       output.set(bytes.subarray(0, output.length));
       Atomics.store(control, 1, Math.min(bytes.length, output.length));
       Atomics.store(control, 0, -1);
+      if (request.t === "reduce" && isCriticalSettlementCommand(request.command))
+        queueMicrotask(() => self.close());
     }
     Atomics.notify(control, 0);
   }

@@ -376,6 +376,33 @@ describe("session kernel actor boundary", () => {
     })).toThrow("actor stopped");
   });
 
+  test("fail-stops the actor client after ambiguous typed settlement", async () => {
+    const host = await actor();
+    host.decideGateway({
+      op: "request",
+      sessionId: "ambiguous-settlement",
+      requestId: "one",
+      operation: "websocket_command",
+    });
+    host.callStore("failCommand", [
+      "ambiguous-settlement",
+      "one",
+      "receipt changed",
+      false,
+    ]);
+    expect(() => host.decideGateway({
+      op: "complete",
+      sessionId: "ambiguous-settlement",
+      requestId: "one",
+      operation: "websocket_command",
+      result: "done",
+    })).toThrow("receipt changed");
+    expect(() => host.decideDelivery({
+      op: "snapshot",
+      sessionId: "other-session",
+    })).toThrow("receipt changed");
+  });
+
   test("returns a terminal failure instead of re-executing it", async () => {
     const host = await actor();
     const input = {

@@ -27,7 +27,9 @@ import {
 	DeliveryOwnedMap,
 	EphemeralSessionSet,
 	sessionDelivery,
+  sessionKernel,
 	sessionKernelStore,
+  sessionTurn,
 } from "./session-kernel";
 
 export type QueueItem = {
@@ -226,10 +228,10 @@ export const stoppedSessions = new EphemeralSessionSet();
 /** Durable Stop ownership survives a gateway restart until an explicit prompt
  * advances the actor run state out of `stopped`. */
 export function isUserStopped(sessionId: string): boolean {
-  const cancel = sessionKernelStore().turnSnapshot(sessionId).cancel;
+  const cancel = sessionTurn({ op: "snapshot", sessionId }).cancel;
   return (
     stoppedSessions.has(sessionId) ||
-    sessionKernelStore().runState(sessionId).state === "stopped" ||
+    sessionKernel(sessionId).runState().state === "stopped" ||
     cancel?.phase === "prepared" ||
     cancel?.phase === "executing"
   );
@@ -245,13 +247,13 @@ export function isUserStopped(sessionId: string): boolean {
  */
 export function liftUserStop(sessionId: string): void {
   stoppedSessions.delete(sessionId);
-  if (sessionKernelStore().runState(sessionId).state === "stopped")
+  if (sessionKernel(sessionId).runState().state === "stopped")
     // Intake only releases the durable Stop latch. The later physical run
     // reservation owns `prompt` -> `starting` and supplies its run token.
     // Advancing to `starting` here makes the intake busy-check observe its own
     // half-created run, queue the message, and wait forever for an engine owner
     // that was never started.
-    sessionKernelStore().applyRunEvent({ sessionId, event: "stop_lifted" });
+    sessionKernel(sessionId).applyRunEvent({ event: "stop_lifted" });
 }
 
 // Both maps are persisted to disk so a real restart/crash (not just a hot

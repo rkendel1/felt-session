@@ -11,8 +11,15 @@ export type CoreActorRequest =
       payload: SessionActorEffectFor<SessionActorEffectKind>["payload"];
       effectKey: string;
     }
+  | { op: "ack_outbox"; id: number }
+  | { op: "defer_outbox"; id: number }
+  | { op: "fail_outbox"; id: number; error: string; maxAttempts: number }
   | { op: "clear"; sessionId: string }
   | { op: "tombstone"; sessionId: string };
 
 export type CoreActorResult<T extends CoreActorRequest> =
-  T extends { op: "enqueue_effect" } ? number : void;
+  T extends { op: "enqueue_effect" }
+    ? number
+    : T extends { op: "fail_outbox" }
+      ? { updated: boolean; deadLetteredNow: boolean }
+      : void;

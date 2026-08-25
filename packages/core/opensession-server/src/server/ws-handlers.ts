@@ -637,6 +637,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 			const kernelToken = crypto.randomUUID();
 			kernelDispatchTokens.add(kernelToken);
       let gatewayCommandExecuting = false;
+      let gatewayPhysicalFinished = false;
 				try {
           const plan = sessionGatewayCommand({
             op: "request",
@@ -704,6 +705,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 					const dispatchError = kernelDispatchErrors.get(kernelToken);
 					if (dispatchError) throw dispatchError;
 					const result = kernelDispatchResults.get(kernelToken);
+            gatewayPhysicalFinished = true;
             sessionGatewayCommand({
               op: "complete",
               sessionId: commandSessionId,
@@ -734,7 +736,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 					const message =
 						error instanceof Error ? error.message : String(error);
 					const retryable = isRetryableSessionCommandError(error);
-          if (gatewayCommandExecuting)
+          if (gatewayCommandExecuting && !gatewayPhysicalFinished)
             sessionGatewayCommand({
               op: "fail",
               sessionId: commandSessionId,

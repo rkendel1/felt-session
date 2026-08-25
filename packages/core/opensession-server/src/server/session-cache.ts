@@ -448,6 +448,7 @@ export function updateSessionFile(
     });
     if (plan.status !== "execute")
       throw new Error("Unexpected duplicate session-file command");
+    let physicalFinished = false;
     try {
 		const path = `${SESSIONS_DIR}/${sessionId}.json`;
 		const current: NativeSessionFile = existsSync(path)
@@ -463,6 +464,7 @@ export function updateSessionFile(
 			upsertIndexedSession(indexed);
 		}
 		invalidateSessionsCache();
+      physicalFinished = true;
       sessionGatewayCommand({
         op: "complete",
         sessionId,
@@ -471,7 +473,7 @@ export function updateSessionFile(
         result: null,
       });
     } catch (error) {
-      sessionGatewayCommand({
+      if (!physicalFinished) sessionGatewayCommand({
         op: "fail",
         sessionId,
         requestId,

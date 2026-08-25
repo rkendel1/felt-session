@@ -1836,8 +1836,9 @@ export async function handleSessionsRoutes(
 		if (sessionKernelStore().isTombstoned(session.id))
 			return recoverTombstonedDeletion();
 
-    const deleteRequestId = `delete:${crypto.randomUUID()}`;
+    const deleteRequestId = `delete:${session.id}`;
     let deleteExecuting = false;
+    let deletePhysicalFinished = false;
 		try {
       const plan = sessionGatewayCommand({
         op: "request",
@@ -1889,6 +1890,7 @@ export async function handleSessionsRoutes(
 			return { status: 500, body: { error: e.message } };
 		}
 			});
+      deletePhysicalFinished = true;
       sessionGatewayCommand({
         op: "complete",
         sessionId: session.id,
@@ -1898,7 +1900,7 @@ export async function handleSessionsRoutes(
       });
 			return Response.json(result.body, { status: result.status });
 		} catch (error) {
-      if (deleteExecuting)
+      if (deleteExecuting && !deletePhysicalFinished)
         sessionGatewayCommand({
           op: "fail",
           sessionId: session.id,

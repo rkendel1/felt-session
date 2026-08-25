@@ -146,6 +146,16 @@ export function sessionCore<T extends CoreActorRequest>(
       request.payload,
       request.effectKey,
     ) as CoreActorResult<T>;
+  if (request.op === "ack_outbox")
+    return store.ackOutbox(request.id) as CoreActorResult<T>;
+  if (request.op === "defer_outbox")
+    return store.deferOutbox(request.id) as CoreActorResult<T>;
+  if (request.op === "fail_outbox")
+    return store.noteOutboxFailure(
+      request.id,
+      request.error,
+      request.maxAttempts,
+    ) as CoreActorResult<T>;
   if (request.op === "clear")
     return store.clearSession(request.sessionId) as CoreActorResult<T>;
   return store.tombstoneSession(request.sessionId) as CoreActorResult<T>;
@@ -348,41 +358,6 @@ export class SessionKernel {
 		return sessionKernelStore().runState(this.sessionId);
 	}
 
-	setRunState(input: {
-		state: string;
-		event: string;
-		detail?: unknown;
-		generation?: number;
-		currentRunId?: string;
-	}): DurableRunState {
-    this.assertWritable(`run_state:${input.event}`);
-    this.touch();
-    return sessionKernelStore().setRunState({
-      sessionId: this.sessionId,
-      ...input,
-    });
-	}
-
-	registerRun(
-		runId: string,
-		stateName: string,
-		event: string,
-		detail?: unknown,
-	): DurableRunState {
-    this.assertWritable(`register_run:${event}`);
-    this.touch();
-    const prior = sessionKernelStore().runState(this.sessionId);
-    return sessionKernelStore().setRunState({
-      sessionId: this.sessionId,
-      state: stateName,
-      event,
-      detail,
-      currentRunId: runId,
-      generation:
-        prior.currentRunId === runId ? prior.generation : prior.generation + 1,
-    });
-	}
-
 	isCurrentRun(runId: string, generation?: number): boolean {
 		const current = this.runState();
 		return (
@@ -392,11 +367,6 @@ export class SessionKernel {
 			current.currentRunId === runId &&
 			(generation === undefined || current.generation === generation)
 		);
-	}
-
-	recordChange(kind: string, payload?: unknown): number {
-		this.touch();
-		return sessionKernelStore().appendChange(this.sessionId, kind, payload);
 	}
 
 	changesSince(changeSeq: number, limit = 500) {

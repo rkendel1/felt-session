@@ -1,3 +1,4 @@
+import { DESTINATION_IDEMPOTENT_GATEWAY_OPERATIONS } from "./gateway-command-protocol";
 /**
  * Durable state for the session actor boundary.
  *
@@ -1826,10 +1827,14 @@ export class SessionKernelStore {
     if (!input.requestId || input.requestId.length > 256)
       throw new Error("Invalid gateway command intent");
     if (this.isTombstoned(input.sessionId)) {
-      if (
-        input.operation === "delete_session" ||
-        input.operation === "transcript_delete"
-      ) return { status: "execute" };
+      if (input.operation === "delete_session")
+        return {
+          status: "completed",
+          result: { status: 200, body: { ok: true } },
+          duplicate: true,
+        };
+      if (input.operation === "transcript_delete")
+        return { status: "execute" };
       throw new Error(`Session ${input.sessionId} was deleted`);
     }
     const record = this.acceptCommand({
@@ -1837,7 +1842,7 @@ export class SessionKernelStore {
       requestId: input.requestId,
       type: input.operation,
       payload: input.identity,
-      replaySafe: true,
+      replaySafe: DESTINATION_IDEMPOTENT_GATEWAY_OPERATIONS.has(input.operation),
     });
     if (record.status === "completed")
       return { status: "completed", result: record.result, duplicate: true };

@@ -49,3 +49,32 @@ export type KernelActorSyncRequest =
   | ({ t: "reduce"; command: SessionActorReducerCommand } & SyncBuffers);
 
 export type KernelActorRunEventResult = RunEventDecisionResult;
+
+/** Settlement follows a physical or externally visible action. Any rejected
+ * settlement is ambiguous, so both the client and actor fail-stop. */
+export function isCriticalSettlementCommand(
+  command: SessionActorReducerCommand,
+): boolean {
+  if (command.kind === "gateway")
+    return command.request.op === "complete" || command.request.op === "fail";
+  if (command.kind === "core")
+    return command.request.op === "ack_outbox" || command.request.op === "fail_outbox";
+  if (command.kind === "timer")
+    return command.request.op === "complete" || command.request.op === "fail";
+  if (command.kind === "delivery")
+    return [
+      "complete_submit_command",
+      "fail_submit_command",
+      "settle_interrupt",
+      "ack_dispatch",
+      "fail_dispatch",
+    ].includes(command.request.op);
+  if (command.kind === "turn")
+    return [
+      "complete_cancel_command",
+      "fail_cancel_command",
+      "settle_cancel",
+      "settle_outcome_projection",
+    ].includes(command.request.op);
+  return false;
+}

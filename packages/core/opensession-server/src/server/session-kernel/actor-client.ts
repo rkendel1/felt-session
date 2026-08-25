@@ -26,6 +26,7 @@ import type { GatewayCommandRequest, GatewayCommandResult } from "./gateway-comm
 import type { CoreActorRequest, CoreActorResult } from "./core-protocol";
 import {
   SESSION_KERNEL_ACTOR_VERSION,
+  isCriticalSettlementCommand,
   type KernelActorAsyncRequest,
   type KernelActorAsyncResponse,
 } from "./actor-protocol";
@@ -356,8 +357,12 @@ export class SessionKernelActorClient {
       result?: TResult;
       error?: string;
     };
-    if (!response.ok)
-      throw new Error(response.error || `Session kernel ${label} failed`);
+    if (!response.ok) {
+      const error = new Error(response.error || `Session kernel ${label} failed`);
+      if (request.t === "reduce" && isCriticalSettlementCommand(request.command))
+        this.markDead(error);
+      throw error;
+    }
     return response.result as TResult;
   }
 

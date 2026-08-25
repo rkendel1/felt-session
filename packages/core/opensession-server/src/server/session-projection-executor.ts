@@ -23,8 +23,10 @@ export function executeSessionProjection<T>(
   });
   if (plan.status !== "execute")
     throw new Error(`Unexpected duplicate ${operation} command`);
+  let physicalFinished = false;
   try {
     const result = mutate();
+    physicalFinished = true;
     return sessionGatewayCommand({
       op: "complete",
       sessionId,
@@ -33,7 +35,7 @@ export function executeSessionProjection<T>(
       result,
     }) as T;
   } catch (error) {
-    sessionGatewayCommand({
+    if (!physicalFinished) sessionGatewayCommand({
       op: "fail",
       sessionId,
       requestId,
