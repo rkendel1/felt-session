@@ -94,6 +94,12 @@ export function sessionAsk<T extends AskActorRequest>(
   else if (request.op === "entries") result = store.askEntries();
   else if (request.op === "set")
     result = store.setAskRecord(request.sessionId, request.value);
+  else if (request.op === "answer")
+    result = store.answerAskRecord(
+      request.sessionId,
+      request.questionId,
+      request.answers,
+    );
   else if (request.op === "delete")
     result = store.deleteAskRecord(request.sessionId);
   else result = store.clearAskRecords();

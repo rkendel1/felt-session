@@ -1741,6 +1741,30 @@ export class SessionKernelStore {
     this.mutateAskRecord(sessionId, value);
   }
 
+  /** Settle one pending ask durably. Idempotent on replay: an already
+   * answered record with the same question reports matched without
+   * re-mutating, so the original caller's true result replays. */
+  answerAskRecord(
+    sessionId: string,
+    questionId: string | null,
+    answers: Record<string, string> | null,
+  ): { matched: boolean } {
+    const record = this.askSnapshot(sessionId) as
+      | { questionId?: string; answerReceived?: boolean }
+      | undefined;
+    if (!record) return { matched: false };
+    if (record.answerReceived)
+      return { matched: (record.questionId ?? null) === questionId };
+    if (questionId !== null && (record.questionId ?? null) !== questionId)
+      return { matched: false };
+    this.setAskRecord(sessionId, {
+      ...record,
+      answerReceived: true,
+      earlyAnswer: answers,
+    });
+    return { matched: true };
+  }
+
   deleteAskRecord(sessionId: string): boolean {
     return this.mutateAskRecord(sessionId, undefined);
   }

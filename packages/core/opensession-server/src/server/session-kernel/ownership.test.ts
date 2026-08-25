@@ -30,7 +30,6 @@ describe("single session ownership", () => {
 		}, 0);
 		expect(sites).toBe(LEGACY_GATEWAY_EFFECT_SITE_BASELINE);
 		expect(LEGACY_GATEWAY_EFFECT_OPERATIONS).toEqual([
-			"answer_question",
 			"cancel_session",
 			"delete_session",
 			"session_file_updated",
@@ -372,7 +371,10 @@ describe("single session ownership", () => {
 		expect(create).not.toMatch(/\bcreateWorktreeForExistingBranch\(/);
 		expect(create).toContain("spec.openingPromptEntryId");
 		expect(wiring).toContain('legacyGatewayEffect("cancel_session"');
-		expect(wiring).toContain('legacyGatewayEffect("answer_question"');
+		// Ask answers settle through the typed actor aggregate, not the
+		// compatibility mailbox.
+		expect(wiring).not.toContain('legacyGatewayEffect("answer_question"');
+		expect(wiring).toContain('op: "answer",');
 		const tools = read("../agents/slack/sessions-tools.ts");
 		expect(tools).toContain("durableToolRequestId");
 		expect(tools).toContain('durableToolRequestId(ctx, "create_session", extra');

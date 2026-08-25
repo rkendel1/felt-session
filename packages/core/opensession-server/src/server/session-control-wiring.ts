@@ -18,7 +18,7 @@
 import { AUTO_CONTINUE_USER } from "./auto-continue";
 import { personaName } from "./config";
 import { currentAgentRunToken, isAgentSessionBusy, steerAgentRun } from "./agent-runner";
-import { pendingAskAwaitingAnswer } from "./asks";
+import { pendingAskAwaitingAnswer, pendingAsks } from "./asks";
 import { relinkAskThreads } from "./human-asks";
 import { SESSION_EFFORTS, type SessionEffort, providerFor, resolveModel } from "./models";
 import { configuredInteractiveDefaultModel } from "./model-catalog";
@@ -56,6 +56,7 @@ import {
 	requestCreationBranch,
 	requestCreationCredential,
 	requestCreationWorkspace,
+	sessionAsk,
 	sessionKernel,
 	sessionKernelOwnsCurrentCommand,
   sessionTurn,
@@ -152,23 +153,23 @@ registerSessionControl({
 	},
 
 	answerQuestion: async (id, answers, opts) => {
-		const requestId = opts?.requestId || randomUUIDv7();
 		const questionId = pendingAskAwaitingAnswer(id)?.questionId || null;
-		const accepted = await sessionKernel(id).dispatchLegacy(
-			legacyGatewayEffect("answer_question", {
-				requestId,
-				payload: { questionId, answers },
-				source: "session_control",
-				replaySafe: true,
-			}),
-			() => {
-				const pending = pendingAskAwaitingAnswer(id);
-				if (!pending || pending.questionId !== questionId) return false;
-				pending.resolve(answers && typeof answers === "object" ? answers : null);
-				return true;
-			},
-		);
-		return accepted.result;
+		// The actor settles the durable ask aggregate directly; the gateway
+		// waiter is resolved from the committed result. No compatibility
+		// mailbox entry: the aggregate itself makes replay idempotent.
+		const settled = sessionAsk({
+			op: "answer",
+			sessionId: id,
+			questionId,
+			answers,
+		});
+		if (!settled.matched) return false;
+		const pending = pendingAsks.get(id) as
+			| { questionId?: string; resolve?: (value: unknown) => void }
+			| undefined;
+		if (pending?.resolve && pending.questionId === questionId)
+			pending.resolve(answers && typeof answers === "object" ? answers : null);
+		return true;
 	},
 
 	deliverToSession: async (id, content, user, opts) => {
