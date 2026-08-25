@@ -1133,6 +1133,9 @@ export function makePiBashTool(input: {
   unattended: boolean;
   sessionId?: string;
   runKind?: string;
+  /** Immutable Open Session run cancellation. Kept separate from Pi's tool
+   * signal because AgentSession.abort() can leave an active tool signal live. */
+  runSignal?: AbortSignal;
   onAudit?: (event: PiBashAuditEvent) => void;
 }): ToolDefinition<any, any, any> {
   return {
@@ -1182,7 +1185,8 @@ export function makePiBashTool(input: {
           ? Math.min(rawTimeout, BASH_MAX_TIMEOUT_S)
           : BASH_DEFAULT_TIMEOUT_S;
 
-      if (signal?.aborted) throw new Error("Command aborted");
+      const aborted = () => Boolean(signal?.aborted || input.runSignal?.aborted);
+      if (aborted()) throw new Error("Command aborted");
       const commandAudit = summarizeBashAuditCommand(command);
       const commandStartedAt = Date.now();
       input.onAudit?.({ phase: "start", ...commandAudit, timeout_s: timeoutS });
@@ -1263,7 +1267,14 @@ export function makePiBashTool(input: {
           killTree();
         }, timeoutS * 1000);
         const onAbort = () => killTree();
-        signal?.addEventListener("abort", onAbort, { once: true });
+        const abortSignals = [...new Set([signal, input.runSignal].filter(
+          (candidate): candidate is AbortSignal => !!candidate,
+        ))];
+        for (const abortSignal of abortSignals)
+          abortSignal.addEventListener("abort", onAbort, { once: true });
+        // addEventListener does not replay an abort that raced spawn/listener
+        // installation, so close that window before awaiting process exit.
+        if (aborted()) killTree();
         try {
           // Exit-gated completion: the drains alone can outlive bash forever
           // when a backgrounded child inherited the pipes, so wait for exit
@@ -1273,7 +1284,8 @@ export function makePiBashTool(input: {
           await Promise.race([drains, Bun.sleep(250)]);
         } finally {
           clearTimeout(timer);
-          signal?.removeEventListener("abort", onAbort);
+          for (const abortSignal of abortSignals)
+            abortSignal.removeEventListener("abort", onAbort);
           for (const reader of readers) {
             // cancel() rejects (async) when the drain already released the
             // reader — swallow both the sync throw and the rejection.
@@ -1287,7 +1299,7 @@ export function makePiBashTool(input: {
           (droppedChars > 0
             ? `[output truncated: first ${droppedChars} characters dropped]\n`
             : "") + out;
-        if (signal?.aborted) throw new Error("Command aborted");
+        if (aborted()) throw new Error("Command aborted");
         if (timedOut)
           throw new Error(`${text}\nCommand timed out after ${timeoutS}s`.trim());
         if (exitCode !== 0)
@@ -1297,7 +1309,7 @@ export function makePiBashTool(input: {
           details: { exitCode, truncatedChars: droppedChars || undefined },
         };
       } finally {
-        const cancelled = Boolean(signal?.aborted);
+        const cancelled = Boolean(signal?.aborted || input.runSignal?.aborted);
         input.onAudit?.({
           phase: "finish",
           ...commandAudit,
@@ -2083,6 +2095,7 @@ async function* runPiAttempt(
               unattended: policy.unattended,
               sessionId: journal?.osSessionId,
               runKind: journal?.kind,
+              runSignal: abort.signal,
               onAudit: (event) =>
                 audit({
                   msg: `pi_command_${event.phase}`,

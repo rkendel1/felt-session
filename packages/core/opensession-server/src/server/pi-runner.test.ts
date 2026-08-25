@@ -1073,6 +1073,23 @@ describe("makePiBashTool exit-gated completion", () => {
     expect(Date.now() - started).toBeLessThan(8_000);
   });
 
+  test("run cancellation kills bash even when Pi keeps its tool signal live", async () => {
+    const runAbort = new AbortController();
+    const runBoundTool = makePiBashTool({
+      cwd: tmpdir(),
+      env,
+      gated: false,
+      unattended: false,
+      runSignal: runAbort.signal,
+    });
+    setTimeout(() => runAbort.abort(), 200);
+    const started = Date.now();
+    await expect(
+      (runBoundTool as any).execute("run-cancel", { command: "sleep 60" }, undefined),
+    ).rejects.toThrow(/aborted/i);
+    expect(Date.now() - started).toBeLessThan(8_000);
+  });
+
   test("emits paired, redacted audit events for a successful command", async () => {
     const events: PiBashAuditEvent[] = [];
     const auditedTool = makePiBashTool({
