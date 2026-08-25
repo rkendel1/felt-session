@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import {
   SessionKernelActorClient,
   SessionKernelQuarantinedError,
+  isFatalSessionKernelAsyncTimeout,
 } from "./actor-client";
 import {
   __setSessionKernelStoreForTest,
@@ -30,6 +31,32 @@ async function actor(): Promise<SessionKernelActorClient> {
 }
 
 describe("session kernel actor boundary", () => {
+  test("keeps polling timeouts retryable while fencing handshake ambiguity", () => {
+    expect(isFatalSessionKernelAsyncTimeout({
+      t: "runtime_work",
+      rpcId: "runtime",
+      now: 0,
+      timerKinds: [],
+      effectKinds: [],
+      limit: 1,
+    })).toBe(false);
+    expect(isFatalSessionKernelAsyncTimeout({ t: "stats", rpcId: "stats" }))
+      .toBe(false);
+    expect(isFatalSessionKernelAsyncTimeout({ t: "maintain", rpcId: "maintain" }))
+      .toBe(false);
+    expect(isFatalSessionKernelAsyncTimeout({
+      t: "hello",
+      rpcId: "hello",
+      version: 23,
+    })).toBe(true);
+    expect(isFatalSessionKernelAsyncTimeout({
+      t: "acknowledge",
+      rpcId: "ack",
+      sessionId: "session",
+      requestId: "request",
+    })).toBe(true);
+  });
+
   test("reads per-session quarantine state through the actor", async () => {
     const host = await actor();
     installSessionKernelActor(host);

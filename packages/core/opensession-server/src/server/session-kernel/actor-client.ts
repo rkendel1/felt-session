@@ -67,6 +67,12 @@ export class SessionKernelQuarantinedError extends SessionKernelActorError {
   }
 }
 
+export function isFatalSessionKernelAsyncTimeout(
+  request: KernelActorAsyncRequest,
+): boolean {
+  return request.t === "hello" || request.t === "acknowledge";
+}
+
 type Pending = {
   resolve: (value: KernelActorAsyncResponse) => void;
   reject: (error: Error) => void;
@@ -407,11 +413,14 @@ export class SessionKernelActorClient {
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         this.pending.delete(request.rpcId);
-        const error = new Error(
-          `Session kernel actor timed out handling ${request.t}`,
-        );
-        this.markDead(error);
-        reject(error);
+        const message = `Session kernel actor timed out handling ${request.t}`;
+        if (isFatalSessionKernelAsyncTimeout(request)) {
+          const error = new Error(message);
+          this.markDead(error);
+          reject(error);
+          return;
+        }
+        reject(new SessionKernelActorError(message, true));
       }, 15_000);
       this.pending.set(request.rpcId, {
         resolve: (value) => {
