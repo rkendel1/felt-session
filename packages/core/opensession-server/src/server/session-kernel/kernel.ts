@@ -263,7 +263,12 @@ export function sessionKernelActorActive(): boolean {
 }
 
 export function sessionKernelStore(): SessionKernelStoreApi {
-	return (state.store ??= new SessionKernelStore());
+  if (state.store) return state.store;
+  if (process.env.NODE_ENV === "test")
+    return (state.store = new SessionKernelStore());
+  throw new Error(
+    "Session kernel store requires the authoritative actor service",
+  );
 }
 
 export function __setSessionKernelStoreForTest(
@@ -282,7 +287,7 @@ export function installSessionKernelActor(
 ): SessionKernelActorClient | undefined {
 	const previous = state.actor;
 	state.actor = actor;
-	if (actor) state.store = actor.store;
+  state.store = actor?.store;
 	state.kernels?.clear();
 	state.deliveryProjection?.clear();
 	return previous;

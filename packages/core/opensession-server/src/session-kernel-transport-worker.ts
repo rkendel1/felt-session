@@ -1,4 +1,5 @@
 import {
+  SESSION_KERNEL_ACTOR_VERSION,
   SESSION_KERNEL_MAX_REQUEST_BYTES,
   SESSION_KERNEL_MAX_TRANSPORT_REQUESTS,
   SESSION_KERNEL_TRANSPORT_VERSION,
@@ -18,6 +19,7 @@ const token = await readSessionKernelCredential();
 const endpoint = `${sessionKernelServiceUrl().replace(/\/$/, "")}/rpc`;
 let inFlight = 0;
 let fatal = false;
+let serviceEpoch: string | undefined;
 
 function failTransport(message: string): never {
   fatal = true;
@@ -35,6 +37,8 @@ async function rpc(
     });
   const envelope: KernelActorTransportEnvelope = {
     version: SESSION_KERNEL_TRANSPORT_VERSION,
+    actorVersion: SESSION_KERNEL_ACTOR_VERSION,
+    ...(serviceEpoch ? { serviceEpoch } : {}),
     request,
   };
   const body = JSON.stringify(envelope);
@@ -65,6 +69,13 @@ async function rpc(
     const result = JSON.parse(text) as KernelActorServiceResponse;
     if (!result || result.rpcId !== request.rpcId)
       failTransport("Session kernel service returned an invalid response");
+    if (request.t === "hello") {
+      if (result.t !== "ready" || !result.serviceEpoch)
+        failTransport("Session kernel service omitted its incarnation fence");
+      serviceEpoch = result.serviceEpoch;
+    } else if (!serviceEpoch) {
+      failTransport("Session kernel service was used before handshake");
+    }
     return result;
   } catch (error) {
     if (

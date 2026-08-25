@@ -5,7 +5,7 @@ import type {
   RunEventDecisionResult,
 } from "./store";
 
-export const SESSION_KERNEL_ACTOR_VERSION = 19;
+export const SESSION_KERNEL_ACTOR_VERSION = 20;
 export const SESSION_KERNEL_TRANSPORT_VERSION = 1;
 export const SESSION_KERNEL_MAX_REQUEST_BYTES = 16 * 1024 * 1024;
 export const SESSION_KERNEL_MAX_RESPONSE_BYTES = 128 * 1024 * 1024;
@@ -27,7 +27,7 @@ export type KernelActorAsyncRequest =
 ;
 
 export type KernelActorAsyncResponse =
-  | { t: "ready"; rpcId: string; version: number }
+  | { t: "ready"; rpcId: string; version: number; serviceEpoch?: string }
   | { t: "acknowledge_result"; rpcId: string }
   | { t: "maintain_result"; rpcId: string; pending: boolean }
   | {
@@ -64,6 +64,8 @@ export type KernelActorServiceResponse =
 
 export type KernelActorTransportEnvelope = {
   version: number;
+  actorVersion: number;
+  serviceEpoch?: string;
   request: KernelActorAsyncRequest | KernelActorServiceCall;
 };
 

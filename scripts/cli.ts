@@ -132,10 +132,38 @@ async function start(): Promise<number> {
     info(`Open ${bold(publicUrl)}`);
     // Compiled binary: re-exec ourselves as the server subcommand (there is no
     // `bun`/opensession.ts on disk). From source: run the entry under bun.
-    const command = isCompiledBinary()
+    const compiled = isCompiledBinary();
+    const command = compiled
       ? [process.execPath, "server"]
       : ["bun", "run", "packages/core/opensession-server/opensession.ts"];
-    return await runInherit(command, REPO_ROOT);
+    const kernelCommand = compiled
+      ? [process.execPath, "session-kernel-service"]
+      : ["bun", "run", "packages/core/opensession-server/src/session-kernel-service.ts"];
+    const token = `${crypto.randomUUID()}${crypto.randomUUID()}`;
+    const sharedEnv = { OPENSESSION_SESSION_KERNEL_TOKEN: token };
+    const kernel = Bun.spawn(kernelCommand, {
+      cwd: REPO_ROOT,
+      env: {
+        PATH: process.env.PATH || "/usr/local/bin:/usr/bin:/bin",
+        HOME: process.env.HOME || "",
+        NODE_ENV: process.env.NODE_ENV || "production",
+        ...(process.env.OPENSESSION_STATE_DIR
+          ? { OPENSESSION_STATE_DIR: process.env.OPENSESSION_STATE_DIR }
+          : {}),
+        ...(process.env.OPENSESSION_SESSIONS_DIR
+          ? { OPENSESSION_SESSIONS_DIR: process.env.OPENSESSION_SESSIONS_DIR }
+          : {}),
+        ...sharedEnv,
+      },
+      stdout: "inherit",
+      stderr: "inherit",
+    });
+    try {
+      return await runInherit(command, REPO_ROOT, sharedEnv);
+    } finally {
+      kernel.kill("SIGTERM");
+      await kernel.exited;
+    }
   }
   const code = await service.control("start");
   if (code === 0) info(`Open ${bold(publicUrl)}`);

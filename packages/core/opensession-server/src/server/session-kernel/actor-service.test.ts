@@ -19,6 +19,7 @@ import { startSessionKernelService } from "./actor-service";
 const token = "test-session-kernel-token";
 const stateDir = mkdtempSync(join(tmpdir(), "opensession-kernel-service-"));
 let service: Awaited<ReturnType<typeof startSessionKernelService>>;
+let serviceEpoch: string | undefined;
 const previousStateDir = process.env.OPENSESSION_STATE_DIR;
 
 beforeAll(async () => {
@@ -34,6 +35,12 @@ afterAll(() => {
 });
 
 async function rpc(request: KernelActorTransportEnvelope["request"]) {
+  if (!serviceEpoch && request.t !== "hello")
+    await rpc({
+      t: "hello",
+      rpcId: "test-handshake",
+      version: SESSION_KERNEL_ACTOR_VERSION,
+    });
   const response = await fetch(`${service.url}/rpc`, {
     method: "POST",
     headers: {
@@ -42,11 +49,15 @@ async function rpc(request: KernelActorTransportEnvelope["request"]) {
     },
     body: JSON.stringify({
       version: SESSION_KERNEL_TRANSPORT_VERSION,
+      actorVersion: SESSION_KERNEL_ACTOR_VERSION,
+      ...(serviceEpoch ? { serviceEpoch } : {}),
       request,
     }),
   });
   expect(response.status).toBe(200);
-  return (await response.json()) as Record<string, any>;
+  const body = (await response.json()) as Record<string, any>;
+  if (body.t === "ready") serviceEpoch = body.serviceEpoch;
+  return body;
 }
 
 describe("session kernel actor service", () => {
@@ -75,6 +86,7 @@ describe("session kernel actor service", () => {
       },
       body: JSON.stringify({
         version: SESSION_KERNEL_TRANSPORT_VERSION + 1,
+        actorVersion: SESSION_KERNEL_ACTOR_VERSION,
         request: {
           t: "hello",
           rpcId: "wrong-version",
@@ -83,6 +95,39 @@ describe("session kernel actor service", () => {
       }),
     });
     expect(response.status).toBe(409);
+  });
+
+  test("fences actor versions and service incarnations on every call", async () => {
+    await rpc({
+      t: "hello",
+      rpcId: "version-handshake",
+      version: SESSION_KERNEL_ACTOR_VERSION,
+    });
+    for (const envelope of [
+      {
+        version: SESSION_KERNEL_TRANSPORT_VERSION,
+        actorVersion: SESSION_KERNEL_ACTOR_VERSION + 1,
+        serviceEpoch,
+      },
+      {
+        version: SESSION_KERNEL_TRANSPORT_VERSION,
+        actorVersion: SESSION_KERNEL_ACTOR_VERSION,
+        serviceEpoch: "stale-service",
+      },
+    ]) {
+      const response = await fetch(`${service.url}/rpc`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${token}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          ...envelope,
+          request: { t: "stats", rpcId: crypto.randomUUID() },
+        }),
+      });
+      expect(response.status).toBe(409);
+    }
   });
 
   test("rejects a call outside the bounded response budget", async () => {

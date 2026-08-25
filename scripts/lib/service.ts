@@ -71,6 +71,17 @@ export const LAUNCHD_PLIST = join(
  * `bin/OpenSession` and the `bin/opensession` shim are the same file, so writing
  * the launcher there would follow the shim symlink and clobber the binary. */
 export const LAUNCHD_LAUNCHER = join(OPENSESSION_HOME, "OpenSession");
+export const LAUNCHD_SESSION_KERNEL_LABEL = "dev.opensession.session-kernel";
+export const LAUNCHD_SESSION_KERNEL_PLIST = join(
+  HOME,
+  "Library",
+  "LaunchAgents",
+  `${LAUNCHD_SESSION_KERNEL_LABEL}.plist`,
+);
+export const LAUNCHD_SESSION_KERNEL_LAUNCHER = join(
+  OPENSESSION_HOME,
+  "OpenSessionKernel",
+);
 export const LOG_DIR = join(OPENSESSION_HOME, "logs");
 const RUN_HOST_HELPER = "/usr/local/libexec/opensession-run-host";
 
@@ -577,6 +588,53 @@ export function renderLauncher(): string {
   );
 }
 
+export function renderSessionKernelLauncher(): string {
+  const compiled = isCompiledBinary();
+  const exec = compiled
+    ? `${SHIM_PATH} session-kernel-service`
+    : `${bunPath()} run packages/core/opensession-server/src/session-kernel-service.ts`;
+  return (
+    `#!/bin/bash\n` +
+    `cd ${serviceWorkdir()} || exit 1\n` +
+    `exec ${exec}\n`
+  );
+}
+
+export function renderSessionKernelPlist(): string {
+  const binDir = isCompiledBinary() ? dirname(SHIM_PATH) : bunPath().replace(/\/bun$/, "");
+  const state = process.env.OPENSESSION_STATE_DIR || envFileValue("OPENSESSION_STATE_DIR");
+  const sessions =
+    process.env.OPENSESSION_SESSIONS_DIR || envFileValue("OPENSESSION_SESSIONS_DIR");
+  const optional = [
+    state ? `    <key>OPENSESSION_STATE_DIR</key><string>${xml(state)}</string>` : "",
+    sessions ? `    <key>OPENSESSION_SESSIONS_DIR</key><string>${xml(sessions)}</string>` : "",
+  ].filter(Boolean).join("\n");
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>${LAUNCHD_SESSION_KERNEL_LABEL}</string>
+  <key>ProgramArguments</key>
+  <array><string>${xml(LAUNCHD_SESSION_KERNEL_LAUNCHER)}</string></array>
+  <key>WorkingDirectory</key><string>${xml(serviceWorkdir())}</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>${xml(servicePath(binDir))}</string>
+    <key>HOME</key><string>${xml(HOME)}</string>
+    <key>NODE_ENV</key><string>production</string>
+    <key>OPENSESSION_SESSION_KERNEL_TOKEN_FILE</key><string>${xml(USER_SESSION_KERNEL_TOKEN_PATH)}</string>
+${optional}
+  </dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>StandardOutPath</key><string>${xml(join(LOG_DIR, "session-kernel.log"))}</string>
+  <key>StandardErrorPath</key><string>${xml(join(LOG_DIR, "session-kernel.err.log"))}</string>
+  <key>ProcessType</key><string>Interactive</string>
+</dict>
+</plist>
+`;
+}
+
 export function renderPlist(): string {
   const exec = serverExec();
   return `<?xml version="1.0" encoding="UTF-8"?>
@@ -852,10 +910,41 @@ export async function install(
       mkdirSync(join(HOME, "Library", "LaunchAgents"), { recursive: true });
       mkdirSync(LOG_DIR, { recursive: true });
       mkdirSync(dirname(LAUNCHD_LAUNCHER), { recursive: true });
+      if (!existsSync(USER_SESSION_KERNEL_TOKEN_PATH)) {
+        await Bun.write(
+          USER_SESSION_KERNEL_TOKEN_PATH,
+          `${crypto.randomUUID()}${crypto.randomUUID()}\n`,
+        );
+        chmodSync(USER_SESSION_KERNEL_TOKEN_PATH, 0o600);
+      }
       await Bun.write(LAUNCHD_LAUNCHER, renderLauncher());
+      await Bun.write(
+        LAUNCHD_SESSION_KERNEL_LAUNCHER,
+        renderSessionKernelLauncher(),
+      );
       chmodSync(LAUNCHD_LAUNCHER, 0o755);
+      chmodSync(LAUNCHD_SESSION_KERNEL_LAUNCHER, 0o755);
       await Bun.write(LAUNCHD_PLIST, renderPlist());
+      await Bun.write(
+        LAUNCHD_SESSION_KERNEL_PLIST,
+        renderSessionKernelPlist(),
+      );
       await run(["launchctl", "bootout", `${domain()}/${LAUNCHD_LABEL}`]);
+      await run([
+        "launchctl",
+        "bootout",
+        `${domain()}/${LAUNCHD_SESSION_KERNEL_LABEL}`,
+      ]);
+      const kernel = await run([
+        "launchctl",
+        "bootstrap",
+        domain(),
+        LAUNCHD_SESSION_KERNEL_PLIST,
+      ]);
+      if (kernel.code !== 0) {
+        warn(`launchctl actor bootstrap failed: ${kernel.stderr}`);
+        return false;
+      }
       const { code, stderr } = await run([
         "launchctl",
         "bootstrap",
@@ -901,22 +990,68 @@ export async function control(
 
   if (supervisor() === "launchd") {
     const label = `${domain()}/${LAUNCHD_LABEL}`;
+    const kernel = `${domain()}/${LAUNCHD_SESSION_KERNEL_LABEL}`;
     switch (action) {
-      case "start":
-        return await runInherit(["launchctl", "kickstart", label]);
-      case "stop":
-        return await runInherit(["launchctl", "bootout", label]);
-      case "restart":
-        return await runInherit(["launchctl", "kickstart", "-k", label]);
+      case "start": {
+        const actorLoaded = (await run(["launchctl", "print", kernel], { quiet: true })).code === 0;
+        const actor = await runInherit(
+          actorLoaded
+            ? ["launchctl", "kickstart", kernel]
+            : ["launchctl", "bootstrap", domain(), LAUNCHD_SESSION_KERNEL_PLIST],
+        );
+        if (actor !== 0) return actor;
+        const gatewayLoaded = (await run(["launchctl", "print", label], { quiet: true })).code === 0;
+        return await runInherit(
+          gatewayLoaded
+            ? ["launchctl", "kickstart", label]
+            : ["launchctl", "bootstrap", domain(), LAUNCHD_PLIST],
+        );
+      }
+      case "stop": {
+        const gateway = await runInherit(["launchctl", "bootout", label]);
+        const actor = await runInherit(["launchctl", "bootout", kernel]);
+        return gateway || actor;
+      }
+      case "restart": {
+        await runInherit(["launchctl", "bootout", label]);
+        const actor = await runInherit(["launchctl", "kickstart", "-k", kernel]);
+        if (actor !== 0) return actor;
+        return await runInherit([
+          "launchctl",
+          "bootstrap",
+          domain(),
+          LAUNCHD_PLIST,
+        ]);
+      }
     }
   }
 
   const scope = installedScope() ?? "user";
-  return await runInherit(
-    systemctl(scope, [action, SERVICE_NAME]),
+  const env = userEnv();
+  if (action === "start") {
+    const actor = await runInherit(
+      systemctl(scope, ["start", SESSION_KERNEL_SERVICE_NAME]),
+      undefined,
+      env,
+    );
+    return actor === 0
+      ? await runInherit(systemctl(scope, ["start", SERVICE_NAME]), undefined, env)
+      : actor;
+  }
+  const gateway = await runInherit(
+    systemctl(scope, ["stop", SERVICE_NAME]),
     undefined,
-    userEnv(),
+    env,
   );
+  const actor = await runInherit(
+    systemctl(scope, [action === "restart" ? "restart" : "stop", SESSION_KERNEL_SERVICE_NAME]),
+    undefined,
+    env,
+  );
+  if (action === "stop") return gateway || actor;
+  return actor === 0
+    ? await runInherit(systemctl(scope, ["start", SERVICE_NAME]), undefined, env)
+    : actor;
 }
 
 export async function logs(follow: boolean, lines: number): Promise<number> {
@@ -964,7 +1099,18 @@ export async function uninstall(): Promise<boolean> {
         env,
       );
       if (scope === "user") {
-        await run(["rm", "-f", USER_UNIT_PATH]);
+        await runInherit(
+          systemctl(scope, ["disable", "--now", SESSION_KERNEL_SERVICE_NAME]),
+          undefined,
+          env,
+        );
+        await run([
+          "rm",
+          "-f",
+          USER_UNIT_PATH,
+          USER_SESSION_KERNEL_UNIT_PATH,
+          USER_SESSION_KERNEL_TOKEN_PATH,
+        ]);
         await runInherit(systemctl(scope, ["daemon-reload"]), undefined, env);
         ok("user service removed");
         return true;
@@ -976,11 +1122,21 @@ export async function uninstall(): Promise<boolean> {
         "--now",
         EXECUTOR_SERVICE_NAME,
       ]);
+      await runInherit([
+        "sudo",
+        "systemctl",
+        "disable",
+        "--now",
+        SESSION_KERNEL_SERVICE_NAME,
+      ]);
       for (const path of [
         SERVICE_PATH,
         EXECUTOR_SERVICE_PATH,
+        SESSION_KERNEL_SERVICE_PATH,
         "/etc/systemd/system/opensession.service.d/executor-credential.conf",
+        "/etc/systemd/system/opensession.service.d/session-kernel-credential.conf",
         EXECUTOR_TOKEN_PATH,
+        SESSION_KERNEL_TOKEN_PATH,
         "/etc/opensession/run-host.conf",
         "/etc/sudoers.d/opensession-run-host",
         RUN_HOST_HELPER,
@@ -1000,7 +1156,20 @@ export async function uninstall(): Promise<boolean> {
     case "launchd": {
       if (!existsSync(LAUNCHD_PLIST)) return true;
       await run(["launchctl", "bootout", `${domain()}/${LAUNCHD_LABEL}`]);
-      await run(["rm", "-f", LAUNCHD_PLIST, LAUNCHD_LAUNCHER]);
+      await run([
+        "launchctl",
+        "bootout",
+        `${domain()}/${LAUNCHD_SESSION_KERNEL_LABEL}`,
+      ]);
+      await run([
+        "rm",
+        "-f",
+        LAUNCHD_PLIST,
+        LAUNCHD_LAUNCHER,
+        LAUNCHD_SESSION_KERNEL_PLIST,
+        LAUNCHD_SESSION_KERNEL_LAUNCHER,
+        USER_SESSION_KERNEL_TOKEN_PATH,
+      ]);
       ok("LaunchAgent removed");
       return true;
     }

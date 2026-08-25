@@ -347,6 +347,7 @@ rollback_to_pin() {
     log "ERROR: executor failed readiness after rollback"
     return 1
   fi
+  run_systemctl stop "$SERVICE_NAME"
   if ! refresh_session_kernel; then
     log "ERROR: session kernel failed readiness after rollback"
     return 1
@@ -419,6 +420,11 @@ do_deploy() {
     exit 1
   fi
 
+  # The actor service opens and migrates the durable database, so establish the
+  # rollback floor before replacing it. A failed target must never boot an older
+  # protocol against a database the target may already have advanced.
+  record_kernel_schema_floor
+  run_systemctl stop "$SERVICE_NAME"
   if ! refresh_session_kernel; then
     log "ERROR: target session kernel failed readiness; attempting rollback to pin"
     if rollback_to_pin; then
@@ -430,11 +436,6 @@ do_deploy() {
     fi
     exit 1
   fi
-
-  # Record the minimum rollback-compatible schema before this code can open and
-  # migrate the durable database. A failed health gate must not boot an older
-  # binary that would replay indeterminate physical work.
-  record_kernel_schema_floor
 
   # Open the watchdog window just before the restart, so the watchdog only
   # ever acts on failures caused by THIS deploy.

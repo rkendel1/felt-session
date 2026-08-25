@@ -33,10 +33,10 @@ filesystem, network, process, and model effects remain in the independently
 supervised executors. Their active receipts do not hold the actor mailbox, so
 Stop, steering, and fenced run events remain responsive.
 
-The gateway retains a Worker bridge only to support synchronous compatibility
-reads while call sites migrate. That bridge performs authenticated bounded HTTP
-RPC and wakes the gateway through its existing `SharedArrayBuffer`; it never
-opens the store. A missing credential, handshake mismatch, service failure, or
+The gateway retains a Worker bridge for bounded synchronous reads and typed
+reductions. That bridge performs authenticated bounded HTTP RPC and wakes the
+gateway through its existing `SharedArrayBuffer`; it never opens the store. A
+missing credential, actor/transport/incarnation mismatch, service failure, or
 invalid response fail-stops the gateway. There is no in-process actor or direct
 writer fallback in production.
 
@@ -46,9 +46,10 @@ opening two writable SQLite connections. The service and gateway share only the
 minimal state-directory environment and a root-owned 0600 credential. Source
 installs use `packages/core/opensession-server/src/session-kernel-service.ts`;
 compiled installs dispatch `opensession session-kernel-service` and ship both
-actor and transport Worker sidecars. The service enforces a `127.0.0.1` bind;
-clients can override the endpoint with `OPENSESSION_SESSION_KERNEL_URL` and
-operators can move the local port with `OPENSESSION_SESSION_KERNEL_PORT`.
+actor and transport Worker sidecars. The service and client both enforce plain HTTP on `127.0.0.1`; operators can
+move the local port with `OPENSESSION_SESSION_KERNEL_PORT`. Systemd user units,
+macOS launchd installs, and foreground development supervise the same separate
+actor process with a minimally scoped environment.
 
 The target is an Erlang/Durable Objects style state machine: each typed message
 is reduced and committed in one short actor turn, external work is emitted as a

@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { resolve } from "node:path";
-import { renderSessionKernelUnit, renderUnit } from "../scripts/lib/service";
+import {
+  renderSessionKernelLauncher,
+  renderSessionKernelPlist,
+  renderSessionKernelUnit,
+  renderUnit,
+} from "../scripts/lib/service";
 
 const repoRoot = resolve(import.meta.dir, "..");
 
@@ -27,6 +32,16 @@ describe("session kernel service deployment", () => {
     expect(runtime).toContain("session-kernel-transport-worker.js");
     expect(runtime).not.toContain('workerEntry("session-kernel-worker.js"');
     expect(runtime).not.toContain("new SessionKernelStore");
+    const kernel = await Bun.file(
+      resolve(
+        repoRoot,
+        "packages/core/opensession-server/src/server/session-kernel/kernel.ts",
+      ),
+    ).text();
+    expect(kernel).toContain('process.env.NODE_ENV === "test"');
+    expect(kernel).toContain(
+      "Session kernel store requires the authoritative actor service",
+    );
   });
 
   test("renders source and rootless units with minimal state environment", async () => {
@@ -49,11 +64,34 @@ describe("session kernel service deployment", () => {
     ).text();
     expect(deploy).toContain("install-session-kernel-credential.sh");
     expect(deploy).toContain("opensession-session-kernel.service");
-    expect(deploy.indexOf('systemctl restart opensession-session-kernel.service'))
+    const stopGateway = deploy.indexOf("systemctl stop opensession.service");
+    const restartActor = deploy.indexOf(
+      "systemctl restart opensession-session-kernel.service",
+    );
+    const publishGateway = deploy.indexOf(
+      'cp "$REPO_DIR/opensession.service"',
+    );
+    expect(stopGateway).toBeGreaterThan(0);
+    expect(restartActor).toBeGreaterThan(stopGateway);
+    expect(publishGateway).toBeGreaterThan(restartActor);
+    expect(restartActor)
       .toBeLessThan(deploy.lastIndexOf("systemctl restart opensession.service"));
-    expect(selfDeploy).toContain("refresh_session_kernel");
-    expect(selfDeploy.indexOf("refresh_session_kernel"))
+    expect(selfDeploy).toContain('run_systemctl stop "$SERVICE_NAME"');
+    expect(selfDeploy.lastIndexOf('run_systemctl stop "$SERVICE_NAME"'))
+      .toBeLessThan(selfDeploy.lastIndexOf("refresh_session_kernel"));
+    expect(selfDeploy.lastIndexOf("refresh_session_kernel"))
       .toBeLessThan(selfDeploy.lastIndexOf("restart_service"));
+  });
+
+  test("supervises a separate minimal actor process on launchd", () => {
+    const plist = renderSessionKernelPlist();
+    const launcher = renderSessionKernelLauncher();
+    expect(plist).toContain("dev.opensession.session-kernel");
+    expect(plist).toContain("OPENSESSION_SESSION_KERNEL_TOKEN_FILE");
+    expect(plist).not.toContain("PLAIN_API_KEY");
+    expect(plist).not.toContain("EnvironmentFile");
+    expect(launcher).toContain("session-kernel-service.ts");
+    expect(launcher).not.toContain("opensession.env");
   });
 
   test("renders the same credential into both sides of the gateway boundary", async () => {

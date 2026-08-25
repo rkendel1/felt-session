@@ -119,12 +119,13 @@ if ! run_as_service_user git -C "$REPO_DIR" diff --quiet 'HEAD@{1}' HEAD -- bun.
   run_as_service_user bash -lc "cd '$REPO_DIR' && bun install --frozen-lockfile"
 fi
 
-# The deployed unit is a COPY of the repo's opensession.service (not a symlink) —
-# sync it when it changes so unit edits actually ship.
+# Publish the dependent gateway unit only after the actor unit is installed and
+# healthy. This avoids a first-rollout window where Requires= points at a unit
+# that does not exist yet.
+GATEWAY_UNIT_NEEDS_SYNC=0
 if ! cmp -s "$REPO_DIR/opensession.service" /etc/systemd/system/opensession.service; then
-  echo "[deploy] opensession.service changed — syncing unit + daemon-reload"
-  cp "$REPO_DIR/opensession.service" /etc/systemd/system/opensession.service
-  systemctl daemon-reload
+  GATEWAY_UNIT_NEEDS_SYNC=1
+  RESTART_GATEWAY=1
 fi
 
 EXECUTOR_TOKEN_PATH="/etc/opensession/executor-token"
@@ -250,6 +251,11 @@ if [ "$RESTART_GATEWAY" = "1" ]; then
   done
 fi
 
+if [ "$RESTART_KERNEL" = "1" ]; then
+  echo "[deploy] stopping gateway before replacing its actor protocol peer"
+  systemctl stop opensession.service
+fi
+
 if [ "$RESTART_EXECUTOR" = "1" ]; then
   echo "[deploy] restarting executor launcher (active run hosts are unaffected)"
   systemctl enable opensession-executor.service
@@ -291,6 +297,12 @@ if ! systemctl is-active --quiet opensession-session-kernel.service \
   || ! curl -fs --max-time 2 http://127.0.0.1:3849/ready >/dev/null 2>&1; then
   echo "[deploy] ERROR: session kernel actor service did not become healthy" >&2
   exit 1
+fi
+
+if [ "$GATEWAY_UNIT_NEEDS_SYNC" = "1" ]; then
+  echo "[deploy] opensession.service changed — syncing after actor readiness"
+  cp "$REPO_DIR/opensession.service" /etc/systemd/system/opensession.service
+  systemctl daemon-reload
 fi
 
 # Host safety fuses: the coordinator gets its own ceiling, while detached

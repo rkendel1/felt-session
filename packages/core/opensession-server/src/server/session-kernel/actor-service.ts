@@ -30,20 +30,24 @@ export type SessionKernelServiceOptions = {
 };
 
 export function sessionKernelServiceUrl(): string {
-  return (
+  const value =
     process.env.OPENSESSION_SESSION_KERNEL_URL ??
-    `http://${process.env.OPENSESSION_SESSION_KERNEL_HOST ?? DEFAULT_HOST}:${process.env.OPENSESSION_SESSION_KERNEL_PORT ?? DEFAULT_PORT}`
-  );
+    `http://${process.env.OPENSESSION_SESSION_KERNEL_HOST ?? DEFAULT_HOST}:${process.env.OPENSESSION_SESSION_KERNEL_PORT ?? DEFAULT_PORT}`;
+  const url = new URL(value);
+  if (url.protocol !== "http:" || url.hostname !== DEFAULT_HOST)
+    throw new Error("Session kernel service URL must use HTTP on 127.0.0.1");
+  return url.origin;
 }
 
 export async function readSessionKernelCredential(): Promise<string> {
   const inline = process.env.OPENSESSION_SESSION_KERNEL_TOKEN?.trim();
   if (inline) return inline;
   const credentialDirectory = process.env.CREDENTIALS_DIRECTORY;
-  if (credentialDirectory) {
-    const value = (
-      await readFile(`${credentialDirectory}/session-kernel-token`, "utf8")
-    ).trim();
+  const credentialFile = credentialDirectory
+    ? `${credentialDirectory}/session-kernel-token`
+    : process.env.OPENSESSION_SESSION_KERNEL_TOKEN_FILE;
+  if (credentialFile) {
+    const value = (await readFile(credentialFile, "utf8")).trim();
     if (value) return value;
   }
   throw new Error("Session kernel service credential is unavailable");
@@ -84,6 +88,7 @@ export async function startSessionKernelService(
     { type: "module" },
   );
   const pending = new Map<string, Pending>();
+  const serviceEpoch = crypto.randomUUID();
   let server: ReturnType<typeof Bun.serve> | undefined;
   let actorReady = false;
   let actorError: Error | undefined;
@@ -203,11 +208,26 @@ export async function startSessionKernelService(
           { error: "Unsupported session kernel transport version" },
           { status: 409 },
         );
+      if (envelope.actorVersion !== SESSION_KERNEL_ACTOR_VERSION)
+        return json(
+          { error: "Unsupported session kernel actor version" },
+          { status: 409 },
+        );
+      if (
+        envelope.request?.t !== "hello" &&
+        envelope.serviceEpoch !== serviceEpoch
+      )
+        return json(
+          { error: "Session kernel service incarnation changed" },
+          { status: 409 },
+        );
       if (!envelope.request || typeof envelope.request.rpcId !== "string")
         return json({ error: "Invalid RPC envelope" }, { status: 400 });
       try {
         const response = await actorRequest(envelope.request);
-        const body = JSON.stringify(response);
+        const fencedResponse =
+          response.t === "ready" ? { ...response, serviceEpoch } : response;
+        const body = JSON.stringify(fencedResponse);
         if (Buffer.byteLength(body) > SESSION_KERNEL_MAX_RESPONSE_BYTES + 1024)
           return json({ error: "Response is too large" }, { status: 507 });
         return new Response(body, {
