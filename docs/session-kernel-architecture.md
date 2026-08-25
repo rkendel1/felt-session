@@ -32,10 +32,12 @@ The network frontend and actors are separate isolates. The frontend bounds
 requests at 16 MiB, responses at 128 MiB, and outstanding calls at 1024. A
 catalog lane plus a configurable bounded pool of session Worker lanes host typed
 messages. The service owns one serial promise mailbox per canonical session ID
-and selects a free lane for each turn, so one SQLite wait cannot consume every
-lane and two turns for one session cannot overlap. A failed lane is restarted
-without stopping healthy lanes; system-catalog ambiguity still fail-stops the
-service. After startup ownership checks, actor turns perform bounded SQLite
+and gives that actor stable lane affinity, so process-local reducer caches remain
+coherent and two turns for one session cannot overlap. Many actors share each
+lane, while the short isolated SQLite wait bound leaves unrelated lanes
+available. A failed lane is restarted without stopping healthy lanes;
+system-catalog ambiguity still fail-stops the service. After startup ownership
+checks, actor turns perform bounded SQLite
 reductions only. They do not bind sockets, perform filesystem or process work,
 invoke models, or execute outbox effects. Physical filesystem, network,
 process, and model work remains in gateway continuations, the executor service,

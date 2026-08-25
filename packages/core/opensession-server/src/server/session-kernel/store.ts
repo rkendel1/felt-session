@@ -1113,6 +1113,10 @@ export class SessionKernelStore {
 	}
 
 	runStates(): Array<DurableRunState & { sessionId: string }> {
+    // Catalog/global reads may run on a different actor-host lane from the
+    // session's stable mailbox. Refresh this projection from SQLite instead of
+    // returning a lane-local cache snapshot.
+    this.hydrateRunStateCache();
 		return [...this.runStateCache].map(([sessionId, state]) => ({
 			sessionId,
 			...state,

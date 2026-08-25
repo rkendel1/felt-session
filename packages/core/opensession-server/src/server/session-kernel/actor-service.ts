@@ -285,13 +285,19 @@ export async function startSessionKernelService(
     slot.ready = true;
   }
 
-  function leastBusySessionSlot(): WorkerSlot {
-    const ready = sessionSlots.filter((slot) => slot.ready && slot.worker);
-    if (ready.length === 0)
-      throw new RetryableActorHostError("Session actor pool is restarting");
-    return ready.reduce((best, slot) =>
-      slot.pending.size < best.pending.size ? slot : best,
-    );
+  function assignedSessionSlot(sessionId: string): WorkerSlot {
+    // Stable affinity keeps one logical actor's in-memory SQLite/cache state on
+    // one lane until that lane restarts. The durable database remains the
+    // authority and is rehydrated after restart or LRU passivation.
+    let hash = 2_166_136_261;
+    for (let index = 0; index < sessionId.length; index += 1) {
+      hash ^= sessionId.charCodeAt(index);
+      hash = Math.imul(hash, 16_777_619);
+    }
+    const slot = sessionSlots[(hash >>> 0) % sessionSlots.length]!;
+    if (!slot.ready || !slot.worker)
+      throw new RetryableActorHostError("Session actor lane is restarting");
+    return slot;
   }
 
   function enqueueSession(
@@ -303,7 +309,7 @@ export async function startSessionKernelService(
     const turn = prior
       .catch(() => {})
       .then(() => gate)
-      .then(() => sendToSlot(leastBusySessionSlot(), request));
+      .then(() => sendToSlot(assignedSessionSlot(sessionId), request));
     const tail = turn.then(() => {}, () => {});
     sessionMailboxes.set(sessionId, tail);
     void tail.then(() => {
