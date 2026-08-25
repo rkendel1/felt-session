@@ -320,22 +320,27 @@ export async function startSessionKernelService(
 
   function pumpSlot(slot: WorkerSlot): void {
     if (slot.pending.size > 0 || !slot.worker) return;
-    const priorityIndex = slot.queue.findIndex((turn) => turn.priority);
-    const ordinaryIndex = slot.queue.findIndex((turn) => !turn.priority);
     let index = -1;
-    if (
-      priorityIndex >= 0 &&
-      (ordinaryIndex < 0 || slot.priorityBurst < MAX_PRIORITY_BURST)
-    ) {
-      index = priorityIndex;
-      slot.priorityBurst += 1;
-    } else if (ordinaryIndex >= 0) {
-      index = ordinaryIndex;
-      slot.priorityBurst = 0;
+    if (!slot.ready) {
+      // A restart handshake is an infrastructure prerequisite, not actor work.
+      // It must bypass fairness state retained from the failed generation.
+      index = slot.queue.findIndex((turn) => turn.allowUnready);
+    } else {
+      const priorityIndex = slot.queue.findIndex((turn) => turn.priority);
+      const ordinaryIndex = slot.queue.findIndex((turn) => !turn.priority);
+      if (
+        priorityIndex >= 0 &&
+        (ordinaryIndex < 0 || slot.priorityBurst < MAX_PRIORITY_BURST)
+      ) {
+        index = priorityIndex;
+        slot.priorityBurst += 1;
+      } else if (ordinaryIndex >= 0) {
+        index = ordinaryIndex;
+        slot.priorityBurst = 0;
+      }
     }
     if (index < 0) return;
     const turn = slot.queue[index]!;
-    if (!slot.ready && !turn.allowUnready) return;
     slot.queue.splice(index, 1);
     const originalRpcId = turn.request.rpcId;
     const rpcId = crypto.randomUUID();
