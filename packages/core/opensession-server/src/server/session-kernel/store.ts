@@ -4291,12 +4291,31 @@ export class SessionKernelStore {
 		try {
 			this.db.query("ATTACH DATABASE ? AS session_migration").run(temporaryPath);
 			attached = true;
+			const columnsByTable = new Map<string, string>();
+			for (const table of SESSION_KERNEL_SESSION_TABLES) {
+				const sourceColumns = (this.db.query(
+					`PRAGMA main.table_info(${table})`,
+				).all() as Array<{ name: string }>).map((column) => column.name);
+				const targetColumns = (this.db.query(
+					`PRAGMA session_migration.table_info(${table})`,
+				).all() as Array<{ name: string }>).map((column) => column.name);
+				if (
+					sourceColumns.length !== targetColumns.length ||
+					targetColumns.some((column) => !sourceColumns.includes(column))
+				) throw new Error(`Session migration schema mismatch for ${table}`);
+				columnsByTable.set(
+					table,
+					targetColumns.map((column) => `"${column.replaceAll('"', '""')}"`).join(", "),
+				);
+			}
 			this.db.exec("BEGIN IMMEDIATE");
 			try {
-				for (const table of SESSION_KERNEL_SESSION_TABLES)
+				for (const table of SESSION_KERNEL_SESSION_TABLES) {
+					const columns = columnsByTable.get(table)!;
 					this.db.query(
-						`INSERT INTO session_migration.${table} SELECT * FROM main.${table} WHERE session_id = ?`,
+						`INSERT INTO session_migration.${table} (${columns}) SELECT ${columns} FROM main.${table} WHERE session_id = ?`,
 					).run(sessionId);
+				}
 				this.db.exec("COMMIT");
 			} catch (error) {
 				this.db.exec("ROLLBACK");
@@ -4312,18 +4331,19 @@ export class SessionKernelStore {
 				).get(sessionId) as { count: number };
 				if (Number(source.count) !== Number(target.count))
 					throw new Error(`Session migration count mismatch for ${table}`);
+				const columns = columnsByTable.get(table)!;
 				const sourceDifference = this.db.query(`
 					SELECT 1 AS differs FROM (
-						SELECT * FROM main.${table} WHERE session_id = ?
+						SELECT ${columns} FROM main.${table} WHERE session_id = ?
 						EXCEPT
-						SELECT * FROM session_migration.${table} WHERE session_id = ?
+						SELECT ${columns} FROM session_migration.${table} WHERE session_id = ?
 					) LIMIT 1
 				`).get(sessionId, sessionId);
 				const targetDifference = this.db.query(`
 					SELECT 1 AS differs FROM (
-						SELECT * FROM session_migration.${table} WHERE session_id = ?
+						SELECT ${columns} FROM session_migration.${table} WHERE session_id = ?
 						EXCEPT
-						SELECT * FROM main.${table} WHERE session_id = ?
+						SELECT ${columns} FROM main.${table} WHERE session_id = ?
 					) LIMIT 1
 				`).get(sessionId, sessionId);
 				if (sourceDifference || targetDifference)
