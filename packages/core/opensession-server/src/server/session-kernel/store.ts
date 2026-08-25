@@ -1760,7 +1760,14 @@ export class SessionKernelStore {
       | undefined;
     if (!record) return { matched: false };
     if (record.answer)
-      return { matched: record.answer.requestId === answeredVia };
+      return {
+        matched: record.answer.requestId === answeredVia,
+        // An exact replay must resolve with the already-committed answers,
+        // never the retry call's payload.
+        ...(record.answer.requestId === answeredVia
+          ? { answers: record.answer.answers }
+          : {}),
+      };
     if (questionId !== null && (record.questionId ?? null) !== questionId)
       return { matched: false };
     this.setAskRecord(sessionId, {

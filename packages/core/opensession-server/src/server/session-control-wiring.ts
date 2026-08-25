@@ -167,6 +167,10 @@ registerSessionControl({
 			answeredVia: requestId,
 		});
 		if (!settled.matched) return false;
+		// An exact retry must wake the waiter with the already-committed
+		// answers, never the retry call's payload.
+		const effective =
+			settled.answers ?? (answers && typeof answers === "object" ? answers : null);
 		const pending = pendingAsks.get(id) as
 			| { questionId?: string; resolve?: (value: unknown) => void }
 			| undefined;
@@ -174,7 +178,7 @@ registerSessionControl({
 			pending?.resolve &&
 			(questionId === null || pending.questionId === questionId)
 		)
-			pending.resolve(answers && typeof answers === "object" ? answers : null);
+			pending.resolve(effective);
 		return true;
 	},
 

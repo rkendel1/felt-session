@@ -580,6 +580,19 @@ export function restorePendingAsks(
         ...(ask.answerReceived
           ? { answerReceived: true, earlyAnswer: ask.earlyAnswer ?? null }
           : {}),
+        // A crash between the actor's durable answer commit and the gateway
+        // resolver leaves answerReceived unset; project the committed answer
+        // so recovery consumes it instead of re-asking.
+        ...((ask as { answer?: { answers: Record<string, string> | null } })
+          .answer && !ask.answerReceived
+          ? {
+              answerReceived: true,
+              earlyAnswer:
+                (ask as unknown as {
+                  answer: { answers: Record<string, string> | null };
+                }).answer.answers ?? null,
+            }
+          : {}),
       })),
     };
   } else {

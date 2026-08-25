@@ -21,5 +21,5 @@ export type AskActorResult<T extends AskActorRequest> = T extends {
     : T extends { op: "delete" }
       ? boolean
       : T extends { op: "answer" }
-        ? { matched: boolean }
+        ? { matched: boolean; answers?: Record<string, string> | null }
         : void;
