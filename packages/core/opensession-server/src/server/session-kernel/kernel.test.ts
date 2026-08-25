@@ -22,6 +22,7 @@ import {
 	type LegacyGatewayEffect,
 	type LegacyGatewayEffectInput,
 } from ".";
+import { SESSION_KERNEL_ACTOR_VERSION } from "./actor-protocol";
 
 function testEffect(
 	input: LegacyGatewayEffectInput & { type?: string },
@@ -49,6 +50,7 @@ test("tracked schema version matches the store reader", () => {
 			readFileSync(join(import.meta.dir, "schema-version"), "utf8").trim(),
 		),
 	).toBe(SESSION_KERNEL_SCHEMA_VERSION);
+	expect(SESSION_KERNEL_ACTOR_VERSION).toBe(SESSION_KERNEL_SCHEMA_VERSION);
 });
 
 test("refuses an unsafe schema downgrade", () => {
@@ -240,23 +242,106 @@ describe("SessionKernel", () => {
 		expect(durableSessionCommand("s1", "stable")?.status).toBe("completed");
 	});
 
-  test("retains the original run target for command replay", async () => {
-    await sessionKernel("run-target-replay").dispatchLegacy(
-      legacyGatewayEffect("cancel_session", {
-        requestId: "cancel-request",
-        payload: {
-          targetRunId: "dispatch-one",
-          targetRunGeneration: 4,
-        },
-        replaySafe: true,
-      }),
-      () => true,
-    );
-    expect(
-      durableSessionCommand("run-target-replay", "cancel-request")?.payload,
-    ).toEqual({
+  test("retains the actor-selected run target through cancel command replay", () => {
+    const sessionId = "run-target-replay";
+    store.applyRunEvent({ sessionId, event: "prompt", runKey: "dispatch-one" });
+    const first = store.requestTurnCancelCommand({
+      sessionId,
+      requestId: "cancel-request",
+      fallbackRunId: null,
+    });
+    expect(first).toEqual({
+      status: "execute",
       targetRunId: "dispatch-one",
-      targetRunGeneration: 4,
+      targetRunGeneration: 1,
+    });
+    expect(store.requestTurnCancelCommand({
+      sessionId,
+      requestId: "cancel-request",
+      fallbackRunId: "dispatch-two",
+    })).toEqual(first);
+    expect(durableSessionCommand(sessionId, "cancel-request")?.payload).toEqual({
+      targetRunId: "dispatch-one",
+      targetRunGeneration: 1,
+    });
+    store.prepareTurnCancel({
+      sessionId,
+      cancelId: "stop:cancel-request",
+      expectedRunId: "dispatch-one",
+      expectedGeneration: 1,
+      dispatchId: "dispatch-one",
+      requeueIds: [],
+      source: "session_control",
+    });
+    expect(store.completeTurnCancelCommand({
+      sessionId,
+      requestId: "cancel-request",
+      result: true,
+    })).toBe(true);
+    expect(store.requestTurnCancelCommand({
+      sessionId,
+      requestId: "cancel-request",
+      fallbackRunId: "dispatch-successor",
+    })).toEqual({ status: "completed", result: true, duplicate: true });
+  });
+
+  test("recovers an unfinished typed cancel command after actor-store restart", () => {
+    const dir = mkdtempSync(join(tmpdir(), "session-kernel-cancel-command-"));
+    const path = join(dir, "kernel.sqlite");
+    let durableStore = new SessionKernelStore(path);
+    try {
+      durableStore.applyRunEvent({
+        sessionId: "cancel-command-restart",
+        event: "prompt",
+        runKey: "original-run",
+      });
+      expect(durableStore.requestTurnCancelCommand({
+        sessionId: "cancel-command-restart",
+        requestId: "stable-stop",
+        fallbackRunId: null,
+      })).toMatchObject({ status: "execute", targetRunId: "original-run" });
+      durableStore.close();
+      durableStore = new SessionKernelStore(path);
+      expect(durableStore.requestTurnCancelCommand({
+        sessionId: "cancel-command-restart",
+        requestId: "stable-stop",
+        fallbackRunId: "successor-run",
+      })).toEqual({
+        status: "execute",
+        targetRunId: "original-run",
+        targetRunGeneration: 1,
+      });
+      expect(() => durableStore.completeTurnCancelCommand({
+        sessionId: "cancel-command-restart",
+        requestId: "stable-stop",
+        result: true,
+      })).toThrow("without its durable receipt");
+    } finally {
+      durableStore.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("does not retarget a completed no-op cancel to a later run", () => {
+    const input = {
+      sessionId: "cancel-no-run",
+      requestId: "cancel-no-run-request",
+      fallbackRunId: null,
+    } as const;
+    expect(store.requestTurnCancelCommand(input)).toEqual({
+      status: "completed",
+      result: false,
+      duplicate: false,
+    });
+    store.applyRunEvent({
+      sessionId: input.sessionId,
+      event: "prompt",
+      runKey: "later-run",
+    });
+    expect(store.requestTurnCancelCommand(input)).toEqual({
+      status: "completed",
+      result: false,
+      duplicate: true,
     });
   });
 

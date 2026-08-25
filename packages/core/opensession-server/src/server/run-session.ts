@@ -337,8 +337,20 @@ export function requestTurnCancel(
   session: UnifiedSession,
   request: TurnCancelRequest,
 ): { requeued: number } {
+  const existingCancel = sessionTurn({ op: "snapshot", sessionId }).cancel;
+  const exactReplay =
+    existingCancel?.cancelId === request.cancelId &&
+    existingCancel.runId === request.expectedRunId &&
+    existingCancel.runGeneration === request.expectedGeneration
+      ? existingCancel
+      : undefined;
   const steered = steeredReceipts.get(sessionId) || [];
   const requeued = undeliveredSteers(steered, engineUserTexts(session));
+  const requeueIds =
+    exactReplay?.requeueIds ??
+    requeued
+      .map((item) => item.id)
+      .filter((id): id is string => typeof id === "string" && id.length > 0);
   sessionTurn({
     op: "prepare_cancel",
     sessionId,
@@ -346,9 +358,7 @@ export function requestTurnCancel(
     expectedRunId: request.expectedRunId,
     expectedGeneration: request.expectedGeneration,
     dispatchId: request.expectedRunId,
-    requeueIds: requeued
-      .map((item) => item.id)
-      .filter((id): id is string => typeof id === "string" && id.length > 0),
+    requeueIds,
     source: request.source,
     ...(request.user ? { user: request.user } : {}),
   });
@@ -363,7 +373,7 @@ export function requestTurnCancel(
     persistQueues();
     broadcastQueue(sessionId);
   }
-  return { requeued: requeued.length };
+  return { requeued: exactReplay ? exactReplay.requeueIds.length : requeued.length };
 }
 
 export function settleCreationOpeningForStop(sessionId: string): boolean {

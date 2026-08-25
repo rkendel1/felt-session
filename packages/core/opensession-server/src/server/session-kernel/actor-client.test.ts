@@ -311,6 +311,31 @@ describe("session kernel actor boundary", () => {
     ]);
   });
 
+  test("owns cancel command retry identity before gateway continuation", async () => {
+    const host = await actor();
+    host.decideRunEvent({
+      sessionId: "typed-cancel",
+      event: "prompt",
+      runKey: "run-one",
+    });
+    expect(host.decideTurn({
+      op: "request_cancel_command",
+      sessionId: "typed-cancel",
+      requestId: "request-one",
+      fallbackRunId: null,
+    })).toEqual({
+      status: "execute",
+      targetRunId: "run-one",
+      targetRunGeneration: 1,
+    });
+    expect(host.decideTurn({
+      op: "request_cancel_command",
+      sessionId: "typed-cancel",
+      requestId: "request-one",
+      fallbackRunId: "run-two",
+    })).toMatchObject({ status: "execute", targetRunId: "run-one" });
+  });
+
   test("owns terminal outcome projection and settlement while gateway work is active", async () => {
     const host = await actor();
     host.decideRunEvent({

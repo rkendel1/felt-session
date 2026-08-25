@@ -685,6 +685,30 @@ class RemoteStore implements SessionKernelStoreApi {
   turnSnapshot(sessionId: string) {
     return this.actor.decideTurn({ op: "snapshot", sessionId });
   }
+  requestTurnCancelCommand(
+    input: Parameters<SessionKernelStoreApi["requestTurnCancelCommand"]>[0],
+  ): ReturnType<SessionKernelStoreApi["requestTurnCancelCommand"]> {
+    return this.actor.decideTurn({
+      op: "request_cancel_command",
+      ...input,
+    }) as ReturnType<SessionKernelStoreApi["requestTurnCancelCommand"]>;
+  }
+  completeTurnCancelCommand(
+    input: Parameters<SessionKernelStoreApi["completeTurnCancelCommand"]>[0],
+  ): ReturnType<SessionKernelStoreApi["completeTurnCancelCommand"]> {
+    return this.actor.decideTurn({
+      op: "complete_cancel_command",
+      ...input,
+    }) as ReturnType<SessionKernelStoreApi["completeTurnCancelCommand"]>;
+  }
+  failTurnCancelCommand(
+    input: Parameters<SessionKernelStoreApi["failTurnCancelCommand"]>[0],
+  ): ReturnType<SessionKernelStoreApi["failTurnCancelCommand"]> {
+    return this.actor.decideTurn({
+      op: "fail_cancel_command",
+      ...input,
+    }) as ReturnType<SessionKernelStoreApi["failTurnCancelCommand"]>;
+  }
   prepareTurnCancel(
     input: Parameters<SessionKernelStoreApi["prepareTurnCancel"]>[0],
   ): ReturnType<SessionKernelStoreApi["prepareTurnCancel"]> {

@@ -30,7 +30,6 @@ describe("single session ownership", () => {
 		}, 0);
 		expect(sites).toBe(LEGACY_GATEWAY_EFFECT_SITE_BASELINE);
 		expect(LEGACY_GATEWAY_EFFECT_OPERATIONS).toEqual([
-			"cancel_session",
 			"delete_session",
 			"session_file_updated",
 			"submit_prompt",
@@ -373,7 +372,8 @@ describe("single session ownership", () => {
 		expect(create).not.toMatch(/\bcreateWorktree\(/);
 		expect(create).not.toMatch(/\bcreateWorktreeForExistingBranch\(/);
 		expect(create).toContain("spec.openingPromptEntryId");
-		expect(wiring).toContain('legacyGatewayEffect("cancel_session"');
+		expect(wiring).not.toContain('legacyGatewayEffect("cancel_session"');
+		expect(wiring).toContain('op: "request_cancel_command"');
 		// Ask answers settle through the typed actor aggregate, not the
 		// compatibility mailbox.
 		expect(wiring).not.toContain('legacyGatewayEffect("answer_question"');
@@ -488,13 +488,18 @@ describe("single session ownership", () => {
     expect(runnerSession).toContain("journalClearIfLineage(run)");
     expect(runnerSession).not.toContain("journalClear(session.id)");
     const wiring = read("session-control-wiring.ts");
-    expect(wiring).toContain("requestTurnCancel(id, session");
-    expect(wiring.indexOf("const persistedCancel =")).toBeLessThan(
-      wiring.indexOf('legacyGatewayEffect("cancel_session"'),
+    expect(wiring).toContain("requestTurnCancel(id, currentSession");
+    expect(wiring).not.toContain('legacyGatewayEffect("cancel_session"');
+    expect(wiring.indexOf('op: "request_cancel_command"')).toBeLessThan(
+      wiring.indexOf("requestTurnCancel(id, currentSession"),
     );
-    expect(wiring.indexOf("const priorCommandPayload = durableSessionCommand(")).toBeLessThan(
-      wiring.indexOf('legacyGatewayEffect("cancel_session"'),
+    const cancelContinuation = wiring.indexOf(
+      "requestTurnCancel(id, currentSession",
     );
+    expect(cancelContinuation).toBeLessThan(
+      wiring.indexOf('op: "complete_cancel_command"', cancelContinuation),
+    );
+    expect(wiring).toContain('op: "fail_cancel_command"');
     expect(wiring).not.toContain("cancelAgentRun(");
 		const routes = read("routes/sessions.ts");
 		expect(routes).toContain("await cancelAgentRunAndWait(runIds)");

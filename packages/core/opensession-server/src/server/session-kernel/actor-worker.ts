@@ -371,6 +371,12 @@ export function startSessionKernelActorWorker(): void {
         } else if (command.kind === "turn") {
           const turn = command.request;
           if (turn.op === "snapshot") result = store.turnSnapshot(turn.sessionId);
+          else if (turn.op === "request_cancel_command")
+            result = store.requestTurnCancelCommand(turn);
+          else if (turn.op === "complete_cancel_command")
+            result = store.completeTurnCancelCommand(turn);
+          else if (turn.op === "fail_cancel_command")
+            result = store.failTurnCancelCommand(turn);
           else if (turn.op === "prepare_cancel")
             result = store.prepareTurnCancel(turn);
           else if (turn.op === "begin_cancel_effect")

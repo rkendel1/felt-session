@@ -49,7 +49,6 @@ import { ensureAskCheckout, ensureScratchDir, getRepo, isRegisteredWorktree, lis
 import { broadcastToSession } from "./ws-hub";
 import { randomUUIDv7 } from "bun";
 import {
-  durableSessionCommand,
 	legacyGatewayEffect,
 	patchCreationSetupPlan,
 	requestCreationAttachment,
@@ -60,7 +59,6 @@ import {
 	sessionKernel,
 	sessionKernelOwnsCurrentCommand,
   sessionTurn,
-  targetForTurnCancel,
 } from "./session-kernel";
 import {
 	canonicalCommandPayload,
@@ -389,69 +387,45 @@ registerSessionControl({
 
 	cancelSession: async (id, opts) => {
 		const requestId = opts?.requestId || randomUUIDv7();
-    const targetRun = sessionKernel(id).runState();
-    const persistedCancel = sessionTurn({ op: "snapshot", sessionId: id }).cancel;
-    const priorCommandPayload = durableSessionCommand(id, requestId)?.payload as
-      | { targetRunId?: string | null; targetRunGeneration?: number }
-      | undefined;
-    const commandTarget =
-      priorCommandPayload?.targetRunId !== undefined &&
-      priorCommandPayload.targetRunGeneration !== undefined
-        ? {
-            runId: priorCommandPayload.targetRunId,
-            generation: priorCommandPayload.targetRunGeneration,
-          }
-        : undefined;
-    const replayedTarget =
-      commandTarget ||
-      targetForTurnCancel(persistedCancel, `stop:${requestId}`);
-    const targetRunId = replayedTarget
-      ? replayedTarget.runId
-      : targetRun.currentRunId ||
-      (targetRun.state === "starting" || targetRun.state === "preparing"
-        ? currentAgentRunToken(id)
-          : undefined) ||
-        null;
-    const targetRunGeneration =
-      replayedTarget?.generation ?? targetRun.generation;
-		const accepted = await sessionKernel(id).dispatchLegacy(
-			legacyGatewayEffect("cancel_session", {
-				requestId,
-        payload: { targetRunId, targetRunGeneration },
+		const session = findSession(id);
+		const plan = sessionTurn({
+			op: "request_cancel_command",
+			sessionId: id,
+			requestId,
+			fallbackRunId: currentAgentRunToken(id) || null,
+		});
+		if (plan.status === "completed") return plan.result;
+		try {
+			const currentSession = findSession(id);
+			if (!currentSession) {
+				return sessionTurn({
+					op: "complete_cancel_command",
+					sessionId: id,
+					requestId,
+					result: false,
+				});
+			}
+			requestTurnCancel(id, currentSession, {
+				cancelId: `stop:${requestId}`,
+				expectedRunId: plan.targetRunId,
+				expectedGeneration: plan.targetRunGeneration,
 				source: "session_control",
-				replaySafe: true,
-			}),
-      () => {
-        const current = sessionKernel(id).runState();
-        const currentTargetId =
-          current.currentRunId ||
-          (current.state === "starting" || current.state === "preparing"
-            ? currentAgentRunToken(id)
-            : undefined) ||
-          null;
-        if (
-          currentTargetId !== targetRunId ||
-          current.generation !== targetRunGeneration
-        ) {
-          const replayedCancel = sessionTurn({ op: "snapshot", sessionId: id }).cancel;
-          const cancelReplayMatches =
-            replayedCancel?.cancelId === `stop:${requestId}` &&
-            replayedCancel.runId === targetRunId &&
-            replayedCancel.runGeneration === targetRunGeneration;
-          if (!cancelReplayMatches) throw new Error("The run targeted by this command has already changed");
-        }
-        const session = findSession(id);
-        if (!session || !targetRunId) return false;
-        requestTurnCancel(id, session, {
-          cancelId: `stop:${requestId}`,
-          expectedRunId: targetRunId,
-          expectedGeneration: targetRunGeneration,
-          source: "session_control",
-        });
-        return true;
-      },
-		);
-		return accepted.result;
+			});
+			return sessionTurn({
+				op: "complete_cancel_command",
+				sessionId: id,
+				requestId,
+				result: true,
+			});
+		} catch (error) {
+			sessionTurn({
+				op: "fail_cancel_command",
+				sessionId: id,
+				requestId,
+				error: error instanceof Error ? error.message : String(error),
+			});
+			throw error;
+		}
 	},
 
 	createSession: async (input: CreateSessionOpts) => {

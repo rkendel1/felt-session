@@ -347,7 +347,7 @@ allocates a fenced `executionId`, and immediately returns an execution descripto
 It does not retain a per-session gateway lease and does not stop reducing run,
 delivery or ask messages while physical work is active. Different command intents
 can be admitted concurrently. The temporary `LegacyGatewayEffect` adapter preserves physical effect
-order for eight compatibility call sites, but that queue is not authoritative:
+order for four compatibility call sites, but that queue is not authoritative:
 every item in it is already durable in the actor. Its operation union and exact
 production call-site baseline are structural migration fences. New lifecycle
 work must use typed reducer messages and executors rather than add a callback.
@@ -411,3 +411,7 @@ instead of posting a second one. GitHub conflict transitions likewise persist
 their delivery intent until SessionControl durably admits it. Restored ask
 answers keep their durable card until the stable continuation delivery is
 admitted, so a restart cannot lose the answer between retirement and queueing.
+Explicit Stop requests likewise enter through a typed turn command plan: the
+actor permanently selects the original run id and generation before gateway
+bookkeeping or physical cancellation, and an exact retry cannot target a
+successor.

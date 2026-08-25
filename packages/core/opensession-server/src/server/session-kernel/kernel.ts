@@ -115,6 +115,12 @@ export function sessionTurn<T extends TurnActorRequest>(
   const store = compatibilityStoreForTest("turn");
   if (request.op === "snapshot")
     return store.turnSnapshot(request.sessionId) as TurnActorResult<T>;
+  if (request.op === "request_cancel_command")
+    return store.requestTurnCancelCommand(request) as TurnActorResult<T>;
+  if (request.op === "complete_cancel_command")
+    return store.completeTurnCancelCommand(request) as TurnActorResult<T>;
+  if (request.op === "fail_cancel_command")
+    return store.failTurnCancelCommand(request) as TurnActorResult<T>;
   if (request.op === "prepare_cancel")
     return store.prepareTurnCancel(request) as TurnActorResult<T>;
   if (request.op === "begin_cancel_effect")
