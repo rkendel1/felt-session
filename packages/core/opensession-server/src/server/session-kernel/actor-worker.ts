@@ -254,7 +254,11 @@ export function startSessionKernelActorWorker(): void {
       } else {
         const sessionId = storeMutationSessionId(request.method, request.args, host);
         requestSessionId = sessionId;
-        if (sessionId) {
+        if (
+          sessionId &&
+          request.method !== "quarantineSession" &&
+          request.method !== "releaseQuarantine"
+        ) {
           const quarantine = host.quarantinedSession(sessionId);
           if (quarantine)
             throw new SessionQuarantinedError(sessionId, quarantine.reason);
@@ -385,24 +389,52 @@ export function startSessionKernelActorWorker(): void {
         });
       return;
     }
-    if (request.t === "acknowledge") {
-      host.call("acknowledgeCommand", [request.sessionId, request.requestId]);
-      post({ t: "acknowledge_result", rpcId: request.rpcId });
-    } else if (request.t === "stats") {
-      post({ t: "stats_result", rpcId: request.rpcId, stats: host.stats() });
-    } else if (request.t === "maintain") {
-      const pending = host.maintain();
-      post({ t: "maintain_result", rpcId: request.rpcId, pending });
-    } else if (request.t === "runtime_work") {
+    try {
+      if (request.t === "acknowledge") {
+        const quarantine = host.quarantinedSession(request.sessionId);
+        if (quarantine)
+          throw new SessionQuarantinedError(request.sessionId, quarantine.reason);
+        host.call("acknowledgeCommand", [request.sessionId, request.requestId]);
+        post({ t: "acknowledge_result", rpcId: request.rpcId });
+      } else if (request.t === "stats") {
+        post({ t: "stats_result", rpcId: request.rpcId, stats: host.stats() });
+      } else if (request.t === "maintain") {
+        const pending = host.maintain();
+        post({ t: "maintain_result", rpcId: request.rpcId, pending });
+      } else if (request.t === "runtime_work") {
+        post({
+          t: "runtime_work_result",
+          rpcId: request.rpcId,
+          ...host.runtimeWork(
+            request.now,
+            request.timerKinds,
+            request.effectKinds,
+            request.limit,
+          ),
+        });
+      }
+    } catch (error) {
+      const sessionId = request.t === "acknowledge" ? request.sessionId : undefined;
+      const isolatedFailure =
+        !!sessionId && infrastructureFailure(error) && host.isIsolated(sessionId);
+      if (isolatedFailure) {
+        try {
+          host.quarantineSession(
+            sessionId,
+            error instanceof Error ? error.message : String(error),
+            "command:acknowledge",
+            true,
+          );
+        } catch {
+          queueMicrotask(() => self.close());
+        }
+      } else if (!(error instanceof SessionQuarantinedError)) {
+        queueMicrotask(() => self.close());
+      }
       post({
-        t: "runtime_work_result",
+        t: "error",
         rpcId: request.rpcId,
-        ...host.runtimeWork(
-          request.now,
-          request.timerKinds,
-          request.effectKinds,
-          request.limit,
-        ),
+        error: error instanceof Error ? error.message : String(error),
       });
     }
   };
