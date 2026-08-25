@@ -7,6 +7,7 @@ import {
   type DurableRunState,
   type DurableSessionQuarantine,
   type DurableTimer,
+  type DeliverySlot,
   type SessionKernelStoreApi,
 } from "./store";
 import { sessionKernelStoreRoute } from "./store-routing";
@@ -57,6 +58,11 @@ export class SessionKernelStoreHost {
   private runtimeCursor = "";
   private maintenanceSessionCursor = "";
   private outboxRouteMaintenanceCursor = 0;
+  private askEntriesCache?: Array<[string, unknown]>;
+  private readonly deliveryEntriesCache = new Map<
+    DeliverySlot,
+    Array<[string, unknown]>
+  >();
 
   constructor(
     private readonly centralPath = sessionKernelDbPath(),
@@ -113,15 +119,18 @@ export class SessionKernelStoreHost {
     commandKind: string,
     infrastructure = false,
   ): DurableSessionQuarantine {
-    if (infrastructure && this.isIsolated(sessionId))
-      return this.centralOperation(
-        () => this.central.quarantineSession(sessionId, reason, commandKind),
-      );
-    return this.storeForSession(sessionId, true).quarantineSession(
-      sessionId,
-      reason,
-      commandKind,
-    );
+    const quarantine = infrastructure && this.isIsolated(sessionId)
+      ? this.centralOperation(
+          () => this.central.quarantineSession(sessionId, reason, commandKind),
+        )
+      : this.storeForSession(sessionId, true).quarantineSession(
+          sessionId,
+          reason,
+          commandKind,
+        );
+    this.askEntriesCache = undefined;
+    this.deliveryEntriesCache.clear();
+    return quarantine;
   }
 
   storeForSession(sessionId: string, mutation = false): SessionKernelStore {
@@ -188,6 +197,10 @@ export class SessionKernelStoreHost {
       const centralReleased = this.centralOperation(
         () => this.central.releaseQuarantine(sessionId),
       );
+      if (centralReleased || isolatedReleased) {
+        this.askEntriesCache = undefined;
+        this.deliveryEntriesCache.clear();
+      }
       return centralReleased || isolatedReleased;
     }
     const route = sessionKernelStoreRoute(method, args);
@@ -203,11 +216,16 @@ export class SessionKernelStoreHost {
       ) this.centralOperation(() => this.central.forgetIsolatedOutboxRoute(route.id));
       return result;
     }
-    return this.invoke(
+    const result = this.invoke(
       this.storeForSession(route.sessionId, route.mutation),
       method,
       args,
     );
+    if (route.mutation) {
+      this.askEntriesCache = undefined;
+      this.deliveryEntriesCache.clear();
+    }
+    return result;
   }
 
   allRunStates(): Array<DurableRunState & { sessionId: string }> {
@@ -215,14 +233,24 @@ export class SessionKernelStoreHost {
   }
 
   allAskEntries(): Array<[string, unknown]> {
-    return this.mapReadStores("global:ask-entries", (store) => store.askEntries()).flat();
+    if (this.askEntriesCache) return structuredClone(this.askEntriesCache);
+    const entries = this.mapReadStores(
+      "global:ask-entries",
+      (store) => store.askEntries(),
+    ).flat();
+    this.askEntriesCache = entries;
+    return structuredClone(entries);
   }
 
   allDeliveryEntries(slot: Parameters<SessionKernelStoreApi["deliveryEntries"]>[0]) {
-    return this.mapReadStores(
+    const cached = this.deliveryEntriesCache.get(slot);
+    if (cached) return structuredClone(cached);
+    const entries = this.mapReadStores(
       "global:delivery-entries",
       (store) => store.deliveryEntries(slot),
     ).flat();
+    this.deliveryEntriesCache.set(slot, entries);
+    return structuredClone(entries);
   }
 
   allQuarantinedSessions(limit = 100, offset = 0): DurableSessionQuarantine[] {
@@ -543,11 +571,13 @@ export class SessionKernelStoreHost {
     }
     if (method === "clearAskRecords") {
       this.mapStores("global:clear-asks", (store) => store.clearAskRecords());
+      this.askEntriesCache = undefined;
       return;
     }
     if (method === "clearDeliverySlot") {
       this.mapStores("global:clear-delivery", (store) =>
         store.clearDeliverySlot(args[0] as Parameters<SessionKernelStoreApi["clearDeliverySlot"]>[0]));
+      this.deliveryEntriesCache.clear();
       return;
     }
     if (method === "settlePendingSteers") {
@@ -564,6 +594,7 @@ export class SessionKernelStoreHost {
         );
         if (result.ok) settled += result.value;
       }
+      if (settled > 0) this.deliveryEntriesCache.clear();
       return settled;
     }
     if (method === "retryCompatibleCreationBranchDeadLetters") {

@@ -326,6 +326,41 @@ describe("per-session session kernel storage", () => {
     host.close();
   });
 
+  test("caches sparse global projections and invalidates them after mutations", () => {
+    const path = paths();
+    const host = new SessionKernelStoreHost(path.central, path.isolated);
+    host.call("setAskRecord", ["cache-session", {
+      questionId: "ask-one",
+      questions: [{ question: "First?" }],
+    }]);
+    host.call("setDeliverySlot", [
+      "cache-session",
+      "queued",
+      [{ id: "queue-one", content: "First" }],
+    ]);
+
+    const asks = host.allAskEntries();
+    const deliveries = host.allDeliveryEntries("queued");
+    (asks[0]![1] as { questionId: string }).questionId = "caller-mutated";
+    (deliveries[0]![1] as Array<{ content: string }>)[0]!.content = "caller-mutated";
+    expect(host.allAskEntries()[0]![1]).toMatchObject({ questionId: "ask-one" });
+    expect(host.allDeliveryEntries("queued")[0]![1]).toMatchObject([
+      { id: "queue-one", content: "First" },
+    ]);
+
+    host.call("deleteAskRecord", ["cache-session"]);
+    host.call("setDeliverySlot", [
+      "cache-session",
+      "queued",
+      [{ id: "queue-two", content: "Second" }],
+    ]);
+    expect(host.allAskEntries()).toEqual([]);
+    expect(host.allDeliveryEntries("queued")[0]![1]).toMatchObject([
+      { id: "queue-two", content: "Second" },
+    ]);
+    host.close();
+  });
+
   test("settles only isolated stores that contain pending steers", () => {
     const path = paths();
     const host = new SessionKernelStoreHost(path.central, path.isolated);
