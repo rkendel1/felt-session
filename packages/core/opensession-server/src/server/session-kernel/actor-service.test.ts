@@ -14,7 +14,10 @@ import {
   SESSION_KERNEL_TRANSPORT_VERSION,
   type KernelActorTransportEnvelope,
 } from "./actor-protocol";
-import { startSessionKernelService } from "./actor-service";
+import {
+  sessionKernelServiceUrl,
+  startSessionKernelService,
+} from "./actor-service";
 
 const token = "test-session-kernel-token";
 const stateDir = mkdtempSync(join(tmpdir(), "opensession-kernel-service-"));
@@ -75,6 +78,20 @@ describe("session kernel actor service", () => {
       body: "{}",
     });
     expect(unauthorized.status).toBe(401);
+  });
+
+  test("refuses to send the actor credential off host", () => {
+    const previous = process.env.OPENSESSION_SESSION_KERNEL_URL;
+    process.env.OPENSESSION_SESSION_KERNEL_URL = "https://example.com/rpc";
+    try {
+      expect(() => sessionKernelServiceUrl()).toThrow(
+        "must use HTTP on 127.0.0.1",
+      );
+    } finally {
+      if (previous === undefined)
+        delete process.env.OPENSESSION_SESSION_KERNEL_URL;
+      else process.env.OPENSESSION_SESSION_KERNEL_URL = previous;
+    }
   });
 
   test("rejects mixed transport versions before actor dispatch", async () => {
