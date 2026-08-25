@@ -4278,20 +4278,23 @@ export class SessionKernelStore {
 			throw new Error(`Session ${sessionId} has no isolated placement`);
 	}
 
-	isolatedWakeCandidates(now = Date.now(), limit = 100): string[] {
+	isolatedWakeCandidates(
+		now = Date.now(),
+		limit = 100,
+		afterSessionId = "",
+	): string[] {
 		return (this.db.query(`
 			SELECT session_id FROM session_kernel_placements
 			WHERE placement = 'isolated'
+			  AND session_id > ?
 			  AND NOT EXISTS (
 				SELECT 1 FROM session_kernel_quarantine q
 				WHERE q.session_id = session_kernel_placements.session_id
 			  )
 			  AND (needs_scan = 1 OR next_timer_at <= ? OR next_outbox_at <= ?)
-			ORDER BY needs_scan DESC,
-				MIN(COALESCE(next_timer_at, 9223372036854775807), COALESCE(next_outbox_at, 9223372036854775807)),
-				session_id
+			ORDER BY session_id
 			LIMIT ?
-		`).all(now, now, Math.max(1, limit)) as Array<{ session_id: string }>)
+		`).all(afterSessionId, now, now, Math.max(1, limit)) as Array<{ session_id: string }>)
 			.map((row) => row.session_id);
 	}
 
@@ -4315,16 +4318,22 @@ export class SessionKernelStore {
 		const floor = 4_000_000_000_000_000;
 		let id = floor;
 		const tx = this.db.transaction(() => {
-			const row = this.db.query(
-				"SELECT MAX(id) AS max_id FROM session_kernel_outbox_routes",
-			).get() as { max_id: number | null };
-			id = Math.max(floor, Number(row.max_id ?? floor - 1) + 1);
+			const seeded = this.db.run(`
+				UPDATE sqlite_sequence SET seq = MAX(seq, ?)
+				WHERE name = 'session_kernel_outbox_routes'
+			`, [floor - 1]);
+			if (seeded.changes === 0)
+				this.db.run(
+					"INSERT INTO sqlite_sequence(name, seq) VALUES ('session_kernel_outbox_routes', ?)",
+					[floor - 1],
+				);
+			const inserted = this.db.run(
+				"INSERT INTO session_kernel_outbox_routes (session_id, created_at) VALUES (?, ?)",
+				[sessionId, Date.now()],
+			);
+			id = Number(inserted.lastInsertRowid);
 			if (!Number.isSafeInteger(id))
 				throw new Error("Isolated outbox identity space is exhausted");
-			this.db.run(
-				"INSERT INTO session_kernel_outbox_routes (id, session_id, created_at) VALUES (?, ?, ?)",
-				[id, sessionId, Date.now()],
-			);
 		});
 		tx.immediate();
 		return id;

@@ -128,7 +128,7 @@ function minDefined(values: Array<number | undefined>): number | undefined {
 export class SessionKernelStoreHost {
   readonly central: SessionKernelStore;
   private readonly isolated = new Map<string, SessionKernelStore>();
-  private runtimeCursor = 0;
+  private runtimeCursor = "";
   private outboxRouteMaintenanceCursor = 0;
 
   constructor(
@@ -268,16 +268,22 @@ export class SessionKernelStoreHost {
     limit: number,
   ): { timers: DurableTimer[]; outbox: DurableOutboxItem[] } {
     const candidateLimit = Math.max(100, limit * 4);
-    const candidates = this.central.isolatedWakeCandidates(now, candidateLimit);
-    const rotated = candidates.length === 0
-      ? []
-      : [
-          ...candidates.slice(this.runtimeCursor % candidates.length),
-          ...candidates.slice(0, this.runtimeCursor % candidates.length),
-        ];
-    this.runtimeCursor += Math.max(1, limit);
+    let candidates = this.central.isolatedWakeCandidates(
+      now,
+      candidateLimit,
+      this.runtimeCursor,
+    );
+    if (candidates.length < candidateLimit && this.runtimeCursor) {
+      const wrapped = this.central.isolatedWakeCandidates(
+        now,
+        candidateLimit - candidates.length,
+      );
+      const seen = new Set(candidates);
+      candidates = [...candidates, ...wrapped.filter((sessionId) => !seen.has(sessionId))];
+    }
+    if (candidates.length > 0) this.runtimeCursor = candidates.at(-1)!;
     const isolatedStores: Array<{ sessionId: string; store: SessionKernelStore }> = [];
-    for (const sessionId of rotated) {
+    for (const sessionId of candidates) {
       try {
         isolatedStores.push({ sessionId, store: this.openIsolated(sessionId) });
       } catch (error) {

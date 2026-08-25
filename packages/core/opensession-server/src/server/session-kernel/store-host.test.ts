@@ -108,6 +108,27 @@ describe("per-session session kernel storage", () => {
     recovered.close();
   });
 
+  test("pages wake candidates in the catalog instead of rotating a fixed prefix", () => {
+    const path = paths();
+    const host = new SessionKernelStoreHost(path.central, path.isolated);
+    for (let index = 0; index < 250; index += 1) {
+      const sessionId = `due-${String(index).padStart(3, "0")}`;
+      host.central.claimIsolatedSession(sessionId);
+      host.central.settleIsolatedSessionWake(sessionId, 0, undefined);
+    }
+    const first = host.central.isolatedWakeCandidates(Date.now(), 100);
+    const second = host.central.isolatedWakeCandidates(
+      Date.now(),
+      100,
+      first.at(-1),
+    );
+    expect(first).toHaveLength(100);
+    expect(second).toHaveLength(100);
+    expect(new Set([...first, ...second]).size).toBe(200);
+    expect(second[0]).toBe("due-100");
+    host.close();
+  });
+
   test("recovers isolated wake work from the durable dirty placement", () => {
     const path = paths();
     const first = new SessionKernelStoreHost(path.central, path.isolated);
@@ -158,6 +179,15 @@ describe("per-session session kernel storage", () => {
     recovered.call("ackOutbox", [outboxId]);
     expect(recovered.central.isolatedOutboxSessionId(outboxId)).toBeUndefined();
     expect(recovered.storeForSession("wake-session").pendingOutbox()).toEqual([]);
+    const successorId = recovered.call("enqueueOutbox", [
+      "successor-session",
+      "known_effect",
+      null,
+      "effect-two",
+    ]) as number;
+    expect(successorId).toBeGreaterThan(outboxId);
+    expect(recovered.central.isolatedOutboxSessionId(successorId))
+      .toBe("successor-session");
     recovered.close();
   });
 });
