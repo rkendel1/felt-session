@@ -566,13 +566,31 @@ export class SessionKernelStoreHost {
       }
       return settled;
     }
-    if (method === "retryCompatibleCreationBranchDeadLetters")
-      return this.mapStores("global:retry-creation-branches", (store) =>
-        store.retryCompatibleCreationBranchDeadLetters(
-          args[0] as Parameters<SessionKernelStoreApi["retryCompatibleCreationBranchDeadLetters"]>[0],
-          args[1] as number | undefined,
-        ),
-      ).flat();
+    if (method === "retryCompatibleCreationBranchDeadLetters") {
+      const destinations = args[0] as Parameters<
+        SessionKernelStoreApi["retryCompatibleCreationBranchDeadLetters"]
+      >[0];
+      const now = args[1] as number | undefined;
+      const retried = this.central.retryCompatibleCreationBranchDeadLetters(
+        destinations,
+        now,
+      );
+      const candidates = this.mapIsolatedReadStores(
+        "global:find-creation-branch-dead-letters",
+        (store, sessionId) =>
+          store.hasCreationBranchDeadLetters() ? sessionId : undefined,
+      ).filter((sessionId): sessionId is string => sessionId !== undefined);
+      for (const sessionId of candidates) {
+        const result = this.containIsolated(
+          sessionId,
+          "global:retry-creation-branches",
+          () => this.storeForSession(sessionId, true)
+            .retryCompatibleCreationBranchDeadLetters(destinations, now),
+        );
+        if (result.ok) retried.push(...result.value);
+      }
+      return retried;
+    }
     if (method === "deadLetters") {
       const limit = Number(args[0] ?? 100);
       const offset = Number(args[1] ?? 0);

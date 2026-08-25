@@ -355,6 +355,30 @@ describe("per-session session kernel storage", () => {
     host.close();
   });
 
+  test("skips empty stores when retrying compatible creation dead letters", () => {
+    const path = paths();
+    const host = new SessionKernelStoreHost(path.central, path.isolated);
+    host.call("setRunState", [{
+      sessionId: "empty-creation-session",
+      state: "idle",
+      event: "seed",
+    }]);
+    Object.defineProperty(
+      host.storeForSession("empty-creation-session"),
+      "retryCompatibleCreationBranchDeadLetters",
+      {
+        configurable: true,
+        value: () => {
+          throw new Error("empty stores must not enter the mutation sweep");
+        },
+      },
+    );
+
+    expect(host.call("retryCompatibleCreationBranchDeadLetters", [[], Date.now()]))
+      .toEqual([]);
+    host.close();
+  });
+
   test("recovers isolated wake work from the durable dirty placement", () => {
     const path = paths();
     const first = new SessionKernelStoreHost(path.central, path.isolated);

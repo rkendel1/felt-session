@@ -4130,6 +4130,20 @@ export class SessionKernelStore {
 		return result.changes > 0;
 	}
 
+	hasCreationBranchDeadLetters(): boolean {
+		return !!this.db.query(
+			`SELECT 1
+			 FROM session_kernel_outbox AS outbox
+			 JOIN session_kernel_creation AS creation
+			   ON creation.session_id = outbox.session_id
+			  AND creation.state = 'preparing'
+			  AND creation.current_effect_id = outbox.effect_key
+			 WHERE outbox.kind = 'creation_branch_prepare'
+			   AND outbox.dead_lettered_at IS NOT NULL
+			 LIMIT 1`,
+		).get();
+	}
+
 	/**
 	 * Re-admit branch effects rejected before physical work by compatibility bugs:
 	 * the former shared-checkout classifier and the old empty-base decoder. The
@@ -4634,6 +4648,7 @@ export type SessionKernelStoreApi = Omit<
 	SessionKernelStore,
 	| "hasSessionDurableState"
 	| "hasPendingSteers"
+	| "hasCreationBranchDeadLetters"
 	| "legacySessionIds"
 	| "migrateLegacySession"
 	| "sessionPlacement"
