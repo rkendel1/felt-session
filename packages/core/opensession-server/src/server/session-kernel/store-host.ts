@@ -327,14 +327,6 @@ export class SessionKernelStoreHost {
   }
 
   maintain(): boolean {
-    const configuredMigrationLimit = Number(
-      process.env.OPENSESSION_SESSION_KERNEL_MIGRATION_BATCH ?? 2,
-    );
-    const migrationLimit = Number.isInteger(configuredMigrationLimit) &&
-        configuredMigrationLimit >= 1 && configuredMigrationLimit <= 10
-      ? configuredMigrationLimit
-      : 2;
-    const migrated = this.migrateLegacySessions(migrationLimit);
     let routes = this.central.isolatedOutboxRoutes(
       50,
       this.outboxRouteMaintenanceCursor,
@@ -354,8 +346,7 @@ export class SessionKernelStoreHost {
       if (routedSession.ok && routedSession.value !== route.sessionId)
         this.central.forgetIsolatedOutboxRoute(route.id);
     }
-    let pending = migrated === migrationLimit || routes.length === 50 ||
-      this.central.maintain();
+    let pending = routes.length === 50 || this.central.maintain();
     const maintenanceBatch = 8;
     const placements = this.central.isolatedSessionPlacements(
       maintenanceBatch,

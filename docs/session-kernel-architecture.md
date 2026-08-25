@@ -420,10 +420,10 @@ turns, and disappears when its queue drains. Worker-local SQLite connections
 activate lazily and are passivated by a bounded LRU. The pool defaults to four
 session lanes plus a compatibility catalog lane and is bounded to 32 lanes.
 A session with no legacy durable rows is claimed in the placement catalog before
-its first mutation, then writes only its own SQLite database. Bounded schema-23
-maintenance copies and verifies legacy sessions behind the actor admission
-barrier, publishes the target, and atomically switches placement while removing
-central rows. The router never dual-writes authoritative state. Isolated outbox
+its first mutation, then writes only its own SQLite database. The schema-23
+offline deploy migrator runs after gateway and actor shutdown, verifies each
+unpublished target, and atomically switches placement while removing central
+rows. The router never dual-writes authoritative state. Isolated outbox
 rows use a globally reserved numeric identity allocated by the catalog so
 existing settlement protocols remain additive and mixed-version safe.
 
@@ -443,9 +443,9 @@ Sessions therefore converge on distinct physical databases and logical
 mailboxes inside a bounded, independently supervised pool. A locked isolated
 database has a 250 ms SQLite busy bound, after which that session is quarantined;
 the compatibility gateway's synchronous bridge cannot inherit the central
-store's five-second wait. Catalog-wide compatibility scans remain bounded
-barriers while legacy rows drain; their final decomposition is cleanup rather
-than an authority change.
+store's five-second wait. Catalog-wide compatibility scans use read-only transient connections and paged
+maintenance; their final decomposition is cleanup rather than an authority
+change.
 
 A command admission is a short bounded reduction: the actor fingerprints and
 persists the intent, then immediately returns `execute`, `in_progress`, or the

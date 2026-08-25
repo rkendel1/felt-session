@@ -71,18 +71,18 @@ The service uses typed, exhaustive routing metadata to derive the session ID bef
 
 Before an isolated mutation the router commits `needs_scan = 1`. The actor then commits the session transaction. Repair may conservatively rescan extra work after a crash. It must never omit accepted timer/outbox work. After a scan, the router writes derived `next_timer_at` and `next_outbox_at`. The index is rebuilt by enumerating placements and querying each session DB.
 
-### Bounded legacy migration
+### Offline legacy migration
 
-Maintenance migrates a small bounded batch behind the actor host's global admission barrier:
+The schema-23 deploy stops the gateway and actor service, then runs the resumable placement migrator as the only writer. Migration never occupies an actor turn or blocks Stop/steer behind filesystem work:
 
-1. **Fence:** drain already-admitted session turns and hold later turns behind the global barrier. This temporary catalog-wide barrier prevents a compatibility fan-out from racing cutover.
+1. **Fence:** stop gateway admission and the actor service. The migration process claims the same durable single-writer lease before touching either authority.
 2. **Snapshot:** copy every row for one session-owned table into a new unpublished database. Preserve numeric outbox IDs, command receipts, generations, tombstones, timers, attempts, execution tokens, quarantine, and change sequences.
 3. **Verify:** compare counts and both-direction `EXCEPT` row sets for every table, then require `PRAGMA integrity_check = ok`. A mismatch leaves the central route authoritative and removes the unpublished target.
 4. **Publish target:** checkpoint, fsync, and atomically rename the verified database to its content-addressed session path.
 5. **Cut over:** in one immediate central transaction insert all temporary outbox routes and the isolated placement, then remove that session's central rows. This transaction is the linearization point. A crash before it leaves central state authoritative; after it only the complete target is authoritative.
-6. **Activate:** the next normal routed turn lazily opens the target and applies ordinary command-journal recovery. The durable dirty wake bit forces timer/outbox rescan.
+6. **Activate:** after all remaining legacy rows are cut over, start the actor service and gateway. Normal routed turns lazily open targets and apply ordinary command-journal recovery. Durable dirty wake bits force timer/outbox rescan.
 
-No migration writes both authorities. Copying writes an unpublished target while central state remains authoritative. The cutover transaction removes central session rows as it publishes the route.
+Each cutover is independently crash-safe. Rerunning the offline command resumes from central rows that still lack placements. No migration writes both authorities. Copying writes an unpublished target while central state remains authoritative. The cutover transaction removes central session rows as it publishes the route.
 
 ### Crash points and recovery
 

@@ -177,7 +177,10 @@ refresh_session_kernel() {
     log "ERROR: session kernel service artifacts are missing; run the root deploy before this revision"
     return 1
   fi
-  run_systemctl restart "$SESSION_KERNEL_SERVICE_NAME"
+  run_systemctl stop "$SESSION_KERNEL_SERVICE_NAME"
+  log "migrating legacy session-kernel rows offline"
+  bun "$REPO_DIR/scripts/migrate-session-kernel-storage.ts"
+  run_systemctl start "$SESSION_KERNEL_SERVICE_NAME"
   local i
   for i in $(seq 1 30); do
     if run_systemctl is-active --quiet "$SESSION_KERNEL_SERVICE_NAME" \

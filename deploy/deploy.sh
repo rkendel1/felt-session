@@ -254,6 +254,13 @@ fi
 if [ "$RESTART_KERNEL" = "1" ]; then
   echo "[deploy] stopping gateway before replacing its actor protocol peer"
   systemctl stop opensession.service
+  systemctl stop opensession-session-kernel.service
+  echo "[deploy] migrating legacy session-kernel rows offline"
+  run_as_service_user env \
+    HOME="$SERVICE_HOME_DIR" \
+    OPENSESSION_STATE_DIR="$STATE_DIR" \
+    OPENSESSION_SESSIONS_DIR="$SESSIONS_DIR" \
+    "$EXECUTOR_BUN" "$REPO_DIR/scripts/migrate-session-kernel-storage.ts"
 fi
 
 if [ "$RESTART_EXECUTOR" = "1" ]; then
