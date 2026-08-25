@@ -224,7 +224,7 @@ const PROCESS_OWNER_ID = (ownerGlobal.__opensessionSessionKernelOwnerId ??=
 		bootId: linuxBootId(),
 		start: linuxProcessStart(process.pid),
 	} satisfies ProcessOwnerIdentity));
-export const SESSION_KERNEL_SCHEMA_VERSION = 22;
+export const SESSION_KERNEL_SCHEMA_VERSION = 23;
 export const SESSION_KERNEL_MAX_CREATION_EFFECT_RECEIPTS = 256;
 export const SESSION_KERNEL_MAX_OPENING_PLAN_BYTES = 16 * 1024 * 1024;
 
@@ -4428,11 +4428,15 @@ export class SessionKernelStore {
 		};
 	}
 
-	isolatedSessionPlacements(): DurableSessionPlacement[] {
+	isolatedSessionPlacements(
+		limit = 100_000,
+		afterSessionId = "",
+	): DurableSessionPlacement[] {
 		return (this.db.query(`
 			SELECT session_id FROM session_kernel_placements
-			WHERE placement = 'isolated' ORDER BY session_id
-		`).all() as Array<{ session_id: string }>)
+			WHERE placement = 'isolated' AND session_id > ?
+			ORDER BY session_id LIMIT ?
+		`).all(afterSessionId, Math.max(1, limit)) as Array<{ session_id: string }>)
 			.map((row) => this.sessionPlacement(row.session_id)!)
 			.filter(Boolean);
 	}

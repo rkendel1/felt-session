@@ -85,9 +85,10 @@ does not exist. `OPENSESSION_SESSIONS_DIR` overrides the sessions directory
 directly. Without that override, `OPENSESSION_STATE_DIR` places it at
 `<state-dir>/.opensession-sessions/`.
 
-- `session-kernel.sqlite` is the legacy store and the placement/wake catalog.
+- `session-kernel.sqlite` is the placement/wake catalog and temporary source for
+  not-yet-migrated legacy rows.
 - `session-kernel-sessions/<prefix>/<sha256>.sqlite` is the authoritative
-  database for each newly claimed session.
+  database for each placed session.
 
 Each authoritative session database contains:
 
@@ -419,12 +420,12 @@ turns, and disappears when its queue drains. Worker-local SQLite connections
 activate lazily and are passivated by a bounded LRU. The pool defaults to four
 session lanes plus a compatibility catalog lane and is bounded to 32 lanes.
 A session with no legacy durable rows is claimed in the placement catalog before
-its first mutation, then writes only its own SQLite database. Existing sessions
-remain on the legacy central database until the per-session fenced migration
-pass in `adrs/per-session-actor-host-placement.md`; the router never dual-writes
-authoritative state. Isolated outbox rows use a globally reserved numeric
-identity allocated by the catalog so existing settlement protocols remain
-additive and mixed-version safe.
+its first mutation, then writes only its own SQLite database. Bounded schema-23
+maintenance copies and verifies legacy sessions behind the actor admission
+barrier, publishes the target, and atomically switches placement while removing
+central rows. The router never dual-writes authoritative state. Isolated outbox
+rows use a globally reserved numeric identity allocated by the catalog so
+existing settlement protocols remain additive and mixed-version safe.
 
 Before every isolated mutation, the host durably marks that session's catalog
 wake record dirty. A crash can therefore leave an extra scan but cannot hide a
@@ -438,13 +439,13 @@ sessions available. An isolated database infrastructure failure is recorded as
 a catalog quarantine for that session. Catalog or legacy-store infrastructure
 ambiguity still fail-stops the whole actor.
 
-New sessions therefore have distinct physical databases and logical mailboxes
-inside a bounded, independently supervised pool. A locked isolated database has
-a 250 ms SQLite busy bound, after which that session is quarantined; the
-compatibility gateway's synchronous bridge cannot inherit the central store's
-five-second wait. The remaining placement step is crash-safe lazy migration of
-legacy sessions and decomposition of catalog-wide compatibility scans into
-per-session mailbox work.
+Sessions therefore converge on distinct physical databases and logical
+mailboxes inside a bounded, independently supervised pool. A locked isolated
+database has a 250 ms SQLite busy bound, after which that session is quarantined;
+the compatibility gateway's synchronous bridge cannot inherit the central
+store's five-second wait. Catalog-wide compatibility scans remain bounded
+barriers while legacy rows drain; their final decomposition is cleanup rather
+than an authority change.
 
 A command admission is a short bounded reduction: the actor fingerprints and
 persists the intent, then immediately returns `execute`, `in_progress`, or the

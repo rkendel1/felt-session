@@ -45,9 +45,9 @@ function centralStoreFailure(error: unknown): Error & { code: string } {
 /**
  * Routes one session to exactly one authoritative SQLite store.
  *
- * Existing sessions remain in the schema-21 central store until an explicit
- * migration moves them. A session with no central durable rows is claimed in
- * the placement catalog before its first mutation and writes only its own DB.
+ * Existing central sessions move in bounded, verified maintenance batches. A
+ * session with no central durable rows is claimed in the placement catalog
+ * before its first mutation and writes only its own DB.
  * The durable dirty bit is committed before every isolated mutation, making
  * the global wake index conservative and repairable after a crash.
  */
@@ -55,6 +55,7 @@ export class SessionKernelStoreHost {
   readonly central: SessionKernelStore;
   private readonly isolated = new Map<string, SessionKernelStore>();
   private runtimeCursor = "";
+  private maintenanceSessionCursor = "";
   private outboxRouteMaintenanceCursor = 0;
 
   constructor(
@@ -349,8 +350,26 @@ export class SessionKernelStoreHost {
     }
     let pending = migrated === migrationLimit || routes.length === 50 ||
       this.central.maintain();
-    for (const result of this.mapIsolatedStores("maintenance:store", (store) => store.maintain()))
-      pending = result || pending;
+    const maintenanceBatch = 8;
+    const placements = this.central.isolatedSessionPlacements(
+      maintenanceBatch,
+      this.maintenanceSessionCursor,
+    );
+    if (placements.length === 0 && this.maintenanceSessionCursor) {
+      this.maintenanceSessionCursor = "";
+    } else {
+      for (const { sessionId } of placements) {
+        this.maintenanceSessionCursor = sessionId;
+        if (this.central.quarantinedSession(sessionId)) continue;
+        const result = this.containIsolated(
+          sessionId,
+          "maintenance:store",
+          () => this.openIsolated(sessionId).maintain(),
+        );
+        if (result.ok) pending = result.value || pending;
+      }
+      pending = placements.length === maintenanceBatch || pending;
+    }
     return pending;
   }
 
@@ -392,21 +411,6 @@ export class SessionKernelStoreHost {
     return store;
   }
 
-  private isolatedStoreEntries(): Array<{ sessionId: string; store: SessionKernelStore }> {
-    const entries: Array<{ sessionId: string; store: SessionKernelStore }> = [];
-    for (const placement of this.central.isolatedSessionPlacements()) {
-      const { sessionId } = placement;
-      if (this.central.quarantinedSession(sessionId)) continue;
-      const opened = this.containIsolated(
-        sessionId,
-        "storage:open",
-        () => this.openIsolated(sessionId),
-      );
-      if (opened.ok) entries.push({ sessionId, store: opened.value });
-    }
-    return entries;
-  }
-
   private containIsolated<T>(
     sessionId: string,
     commandKind: string,
@@ -433,11 +437,14 @@ export class SessionKernelStoreHost {
     operation: (store: SessionKernelStore, sessionId: string) => T,
   ): T[] {
     const results: T[] = [];
-    for (const { sessionId, store } of this.isolatedStoreEntries()) {
+    for (const { sessionId } of this.central.isolatedSessionPlacements()) {
+      if (this.central.quarantinedSession(sessionId)) continue;
+      // Operate before opening the next actor. Building an array of store
+      // handles first let the bounded LRU close early entries before use.
       const result = this.containIsolated(
         sessionId,
         commandKind,
-        () => operation(store, sessionId),
+        () => operation(this.openIsolated(sessionId), sessionId),
       );
       if (result.ok) results.push(result.value);
     }

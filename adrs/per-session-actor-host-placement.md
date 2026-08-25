@@ -4,7 +4,7 @@ Status: Accepted for incremental implementation
 
 ## Context
 
-Schema 21 made `SessionKernel` the single logical owner of lifecycle state but hosted every session in one Worker and one SQLite database. Schema 22 introduced a durable placement catalog and routes a newly mutated session with no legacy rows to its own database. This ADR defines the final placement model and the crash-safe path from that bridge.
+Schema 21 made `SessionKernel` the single logical owner of lifecycle state but hosted every session in one Worker and one SQLite database. Schema 22 introduced a durable placement catalog and routes a newly mutated session with no legacy rows to its own database. Schema 23 adds bounded, verified cutover of legacy rows. This ADR defines the final placement model and the crash-safe path from that bridge.
 
 The non-negotiable boundary is one logical actor, serial mailbox, and authoritative SQLite database per session. Logical actors are not operating-system processes. A separately supervised actor-host service runs a bounded pool of Worker isolates, activates actors lazily, and passivates idle actors. Network, model, sandbox, filesystem, and process work stays in gateway/executor processes and returns only fenced receipts.
 
@@ -31,7 +31,7 @@ Schema 22 creates these tables in every `SessionKernelStore` because the same st
 | `session_kernel_timers` | session DB | Durable timer authority, attempts, execution token, and dead-letter state. |
 | `session_kernel_outbox` | session DB | Durable external effects, stable effect identity, attempts, execution token, and dead-letter state. |
 
-The final system database contains only process ownership, placements, per-session migration records/fences, storage quarantine, the repairable wake index, and the temporary numeric outbox route allocator. Central copies of the other tables are legacy evidence, not a second authority, after route cutover.
+The final system database contains only process ownership, placements, storage quarantine, the repairable wake index, and the temporary numeric outbox route allocator. Schema 23 removes a session's central rows in the same transaction that publishes its placement and outbox routes, so retained central evidence can never be mistaken for a second authority.
 
 ## Existing command and effect surface
 
@@ -71,19 +71,18 @@ The service uses typed, exhaustive routing metadata to derive the session ID bef
 
 Before an isolated mutation the router commits `needs_scan = 1`. The actor then commits the session transaction. Repair may conservatively rescan extra work after a crash. It must never omit accepted timer/outbox work. After a scan, the router writes derived `next_timer_at` and `next_outbox_at`. The index is rebuilt by enumerating placements and querying each session DB.
 
-### Lazy legacy migration
+### Bounded legacy migration
 
-Migration is per session and never pauses unrelated admission:
+Maintenance migrates a small bounded batch behind the actor host's global admission barrier:
 
-1. **Fence:** serialize behind that session mailbox, write migration state `copying` with source schema, target path, route epoch candidate, and source evidence identity. New admissions for only that session wait.
-2. **Snapshot:** checkpoint/read the legacy database under the existing writer, copy every row for the session from all session-owned tables into a new temporary session DB. Preserve numeric outbox IDs, command receipts, generations, tombstones, timers, attempts, execution tokens, quarantine, and change sequences.
-3. **Verify:** compare table counts plus canonical row digests, schema version, foreign identity constraints, max change sequence, run generation, pending timer/outbox identities, and `PRAGMA integrity_check`. Record the digest in migration state. A mismatch quarantines migration and leaves the legacy route authoritative.
-4. **Publish target:** fsync the verified DB and atomically rename it to the content-addressed session path. Reopening must reproduce the verified digest.
-5. **Cut over:** in one system/legacy transaction change migration state to `cutover`, insert the isolated placement and wake data, and insert temporary outbox ID routes. The route switch is the linearization point. Legacy rows become read-only evidence at this instant.
-6. **Verify route:** activate through the normal router, recheck the target digest and fencing identities, then mark `verified` and resume the session mailbox.
-7. **Cleanup gate:** only a later retention job, after backup and fleet/schema gates, may move/delete legacy evidence. It must never be part of cutover recovery.
+1. **Fence:** drain already-admitted session turns and hold later turns behind the global barrier. This temporary catalog-wide barrier prevents a compatibility fan-out from racing cutover.
+2. **Snapshot:** copy every row for one session-owned table into a new unpublished database. Preserve numeric outbox IDs, command receipts, generations, tombstones, timers, attempts, execution tokens, quarantine, and change sequences.
+3. **Verify:** compare counts and both-direction `EXCEPT` row sets for every table, then require `PRAGMA integrity_check = ok`. A mismatch leaves the central route authoritative and removes the unpublished target.
+4. **Publish target:** checkpoint, fsync, and atomically rename the verified database to its content-addressed session path.
+5. **Cut over:** in one immediate central transaction insert all temporary outbox routes and the isolated placement, then remove that session's central rows. This transaction is the linearization point. A crash before it leaves central state authoritative; after it only the complete target is authoritative.
+6. **Activate:** the next normal routed turn lazily opens the target and applies ordinary command-journal recovery. The durable dirty wake bit forces timer/outbox rescan.
 
-No migration writes both authorities. Copying writes an unpublished target while legacy remains authoritative. After cutover only the target is writable.
+No migration writes both authorities. Copying writes an unpublished target while central state remains authoritative. The cutover transaction removes central session rows as it publishes the route.
 
 ### Crash points and recovery
 
@@ -95,16 +94,16 @@ No migration writes both authorities. Copying writes an unpublished target while
 | After isolated commit, before reply | Replay returns the durable command/effect/timer receipt. |
 | After isolated commit, before wake repair | Dirty placement forces a rescan. |
 | Worker crash or timeout | Supervisor removes the Worker, preserves mailbox ordering, starts a replacement, and re-enters only replay-safe work. Other lanes continue. |
-| During migration snapshot or verification | Migration remains `copying`; delete/rebuild only the unpublished temporary target. Legacy remains authoritative. |
-| After target rename, before route cutover | Migration record identifies an unpublished target. Reverify and continue or replace it; legacy remains authoritative. |
-| After route cutover, before `verified` | Route is authoritative. Reopen target, verify recorded digest, rebuild wake/outbox routes, then resume. Never fall back to legacy writes. |
-| After cutover with unreadable target | Quarantine that session and retain both target and legacy evidence for repair. Do not silently revert route. |
+| During migration snapshot or verification | Delete/rebuild only the unpublished temporary target. Central rows remain authoritative. |
+| After target rename, before route cutover | No placement exists, so recovery may remove and rebuild the unpublished target from central rows. |
+| During cutover | Placement, outbox routes, and central-row removal commit or roll back together. |
+| After cutover with unreadable target | Quarantine that session. Do not silently recreate or fall back to central writes. |
 | During deletion | Tombstone and ownership fences remain in the session authority. Route/evidence removal occurs only after physical ownership is proven absent. |
 | System DB commit ambiguity | Fail-stop the actor host because route authority is unknown. |
 
 ## Compatibility and removal gates
 
-- Central session tables remain only while at least one placement is legacy or migration evidence retention has not elapsed.
+- Central session tables remain structurally for mixed-version compatibility, but bounded maintenance drives their session row count to zero.
 - `session_kernel_outbox_routes` remains until all consumers settle effects by `(session_id, effect_id)` rather than a global integer.
 - Global ask/delivery import markers remain until legacy JSON import support is removed.
 - The central WAL read mirror remains valid only for legacy compatibility reads. Routed reads for isolated sessions always enter the actor host.

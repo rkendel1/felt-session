@@ -165,7 +165,7 @@ describe("per-session session kernel storage", () => {
       quarantinedSessions: 1,
     });
     expect(recovered.quarantinedSession("broken-session")).toMatchObject({
-      commandKind: "storage:open",
+      commandKind: "global:stats",
     });
     expect(recovered.storeForSession("healthy-session").runState("healthy-session").state)
       .toBe("running");
@@ -267,6 +267,7 @@ describe("per-session session kernel storage", () => {
 
     expect(host.storeForSession("first-session").runState("first-session"))
       .toMatchObject({ state: "running", currentRunId: "first-run" });
+    expect(host.stats()).toMatchObject({ sessions: 2, quarantinedSessions: 0 });
     host.close();
   });
 
