@@ -610,9 +610,43 @@ async function restorePlannedOpening(sessionId: string): Promise<{
 	const legacyPlan = actorPlan ? undefined : readCreatePlanForRecovery(sessionId);
 	const openingPlan = actorPlan ?? legacyPlan?.resolved;
 	const identity = actorPlan ? creation!.identity : legacyPlan?.identity;
-	const dispatch = promptDispatches.get(sessionId);
-	if (!openingPlan || !identity || dispatch?.kind !== "create") return null;
+	if (!openingPlan || !identity) return null;
 	const restored = restoreResolvedCreate<ResolvedCreate>(openingPlan);
+	let dispatch = promptDispatches.get(sessionId);
+	if (
+		!dispatch &&
+		actorPlan &&
+		creation?.state === "opening_dispatched" &&
+		typeof restored.openingPromptEntryId === "string" &&
+		restored.openingPromptEntryId &&
+		typeof restored.openingPrompt === "string"
+	) {
+		// A pre-schema-22 recovery pass could remove the create dispatch before
+		// the session file existed. The opening plan is write-once and carries the
+		// exact prompt identity, so restore that same actor receipt before launch.
+		const promptEntryId = restored.openingPromptEntryId;
+		const openingPrompt = restored.openingPrompt;
+		const recoveredDispatch = {
+			promptEntryId,
+			items: [
+				{
+					content: openingPrompt,
+					user: restored.user,
+					...(restored.images?.length
+						? {
+								images: restored.images.map(
+									(image) => `data:${image.mediaType};base64,${image.data}`,
+								),
+							}
+						: {}),
+				},
+			],
+			kind: "create" as const,
+		};
+		promptDispatches.set(sessionId, recoveredDispatch);
+		dispatch = recoveredDispatch;
+	}
+	if (dispatch?.kind !== "create") return null;
 	const restoredGitEnv = githubCredentialForPrincipal(restored.gitPrincipal)?.env;
 	if (
 		typeof restored.wtPath !== "string" ||

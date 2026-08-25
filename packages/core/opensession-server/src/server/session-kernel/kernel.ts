@@ -264,7 +264,9 @@ export function sessionKernelActorActive(): boolean {
 
 export function sessionIsQuarantined(sessionId: string): boolean {
   if (state.actor) return !!state.actor.quarantinedSession(sessionId);
-  return !!compatibilityStoreForTest("quarantine read").quarantinedSession(sessionId);
+  if (process.env.NODE_ENV === "test")
+    return !!sessionKernelStore().quarantinedSession(sessionId);
+  throw new Error("Session quarantine reads require the authoritative actor");
 }
 
 export function sessionKernelStore(): SessionKernelStoreApi {

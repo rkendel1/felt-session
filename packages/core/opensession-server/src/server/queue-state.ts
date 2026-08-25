@@ -457,15 +457,17 @@ export function restorePersistedQueueState(options: {
 		}
 		for (const [sessionId, dispatch] of promptDispatches) {
 			if (!restorable(sessionId)) continue;
+			const creationOwned =
+				dispatch.kind === "create" &&
+				(options.creationOwnsPrompt?.(sessionId, dispatch.promptEntryId) ||
+					!options.journalOwnsPrompt(sessionId, dispatch.promptEntryId));
+			// Creation dispatches intentionally precede the session file. The actor
+			// opening plan and effect remain their recovery authority in this window.
+			if (creationOwned) continue;
 			if (!options.sessionExists(sessionId)) {
 				promptDispatches.delete(sessionId);
 				continue;
 			}
-			if (
-				dispatch.kind === "create" &&
-				(options.creationOwnsPrompt?.(sessionId, dispatch.promptEntryId) ||
-					!options.journalOwnsPrompt(sessionId, dispatch.promptEntryId))
-			) continue;
 			if (options.journalOwnsPrompt(sessionId, dispatch.promptEntryId))
 				acknowledgePromptDispatch(sessionId, dispatch.promptEntryId, false);
 			else failPromptDispatch(sessionId, dispatch.promptEntryId, false);
