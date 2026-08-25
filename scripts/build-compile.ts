@@ -267,6 +267,7 @@ async function buildSharpSidecar(stage: string, sharpVersion: string): Promise<v
  */
 const WORKER_SIDECARS: Array<{ entry: string; name: string }> = [
 	{ entry: "packages/core/opensession-server/src/session-kernel-worker.ts", name: "session-kernel-worker.js" },
+	{ entry: "packages/core/opensession-server/src/session-kernel-transport-worker.ts", name: "session-kernel-transport-worker.js" },
 	{ entry: "packages/core/opensession-server/src/server/workflow-worker.ts", name: "workflow-worker.js" },
 	{ entry: "packages/core/opensession-server/src/server/code-flow-worker.ts", name: "code-flow-worker.js" },
 ];
@@ -320,7 +321,9 @@ async function main(): Promise<void> {
 	for (const rel of [
 		"opensession.service",
 		"opensession-executor.service",
+		"opensession-session-kernel.service",
 		"deploy/install-executor-credential.sh",
+		"deploy/install-session-kernel-credential.sh",
 		"deploy/install-run-host-helper.sh",
 		"deploy/opensession-run-host",
 	]) {

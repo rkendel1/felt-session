@@ -1,16 +1,18 @@
 import { SessionKernelStore } from "./store";
 import {
   SESSION_KERNEL_ACTOR_VERSION,
+  SESSION_KERNEL_MAX_RESPONSE_BYTES,
   isCriticalSettlementCommand,
   type KernelActorAsyncRequest,
-  type KernelActorAsyncResponse,
+  type KernelActorServiceCall,
+  type KernelActorServiceResponse,
   type KernelActorSyncRequest,
 } from "./actor-protocol";
 import { isDeliveryReadRequest } from "./delivery-protocol";
 
 export function startSessionKernelActorWorker(): void {
   const store = new SessionKernelStore();
-  function post(message: KernelActorAsyncResponse): void {
+  function post(message: KernelActorServiceResponse): void {
     self.postMessage(message);
   }
 
@@ -208,10 +210,47 @@ export function startSessionKernelActorWorker(): void {
     Atomics.notify(control, 0);
   }
 
+  function serviceCall(request: KernelActorServiceCall): void {
+    const outputBytes = Math.floor(request.outputBytes);
+    if (outputBytes <= 0 || outputBytes > SESSION_KERNEL_MAX_RESPONSE_BYTES) {
+      post({
+        t: "error",
+        rpcId: request.rpcId,
+        error: "Invalid kernel actor response bound",
+      });
+      return;
+    }
+    const control = new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT * 2);
+    const output = new SharedArrayBuffer(outputBytes);
+    syncStore({ ...request.request, control, output } as KernelActorSyncRequest);
+    const view = new Int32Array(control);
+    const status = Atomics.load(view, 0) as -1 | 1 | 2;
+    const length = Atomics.load(view, 1);
+    post({
+      t: "call_result",
+      rpcId: request.rpcId,
+      status,
+      length,
+      ...(status === 2
+        ? {}
+        : {
+            body: new TextDecoder().decode(
+              new Uint8Array(output, 0, Math.min(length, outputBytes)),
+            ),
+          }),
+    });
+  }
+
   self.onmessage = (
-    event: MessageEvent<KernelActorAsyncRequest | KernelActorSyncRequest>,
+    event: MessageEvent<
+      KernelActorAsyncRequest | KernelActorSyncRequest | KernelActorServiceCall
+    >,
   ) => {
     const request = event.data;
+    if (request.t === "call") {
+      serviceCall(request);
+      return;
+    }
     if (request.t === "store" || request.t === "reduce") {
       syncStore(request);
       return;

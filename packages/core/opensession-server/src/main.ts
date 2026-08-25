@@ -19,6 +19,7 @@
  *   opensession runner-host <spec>  → host.ts   (spec at argv[2] after splice)
  *   opensession mcp-proxy           → mcp-proxy.ts (config from env)
  *   opensession executor            → executor/main.ts (fixed launch policy)
+ *   opensession session-kernel-service → session-kernel-service.ts
  *   opensession transcript-search-worker
  *                                    → transcript-search-worker.ts (JSON via stdio)
  *   opensession server              → opensession.ts (the HTTP/WS server)
@@ -75,6 +76,10 @@ if (sub === "runner-host") {
   process.argv.splice(2, 1);
   const { runExecutor } = await import("./executor/main");
   await runExecutor();
+} else if (sub === "session-kernel-service") {
+  process.argv.splice(2, 1);
+  const { runSessionKernelService } = await import("./session-kernel-service");
+  await runSessionKernelService();
 } else if (sub === "transcript-search-worker") {
   process.argv.splice(2, 1);
   const { runTranscriptSearchWorker } =

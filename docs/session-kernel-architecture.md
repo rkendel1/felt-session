@@ -15,6 +15,41 @@ executor event belongs to the current run.
 The implementation lives in
 `packages/core/opensession-server/src/server/session-kernel/`.
 
+## Service boundary
+
+The writable actor is hosted by `opensession-session-kernel.service`, not by the
+HTTP gateway. The service binds only `127.0.0.1:3849`, authenticates every RPC
+with the systemd `session-kernel-token` credential, and negotiates a transport
+version separately from the actor/schema version. `/live` reports process/actor
+liveness and `/ready` reports whether the actor handshake completed. Neither
+endpoint exposes RPC data.
+
+The network frontend and the actor are separate isolates. The frontend bounds
+requests at 16 MiB, responses at 128 MiB, and outstanding calls at 1024, then
+forwards typed messages to the actor Worker. After startup ownership checks, actor
+turns perform bounded SQLite reductions only. They do not bind sockets, perform
+filesystem or process work, invoke models, or execute outbox effects. Long-running
+filesystem, network, process, and model effects remain in the independently
+supervised executors. Their active receipts do not hold the actor mailbox, so
+Stop, steering, and fenced run events remain responsive.
+
+The gateway retains a Worker bridge only to support synchronous compatibility
+reads while call sites migrate. That bridge performs authenticated bounded HTTP
+RPC and wakes the gateway through its existing `SharedArrayBuffer`; it never
+opens the store. A missing credential, handshake mismatch, service failure, or
+invalid response fail-stops the gateway. There is no in-process actor or direct
+writer fallback in production.
+
+Systemd stops the old gateway before starting or restarting the actor service,
+then starts the new gateway. This sequencing prevents mixed releases from
+opening two writable SQLite connections. The service and gateway share only the
+minimal state-directory environment and a root-owned 0600 credential. Source
+installs use `packages/core/opensession-server/src/session-kernel-service.ts`;
+compiled installs dispatch `opensession session-kernel-service` and ship both
+actor and transport Worker sidecars. The service enforces a `127.0.0.1` bind;
+clients can override the endpoint with `OPENSESSION_SESSION_KERNEL_URL` and
+operators can move the local port with `OPENSESSION_SESSION_KERNEL_PORT`.
+
 The target is an Erlang/Durable Objects style state machine: each typed message
 is reduced and committed in one short actor turn, external work is emitted as a
 durable effect, and results return as fenced messages. The actor never waits for

@@ -40,9 +40,15 @@ import {
   REPO_ROOT,
   SERVICE_NAME,
   SERVICE_PATH,
+  SESSION_KERNEL_SERVICE_NAME,
+  SESSION_KERNEL_SERVICE_PATH,
+  SESSION_KERNEL_TOKEN_PATH,
   SHIM_PATH,
   STAGED_EXECUTOR_UNIT_PATH,
+  STAGED_SESSION_KERNEL_UNIT_PATH,
   STAGED_UNIT_PATH,
+  USER_SESSION_KERNEL_TOKEN_PATH,
+  USER_SESSION_KERNEL_UNIT_PATH,
   USER_UNIT_PATH,
 } from "./paths";
 import { isCompiledBinary } from "../../packages/core/opensession-server/src/runner-host/exe";
@@ -344,6 +350,10 @@ export async function renderUnit(
       .replace(
         credentialMarker,
         "LoadCredential=executor-token:/etc/opensession/executor-token\n",
+      )
+      .replace(
+        /^# SESSION_KERNEL_CREDENTIAL$/m,
+        `LoadCredential=session-kernel-token:${SESSION_KERNEL_TOKEN_PATH}`,
       );
   }
   // A user manager cannot consume the root-owned executor credential or launch
@@ -351,10 +361,14 @@ export async function renderUnit(
   // running turns in the gateway process. The system scope retains detached,
   // restart-surviving execution through the independent executor service.
   return unit
+    .replace(
+      /^# SESSION_KERNEL_CREDENTIAL$/m,
+      `LoadCredential=session-kernel-token:${USER_SESSION_KERNEL_TOKEN_PATH}`,
+    )
     .replace(/^Wants=opensession-executor\.service\n/m, "")
     .replace(
-      /^After=network\.target opensession-executor\.service$/m,
-      "After=network.target",
+      /^After=network\.target opensession-session-kernel\.service opensession-executor\.service$/m,
+      "After=network.target opensession-session-kernel.service",
     )
     .replace(
       credentialMarker,
@@ -412,6 +426,40 @@ export async function renderExecutorUnit(): Promise<string> {
       /^Environment="PATH=.*"$/m,
       `Environment="PATH=${servicePath(binDir)}"`,
     );
+}
+
+/** Render the independently supervised SessionKernel owner. */
+export async function renderSessionKernelUnit(
+  scope: SystemdScope = "system",
+): Promise<string> {
+  const template = join(serviceWorkdir(), "opensession-session-kernel.service");
+  if (!existsSync(template))
+    throw new Error(`missing session kernel unit template at ${template}`);
+  const bun = bunPath();
+  const compiled = isCompiledBinary();
+  const exec = compiled
+    ? `${SHIM_PATH} session-kernel-service`
+    : `${bun} run packages/core/opensession-server/src/session-kernel-service.ts`;
+  const binDir = compiled ? dirname(SHIM_PATH) : bun.replace(/\/bun$/, "");
+  let unit = (await Bun.file(template).text())
+    .replace(/^User=.*$/m, `User=${await resolveUsername()}`)
+    .replace(/^WorkingDirectory=.*$/m, `WorkingDirectory=${serviceWorkdir()}`)
+    .replace(/^# SESSION_KERNEL_PATH_ENV$/m, executorPathEnvironment())
+    .replace(/^ExecStart=.*$/m, `ExecStart=${exec}`)
+    .replace(
+      /^Environment="PATH=.*"$/m,
+      `Environment="PATH=${servicePath(binDir)}"`,
+    );
+  if (scope === "system") return unit;
+  return unit
+    .replace(/^User=.*\n/m, "")
+    .replace(
+      /^LoadCredential=session-kernel-token:.*$/m,
+      `LoadCredential=session-kernel-token:${USER_SESSION_KERNEL_TOKEN_PATH}`,
+    )
+    .replace(/^IPAddressAllow=.*\n/m, "")
+    .replace(/^IPAddressDeny=.*\n/m, "")
+    .replace(/^WantedBy=.*$/m, "WantedBy=default.target");
 }
 
 /**
@@ -564,8 +612,10 @@ export async function install(
       const scope = opts.scope ?? "user";
       const wasActive = installedScope() === scope && (await isActive());
       const unit = await renderUnit(scope);
+      const kernelUnit = await renderSessionKernelUnit(scope);
       const env = userEnv();
       let migratedUserUnit: string | null = null;
+      let migratedUserKernelUnit: string | null = null;
 
       if (scope === "user") {
         if (
@@ -587,8 +637,17 @@ export async function install(
           return false;
         }
         mkdirSync(dirname(USER_UNIT_PATH), { recursive: true });
+        if (!existsSync(USER_SESSION_KERNEL_TOKEN_PATH)) {
+          await Bun.write(
+            USER_SESSION_KERNEL_TOKEN_PATH,
+            `${crypto.randomUUID()}${crypto.randomUUID()}\n`,
+          );
+          chmodSync(USER_SESSION_KERNEL_TOKEN_PATH, 0o600);
+        }
         await Bun.write(USER_UNIT_PATH, unit);
+        await Bun.write(USER_SESSION_KERNEL_UNIT_PATH, kernelUnit);
         info(dim(`installed ${USER_UNIT_PATH}`));
+        info(dim(`installed ${USER_SESSION_KERNEL_UNIT_PATH}`));
         await enableLinger();
         const runtimeDir =
           process.env.XDG_RUNTIME_DIR ?? env.XDG_RUNTIME_DIR ?? "";
@@ -603,6 +662,7 @@ export async function install(
         const executorUnit = await renderExecutorUnit();
         await Bun.write(STAGED_UNIT_PATH, unit);
         await Bun.write(STAGED_EXECUTOR_UNIT_PATH, executorUnit);
+        await Bun.write(STAGED_SESSION_KERNEL_UNIT_PATH, kernelUnit);
         const serviceUser = await resolveUsername();
         const compiled = isCompiledBinary();
         const runnerBin = compiled ? SHIM_PATH : bunPath();
@@ -621,6 +681,15 @@ export async function install(
             "sudo",
             join(serviceWorkdir(), "deploy", "install-executor-credential.sh"),
             EXECUTOR_TOKEN_PATH,
+          ],
+          [
+            "sudo",
+            join(
+              serviceWorkdir(),
+              "deploy",
+              "install-session-kernel-credential.sh",
+            ),
+            SESSION_KERNEL_TOKEN_PATH,
           ],
           [
             "sudo",
@@ -645,6 +714,12 @@ export async function install(
           ["sudo", "cp", STAGED_EXECUTOR_UNIT_PATH, EXECUTOR_SERVICE_PATH],
           [
             "sudo",
+            "cp",
+            STAGED_SESSION_KERNEL_UNIT_PATH,
+            SESSION_KERNEL_SERVICE_PATH,
+          ],
+          [
+            "sudo",
             "rm",
             "-f",
             "/etc/systemd/system/opensession.service.d/executor-credential.conf",
@@ -663,12 +738,30 @@ export async function install(
             ),
           );
           migratedUserUnit = await Bun.file(USER_UNIT_PATH).text();
+          if (existsSync(USER_SESSION_KERNEL_UNIT_PATH))
+            migratedUserKernelUnit = await Bun.file(
+              USER_SESSION_KERNEL_UNIT_PATH,
+            ).text();
           await runInherit(
             systemctl("user", ["disable", "--now", SERVICE_NAME]),
             undefined,
             env,
           );
-          await run(["rm", "-f", USER_UNIT_PATH]);
+          await runInherit(
+            systemctl("user", [
+              "disable",
+              "--now",
+              SESSION_KERNEL_SERVICE_NAME,
+            ]),
+            undefined,
+            env,
+          );
+          await run([
+            "rm",
+            "-f",
+            USER_UNIT_PATH,
+            USER_SESSION_KERNEL_UNIT_PATH,
+          ]);
           await runInherit(
             systemctl("user", ["daemon-reload"]),
             undefined,
@@ -676,6 +769,9 @@ export async function install(
           );
         }
         const start = [
+          ...(wasActive
+            ? [["sudo", "systemctl", "stop", SERVICE_NAME]]
+            : []),
           ["sudo", "systemctl", "daemon-reload"],
           ["sudo", "systemctl", "enable", EXECUTOR_SERVICE_NAME],
           [
@@ -684,10 +780,9 @@ export async function install(
             executorWasActive ? "restart" : "start",
             EXECUTOR_SERVICE_NAME,
           ],
+          ["sudo", "systemctl", "enable", SESSION_KERNEL_SERVICE_NAME],
+          ["sudo", "systemctl", "restart", SESSION_KERNEL_SERVICE_NAME],
           ["sudo", "systemctl", "enable", "--now", SERVICE_NAME],
-          ...(wasActive
-            ? [["sudo", "systemctl", "restart", SERVICE_NAME]]
-            : []),
         ];
         for (const cmd of start) {
           if ((await runInherit(cmd)) !== 0) {
@@ -696,11 +791,26 @@ export async function install(
               warn("restoring the user service");
               mkdirSync(dirname(USER_UNIT_PATH), { recursive: true });
               await Bun.write(USER_UNIT_PATH, migratedUserUnit);
+              if (migratedUserKernelUnit)
+                await Bun.write(
+                  USER_SESSION_KERNEL_UNIT_PATH,
+                  migratedUserKernelUnit,
+                );
               await runInherit(
                 systemctl("user", ["daemon-reload"]),
                 undefined,
                 env,
               );
+              if (migratedUserKernelUnit)
+                await runInherit(
+                  systemctl("user", [
+                    "enable",
+                    "--now",
+                    SESSION_KERNEL_SERVICE_NAME,
+                  ]),
+                  undefined,
+                  env,
+                );
               await runInherit(
                 systemctl("user", ["enable", "--now", SERVICE_NAME]),
                 undefined,
@@ -719,9 +829,11 @@ export async function install(
       }
 
       for (const cmd of [
+        ...(wasActive ? [systemctl(scope, ["stop", SERVICE_NAME])] : []),
         systemctl(scope, ["daemon-reload"]),
+        systemctl(scope, ["enable", SESSION_KERNEL_SERVICE_NAME]),
+        systemctl(scope, ["restart", SESSION_KERNEL_SERVICE_NAME]),
         systemctl(scope, ["enable", "--now", SERVICE_NAME]),
-        ...(wasActive ? [systemctl(scope, ["restart", SERVICE_NAME])] : []),
       ]) {
         if ((await runInherit(cmd, undefined, env)) !== 0) {
           warn(`failed: ${cmd.join(" ")}`);

@@ -66,3 +66,20 @@ export const STAGED_EXECUTOR_UNIT_PATH = join(
   "opensession-executor.service",
 );
 export const EXECUTOR_TOKEN_PATH = "/etc/opensession/executor-token";
+export const SESSION_KERNEL_SERVICE_NAME = "opensession-session-kernel";
+export const SESSION_KERNEL_SERVICE_PATH = `/etc/systemd/system/${SESSION_KERNEL_SERVICE_NAME}.service`;
+export const STAGED_SESSION_KERNEL_UNIT_PATH = join(
+  OPENSESSION_HOME,
+  "opensession-session-kernel.service",
+);
+export const SESSION_KERNEL_TOKEN_PATH = "/etc/opensession/session-kernel-token";
+export const USER_SESSION_KERNEL_TOKEN_PATH = join(
+  OPENSESSION_HOME,
+  "session-kernel-token",
+);
+export const USER_SESSION_KERNEL_UNIT_PATH = join(
+  process.env.XDG_CONFIG_HOME || join(HOME, ".config"),
+  "systemd",
+  "user",
+  `${SESSION_KERNEL_SERVICE_NAME}.service`,
+);

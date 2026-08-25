@@ -6,6 +6,10 @@ import type {
 } from "./store";
 
 export const SESSION_KERNEL_ACTOR_VERSION = 19;
+export const SESSION_KERNEL_TRANSPORT_VERSION = 1;
+export const SESSION_KERNEL_MAX_REQUEST_BYTES = 16 * 1024 * 1024;
+export const SESSION_KERNEL_MAX_RESPONSE_BYTES = 128 * 1024 * 1024;
+export const SESSION_KERNEL_MAX_TRANSPORT_REQUESTS = 1024;
 
 export type KernelActorAsyncRequest =
   | { t: "hello"; rpcId: string; version: number }
@@ -38,6 +42,30 @@ export type KernelActorAsyncResponse =
       outbox: DurableOutboxItem[];
     }
   | { t: "error"; rpcId: string; error: string; retryable?: boolean };
+
+export type KernelActorServiceCall = {
+  t: "call";
+  rpcId: string;
+  request:
+    | { t: "store"; method: string; args: unknown[] }
+    | { t: "reduce"; command: SessionActorReducerCommand };
+  outputBytes: number;
+};
+
+export type KernelActorServiceResponse =
+  | KernelActorAsyncResponse
+  | {
+      t: "call_result";
+      rpcId: string;
+      status: -1 | 1 | 2;
+      length: number;
+      body?: string;
+    };
+
+export type KernelActorTransportEnvelope = {
+  version: number;
+  request: KernelActorAsyncRequest | KernelActorServiceCall;
+};
 
 type SyncBuffers = {
   control: SharedArrayBuffer;

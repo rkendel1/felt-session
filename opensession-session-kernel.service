@@ -1,0 +1,28 @@
+# ============================================================================
+# TEMPLATE - installed and rewritten by `opensession service install`.
+# This process owns the only writable SessionKernel SQLite connection.
+# ============================================================================
+[Unit]
+Description=Open Session session kernel actor service
+After=network.target
+Before=opensession.service
+
+[Service]
+Environment="PATH=/home/ubuntu/.bun/bin:/usr/local/bin:/usr/bin:/bin"
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/projects/opensession
+# SESSION_KERNEL_PATH_ENV
+LoadCredential=session-kernel-token:/etc/opensession/session-kernel-token
+Environment="NODE_ENV=production"
+ExecStart=/home/ubuntu/.bun/bin/bun run packages/core/opensession-server/src/session-kernel-service.ts
+Restart=always
+RestartSec=1
+TimeoutStopSec=15
+KillMode=mixed
+UMask=0077
+IPAddressAllow=localhost
+IPAddressDeny=any
+
+[Install]
+WantedBy=multi-user.target
