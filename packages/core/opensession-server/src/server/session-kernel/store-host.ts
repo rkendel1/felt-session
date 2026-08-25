@@ -211,19 +211,22 @@ export class SessionKernelStoreHost {
   }
 
   allRunStates(): Array<DurableRunState & { sessionId: string }> {
-    return this.mapStores("global:run-states", (store) => store.runStates()).flat();
+    return this.mapReadStores("global:run-states", (store) => store.runStates()).flat();
   }
 
   allAskEntries(): Array<[string, unknown]> {
-    return this.mapStores("global:ask-entries", (store) => store.askEntries()).flat();
+    return this.mapReadStores("global:ask-entries", (store) => store.askEntries()).flat();
   }
 
   allDeliveryEntries(slot: Parameters<SessionKernelStoreApi["deliveryEntries"]>[0]) {
-    return this.mapStores("global:delivery-entries", (store) => store.deliveryEntries(slot)).flat();
+    return this.mapReadStores(
+      "global:delivery-entries",
+      (store) => store.deliveryEntries(slot),
+    ).flat();
   }
 
   allQuarantinedSessions(limit = 100, offset = 0): DurableSessionQuarantine[] {
-    const isolated = this.mapIsolatedStores(
+    const isolated = this.mapIsolatedReadStores(
       "global:quarantined-sessions",
       (store) => store.quarantinedSessions(Number.MAX_SAFE_INTEGER, 0),
     ).flat();
@@ -284,7 +287,10 @@ export class SessionKernelStoreHost {
   }
 
   stats(): ReturnType<SessionKernelStoreApi["stats"]> {
-    const isolated = this.mapIsolatedStores("global:stats", (store) => store.stats());
+    const isolated = this.mapIsolatedReadStores(
+      "global:stats",
+      (store) => store.stats(),
+    );
     // Include quarantines created during this scan in the same response.
     const parts = [this.central.stats(), ...isolated];
     const sum = (key: keyof ReturnType<SessionKernelStoreApi["stats"]>) =>
@@ -432,6 +438,53 @@ export class SessionKernelStoreHost {
     }
   }
 
+  private mapIsolatedReadStores<T>(
+    commandKind: string,
+    operation: (store: SessionKernelStore, sessionId: string) => T,
+  ): T[] {
+    const results: T[] = [];
+    for (const { sessionId } of this.central.isolatedSessionPlacements()) {
+      if (this.central.quarantinedSession(sessionId)) continue;
+      const result = this.containIsolated(sessionId, commandKind, () => {
+        const cached = this.isolated.get(sessionId);
+        if (cached) return operation(cached, sessionId);
+        if (this.centralPath === ":memory:")
+          return operation(this.openIsolated(sessionId), sessionId);
+        let store: SessionKernelStore;
+        try {
+          store = new SessionKernelStore(
+            sessionKernelSessionDbPath(sessionId, this.isolatedRoot),
+            { readonly: true },
+          );
+        } catch (error) {
+          // The first schema-23 read may encounter an additive schema-22 target
+          // created before this deploy. Upgrade it once behind the global gate.
+          if (!/read mirror schema \d+ does not match supported \d+/.test(
+            error instanceof Error ? error.message : String(error),
+          )) throw error;
+          return operation(this.openIsolated(sessionId), sessionId);
+        }
+        try {
+          return operation(store, sessionId);
+        } finally {
+          store.close();
+        }
+      });
+      if (result.ok) results.push(result.value);
+    }
+    return results;
+  }
+
+  private mapReadStores<T>(
+    commandKind: string,
+    operation: (store: SessionKernelStore, sessionId?: string) => T,
+  ): T[] {
+    return [
+      operation(this.central),
+      ...this.mapIsolatedReadStores(commandKind, operation),
+    ];
+  }
+
   private mapIsolatedStores<T>(
     commandKind: string,
     operation: (store: SessionKernelStore, sessionId: string) => T,
@@ -476,13 +529,13 @@ export class SessionKernelStoreHost {
     if (method === "quarantinedSessions")
       return this.allQuarantinedSessions(Number(args[0] ?? 100), Number(args[1] ?? 0));
     if (method === "dueTimers")
-      return this.mapStores("global:due-timers", (store) => store.dueTimers(
+      return this.mapReadStores("global:due-timers", (store) => store.dueTimers(
         args[0] as number | undefined,
         args[1] as number | undefined,
         args[2] as readonly string[] | undefined,
       )).flat().slice(0, Number(args[1] ?? 100));
     if (method === "pendingOutbox")
-      return this.mapStores("global:pending-outbox", (store) => store.pendingOutbox(
+      return this.mapReadStores("global:pending-outbox", (store) => store.pendingOutbox(
         args[0] as number | undefined,
         args[1] as number | undefined,
         args[2] as readonly string[] | undefined,
@@ -521,7 +574,7 @@ export class SessionKernelStoreHost {
     if (method === "deadLetters") {
       const limit = Number(args[0] ?? 100);
       const offset = Number(args[1] ?? 0);
-      const isolated = this.mapIsolatedStores(
+      const isolated = this.mapIsolatedReadStores(
         "global:dead-letters",
         (store) => store.deadLetters(Number.MAX_SAFE_INTEGER, 0),
       );
