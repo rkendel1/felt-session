@@ -5,9 +5,10 @@ import {
   expect,
   test,
 } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Database } from "bun:sqlite";
 import {
   SESSION_KERNEL_ACTOR_VERSION,
   SESSION_KERNEL_MAX_RESPONSE_BYTES,
@@ -18,22 +19,31 @@ import {
   sessionKernelServiceUrl,
   startSessionKernelService,
 } from "./actor-service";
+import { sessionKernelSessionDbPath } from "./store";
 
 const token = "test-session-kernel-token";
 const stateDir = mkdtempSync(join(tmpdir(), "opensession-kernel-service-"));
 let service: Awaited<ReturnType<typeof startSessionKernelService>>;
 let serviceEpoch: string | undefined;
 const previousStateDir = process.env.OPENSESSION_STATE_DIR;
+const previousDatabasePath = process.env.OPENSESSION_SESSION_KERNEL_DB_PATH;
 
 beforeAll(async () => {
   process.env.OPENSESSION_STATE_DIR = stateDir;
-  service = await startSessionKernelService({ port: 0, token });
+  service = await startSessionKernelService({
+    port: 0,
+    token,
+    databasePath: join(stateDir, "sessions", "session-kernel.sqlite"),
+  });
 });
 
 afterAll(() => {
   service.stop();
   if (previousStateDir === undefined) delete process.env.OPENSESSION_STATE_DIR;
   else process.env.OPENSESSION_STATE_DIR = previousStateDir;
+  if (previousDatabasePath === undefined)
+    delete process.env.OPENSESSION_SESSION_KERNEL_DB_PATH;
+  else process.env.OPENSESSION_SESSION_KERNEL_DB_PATH = previousDatabasePath;
   rmSync(stateDir, { recursive: true, force: true });
 });
 
@@ -203,6 +213,87 @@ describe("session kernel actor service", () => {
       t: "error",
       error: "Invalid kernel actor response bound",
     });
+  });
+
+  test("a locked session database does not block another session mailbox", async () => {
+    for (const sessionId of ["locked-pool-session", "healthy-pool-session"]) {
+      const created = await rpc({
+        t: "call",
+        rpcId: `create-${sessionId}`,
+        outputBytes: 256 * 1024,
+        request: {
+          t: "store",
+          method: "setRunState",
+          args: [{ sessionId, state: "idle", event: "seed" }],
+        },
+      });
+      expect(created).toMatchObject({ t: "call_result", status: 1 });
+    }
+
+    const isolatedRoot = join(
+      stateDir,
+      "sessions",
+      "session-kernel-sessions",
+    );
+    const lockedPath = sessionKernelSessionDbPath(
+      "locked-pool-session",
+      isolatedRoot,
+    );
+    const healthyPath = sessionKernelSessionDbPath(
+      "healthy-pool-session",
+      isolatedRoot,
+    );
+    expect(lockedPath).not.toBe(healthyPath);
+    expect(existsSync(lockedPath)).toBe(true);
+    expect(existsSync(healthyPath)).toBe(true);
+
+    const lock = new Database(lockedPath);
+    lock.exec("PRAGMA busy_timeout = 50; BEGIN IMMEDIATE;");
+    try {
+      const blocked = rpc({
+        t: "call",
+        rpcId: "blocked-session-turn",
+        outputBytes: 256 * 1024,
+        request: {
+          t: "store",
+          method: "setRunState",
+          args: [{
+            sessionId: "locked-pool-session",
+            state: "running",
+            event: "blocked",
+            currentRunId: "locked-run",
+          }],
+        },
+      });
+      await Bun.sleep(50);
+
+      const startedAt = performance.now();
+      const healthy = await rpc({
+        t: "call",
+        rpcId: "healthy-session-turn",
+        outputBytes: 256 * 1024,
+        request: {
+          t: "store",
+          method: "setRunState",
+          args: [{
+            sessionId: "healthy-pool-session",
+            state: "running",
+            event: "healthy",
+            currentRunId: "healthy-run",
+          }],
+        },
+      });
+      expect(healthy).toMatchObject({ t: "call_result", status: 1 });
+      expect(performance.now() - startedAt).toBeLessThan(1_000);
+
+      lock.exec("COMMIT;");
+      expect(await blocked).toMatchObject({ t: "call_result", status: 1 });
+    } finally {
+      try {
+        lock.exec("ROLLBACK;");
+      } catch {}
+      lock.close();
+    }
   });
 
   test("keeps reductions responsive while an executor owns physical work", async () => {

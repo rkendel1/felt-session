@@ -193,6 +193,30 @@ describe("per-session session kernel storage", () => {
     host.close();
   });
 
+  test("lazily reactivates a passivated session store", () => {
+    const path = paths();
+    const host = new SessionKernelStoreHost(path.central, path.isolated, 1);
+    host.call("setRunState", [{
+      sessionId: "first-session",
+      state: "running",
+      event: "first",
+      currentRunId: "first-run",
+    }]);
+    const firstActivation = host.storeForSession("first-session");
+
+    host.call("setRunState", [{
+      sessionId: "second-session",
+      state: "running",
+      event: "second",
+      currentRunId: "second-run",
+    }]);
+    expect(() => firstActivation.command("first-session", "missing")).toThrow();
+
+    expect(host.storeForSession("first-session").runState("first-session"))
+      .toMatchObject({ state: "running", currentRunId: "first-run" });
+    host.close();
+  });
+
   test("pages wake candidates in the catalog instead of rotating a fixed prefix", () => {
     const path = paths();
     const host = new SessionKernelStoreHost(path.central, path.isolated);

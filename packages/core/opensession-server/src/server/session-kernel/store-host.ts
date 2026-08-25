@@ -9,107 +9,7 @@ import {
   type DurableTimer,
   type SessionKernelStoreApi,
 } from "./store";
-
-const GLOBAL_METHODS = new Set([
-  "askMigrationComplete",
-  "markAskMigrationComplete",
-  "deliveryMigrationComplete",
-  "markDeliveryMigrationComplete",
-  "askEntries",
-  "clearAskRecords",
-  "deliveryEntries",
-  "clearDeliverySlot",
-  "settlePendingSteers",
-  "runStates",
-  "quarantinedSessions",
-  "dueTimers",
-  "pendingOutbox",
-  "stats",
-  "compact",
-  "maintain",
-  "deadLetters",
-  "retryCompatibleCreationBranchDeadLetters",
-]);
-
-const SESSION_FIRST_METHODS = new Set([
-  "command",
-  "quarantinedSession",
-  "quarantineSession",
-  "releaseQuarantine",
-  "markProcessing",
-  "completeCommand",
-  "failCommand",
-  "creationState",
-  "runState",
-  "appendChange",
-  "changesSince",
-  "isTombstoned",
-  "tombstoneSession",
-  "clearSession",
-  "askSnapshot",
-  "setAskRecord",
-  "answerAskRecord",
-  "deleteAskRecord",
-  "turnSnapshot",
-  "deliverySnapshot",
-  "setDeliverySlot",
-  "deleteDeliverySlot",
-  "prepareSteerDelivery",
-  "acceptSteerDelivery",
-  "rejectSteerDelivery",
-  "requeueSteerDeliveries",
-  "ackDeliveryDispatch",
-  "failDeliveryDispatch",
-  "timer",
-  "cancelTimer",
-  "settleTimerSuccess",
-  "noteTimerFailure",
-  "acknowledgeCommand",
-  "discardDeadTimer",
-  "retryDeadTimer",
-  "enqueueOutbox",
-  "enqueueOutboxMany",
-]);
-
-const SESSION_INPUT_METHODS = new Set([
-  "acceptCommand",
-  "completeCommandDecision",
-  "setRunState",
-  "scheduleTimer",
-  "requestGatewayCommand",
-  "completeGatewayCommand",
-  "failGatewayCommand",
-  "requestSubmitPromptCommand",
-  "completeSubmitPromptCommand",
-  "failSubmitPromptCommand",
-  "requestTurnCancelCommand",
-  "completeTurnCancelCommand",
-  "failTurnCancelCommand",
-  "prepareTurnCancel",
-  "beginTurnCancelEffect",
-  "settleTurnCancel",
-  "prepareTurnOutcomeProjection",
-  "beginTurnOutcomeProjection",
-  "settleTurnOutcomeProjection",
-  "prepareDeliveryInterrupt",
-  "beginDeliveryInterruptEffect",
-  "settleDeliveryInterrupt",
-  "claimNextDeliveryDispatch",
-  "claimDeliveryDispatch",
-  "beginTimerExecution",
-  "completeTimerExecution",
-  "failTimerExecution",
-  "recordTimerRuntimeFailure",
-]);
-
-const OUTBOX_ID_METHODS = new Set([
-  "outboxSessionId",
-  "ackOutbox",
-  "deferOutbox",
-  "noteOutboxFailure",
-  "discardDeadOutbox",
-  "retryDeadOutbox",
-]);
+import { sessionKernelStoreRoute } from "./store-routing";
 
 function minDefined(values: Array<number | undefined>): number | undefined {
   const present = values.filter((value): value is number => value !== undefined);
@@ -160,7 +60,13 @@ export class SessionKernelStoreHost {
   constructor(
     private readonly centralPath = sessionKernelDbPath(),
     private readonly isolatedRoot = `${dirname(centralPath)}/session-kernel-sessions`,
+    private readonly maxOpenSessionStores = Math.max(
+      1,
+      Number(process.env.OPENSESSION_SESSION_KERNEL_ACTIVE_STORES ?? 64),
+    ),
   ) {
+    if (!Number.isInteger(maxOpenSessionStores) || maxOpenSessionStores > 1_024)
+      throw new Error("Invalid active session store bound");
     this.central = new SessionKernelStore(centralPath);
   }
 
@@ -248,34 +154,24 @@ export class SessionKernelStoreHost {
       const centralReleased = this.central.releaseQuarantine(sessionId);
       return centralReleased || isolatedReleased;
     }
-    if (GLOBAL_METHODS.has(method)) return this.callGlobal(method, args);
-    if (OUTBOX_ID_METHODS.has(method)) {
-      const id = Number(args[0]);
-      if (method === "outboxSessionId") return this.outboxSessionId(id);
-      const store = this.storeForOutbox(id, true);
+    const route = sessionKernelStoreRoute(method, args);
+    if (route.scope === "global") return this.callGlobal(method, args);
+    if (route.scope === "outbox") {
+      if (method === "outboxSessionId") return this.outboxSessionId(route.id);
+      const store = this.storeForOutbox(route.id, route.mutation);
       const result = this.invoke(store, method, args);
       if (
         (method === "ackOutbox" ||
           (method === "discardDeadOutbox" && result === true)) &&
-        this.central.isolatedOutboxSessionId(id)
-      ) this.central.forgetIsolatedOutboxRoute(id);
+        this.central.isolatedOutboxSessionId(route.id)
+      ) this.central.forgetIsolatedOutboxRoute(route.id);
       return result;
     }
-    if (SESSION_FIRST_METHODS.has(method)) {
-      const sessionId = String(args[0] ?? "");
-      return this.invoke(
-        this.storeForSession(sessionId, this.isMutation(method)),
-        method,
-        args,
-      );
-    }
-    if (SESSION_INPUT_METHODS.has(method)) {
-      const input = args[0] as { sessionId?: unknown } | undefined;
-      if (typeof input?.sessionId !== "string")
-        throw new Error(`Store method ${method} requires a session id`);
-      return this.invoke(this.storeForSession(input.sessionId, true), method, args);
-    }
-    throw new Error(`Unrouted session kernel store method ${method}`);
+    return this.invoke(
+      this.storeForSession(route.sessionId, route.mutation),
+      method,
+      args,
+    );
   }
 
   allRunStates(): Array<DurableRunState & { sessionId: string }> {
@@ -406,7 +302,20 @@ export class SessionKernelStoreHost {
 
   private openIsolated(sessionId: string): SessionKernelStore {
     let store = this.isolated.get(sessionId);
-    if (store) return store;
+    if (store) {
+      // Refresh insertion order so the bounded cache passivates the least
+      // recently used logical actor connection.
+      this.isolated.delete(sessionId);
+      this.isolated.set(sessionId, store);
+      return store;
+    }
+    while (this.isolated.size >= this.maxOpenSessionStores) {
+      const oldestSessionId = this.isolated.keys().next().value as string | undefined;
+      if (!oldestSessionId) break;
+      const oldest = this.isolated.get(oldestSessionId);
+      this.isolated.delete(oldestSessionId);
+      oldest?.close();
+    }
     store = new SessionKernelStore(
       this.centralPath === ":memory:"
         ? ":memory:"
@@ -419,6 +328,10 @@ export class SessionKernelStoreHost {
             throw centralStoreFailure(error);
           }
         },
+        // Gateway compatibility calls still wait synchronously. Keep a locked
+        // session turn short, then quarantine it, rather than blocking the
+        // gateway bridge or an actor lane for SQLite's central-store timeout.
+        busyTimeoutMs: 250,
       },
     );
     this.isolated.set(sessionId, store);
@@ -482,21 +395,6 @@ export class SessionKernelStoreHost {
     operation: (store: SessionKernelStore, sessionId?: string) => T,
   ): T[] {
     return [operation(this.central), ...this.mapIsolatedStores(commandKind, operation)];
-  }
-
-  private isMutation(method: string): boolean {
-    return ![
-      "command",
-      "quarantinedSession",
-      "creationState",
-      "runState",
-      "changesSince",
-      "isTombstoned",
-      "askSnapshot",
-      "turnSnapshot",
-      "deliverySnapshot",
-      "timer",
-    ].includes(method);
   }
 
   private invoke(store: SessionKernelStore, method: string, args: unknown[]): unknown {

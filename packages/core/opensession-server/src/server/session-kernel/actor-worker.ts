@@ -14,6 +14,8 @@ import {
 } from "./actor-protocol";
 import { isDeliveryReadRequest } from "./delivery-protocol";
 import type { SessionActorReducerCommand } from "./lifecycle-protocol";
+import { isReadReducer, sessionActorReducerRoute } from "./actor-routing";
+import { sessionKernelStoreRoute } from "./store-routing";
 
 class SessionQuarantinedError extends Error {
   readonly code = "session_quarantined";
@@ -31,43 +33,23 @@ function reducerSessionId(
   command: SessionActorReducerCommand,
   host: SessionKernelStoreHost,
 ): string | undefined {
-  if (command.kind === "creation_event") return command.decision.sessionId;
-  if (command.kind === "run_event") return command.decision.sessionId;
-  if (command.kind === "delivery" || command.kind === "turn" || command.kind === "timer" || command.kind === "gateway")
-    return "sessionId" in command.request ? command.request.sessionId : undefined;
-  if (command.kind === "ask")
-    return "sessionId" in command.request ? command.request.sessionId : undefined;
-  if ("sessionId" in command.request) return command.request.sessionId;
-  return host.outboxSessionId(command.request.id);
+  const route = sessionActorReducerRoute(command);
+  if (route.scope === "session") return route.sessionId;
+  if (route.scope === "outbox") return host.outboxSessionId(route.id);
+  return undefined;
 }
 
-function isReadReducer(command: SessionActorReducerCommand): boolean {
-  if (command.kind === "ask")
-    return command.request.op === "snapshot" || command.request.op === "entries";
-  if (command.kind === "delivery") return isDeliveryReadRequest(command.request);
-  return command.kind === "turn" && command.request.op === "snapshot";
-}
-
-function storeMutationSessionId(
+function routedStoreCall(
   method: string,
   args: unknown[],
   host: SessionKernelStoreHost,
-): string | undefined {
-  if ([
-    "markProcessing", "completeCommand", "failCommand", "appendChange",
-    "tombstoneSession", "clearSession", "cancelTimer", "settleTimerSuccess",
-    "enqueueOutbox", "enqueueOutboxMany", "acknowledgeCommand", "noteTimerFailure",
-    "discardDeadTimer", "retryDeadTimer", "quarantineSession", "releaseQuarantine",
-  ].includes(method)) return typeof args[0] === "string" ? args[0] : undefined;
-  if (["acceptCommand", "completeCommandDecision", "setRunState", "scheduleTimer"].includes(method)) {
-    const input = args[0];
-    return input && typeof input === "object" && "sessionId" in input && typeof input.sessionId === "string"
-      ? input.sessionId
-      : undefined;
-  }
-  if (["ackOutbox", "deferOutbox", "noteOutboxFailure", "discardDeadOutbox", "retryDeadOutbox"].includes(method))
-    return typeof args[0] === "number" ? host.outboxSessionId(args[0]) : undefined;
-  return undefined;
+): { sessionId?: string; mutation: boolean } {
+  const route = sessionKernelStoreRoute(method, args);
+  if (route.scope === "session")
+    return { sessionId: route.sessionId, mutation: route.mutation };
+  if (route.scope === "outbox")
+    return { sessionId: host.outboxSessionId(route.id), mutation: route.mutation };
+  return { mutation: false };
 }
 
 export function startSessionKernelActorWorker(): void {
@@ -245,9 +227,11 @@ export function startSessionKernelActorWorker(): void {
           else result = host.call("clearAskRecords", []);
         }
       } else {
-        const sessionId = storeMutationSessionId(request.method, request.args, host);
+        const route = routedStoreCall(request.method, request.args, host);
+        const { sessionId } = route;
         requestSessionId = sessionId;
         if (
+          route.mutation &&
           sessionId &&
           request.method !== "quarantineSession" &&
           request.method !== "releaseQuarantine"

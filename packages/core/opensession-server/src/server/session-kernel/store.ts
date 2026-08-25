@@ -207,7 +207,9 @@ const ownerGlobal = globalThis as typeof globalThis & {
 };
 const PROCESS_OWNER_ID = (ownerGlobal.__opensessionSessionKernelOwnerId ??=
 	JSON.stringify({
-		token: crypto.randomUUID(),
+		token:
+      process.env.OPENSESSION_SESSION_KERNEL_OWNER_ID?.trim() ||
+      crypto.randomUUID(),
 		bootId: linuxBootId(),
 		start: linuxProcessStart(process.pid),
 	} satisfies ProcessOwnerIdentity));
@@ -268,6 +270,8 @@ function validCreationSetupPatch(patch: Record<string, unknown>): boolean {
 }
 
 export function sessionKernelDbPath(): string {
+  const explicit = process.env.OPENSESSION_SESSION_KERNEL_DB_PATH?.trim();
+  if (explicit) return explicit;
 	// Test processes must never open the live instance state. Tests that need
 	// restart persistence construct a store at an explicit temporary path.
 	if (process.env.NODE_ENV === "test") return ":memory:";
@@ -355,6 +359,7 @@ export type RunEventDecisionResult = {
 export type SessionKernelStoreOptions = {
 	readonly?: boolean;
 	allocateOutboxId?: (sessionId: string) => number;
+  busyTimeoutMs?: number;
 };
 
 export type DurableSessionPlacement = {
@@ -377,6 +382,9 @@ export class SessionKernelStore {
 	constructor(path = sessionKernelDbPath(), options: SessionKernelStoreOptions = {}) {
 		this.path = path;
 		this.allocateOutboxId = options.allocateOutboxId;
+    const busyTimeoutMs = options.busyTimeoutMs ?? 5_000;
+    if (!Number.isInteger(busyTimeoutMs) || busyTimeoutMs < 0 || busyTimeoutMs > 60_000)
+      throw new Error("Invalid session kernel SQLite busy timeout");
 		if (options.readonly) {
 			if (path === ":memory:")
 				throw new Error("A read-only session kernel store requires a file path");
@@ -402,7 +410,7 @@ export class SessionKernelStore {
 		this.closeable = true;
 		this.db.exec("PRAGMA journal_mode = WAL;");
 		this.db.exec("PRAGMA synchronous = FULL;");
-		this.db.exec("PRAGMA busy_timeout = 5000;");
+		this.db.exec(`PRAGMA busy_timeout = ${busyTimeoutMs};`);
 		this.db.exec(`
 			CREATE TABLE IF NOT EXISTS session_kernel_owner (
 				singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
