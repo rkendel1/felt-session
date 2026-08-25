@@ -198,7 +198,7 @@ export class SessionKernelStoreHost {
       if (
         (method === "ackOutbox" ||
           (method === "discardDeadOutbox" && result === true)) &&
-        this.central.isolatedOutboxSessionId(route.id)
+        this.centralOperation(() => this.central.isolatedOutboxSessionId(route.id))
       ) this.centralOperation(() => this.central.forgetIsolatedOutboxRoute(route.id));
       return result;
     }

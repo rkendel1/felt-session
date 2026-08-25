@@ -509,6 +509,14 @@ describe("session kernel actor service", () => {
 
   test("an ambiguous critical settlement quarantines only its session", async () => {
     const sessionId = "ambiguous-critical-session";
+    const centralPath = join(stateDir, "sessions", "session-kernel.sqlite");
+    const seed = new Database(centralPath);
+    seed.run(`
+      INSERT INTO session_kernel_state
+        (session_id, run_state, run_since, last_event, generation, change_seq, updated_at)
+      VALUES (?, 'idle', ?, 'legacy-seed', 0, 0, ?)
+    `, [sessionId, new Date().toISOString(), Date.now()]);
+    seed.close();
     await rpc({
       t: "call",
       rpcId: "critical-admit",
@@ -528,9 +536,7 @@ describe("session kernel actor service", () => {
         },
       },
     });
-    const isolatedRoot = join(stateDir, "sessions", "session-kernel-sessions");
-    const dbPath = sessionKernelSessionDbPath(sessionId, isolatedRoot);
-    const lock = new Database(dbPath);
+    const lock = new Database(centralPath);
     lock.exec("PRAGMA busy_timeout = 50; BEGIN IMMEDIATE;");
     try {
       const settlement = rpc({
@@ -552,6 +558,20 @@ describe("session kernel actor service", () => {
           },
         },
       });
+      await Bun.sleep(25);
+      const retained = rpc({
+        t: "call",
+        rpcId: "critical-retained-turn",
+        outputBytes: 256 * 1024,
+        request: {
+          t: "reduce",
+          command: {
+            kind: "run_event",
+            commandId: "critical-retained-command",
+            decision: { sessionId, event: "prompt" },
+          },
+        },
+      });
       await Bun.sleep(750);
       lock.exec("COMMIT;");
       const response = await settlement;
@@ -561,10 +581,14 @@ describe("session kernel actor service", () => {
         code: "session_quarantined",
         sessionId,
       });
-      const evidence = new Database(
-        join(stateDir, "sessions", "session-kernel.sqlite"),
-        { readonly: true },
-      );
+      const retainedResponse = await retained;
+      expect(retainedResponse).toMatchObject({ t: "call_result", status: -1 });
+      expect(JSON.parse(retainedResponse.body)).toMatchObject({
+        ok: false,
+        code: "session_quarantined",
+        sessionId,
+      });
+      const evidence = new Database(centralPath, { readonly: true });
       expect(evidence.query(
         "SELECT reason FROM session_kernel_quarantine WHERE session_id = ?",
       ).get(sessionId)).toBeTruthy();

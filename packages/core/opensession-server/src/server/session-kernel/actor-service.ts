@@ -446,6 +446,7 @@ export async function startSessionKernelService(
         version: SESSION_KERNEL_ACTOR_VERSION,
       },
       true,
+      true,
     );
     if (hello.t !== "ready" || hello.version !== SESSION_KERNEL_ACTOR_VERSION)
       throw new Error(`Session actor lane ${slot.index} handshake failed`);
