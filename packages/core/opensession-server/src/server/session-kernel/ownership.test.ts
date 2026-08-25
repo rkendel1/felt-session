@@ -32,7 +32,6 @@ describe("single session ownership", () => {
 		expect(LEGACY_GATEWAY_EFFECT_OPERATIONS).toEqual([
 			"delete_session",
 			"session_file_updated",
-			"submit_prompt",
 			"websocket_command",
 		]);
 		expect(read("session-kernel/kernel.ts")).not.toContain("async dispatch<");
@@ -208,10 +207,12 @@ describe("single session ownership", () => {
 		}
 	});
 
-	test("all shared prompt delivery uses the durable command mailbox", () => {
+	test("all shared prompt delivery uses the typed delivery actor", () => {
 		const control = read("session-control-wiring.ts");
-		expect(control).toContain('legacyGatewayEffect("submit_prompt"');
-		expect(control).toContain("sessionKernel(id).dispatchLegacy");
+		expect(control).not.toContain('legacyGatewayEffect("submit_prompt"');
+		expect(control).toContain('op: "request_submit_command"');
+		expect(control).toContain('op: "complete_submit_command"');
+		expect(control).toContain('op: "fail_submit_command"');
 		expect(read("routes/sessions.ts")).not.toContain("promptReceipt(");
 		expect(existsSync(join(serverDir, "prompt-receipts.ts"))).toBe(false);
 		const steerEligibility = control.indexOf('opts?.busy !== "queue"');
@@ -377,6 +378,10 @@ describe("single session ownership", () => {
 		// compatibility mailbox.
 		expect(wiring).not.toContain('legacyGatewayEffect("answer_question"');
 		expect(wiring).toContain('op: "answer",');
+		expect(wiring).not.toContain('legacyGatewayEffect("submit_prompt"');
+		expect(wiring).toContain('op: "request_submit_command"');
+		expect(wiring).toContain('op: "complete_submit_command"');
+		expect(wiring).toContain('op: "fail_submit_command"');
 		const tools = read("../agents/slack/sessions-tools.ts");
 		expect(tools).toContain("durableToolRequestId");
 		expect(tools).toContain('durableToolRequestId(ctx, "create_session", extra');

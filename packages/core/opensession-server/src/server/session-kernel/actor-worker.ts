@@ -308,6 +308,12 @@ export function startSessionKernelActorWorker(): void {
             result = store.deliverySnapshot(delivery.sessionId);
           else if (delivery.op === "entries")
             result = store.deliveryEntries(delivery.slot);
+          else if (delivery.op === "request_submit_command")
+            result = store.requestSubmitPromptCommand(delivery);
+          else if (delivery.op === "complete_submit_command")
+            result = store.completeSubmitPromptCommand(delivery);
+          else if (delivery.op === "fail_submit_command")
+            result = store.failSubmitPromptCommand(delivery);
           else if (delivery.op === "set")
             result = store.setDeliverySlot(
               delivery.sessionId,

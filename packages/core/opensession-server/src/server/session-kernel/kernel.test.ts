@@ -28,7 +28,7 @@ function testEffect(
 	input: LegacyGatewayEffectInput & { type?: string },
 ): LegacyGatewayEffect {
 	const { type: _legacyTestLabel, ...effect } = input;
-	return legacyGatewayEffect("submit_prompt", effect);
+	return legacyGatewayEffect("websocket_command", effect);
 }
 
 let store: SessionKernelStore;
@@ -345,6 +345,80 @@ describe("SessionKernel", () => {
     });
   });
 
+	test("replays typed submit-prompt results under one immutable identity", () => {
+		const input = {
+			sessionId: "typed-submit",
+			requestId: "delivery-one",
+			identity: { content: "hello", attachmentsHash: "none" },
+		};
+		expect(store.requestSubmitPromptCommand(input)).toEqual({ status: "execute" });
+		expect(store.requestSubmitPromptCommand(input)).toEqual({ status: "execute" });
+		expect(() => store.requestSubmitPromptCommand({
+			...input,
+			identity: { content: "changed", attachmentsHash: "none" },
+		})).toThrow("reused with another payload");
+		const result = {
+			status: "queued",
+			message: "Queued behind the current run.",
+			deliveryId: input.requestId,
+		};
+		expect(store.completeSubmitPromptCommand({
+			sessionId: input.sessionId,
+			requestId: input.requestId,
+			result,
+		})).toEqual(result);
+		expect(store.requestSubmitPromptCommand(input)).toEqual({
+			status: "completed",
+			result,
+			duplicate: true,
+		});
+	});
+
+	test("adopts a queued submit after a crash before command completion", () => {
+		const dir = mkdtempSync(join(tmpdir(), "session-kernel-submit-replay-"));
+		const path = join(dir, "kernel.sqlite");
+		let durableStore = new SessionKernelStore(path);
+		const input = {
+			sessionId: "submit-replay",
+			requestId: "delivery-replay",
+			identity: { content: "hello", attachmentsHash: "none" },
+		};
+		try {
+			expect(durableStore.requestSubmitPromptCommand(input)).toEqual({
+				status: "execute",
+			});
+			durableStore.setDeliverySlot(input.sessionId, "queued", [
+				{ id: input.requestId, content: "hello" },
+			]);
+			durableStore.close();
+			durableStore = new SessionKernelStore(path);
+			expect(durableStore.requestSubmitPromptCommand(input)).toEqual({
+				status: "execute",
+			});
+			expect(durableStore.deliverySnapshot(input.sessionId).queued).toEqual([
+				{ id: input.requestId, content: "hello" },
+			]);
+			const result = {
+				status: "queued",
+				message: "Queued behind the current run.",
+				deliveryId: input.requestId,
+			};
+			durableStore.completeSubmitPromptCommand({
+				sessionId: input.sessionId,
+				requestId: input.requestId,
+				result,
+			});
+			expect(durableStore.requestSubmitPromptCommand(input)).toEqual({
+				status: "completed",
+				result,
+				duplicate: true,
+			});
+		} finally {
+			durableStore.close();
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
 	test("keeps completed receipts for clients that reconnect after compaction", async () => {
 		let calls = 0;
 		const command = testEffect({ requestId: "forever", type: "deliver", payload: { n: 1 } });
@@ -467,7 +541,7 @@ describe("SessionKernel", () => {
 		firstStore.acceptCommand({
 			sessionId: "restart",
 			requestId: "accepted",
-			type: "submit_prompt",
+			type: "websocket_command",
 			payload: { text: "once" },
 			replaySafe: true,
 		});

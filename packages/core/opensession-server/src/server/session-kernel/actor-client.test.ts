@@ -17,7 +17,7 @@ function testEffect(
   input: LegacyGatewayEffectInput & { type?: string },
 ): LegacyGatewayEffect {
   const { type: _legacyTestLabel, ...effect } = input;
-  return legacyGatewayEffect("submit_prompt", effect);
+  return legacyGatewayEffect("websocket_command", effect);
 }
 
 let client: SessionKernelActorClient | undefined;
@@ -334,6 +334,33 @@ describe("session kernel actor boundary", () => {
       requestId: "request-one",
       fallbackRunId: "run-two",
     })).toMatchObject({ status: "execute", targetRunId: "run-one" });
+  });
+
+  test("owns submit-prompt command receipts through the delivery actor", async () => {
+    const host = await actor();
+    const input = {
+      op: "request_submit_command" as const,
+      sessionId: "typed-submit",
+      requestId: "delivery-one",
+      identity: { content: "hello", attachmentsHash: "none" },
+    };
+    expect(host.decideDelivery(input)).toEqual({ status: "execute" });
+    const result = {
+      status: "queued",
+      message: "Queued behind the current run.",
+      deliveryId: input.requestId,
+    };
+    expect(host.decideDelivery({
+      op: "complete_submit_command",
+      sessionId: input.sessionId,
+      requestId: input.requestId,
+      result,
+    })).toEqual(result);
+    expect(host.decideDelivery(input)).toEqual({
+      status: "completed",
+      result,
+      duplicate: true,
+    });
   });
 
   test("owns timer execution receipts through the actor protocol", async () => {

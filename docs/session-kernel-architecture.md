@@ -347,7 +347,7 @@ allocates a fenced `executionId`, and immediately returns an execution descripto
 It does not retain a per-session gateway lease and does not stop reducing run,
 delivery or ask messages while physical work is active. Different command intents
 can be admitted concurrently. The temporary `LegacyGatewayEffect` adapter preserves physical effect
-order for three compatibility call sites, but that queue is not authoritative:
+order for two compatibility call sites, but that queue is not authoritative:
 every item in it is already durable in the actor. Its operation union and exact
 production call-site baseline are structural migration fences. New lifecycle
 work must use typed reducer messages and executors rather than add a callback.
@@ -417,4 +417,7 @@ bookkeeping or physical cancellation, and an exact retry cannot target a
 successor. Durable timer tokens also key typed actor begin/complete/fail
 receipts. Once actor completion commits, recovery retires only that timer
 generation without executing its handler again; a crash before that commit
-remains destination-idempotent at-least-once delivery.
+remains destination-idempotent at-least-once delivery. SessionControl prompt
+delivery uses the same pattern: the actor fingerprints the full immutable
+delivery identity before slash handling, queueing or steering, then stores the
+returned delivery result for exact caller replay.

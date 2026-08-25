@@ -766,6 +766,21 @@ class RemoteStore implements SessionKernelStoreApi {
       ...input,
     }) as ReturnType<SessionKernelStoreApi["settleTurnOutcomeProjection"]>;
   }
+  requestSubmitPromptCommand(
+    input: Parameters<SessionKernelStoreApi["requestSubmitPromptCommand"]>[0],
+  ): ReturnType<SessionKernelStoreApi["requestSubmitPromptCommand"]> {
+    return this.actor.decideDelivery({ op: "request_submit_command", ...input });
+  }
+  completeSubmitPromptCommand(
+    input: Parameters<SessionKernelStoreApi["completeSubmitPromptCommand"]>[0],
+  ): ReturnType<SessionKernelStoreApi["completeSubmitPromptCommand"]> {
+    return this.actor.decideDelivery({ op: "complete_submit_command", ...input });
+  }
+  failSubmitPromptCommand(
+    input: Parameters<SessionKernelStoreApi["failSubmitPromptCommand"]>[0],
+  ): ReturnType<SessionKernelStoreApi["failSubmitPromptCommand"]> {
+    return this.actor.decideDelivery({ op: "fail_submit_command", ...input });
+  }
   deliverySnapshot(sessionId: string) {
     return this.actor.decideDelivery({ op: "snapshot", sessionId });
   }

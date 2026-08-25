@@ -21,6 +21,10 @@ export function targetForDeliveryInterrupt(
     : undefined;
 }
 
+export type SubmitPromptCommandPlan =
+  | { status: "execute" }
+  | { status: "completed"; result: unknown; duplicate: true };
+
 type DeliveryItem = {
   id?: string;
   promptEntryId?: string;
@@ -28,6 +32,24 @@ type DeliveryItem = {
 
 export type DeliveryActorRequest =
   | { op: "snapshot"; sessionId: string }
+  | {
+      op: "request_submit_command";
+      sessionId: string;
+      requestId: string;
+      identity: unknown;
+    }
+  | {
+      op: "complete_submit_command";
+      sessionId: string;
+      requestId: string;
+      result: unknown;
+    }
+  | {
+      op: "fail_submit_command";
+      sessionId: string;
+      requestId: string;
+      error: string;
+    }
   | { op: "entries"; slot: DeliverySlot }
   | { op: "set"; sessionId: string; slot: DeliverySlot; value: unknown }
   | { op: "delete"; sessionId: string; slot: DeliverySlot }
@@ -90,42 +112,48 @@ export type DeliveryActorResult<T extends DeliveryActorRequest> =
     ? DurableDeliveryState
     : T extends { op: "entries" }
       ? Array<[string, unknown]>
-      : T extends { op: "claim_dispatch" }
-        ? { promptEntryId: string; items: unknown[]; revision: number }
-        : T extends { op: "claim_next_dispatch" }
-          ?
-              | { kind: "empty"; revision: number }
-              | { kind: "hold"; heldCount: number; revision: number }
-              | {
-                  kind: "deliver";
-                  promptEntryId: string;
-                  items: unknown[];
-                  interrupted: boolean;
-                  revision: number;
-                }
-        : T extends { op: "prepare_steer" }
-          ? unknown | undefined
-          : T extends {
-                op:
-                  | "delete"
-                  | "ack_dispatch"
-                  | "fail_dispatch"
-                  | "accept_steer"
-                  | "reject_steer";
-              }
-            ? boolean
-            : T extends { op: "settle_pending_steers" | "requeue_steers" }
-              ? number
-              : T extends { op: "prepare_interrupt" }
-                ? {
-                    interruptId: string;
-                    phase: "prepared" | "executing" | "confirmed";
-                    runGeneration: number;
-                    anchorId: string;
-                    soloId?: string;
-                  }
-                : T extends { op: "begin_interrupt_effect" }
-                  ? "execute" | "retry" | "adopt_confirmed" | "confirmed" | "settled"
-                  : T extends { op: "settle_interrupt" }
+      : T extends { op: "request_submit_command" }
+        ? SubmitPromptCommandPlan
+        : T extends { op: "complete_submit_command" }
+          ? unknown
+          : T extends { op: "fail_submit_command" }
+            ? void
+            : T extends { op: "claim_dispatch" }
+              ? { promptEntryId: string; items: unknown[]; revision: number }
+              : T extends { op: "claim_next_dispatch" }
+                ?
+                    | { kind: "empty"; revision: number }
+                    | { kind: "hold"; heldCount: number; revision: number }
+                    | {
+                        kind: "deliver";
+                        promptEntryId: string;
+                        items: unknown[];
+                        interrupted: boolean;
+                        revision: number;
+                      }
+                : T extends { op: "prepare_steer" }
+                  ? unknown | undefined
+                  : T extends {
+                        op:
+                          | "delete"
+                          | "ack_dispatch"
+                          | "fail_dispatch"
+                          | "accept_steer"
+                          | "reject_steer";
+                      }
                     ? boolean
-                  : void;
+                    : T extends { op: "settle_pending_steers" | "requeue_steers" }
+                      ? number
+                      : T extends { op: "prepare_interrupt" }
+                        ? {
+                            interruptId: string;
+                            phase: "prepared" | "executing" | "confirmed";
+                            runGeneration: number;
+                            anchorId: string;
+                            soloId?: string;
+                          }
+                        : T extends { op: "begin_interrupt_effect" }
+                          ? "execute" | "retry" | "adopt_confirmed" | "confirmed" | "settled"
+                          : T extends { op: "settle_interrupt" }
+                            ? boolean
+                            : void;

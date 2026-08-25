@@ -18,11 +18,10 @@ import type {
 export const LEGACY_GATEWAY_EFFECT_OPERATIONS = Object.freeze([
   "delete_session",
   "session_file_updated",
-  "submit_prompt",
   "websocket_command",
 ] as const);
 
-export const LEGACY_GATEWAY_EFFECT_SITE_BASELINE = 3;
+export const LEGACY_GATEWAY_EFFECT_SITE_BASELINE = 2;
 
 export type LegacyGatewayEffectOperation =
   (typeof LEGACY_GATEWAY_EFFECT_OPERATIONS)[number];

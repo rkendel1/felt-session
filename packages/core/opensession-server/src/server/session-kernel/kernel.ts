@@ -166,6 +166,12 @@ export function sessionDelivery<T extends DeliveryActorRequest>(
       result = store.deliverySnapshot(request.sessionId);
   else if (request.op === "entries")
     result = store.deliveryEntries(request.slot);
+  else if (request.op === "request_submit_command")
+    result = store.requestSubmitPromptCommand(request);
+  else if (request.op === "complete_submit_command")
+    result = store.completeSubmitPromptCommand(request);
+  else if (request.op === "fail_submit_command")
+    result = store.failSubmitPromptCommand(request);
   else if (request.op === "set")
     result = store.setDeliverySlot(
       request.sessionId,
