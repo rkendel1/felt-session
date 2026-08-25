@@ -42,6 +42,20 @@ describe("session kernel service deployment", () => {
     expect(user).toContain("WantedBy=default.target");
   });
 
+  test("root and self deploy restart the actor before the gateway", async () => {
+    const deploy = await Bun.file(resolve(repoRoot, "deploy/deploy.sh")).text();
+    const selfDeploy = await Bun.file(
+      resolve(repoRoot, "deploy/self-deploy.sh"),
+    ).text();
+    expect(deploy).toContain("install-session-kernel-credential.sh");
+    expect(deploy).toContain("opensession-session-kernel.service");
+    expect(deploy.indexOf('systemctl restart opensession-session-kernel.service'))
+      .toBeLessThan(deploy.lastIndexOf("systemctl restart opensession.service"));
+    expect(selfDeploy).toContain("refresh_session_kernel");
+    expect(selfDeploy.indexOf("refresh_session_kernel"))
+      .toBeLessThan(selfDeploy.lastIndexOf("restart_service"));
+  });
+
   test("renders the same credential into both sides of the gateway boundary", async () => {
     const gateway = await renderUnit("system");
     const actor = await renderSessionKernelUnit("system");

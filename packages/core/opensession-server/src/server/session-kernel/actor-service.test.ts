@@ -15,7 +15,6 @@ import {
   type KernelActorTransportEnvelope,
 } from "./actor-protocol";
 import { startSessionKernelService } from "./actor-service";
-import { legacyGatewayEffect } from "./lifecycle-protocol";
 
 const token = "test-session-kernel-token";
 const stateDir = mkdtempSync(join(tmpdir(), "opensession-kernel-service-"));
@@ -101,15 +100,28 @@ describe("session kernel actor service", () => {
 
   test("keeps reductions responsive while an executor owns physical work", async () => {
     const active = await rpc({
-      t: "begin",
+      t: "call",
       rpcId: "begin-long-effect",
-      sessionId: "service-session",
-      command: legacyGatewayEffect("submit_prompt", {
-        requestId: "long-effect",
-        payload: { prompt: "keep running" },
-      }),
+      outputBytes: 256 * 1024,
+      request: {
+        t: "reduce",
+        command: {
+          kind: "gateway",
+          commandId: "long-effect-admission",
+          request: {
+            op: "request",
+            sessionId: "service-session",
+            requestId: "long-effect",
+            operation: "websocket_command",
+            identity: { command: "prompt" },
+          },
+        },
+      },
     });
-    expect(active.executionId).toBeString();
+    expect(JSON.parse(active.body)).toMatchObject({
+      ok: true,
+      result: { status: "execute" },
+    });
 
     const startedAt = performance.now();
     const reduction = await rpc({
@@ -133,11 +145,23 @@ describe("session kernel actor service", () => {
     expect(performance.now() - startedAt).toBeLessThan(1_000);
 
     await rpc({
-      t: "complete",
+      t: "call",
       rpcId: "complete-long-effect",
-      executionId: active.executionId,
-      result: "done",
-      effects: [],
+      outputBytes: 256 * 1024,
+      request: {
+        t: "reduce",
+        command: {
+          kind: "gateway",
+          commandId: "long-effect-completion",
+          request: {
+            op: "complete",
+            sessionId: "service-session",
+            requestId: "long-effect",
+            operation: "websocket_command",
+            result: "done",
+          },
+        },
+      },
     });
     const command = await rpc({
       t: "call",

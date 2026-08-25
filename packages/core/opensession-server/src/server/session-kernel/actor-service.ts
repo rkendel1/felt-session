@@ -161,6 +161,7 @@ export async function startSessionKernelService(
     hostname: host,
     port,
     idleTimeout: 15,
+    maxRequestBodySize: SESSION_KERNEL_MAX_REQUEST_BYTES,
     async fetch(request) {
       const url = new URL(request.url);
       if (request.method === "GET" && url.pathname === "/live")

@@ -48,6 +48,8 @@ LEGACY_HEALTH_URL="${OPENSESSION_LEGACY_HEALTH_URL:-http://127.0.0.1:3850/api/he
 ALLOW_RESET="${OPENSESSION_DEPLOY_ALLOW_RESET:-0}"
 SERVICE_NAME="${OPENSESSION_SERVICE_NAME:-opensession.service}"
 EXECUTOR_SERVICE_NAME="opensession-executor.service"
+SESSION_KERNEL_SERVICE_NAME="opensession-session-kernel.service"
+SESSION_KERNEL_READY_URL="http://127.0.0.1:3849/ready"
 EXECUTOR_READY_FILE="/run/opensession-executor/ready"
 RUN_HOST_HELPER_VERSION=2
 
@@ -163,6 +165,28 @@ refresh_executor() {
     sleep 1
   done
   log "ERROR: installed executor launcher did not become healthy"
+  return 1
+}
+
+refresh_session_kernel() {
+  # Like the executor, this privileged unit is installed only through the root
+  # deploy path. Self-deploy restarts the fixed unit but never copies a unit or
+  # credential out of the user-writable checkout.
+  if [ ! -f "/etc/systemd/system/$SESSION_KERNEL_SERVICE_NAME" ] \
+    || [ ! -s /etc/opensession/session-kernel-token ]; then
+    log "ERROR: session kernel service artifacts are missing; run the root deploy before this revision"
+    return 1
+  fi
+  run_systemctl restart "$SESSION_KERNEL_SERVICE_NAME"
+  local i
+  for i in $(seq 1 30); do
+    if run_systemctl is-active --quiet "$SESSION_KERNEL_SERVICE_NAME" \
+      && curl -fs --max-time 2 "$SESSION_KERNEL_READY_URL" >/dev/null 2>&1; then
+      return
+    fi
+    sleep 1
+  done
+  log "ERROR: installed session kernel service did not become healthy"
   return 1
 }
 
@@ -323,6 +347,10 @@ rollback_to_pin() {
     log "ERROR: executor failed readiness after rollback"
     return 1
   fi
+  if ! refresh_session_kernel; then
+    log "ERROR: session kernel failed readiness after rollback"
+    return 1
+  fi
   restart_service
   if poll_rollback_health; then
     ROLLBACK_HEALTHY=1
@@ -387,6 +415,18 @@ do_deploy() {
     elif [ ! -f "$RESULT_FILE" ] || ! grep -q '"action":"rollback-needed"' "$RESULT_FILE" 2>/dev/null; then
       write_result false deploy "$(git_repo rev-parse HEAD)" "$current" \
         "deploy of $target_sha failed executor readiness; rollback failed"
+    fi
+    exit 1
+  fi
+
+  if ! refresh_session_kernel; then
+    log "ERROR: target session kernel failed readiness; attempting rollback to pin"
+    if rollback_to_pin; then
+      write_result false deploy "$(git_repo rev-parse HEAD)" "$current" \
+        "deploy of $target_sha failed session kernel readiness; rolled back and healthy again"
+    elif [ ! -f "$RESULT_FILE" ] || ! grep -q '"action":"rollback-needed"' "$RESULT_FILE" 2>/dev/null; then
+      write_result false deploy "$(git_repo rev-parse HEAD)" "$current" \
+        "deploy of $target_sha failed session kernel readiness; rollback failed"
     fi
     exit 1
   fi

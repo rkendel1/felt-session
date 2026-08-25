@@ -77,6 +77,7 @@ fi
 # Runtime restart scope. Executor-only changes restart the executor without
 # touching browser sockets, actor state, schedulers, or active run hosts.
 RESTART_EXECUTOR=0
+RESTART_KERNEL=0
 RESTART_GATEWAY=0
 CHANGED_FILES="$(run_as_service_user git -C "$REPO_DIR" diff --name-only "$PREVIOUS_HEAD" HEAD)"
 while IFS= read -r changed; do
@@ -88,6 +89,10 @@ while IFS= read -r changed; do
     packages/core/opensession-server/src/executor/*|opensession-executor.service)
       RESTART_EXECUTOR=1
       ;;
+    packages/core/opensession-server/src/server/session-kernel/*|packages/core/opensession-server/src/session-kernel-*|opensession-session-kernel.service|deploy/install-session-kernel-credential.sh)
+      RESTART_KERNEL=1
+      RESTART_GATEWAY=1
+      ;;
     *.test.ts|docs/*|deploy/deploy.sh)
       ;;
     *)
@@ -98,6 +103,7 @@ done <<< "$CHANGED_FILES"
 if [ "$PREVIOUS_HEAD" = "$(run_as_service_user git -C "$REPO_DIR" rev-parse HEAD)" ]; then
   # An explicit same-SHA deploy is normally a request to recover/restart.
   RESTART_EXECUTOR=1
+  RESTART_KERNEL=1
   RESTART_GATEWAY=1
 fi
 
@@ -141,6 +147,22 @@ printf '%s\n' \
 install -o root -g root -m 0644 \
   "$EXECUTOR_CREDENTIAL_DROPIN.tmp" "$EXECUTOR_CREDENTIAL_DROPIN"
 rm -f "$EXECUTOR_CREDENTIAL_DROPIN.tmp"
+systemctl daemon-reload
+
+SESSION_KERNEL_TOKEN_PATH="/etc/opensession/session-kernel-token"
+"$REPO_DIR/deploy/install-session-kernel-credential.sh" "$SESSION_KERNEL_TOKEN_PATH"
+SESSION_KERNEL_CREDENTIAL_DROPIN="/etc/systemd/system/opensession.service.d/session-kernel-credential.conf"
+[ ! -L "$SESSION_KERNEL_CREDENTIAL_DROPIN" ] || {
+  echo "[deploy] ERROR: session kernel credential drop-in cannot be a symlink" >&2
+  exit 1
+}
+printf '%s\n' \
+  '[Service]' \
+  'LoadCredential=session-kernel-token:/etc/opensession/session-kernel-token' \
+  > "$SESSION_KERNEL_CREDENTIAL_DROPIN.tmp"
+install -o root -g root -m 0644 \
+  "$SESSION_KERNEL_CREDENTIAL_DROPIN.tmp" "$SESSION_KERNEL_CREDENTIAL_DROPIN"
+rm -f "$SESSION_KERNEL_CREDENTIAL_DROPIN.tmp"
 systemctl daemon-reload
 
 EXECUTOR_UNIT_SOURCE="$REPO_DIR/opensession-executor.service"
@@ -191,6 +213,25 @@ if ! cmp -s "$EXECUTOR_UNIT_RENDERED" /etc/systemd/system/opensession-executor.s
 fi
 rm -f "$EXECUTOR_UNIT_RENDERED"
 
+SESSION_KERNEL_UNIT_RENDERED="$(mktemp)"
+awk -v home="$SERVICE_HOME_DIR" -v state="$STATE_DIR" -v sessions="$SESSIONS_DIR" '
+  /^# SESSION_KERNEL_PATH_ENV$/ {
+    print "Environment=\"HOME=" home "\""
+    if (state != "") print "Environment=\"OPENSESSION_STATE_DIR=" state "\""
+    if (sessions != "") print "Environment=\"OPENSESSION_SESSIONS_DIR=" sessions "\""
+    next
+  }
+  { print }
+' "$REPO_DIR/opensession-session-kernel.service" > "$SESSION_KERNEL_UNIT_RENDERED"
+if ! cmp -s "$SESSION_KERNEL_UNIT_RENDERED" /etc/systemd/system/opensession-session-kernel.service; then
+  echo "[deploy] opensession-session-kernel.service changed - syncing unit + daemon-reload"
+  cp "$SESSION_KERNEL_UNIT_RENDERED" /etc/systemd/system/opensession-session-kernel.service
+  systemctl daemon-reload
+  RESTART_KERNEL=1
+  RESTART_GATEWAY=1
+fi
+rm -f "$SESSION_KERNEL_UNIT_RENDERED"
+
 if [ "$RESTART_GATEWAY" = "1" ]; then
   # Drain before replacing the executor. The old gateway must not spend the
   # drain window talking to a newer, potentially incompatible launcher.
@@ -228,6 +269,27 @@ done
 if ! systemctl is-active --quiet opensession-executor.service \
   || ! executor_ready; then
   echo "[deploy] ERROR: executor launcher did not become healthy" >&2
+  exit 1
+fi
+
+if [ "$RESTART_KERNEL" = "1" ]; then
+  echo "[deploy] restarting session kernel actor service"
+  systemctl enable opensession-session-kernel.service
+  systemctl restart opensession-session-kernel.service
+elif ! systemctl is-active --quiet opensession-session-kernel.service; then
+  echo "[deploy] starting session kernel actor service"
+  systemctl enable --now opensession-session-kernel.service
+fi
+for _ in $(seq 1 30); do
+  if systemctl is-active --quiet opensession-session-kernel.service \
+    && curl -fs --max-time 2 http://127.0.0.1:3849/ready >/dev/null 2>&1; then
+    break
+  fi
+  sleep 1
+done
+if ! systemctl is-active --quiet opensession-session-kernel.service \
+  || ! curl -fs --max-time 2 http://127.0.0.1:3849/ready >/dev/null 2>&1; then
+  echo "[deploy] ERROR: session kernel actor service did not become healthy" >&2
   exit 1
 fi
 

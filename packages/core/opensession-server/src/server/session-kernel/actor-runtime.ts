@@ -14,7 +14,7 @@ const globalActor = globalThis as typeof globalThis & {
 const runtime = (globalActor.__opensessionSessionKernelActor ??= {});
 
 /**
- * The gateway keeps its synchronous compatibility facade in a Worker bridge.
+ * The gateway keeps its bounded synchronous actor facade in a Worker bridge.
  * That bridge performs bounded authenticated RPC to the independently
  * supervised actor service, then wakes the gateway through SharedArrayBuffer.
  * The service owns the only actor Worker and the only writable SQLite store.
