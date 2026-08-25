@@ -52,6 +52,11 @@ SESSION_KERNEL_SERVICE_NAME="opensession-session-kernel.service"
 SESSION_KERNEL_READY_URL="http://127.0.0.1:3849/ready"
 EXECUTOR_READY_FILE="/run/opensession-executor/ready"
 RUN_HOST_HELPER_VERSION=2
+BUN_BIN="${OPENSESSION_BUN_BIN:-$(command -v bun || true)}"
+[ -n "$BUN_BIN" ] && [ -x "$BUN_BIN" ] || {
+  echo "Open Session deploy requires Bun" >&2
+  exit 1
+}
 
 # Health gate: 30 x 2s = 60s budget, matching deploy.sh's post-restart gate.
 HEALTH_TRIES=30
@@ -179,7 +184,7 @@ refresh_session_kernel() {
   fi
   run_systemctl stop "$SESSION_KERNEL_SERVICE_NAME"
   log "migrating legacy session-kernel rows offline"
-  bun "$REPO_DIR/scripts/migrate-session-kernel-storage.ts"
+  "$BUN_BIN" "$REPO_DIR/scripts/migrate-session-kernel-storage.ts"
   run_systemctl start "$SESSION_KERNEL_SERVICE_NAME"
   local i
   for i in $(seq 1 30); do
