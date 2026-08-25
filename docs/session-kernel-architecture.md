@@ -38,14 +38,15 @@ the executor service, run hosts, sandboxes, or Runners. Active effect receipts
 do not hold the actor mailbox, so Stop, steering, and fenced run events remain
 responsive.
 
-The gateway retains a Worker bridge for typed reductions. Mutations perform
-authenticated bounded HTTP RPC and wake the gateway through its existing
-`SharedArrayBuffer`. Hot pure reads use a physically read-only, `query_only`
-SQLite WAL mirror in the gateway, avoiding an IPC round trip and event-loop wait
-on those paths. The mirror does not claim writer ownership, run migrations, or
-admit commands. A missing credential, actor/transport/incarnation mismatch,
-service failure, or invalid response fail-stops the gateway. There is no
-in-process actor or direct writer fallback in production.
+The gateway retains a Worker bridge for typed reductions. Mutations and durable
+reads perform authenticated bounded HTTP RPC and wake the gateway through its
+existing `SharedArrayBuffer`. Reads also route through the actor host because a
+central WAL mirror cannot authoritatively represent sessions placed in separate
+databases. Hot run-state projections remain cached in the gateway and are
+invalidated by committed actor replies. A missing credential,
+actor/transport/incarnation mismatch, service failure, or invalid response
+fail-stops the gateway. There is no in-process actor or direct writer fallback
+in production.
 
 Installer, deploy, and CLI restart flows stop the old gateway before restarting
 the actor service, then start the new gateway. This sequencing prevents mixed
@@ -71,12 +72,18 @@ a model run or gateway callback before processing the next state fact.
 
 ## Durable state
 
-The active sessions directory contains `session-kernel.sqlite`. A fresh default
-install uses `~/.opensession/sessions/session-kernel.sqlite`; an existing legacy
-`~/.opensession-sessions` directory remains active when the new directory does
-not exist. `OPENSESSION_SESSIONS_DIR` overrides the sessions directory directly.
-Without that override, `OPENSESSION_STATE_DIR` places it at
-`<state-dir>/.opensession-sessions/`. The database contains:
+The storage router uses two durable locations within the active sessions
+directory. A fresh default install uses `~/.opensession/sessions`; an existing
+legacy `~/.opensession-sessions` directory remains active when the new directory
+does not exist. `OPENSESSION_SESSIONS_DIR` overrides the sessions directory
+directly. Without that override, `OPENSESSION_STATE_DIR` places it at
+`<state-dir>/.opensession-sessions/`.
+
+- `session-kernel.sqlite` is the legacy store and the placement/wake catalog.
+- `session-kernel-sessions/<prefix>/<sha256>.sqlite` is the authoritative
+  database for each newly claimed session.
+
+Each authoritative session database contains:
 
 - Durable commands, keyed by session id and client request id.
 - Authoritative run state, run id, and generation.
@@ -399,13 +406,31 @@ and replay committed changes without becoming another session owner.
 
 ## Process boundary
 
-The writable `SessionKernelStore` and autonomous session coordinators currently
-run in one `session-kernel-worker.ts` JavaScript isolate over one SQLite store.
-The gateway starts and handshakes that actor before hydrating projections. This
-is not yet one process or database per session. A failed session-scoped critical
-settlement durably quarantines only that session, suppresses its timer and
-outbox dispatch, and leaves reads and unrelated sessions available. SQLite
-infrastructure failures still fail-stop the whole actor.
+The writable stores and autonomous session coordinators currently run in one
+`session-kernel-worker.ts` JavaScript isolate behind a `SessionKernelStoreHost`.
+A session with no legacy durable rows is claimed in the placement catalog before
+its first mutation, then writes only its own SQLite database. Existing sessions
+remain on the legacy central database until the explicit migration pass moves
+them; the router never dual-writes authoritative state. Isolated outbox rows use
+a globally reserved numeric identity allocated by the catalog so existing
+settlement protocols remain additive and mixed-version safe.
+
+Before every isolated mutation, the host durably marks that session's catalog
+wake record dirty. A crash can therefore leave an extra scan but cannot hide a
+committed timer or outbox item. Runtime reconciliation reads the authoritative
+session database, dispatches due work, and repairs its next-wake projection.
+
+The gateway starts and handshakes the actor host before hydrating projections. A
+failed session-scoped critical settlement durably quarantines only that session,
+suppresses its timer and outbox dispatch, and leaves reads and unrelated
+sessions available. An isolated database infrastructure failure is recorded as
+a catalog quarantine for that session. Catalog or legacy-store infrastructure
+ambiguity still fail-stops the whole actor.
+
+This step provides one authoritative SQLite database per new session, but the
+host still runs one JavaScript mailbox. A bounded pool of independently queued
+logical session actors and crash-safe migration of legacy sessions are the next
+placement step.
 
 A command admission is a short bounded reduction: the actor fingerprints and
 persists the intent, then immediately returns `execute`, `in_progress`, or the

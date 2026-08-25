@@ -1,7 +1,6 @@
 import type { SessionActorReducerCommand } from "./lifecycle-protocol";
 import {
   SessionKernelStore,
-  sessionKernelDbPath,
   type CreationEventDecision,
   type CreationEventDecisionResult,
   type DurableCommandRecord,
@@ -451,10 +450,9 @@ class RemoteStore implements SessionKernelStoreApi {
   };
   constructor(private readonly actor: SessionKernelActorClient) {}
   openReadMirror(): void {
-    const path = sessionKernelDbPath();
-    if (path === ":memory:") return;
-    this.readStore?.close();
-    this.readStore = new SessionKernelStore(path, { readonly: true });
+    // Reads are routed by the actor host once sessions can live in distinct
+    // databases. Opening only the legacy central WAL here would return stale
+    // defaults for isolated sessions and silently violate single authority.
   }
   hydrateRunStates(): void {
     this.runStateCache.clear();

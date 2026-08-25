@@ -248,7 +248,8 @@ describe("single session ownership", () => {
 			entry.indexOf("initHumanAsks()"),
 		);
 		const actor = read("session-kernel/actor-worker.ts");
-		expect(actor).toContain("const store = new SessionKernelStore()");
+		expect(actor).toContain("const host = new SessionKernelStoreHost()");
+		expect(actor).not.toContain("const store = new SessionKernelStore()");
 		expect(read("session-kernel/actor-client.ts")).toContain(
 			"SharedArrayBuffer",
 		);

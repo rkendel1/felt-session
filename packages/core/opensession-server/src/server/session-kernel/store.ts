@@ -211,7 +211,7 @@ const PROCESS_OWNER_ID = (ownerGlobal.__opensessionSessionKernelOwnerId ??=
 		bootId: linuxBootId(),
 		start: linuxProcessStart(process.pid),
 	} satisfies ProcessOwnerIdentity));
-export const SESSION_KERNEL_SCHEMA_VERSION = 21;
+export const SESSION_KERNEL_SCHEMA_VERSION = 22;
 export const SESSION_KERNEL_MAX_CREATION_EFFECT_RECEIPTS = 256;
 export const SESSION_KERNEL_MAX_OPENING_PLAN_BYTES = 16 * 1024 * 1024;
 
@@ -272,6 +272,16 @@ export function sessionKernelDbPath(): string {
 	// restart persistence construct a store at an explicit temporary path.
 	if (process.env.NODE_ENV === "test") return ":memory:";
 	return `${sessionsDir()}/session-kernel.sqlite`;
+}
+
+export function sessionKernelSessionDbPath(
+	sessionId: string,
+	root = `${sessionsDir()}/session-kernel-sessions`,
+): string {
+	if (!sessionId || Buffer.byteLength(sessionId) > 1_024)
+		throw new Error("Invalid session kernel session id");
+	const key = digest(sessionId);
+	return `${root}/${key.slice(0, 2)}/${key}.sqlite`;
 }
 
 export type RunEventDecision = {
@@ -342,15 +352,31 @@ export type RunEventDecisionResult = {
 	state: DurableRunState;
 };
 
+export type SessionKernelStoreOptions = {
+	readonly?: boolean;
+	allocateOutboxId?: (sessionId: string) => number;
+};
+
+export type DurableSessionPlacement = {
+	sessionId: string;
+	placement: "isolated";
+	needsScan: boolean;
+	nextTimerAt?: number;
+	nextOutboxAt?: number;
+	updatedAt: number;
+};
+
 export class SessionKernelStore {
 	private readonly db: Database;
 	private readonly closeable: boolean;
 	private readonly runStateCache = new Map<string, DurableRunState>();
 	private readonly dirtyChangeSessions = new Set<string>();
 	private readonly path: string;
+	private readonly allocateOutboxId?: (sessionId: string) => number;
 
-	constructor(path = sessionKernelDbPath(), options: { readonly?: boolean } = {}) {
+	constructor(path = sessionKernelDbPath(), options: SessionKernelStoreOptions = {}) {
 		this.path = path;
+		this.allocateOutboxId = options.allocateOutboxId;
 		if (options.readonly) {
 			if (path === ":memory:")
 				throw new Error("A read-only session kernel store requires a file path");
@@ -417,6 +443,23 @@ export class SessionKernelStore {
 				command_kind TEXT NOT NULL,
 				quarantined_at INTEGER NOT NULL
 			);
+			CREATE TABLE IF NOT EXISTS session_kernel_placements (
+				session_id TEXT PRIMARY KEY,
+				placement TEXT NOT NULL CHECK (placement = 'isolated'),
+				needs_scan INTEGER NOT NULL DEFAULT 1,
+				next_timer_at INTEGER,
+				next_outbox_at INTEGER,
+				updated_at INTEGER NOT NULL
+			);
+			CREATE TABLE IF NOT EXISTS session_kernel_outbox_routes (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				session_id TEXT NOT NULL,
+				created_at INTEGER NOT NULL
+			);
+			CREATE INDEX IF NOT EXISTS idx_skp_wake
+				ON session_kernel_placements(needs_scan, next_timer_at, next_outbox_at);
+			CREATE INDEX IF NOT EXISTS idx_skor_session
+				ON session_kernel_outbox_routes(session_id, id);
 			CREATE TABLE IF NOT EXISTS session_kernel_state (
 				session_id TEXT PRIMARY KEY,
 				run_state TEXT NOT NULL DEFAULT 'idle',
@@ -3587,12 +3630,24 @@ export class SessionKernelStore {
     effectKey: string = crypto.randomUUID(),
   ): number {
 		const effectId = `${sessionId}:${kind}:${effectKey}`;
+		const existing = this.db.query(
+			"SELECT id FROM session_kernel_outbox WHERE session_id = ? AND kind = ? AND effect_key = ?",
+		).get(sessionId, kind, effectKey) as { id: number } | null;
+		if (existing) return Number(existing.id);
+		const allocatedId = this.allocateOutboxId?.(sessionId);
 		this.db.run(
-			`INSERT INTO session_kernel_outbox
-				(effect_id, effect_key, session_id, kind, payload, created_at)
-			 VALUES (?, ?, ?, ?, ?, ?)
-			 ON CONFLICT(session_id, kind, effect_key) DO NOTHING`,
-			[effectId, effectKey,sessionId, kind, json(payload), Date.now()],
+			allocatedId === undefined
+				? `INSERT INTO session_kernel_outbox
+					(effect_id, effect_key, session_id, kind, payload, created_at)
+				 VALUES (?, ?, ?, ?, ?, ?)
+				 ON CONFLICT(session_id, kind, effect_key) DO NOTHING`
+				: `INSERT INTO session_kernel_outbox
+					(id, effect_id, effect_key, session_id, kind, payload, created_at)
+				 VALUES (?, ?, ?, ?, ?, ?, ?)
+				 ON CONFLICT(session_id, kind, effect_key) DO NOTHING`,
+			allocatedId === undefined
+				? [effectId, effectKey, sessionId, kind, json(payload), Date.now()]
+				: [allocatedId, effectId, effectKey, sessionId, kind, json(payload), Date.now()],
 		);
 		const row = this.db.query(
 				"SELECT id FROM session_kernel_outbox WHERE session_id = ? AND kind = ? AND effect_key = ?",).get(sessionId, kind, effectKey) as { id: number } | null;
@@ -4133,6 +4188,170 @@ export class SessionKernelStore {
 		return retried;
 	}
 
+	hasSessionDurableState(sessionId: string): boolean {
+		const row = this.db.query(`
+			SELECT 1 AS present FROM (
+				SELECT session_id FROM session_kernel_tombstones WHERE session_id = ?
+				UNION ALL SELECT session_id FROM session_kernel_quarantine WHERE session_id = ?
+				UNION ALL SELECT session_id FROM session_kernel_state WHERE session_id = ?
+				UNION ALL SELECT session_id FROM session_kernel_creation WHERE session_id = ?
+				UNION ALL SELECT session_id FROM session_kernel_asks WHERE session_id = ?
+				UNION ALL SELECT session_id FROM session_kernel_delivery WHERE session_id = ?
+				UNION ALL SELECT session_id FROM session_kernel_turn WHERE session_id = ?
+				UNION ALL SELECT session_id FROM session_kernel_turn_projections WHERE session_id = ?
+				UNION ALL SELECT session_id FROM session_kernel_commands WHERE session_id = ?
+				UNION ALL SELECT session_id FROM session_kernel_changes WHERE session_id = ?
+				UNION ALL SELECT session_id FROM session_kernel_timers WHERE session_id = ?
+				UNION ALL SELECT session_id FROM session_kernel_outbox WHERE session_id = ?
+			) LIMIT 1
+		`).get(...Array(12).fill(sessionId)) as { present: number } | null;
+		return row !== null;
+	}
+
+	sessionPlacement(sessionId: string): DurableSessionPlacement | undefined {
+		const row = this.db.query(`
+			SELECT session_id, placement, needs_scan, next_timer_at, next_outbox_at, updated_at
+			FROM session_kernel_placements WHERE session_id = ?
+		`).get(sessionId) as {
+			session_id: string;
+			placement: "isolated";
+			needs_scan: number;
+			next_timer_at: number | null;
+			next_outbox_at: number | null;
+			updated_at: number;
+		} | null;
+		if (!row) return undefined;
+		return {
+			sessionId: row.session_id,
+			placement: row.placement,
+			needsScan: row.needs_scan === 1,
+			...(row.next_timer_at === null ? {} : { nextTimerAt: Number(row.next_timer_at) }),
+			...(row.next_outbox_at === null ? {} : { nextOutboxAt: Number(row.next_outbox_at) }),
+			updatedAt: Number(row.updated_at),
+		};
+	}
+
+	isolatedSessionPlacements(): DurableSessionPlacement[] {
+		return (this.db.query(`
+			SELECT session_id FROM session_kernel_placements
+			WHERE placement = 'isolated' ORDER BY session_id
+		`).all() as Array<{ session_id: string }>)
+			.map((row) => this.sessionPlacement(row.session_id)!)
+			.filter(Boolean);
+	}
+
+	claimIsolatedSession(sessionId: string): DurableSessionPlacement {
+		if (this.hasSessionDurableState(sessionId))
+			throw new Error(`Session ${sessionId} already has central kernel state`);
+		this.db.run(`
+			INSERT INTO session_kernel_placements
+				(session_id, placement, needs_scan, updated_at)
+			VALUES (?, 'isolated', 1, ?)
+			ON CONFLICT(session_id) DO NOTHING
+		`, [sessionId, Date.now()]);
+		const placement = this.sessionPlacement(sessionId);
+		if (!placement) throw new Error("Session placement was not persisted");
+		return placement;
+	}
+
+	markIsolatedSessionDirty(sessionId: string): void {
+		const result = this.db.run(`
+			UPDATE session_kernel_placements
+			SET needs_scan = 1, updated_at = ?
+			WHERE session_id = ? AND placement = 'isolated'
+		`, [Date.now(), sessionId]);
+		if (result.changes !== 1)
+			throw new Error(`Session ${sessionId} has no isolated placement`);
+	}
+
+	settleIsolatedSessionWake(
+		sessionId: string,
+		nextTimerAt?: number,
+		nextOutboxAt?: number,
+	): void {
+		const result = this.db.run(`
+			UPDATE session_kernel_placements
+			SET needs_scan = 0, next_timer_at = ?, next_outbox_at = ?, updated_at = ?
+			WHERE session_id = ? AND placement = 'isolated'
+		`, [nextTimerAt ?? null, nextOutboxAt ?? null, Date.now(), sessionId]);
+		if (result.changes !== 1)
+			throw new Error(`Session ${sessionId} has no isolated placement`);
+	}
+
+	isolatedWakeCandidates(now = Date.now(), limit = 100): string[] {
+		return (this.db.query(`
+			SELECT session_id FROM session_kernel_placements
+			WHERE placement = 'isolated'
+			  AND NOT EXISTS (
+				SELECT 1 FROM session_kernel_quarantine q
+				WHERE q.session_id = session_kernel_placements.session_id
+			  )
+			  AND (needs_scan = 1 OR next_timer_at <= ? OR next_outbox_at <= ?)
+			ORDER BY needs_scan DESC,
+				MIN(COALESCE(next_timer_at, 9223372036854775807), COALESCE(next_outbox_at, 9223372036854775807)),
+				session_id
+			LIMIT ?
+		`).all(now, now, Math.max(1, limit)) as Array<{ session_id: string }>)
+			.map((row) => row.session_id);
+	}
+
+	nextTimerWakeAt(): number | undefined {
+		const row = this.db.query(`
+			SELECT MIN(CASE WHEN next_attempt_at > due_at THEN next_attempt_at ELSE due_at END) AS next_at
+			FROM session_kernel_timers WHERE dead_lettered_at IS NULL
+		`).get() as { next_at: number | null };
+		return row.next_at === null ? undefined : Number(row.next_at);
+	}
+
+	nextOutboxWakeAt(): number | undefined {
+		const row = this.db.query(`
+			SELECT MIN(next_attempt_at) AS next_at
+			FROM session_kernel_outbox WHERE dead_lettered_at IS NULL
+		`).get() as { next_at: number | null };
+		return row.next_at === null ? undefined : Number(row.next_at);
+	}
+
+	allocateIsolatedOutboxId(sessionId: string): number {
+		const floor = 4_000_000_000_000_000;
+		let id = floor;
+		const tx = this.db.transaction(() => {
+			const row = this.db.query(
+				"SELECT MAX(id) AS max_id FROM session_kernel_outbox_routes",
+			).get() as { max_id: number | null };
+			id = Math.max(floor, Number(row.max_id ?? floor - 1) + 1);
+			if (!Number.isSafeInteger(id))
+				throw new Error("Isolated outbox identity space is exhausted");
+			this.db.run(
+				"INSERT INTO session_kernel_outbox_routes (id, session_id, created_at) VALUES (?, ?, ?)",
+				[id, sessionId, Date.now()],
+			);
+		});
+		tx.immediate();
+		return id;
+	}
+
+	isolatedOutboxRoutes(
+		limit = 100,
+		afterId = 0,
+	): Array<{ id: number; sessionId: string }> {
+		return (this.db.query(`
+			SELECT id, session_id FROM session_kernel_outbox_routes
+			WHERE id > ? ORDER BY id LIMIT ?
+		`).all(afterId, Math.max(1, limit)) as Array<{ id: number; session_id: string }>)
+			.map((row) => ({ id: Number(row.id), sessionId: row.session_id }));
+	}
+
+	isolatedOutboxSessionId(id: number): string | undefined {
+		const row = this.db.query(
+			"SELECT session_id FROM session_kernel_outbox_routes WHERE id = ?",
+		).get(id) as { session_id: string } | null;
+		return row?.session_id;
+	}
+
+	forgetIsolatedOutboxRoute(id: number): void {
+		this.db.run("DELETE FROM session_kernel_outbox_routes WHERE id = ?", [id]);
+	}
+
 	outboxSessionId(id: number): string | undefined {
 		const row = this.db
 			.query("SELECT session_id FROM session_kernel_outbox WHERE id = ?")
@@ -4174,8 +4393,20 @@ export class SessionKernelStore {
 	}
 }
 
-/** Structural store surface implemented locally in tests and by the actor proxy in production. */
-export type SessionKernelStoreApi = Pick<
+/** Structural runtime surface implemented locally in tests and by the actor proxy in production. */
+export type SessionKernelStoreApi = Omit<
 	SessionKernelStore,
-	keyof SessionKernelStore
+	| "hasSessionDurableState"
+	| "sessionPlacement"
+	| "isolatedSessionPlacements"
+	| "claimIsolatedSession"
+	| "markIsolatedSessionDirty"
+	| "settleIsolatedSessionWake"
+	| "isolatedWakeCandidates"
+	| "nextTimerWakeAt"
+	| "nextOutboxWakeAt"
+	| "allocateIsolatedOutboxId"
+	| "isolatedOutboxRoutes"
+	| "isolatedOutboxSessionId"
+	| "forgetIsolatedOutboxRoute"
 >;

@@ -5,7 +5,7 @@ import type {
   RunEventDecisionResult,
 } from "./store";
 
-export const SESSION_KERNEL_ACTOR_VERSION = 21;
+export const SESSION_KERNEL_ACTOR_VERSION = 22;
 export const SESSION_KERNEL_TRANSPORT_VERSION = 1;
 export const SESSION_KERNEL_MAX_REQUEST_BYTES = 16 * 1024 * 1024;
 export const SESSION_KERNEL_MAX_RESPONSE_BYTES = 128 * 1024 * 1024;
