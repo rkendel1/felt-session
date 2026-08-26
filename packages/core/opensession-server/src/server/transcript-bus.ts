@@ -10,10 +10,10 @@
  * Contract:
  *  - `subscribeTranscript(sessionId, fn)` returns an unsubscribe function.
  *    Call it exactly once from every teardown path (double-unsub is a no-op).
- *  - `publishTranscript(sessionId, payload)` fans out via queueMicrotask —
- *    one microtask per subscriber, each wrapped in try/catch, so a throwing
- *    subscriber can neither break sibling subscribers nor throw back into
- *    the store's append path.
+ *  - `publishTranscript(sessionId, payload)` assigns and fans out the feed
+ *    frame in one microtask. This keeps feed sequence aligned with delivery:
+ *    a synchronous stream event sent before that microtask must sort before
+ *    the committed frame too. Subscriber errors stay isolated.
  *  - Zero runtime imports from engine/run-rpc/session modules (the only
  *    import below is type-only and erased at compile time) — this module is
  *    safe to import from tests and from anywhere in the server graph.
@@ -77,39 +77,41 @@ export function subscribeTranscript(
 
 /**
  * Fan a committed batch out to this session's subscribers. Fire-and-forget:
- * delivery happens on the microtask queue (never synchronously inside the
- * caller's transaction scope) and subscriber errors are isolated.
+ * feed sequencing and delivery happen together on the microtask queue (never
+ * synchronously inside the caller's transaction scope), and subscriber errors
+ * are isolated.
  */
 export function publishTranscript(
   sessionId: string,
   event: TranscriptBusEvent
 ): void {
-  const lastChangeSeq = event.entries.reduce(
-    (last, entry) => Math.max(last, entry.changeSeq),
-    0
-  );
-  const feed = appendSessionFeed(sessionId, {
-    type: "transcript_append",
-    sessionId,
-    entries: event.entries,
-    firstSeq: event.firstSeq,
-    lastSeq: event.lastSeq,
-    ...(lastChangeSeq ? { lastChangeSeq } : {}),
-    v2: true,
-  });
-  const subs = bus().get(sessionId);
-  if (!subs || subs.size === 0) return;
-  // Snapshot so a subscriber unsubscribing (or subscribing) during fan-out
-  // doesn't mutate the set we're iterating.
-  for (const fn of [...subs]) {
-    queueMicrotask(() => {
+  const subscribers = [...(bus().get(sessionId) ?? [])];
+  queueMicrotask(() => {
+    const lastChangeSeq = event.entries.reduce(
+      (last, entry) => Math.max(last, entry.changeSeq),
+      0
+    );
+    // Assign the feed sequence at delivery time. Appending it before this
+    // microtask let a later stream_tool_* frame send synchronously with a
+    // higher sequence first; clients then rejected this durable append as
+    // stale, leaving live tool rows missing until refresh.
+    const feed = appendSessionFeed(sessionId, {
+      type: "transcript_append",
+      sessionId,
+      entries: event.entries,
+      firstSeq: event.firstSeq,
+      lastSeq: event.lastSeq,
+      ...(lastChangeSeq ? { lastChangeSeq } : {}),
+      v2: true,
+    });
+    for (const fn of subscribers) {
       try {
         fn({ ...event, feed });
       } catch (e) {
         console.warn("[transcript-bus] subscriber threw:", e);
       }
-    });
-  }
+    }
+  });
 }
 
 /** Live subscriber count for one session (diagnostics / serve decisions). */

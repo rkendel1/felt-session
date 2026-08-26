@@ -6,6 +6,7 @@ import {
 	sessionFeedSnapshot,
 } from "./session-feed";
 import { onSessionStateChange } from "./session-state-events";
+import { publishTranscript, subscribeTranscript } from "./transcript-bus";
 
 type FeedAppend = Extract<
 	Extract<ProtocolServerMessage, { type: "session_feed" }>["event"],
@@ -46,6 +47,52 @@ describe("session feed", () => {
 		});
 	});
 
+	test("sequences committed frames when their async fan-out delivers", async () => {
+		const sessionId = `feed-${crypto.randomUUID()}`;
+		let committedSeq: number | undefined;
+		const unsubscribe = subscribeTranscript(sessionId, (event) => {
+			committedSeq = event.feed?.feedSeq;
+		});
+		try {
+			publishTranscript(sessionId, {
+				entries: [
+					{
+						id: "call-1",
+						type: "tool_use",
+						content: "Using Read",
+						timestamp: new Date().toISOString(),
+						toolName: "Read",
+						toolUseId: "call-1",
+						toolInput: { path: "README.md" },
+						seq: 1,
+						changeSeq: 1,
+					},
+				],
+				firstSeq: 1,
+				lastSeq: 1,
+			});
+
+			// A runner can emit the next live frame before transcript fan-out's
+			// microtask. Its synchronous delivery must receive the earlier feed
+			// sequence too, or the client advances past and drops the durable call.
+			const live = appendSessionFeed(sessionId, {
+				type: "stream_tool_result",
+				sessionId,
+				entry: {
+					id: "tr-call-1",
+					type: "tool_result",
+					content: "ok",
+					timestamp: new Date().toISOString(),
+					toolUseId: "call-1",
+				},
+			});
+			await new Promise<void>((resolve) => queueMicrotask(resolve));
+
+			expect(committedSeq).toBe(live.feedSeq + 1);
+		} finally {
+			unsubscribe();
+		}
+	});
 
 	test("orders active frames and resumes a true gap", () => {
 		const sessionId = `feed-${crypto.randomUUID()}`;
