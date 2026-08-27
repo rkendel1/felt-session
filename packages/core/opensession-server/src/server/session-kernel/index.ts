@@ -5,7 +5,6 @@ export * from "./runtime";
 export * from "./actor-runtime";
 export * from "./delivery-map";
 export * from "./delivery-protocol";
-export * from "./agent-operation-protocol";
 export * from "./turn-protocol";
 export * from "./transcript-protocol";
 export * from "./timer-protocol";

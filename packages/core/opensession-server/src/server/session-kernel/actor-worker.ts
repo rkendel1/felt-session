@@ -94,9 +94,7 @@ export function startSessionKernelActorWorker(): void {
             command.kind === "transcript" ? false : !isReadReducer(command),
             reducerMutatesSparseProjection(command),
           );
-        if (command.kind === "agent_operation")
-          result = store.decideAgentOperation(command.request);
-        else if (
+        if (
           command.kind === "transcript" &&
           !isReadReducer(command) &&
           command.request.op !== "delete" &&
@@ -104,10 +102,6 @@ export function startSessionKernelActorWorker(): void {
         ) throw new Error(`Session ${command.request.sessionId} is tombstoned`);
         else if (command.kind === "transcript")
           result = host.transcript(command.request);
-        else if (command.kind === "agent_host_supervision")
-          result = command.request.op === "register_plan"
-            ? store.registerAgentHostPlan(command.request)
-            : store.claimAgentHostSupervision(command.request);
         else if (command.kind === "creation_event")
           result = store.applyCreationEvent(command.decision);
         else if (command.kind === "run_event")
