@@ -10,7 +10,7 @@ import { type RouteContext, requestUser } from "./context";
 import { activeAgentRunCount } from "../agent-runner";
 import { getAgents } from "../agents-registry";
 import { configuredServer } from "../config";
-import { IS_DEV, buildFrontend, frontend, isPrebuiltFrontend, sharedCheckoutEditors } from "../frontend-build";
+import { buildFrontend, frontend, isPrebuiltFrontend, sharedCheckoutEditors } from "../frontend-build";
 import { getPins } from "../pins";
 import { getReads, isUnread } from "../reads";
 import { invalidateSessionsCache, runErrors } from "../session-cache";
@@ -299,7 +299,7 @@ export async function handleSystemRoutes(
 	// Drop-in replacement for `systemctl restart opensession` after a frontend/CSS
 	// change. Tailscale + team gated at the network layer like every route here.
 	if (path === "/api/rebuild-frontend" && req.method === "POST") {
-		if (IS_DEV || !frontend) {
+		if (!frontend) {
 			return Response.json(
 				{ ok: false, error: "not available in dev mode" },
 				{ status: 400 },
@@ -338,7 +338,7 @@ export async function handleSystemRoutes(
 		path === "/api/admin/frontend-reload" &&
 		req.method === "POST"
 	) {
-		if (IS_DEV || !frontend) {
+		if (!frontend) {
 			return Response.json(
 				{ ok: false, error: "not available in dev mode" },
 				{ status: 400 },

@@ -9,12 +9,389 @@ import { Button } from "../ui/button";
 import { Segmented, SegmentedOption } from "../ui/segmented";
 import { DateRangeField } from "../ui/date-picker";
 import { TopBar, TopBarActions, TopBarTitle } from "../ui/top-bar";
-import { cn } from "../ui/cn";
+import { cn, mergeStylexProps, mergeStylexClassName, mergeStylexOverrideClassName } from "../ui/cn";
 import {
 	DETAIL_TOPBAR_TITLE_TEXT,
 	SCROLL_EDGE_DIVIDER,
 } from "../lib/app-shell-classes";
 import { useScrollEdge } from "../hooks/useScrollEdge";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	relative: {
+			position: "relative"
+	},
+	top1: {
+			top: "4px"
+	},
+	TranslateX12: {
+			translate: "calc(calc(1 / 2 * 100%) * -1) 0"
+	},
+	mb1: {
+			marginBottom: "4px"
+	},
+	fontSemibold: {
+			fontWeight: "var(--font-weight-semibold)"
+	},
+	textFg: {
+			color: "var(--text)"
+	},
+	flex: {
+			display: "flex"
+	},
+	itemsCenter: {
+			alignItems: "center"
+	},
+	gap15: {
+			gap: "6px"
+	},
+	whitespaceNowrap: {
+			whiteSpace: "nowrap"
+	},
+	leading45: {
+			lineHeight: "18px"
+	},
+	size2: {
+			width: "8px",
+			height: "8px"
+	},
+	shrink0: {
+			flexShrink: "0"
+	},
+	roundedFull: {
+			borderRadius: "calc(infinity * 1px)"
+	,
+		cornerShape: "round"},
+	textDim: {
+			color: "var(--text-dim)"
+	},
+	mlAuto: {
+			marginLeft: "auto"
+	},
+	pl3: {
+			paddingLeft: "12px"
+	},
+	fontMedium: {
+			fontWeight: "var(--font-weight-medium)"
+	},
+	m0: {
+			margin: "0"
+	},
+	tracking001em: {
+			letterSpacing: "-.01em"
+	},
+	minW0: {
+			minWidth: "0"
+	},
+	bgRaised: {
+			backgroundColor: "var(--bg-raised)"
+	},
+	p5: {
+			padding: "20px"
+	},
+	flexWrap: {
+			flexWrap: "wrap"
+	},
+	itemsStart: {
+			alignItems: "flex-start"
+	},
+	justifyBetween: {
+			justifyContent: "space-between"
+	},
+	gapX3: {
+			columnGap: "12px"
+	},
+	gapY2: {
+			rowGap: "8px"
+	},
+	mb3: {
+			marginBottom: "12px"
+	},
+	mt1: {
+			marginTop: "4px"
+	},
+	px5: {
+			paddingInline: "20px"
+	},
+	py4: {
+			paddingBlock: "16px"
+	},
+	ml05: {
+			marginLeft: "2px"
+	},
+	truncate: {
+			textOverflow: "ellipsis",
+			whiteSpace: "nowrap",
+			overflow: "hidden"
+	},
+	textFaint: {
+			color: "var(--text-faint)"
+	},
+	flexCol: {
+			flexDirection: "column"
+	},
+	w20: {
+			width: "20%"
+	},
+	minW28: {
+			minWidth: "112px"
+	},
+	gap2: {
+			gap: "8px"
+	},
+	h3: {
+			height: "12px"
+	},
+	flex1: {
+			flex: "1"
+	},
+	minW3: {
+			minWidth: "12px"
+	},
+	overflowHidden: {
+			overflow: "hidden"
+	},
+	rounded999px: {
+			borderRadius: "999px"
+	,
+		cornerShape: "var(--cs)"},
+	block: {
+			display: "block"
+	},
+	w14: {
+			width: "56px"
+	},
+	textRight: {
+			textAlign: "right"
+	},
+	mb15: {
+			marginBottom: "6px"
+	},
+	borderCollapse: {
+			borderCollapse: "collapse"
+	},
+	borderT: {
+			borderTopStyle: "solid",
+			borderTopWidth: "1px"
+	},
+	borderLine: {
+			borderColor: "var(--border)"
+	},
+	pt1: {
+			paddingTop: "4px"
+	},
+	pr2: {
+			paddingRight: "8px"
+	},
+	minH0: {
+			minHeight: "0"
+	},
+	bgBg: {
+			backgroundColor: "var(--bg)"
+	},
+	mxAuto: {
+			marginInline: "auto"
+	},
+	wFull: {
+			width: "100%"
+	},
+	maxW1080px: {
+			maxWidth: "1080px"
+	},
+	gap3: {
+			gap: "12px"
+	},
+	px4: {
+			paddingInline: "16px"
+	},
+	overflowYAuto: {
+			overflowY: "auto"
+	},
+	pb10: {
+			paddingBottom: "40px"
+	},
+	mt7: {
+			marginTop: "28px"
+	},
+	mt4: {
+			marginTop: "16px"
+	},
+	textRed: {
+			color: "var(--red)"
+	},
+	h60: {
+			height: "240px"
+	},
+	justifyCenter: {
+			justifyContent: "center"
+	},
+	grid: {
+			display: "grid"
+	},
+	gridCols2: {
+			gridTemplateColumns: "repeat(2,minmax(0,1fr))"
+	},
+	mt2: {
+			marginTop: "8px"
+	},
+	gridCols1: {
+			gridTemplateColumns: "repeat(1,minmax(0,1fr))"
+	},
+	textLeft: {
+			textAlign: "left"
+	},
+	pb15: {
+			paddingBottom: "6px"
+	},
+	py15: {
+			paddingBlock: "6px"
+	},
+	overflowXAuto: {
+			overflowX: "auto"
+	},
+	maxW32: {
+			maxWidth: "128px"
+	},
+	maxW44: {
+			maxWidth: "176px"
+	},
+	Mx2: {
+			marginInline: "-8px"
+	},
+	gap25: {
+			gap: "10px"
+	},
+	roundedRow: {
+			borderRadius: "calc(12px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	px2: {
+			paddingInline: "8px"
+	},
+	noUnderline: {
+			textDecorationLine: "none"
+	},
+	hidden: {
+			display: "none"
+	},
+
+	pointerEventsNone: {
+		"pointerEvents": "none"
+	},
+	absolute: {
+		"position": "absolute"
+	},
+	z10: {
+		"zIndex": "10"
+	},
+	roundedPopup: {
+		"borderRadius": "calc(16px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	CornerShapeSquircle: {
+		"cornerShape": "squircle"
+	},
+	bgPopup: {
+		"backgroundColor": "var(--popup-surface)"
+	},
+	px3: {
+		"paddingInline": "12px"
+	},
+	py25: {
+		"paddingBlock": "10px"
+	},
+	SmoothRingColorVarPopupRing: {
+		"--smooth-ring-color": "var(--popup-ring)"
+	},
+	gapY1: {
+		"rowGap": "4px"
+	},
+	Mx15: {
+		"marginInline": "-6px"
+	},
+	gapX05: {
+		"columnGap": "2px"
+	},
+	gapX35: {
+		"columnGap": "14px"
+	},
+	px15: {
+		"paddingInline": "6px"
+	},
+	py1: {
+		"paddingBlock": "4px"
+	},
+	hoverBgHover: {
+		"@media (hover: hover)": {
+			":hover": {
+				"backgroundColor": "var(--hover)"
+			}
+		}
+	},
+	bgActive: {
+		"backgroundColor": "var(--bg-active)"
+	},
+	bgHover: {
+		"backgroundColor": "var(--hover)"
+	},
+	pb05: {
+		"paddingBottom": "2px"
+	},
+	opacity40: {
+		"opacity": ".4"
+	},
+	tabularNums: {
+		"--tw-numeric-spacing": "tabular-nums",
+		"fontVariantNumeric": "var(--tw-ordinal,) var(--tw-slashed-zero,) var(--tw-numeric-figure,) var(--tw-numeric-spacing,) var(--tw-numeric-fraction,)"
+	},
+	hVarDesktopHeaderH: {
+		"height": "var(--desktop-header-h)"
+	},
+	phoneHAuto: {
+		"@media (max-width: 720px)": {
+			"height": "auto"
+		}
+	},
+	phonePy25: {
+		"@media (max-width: 720px)": {
+			"paddingBlock": "10px"
+		}
+	},
+	opacity60: {
+		"opacity": ".6"
+	},
+	transitionOpacity: {
+		"transitionProperty": "opacity",
+		"transitionTimingFunction": "var(--tw-ease,var(--ease))",
+		"transitionDuration": "var(--tw-duration,var(--dur-micro))"
+	},
+	maxW40: {
+		"maxWidth": "160px"
+	},
+
+	mdPx6: {
+		"@media (min-width: 48rem)": {
+			"paddingInline": "24px"
+		}
+	},
+	mdGridCols4: {
+		"@media (min-width: 48rem)": {
+			"gridTemplateColumns": "repeat(4,minmax(0,1fr))"
+		}
+	},
+	lgGridCols2: {
+		"@media (min-width: 64rem)": {
+			"gridTemplateColumns": "repeat(2,minmax(0,1fr))"
+		}
+	},
+	smInline: {
+		"@media (min-width: 40rem)": {
+			"display": "inline"
+		}
+	},
+});
 
 /**
  * Analytics: what happened on/because of Open Session over a date range —
@@ -155,8 +532,8 @@ function ChartTooltip({
 		<div
 			ref={ref}
 			className={cn(
-				"pointer-events-none absolute z-10 rounded-popup [corner-shape:squircle] bg-popup",
-				"px-3 py-2.5 [--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-md",
+				mergeStylexClassName("", sx.pointerEventsNone, sx.absolute, sx.z10, sx.roundedPopup, sx.CornerShapeSquircle, sx.bgPopup),
+				mergeStylexClassName("smooth-shadow-ring-md", sx.px3, sx.py25, sx.SmoothRingColorVarPopupRing),
 				className,
 			)}
 			style={style}
@@ -198,7 +575,7 @@ function BarChart({ labels, series, values, mode, height = 190, formatValue = fm
 	const tooltipLeft = hover === null ? 0 : Math.min(Math.max(gutter + hover * band + band / 2, 70), width - 90);
 
 	return (
-		<div ref={ref} className="relative" style={{ height }} onMouseLeave={() => setHover(null)}>
+		<div ref={ref} {...stylex.props(sx.relative)} style={{ height }} onMouseLeave={() => setHover(null)}>
 			<svg width={width} height={height} role="img">
 				{ticks.map((t) => (
 					<g key={t}>
@@ -303,13 +680,13 @@ function BarChart({ labels, series, values, mode, height = 190, formatValue = fm
 				})}
 			</svg>
 			{hover !== null && tooltipRows.length > 0 && (
-				<ChartTooltip className="top-1 -translate-x-1/2" style={{ left: tooltipLeft }}>
-					<div className="mb-1 text-meta font-semibold text-fg">{shortDate(labels[hover])}</div>
+				<ChartTooltip className={mergeStylexOverrideClassName("", sx.top1, sx.TranslateX12)} style={{ left: tooltipLeft }}>
+					<div {...stylex.props(sx.mb1, sx.fontSemibold, sx.textFg, typography.meta)}>{shortDate(labels[hover])}</div>
 					{tooltipRows.map((r) => (
-						<div key={r.label} className="flex items-center gap-1.5 whitespace-nowrap text-meta leading-4.5">
-							<span className="size-2 shrink-0 rounded-full" style={{ background: r.color }} />
-							<span className="text-dim">{r.label}</span>
-							<span className="ml-auto pl-3 font-medium tabular-nums text-fg">{formatValue(r.value)}</span>
+						<div key={r.label} {...stylex.props(sx.flex, sx.itemsCenter, sx.gap15, sx.whitespaceNowrap, sx.leading45, typography.meta)}>
+							<span {...stylex.props(sx.size2, sx.shrink0, sx.roundedFull)} style={{ background: r.color }} />
+							<span {...stylex.props(sx.textDim)}>{r.label}</span>
+							<span {...mergeStylexProps("", sx.tabularNums, sx.mlAuto, sx.pl3, sx.fontMedium, sx.textFg)}>{formatValue(r.value)}</span>
 						</div>
 					))}
 				</ChartTooltip>
@@ -339,7 +716,7 @@ function Legend({
 	if (series.length < 2) return null;
 	return (
 		<div
-			className={cn("mb-3 flex flex-wrap gap-y-1", onSelect ? "-mx-1.5 gap-x-0.5" : "gap-x-3.5")}
+			className={cn(mergeStylexClassName("", sx.mb3, sx.flex, sx.flexWrap, sx.gapY1), onSelect ? mergeStylexClassName("", sx.Mx15, sx.gapX05) : mergeStylexClassName("", sx.gapX35))}
 			role={onSelect ? "group" : undefined}
 			aria-label={onSelect ? filterLabel : undefined}
 		>
@@ -350,11 +727,11 @@ function Legend({
 				// they stay readable, a step back in ink and dot.
 				const muted = selected !== null && !active;
 				const swatch = (
-					<span className="size-2 rounded-full" style={{ background: s.color, opacity: muted ? 0.4 : 1 }} />
+					<span {...stylex.props(sx.size2, sx.roundedFull)} style={{ background: s.color, opacity: muted ? 0.4 : 1 }} />
 				);
 				if (!onSelect) {
 					return (
-						<span key={value} className="flex items-center gap-1.5 text-meta text-dim">
+						<span key={value} {...stylex.props(sx.flex, sx.itemsCenter, sx.gap15, sx.textDim, typography.meta)}>
 							{swatch}
 							{s.label}
 						</span>
@@ -368,8 +745,8 @@ function Legend({
 						onClick={() => onSelect(value)}
 						title={active ? clearLabel : `Show only ${s.label}`}
 						className={cn(
-							"flex items-center gap-1.5 rounded-[999px] px-1.5 py-1 text-meta hover:bg-hover",
-							active ? "bg-active text-fg" : muted ? "text-faint" : "text-dim",
+							mergeStylexClassName("", sx.flex, sx.itemsCenter, sx.gap15, sx.rounded999px, sx.px15, sx.py1, typography.meta, sx.hoverBgHover),
+							active ? mergeStylexClassName("", sx.bgActive, sx.textFg) : muted ? mergeStylexClassName("", sx.textFaint) : mergeStylexClassName("", sx.textDim),
 						)}
 					>
 						{swatch}
@@ -404,18 +781,18 @@ function ChartCard({
 	actions?: React.ReactNode;
 	children: React.ReactNode;
 }) {
-	const heading = <h3 className="m-0 text-item-title font-semibold tracking-[-0.01em] text-fg">{title}</h3>;
+	const heading = <h3 {...stylex.props(sx.m0, sx.fontSemibold, sx.tracking001em, sx.textFg, typography.itemTitle)}>{title}</h3>;
 	return (
-		<Card as="section" className="min-w-0 bg-raised p-5">
+		<Card as="section" className={mergeStylexOverrideClassName("", sx.minW0, sx.bgRaised, sx.p5)}>
 			{actions ? (
-				<div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
+				<div {...stylex.props(sx.flex, sx.flexWrap, sx.itemsStart, sx.justifyBetween, sx.gapX3, sx.gapY2)}>
 					{heading}
 					{actions}
 				</div>
 			) : (
 				heading
 			)}
-			{subtitle && <p className="m-0 mb-3 mt-1 text-supporting text-dim">{subtitle}</p>}
+			{subtitle && <p {...stylex.props(sx.m0, sx.mb3, sx.mt1, sx.textDim, typography.supporting)}>{subtitle}</p>}
 			{series && (
 				<Legend
 					series={series}
@@ -443,13 +820,13 @@ function StatTile({
 	sub?: string;
 }) {
 	return (
-		<Card className="min-w-0 bg-raised px-5 py-4">
-			<div className="text-label font-medium text-dim">{label}</div>
-			<div className="mt-1 text-stat font-semibold text-fg">
+		<Card className={mergeStylexOverrideClassName("", sx.minW0, sx.bgRaised, sx.px5, sx.py4)}>
+			<div {...stylex.props(sx.fontMedium, sx.textDim, typography.label)}>{label}</div>
+			<div {...stylex.props(sx.mt1, sx.fontSemibold, sx.textFg, typography.stat)}>
 				{value}
-				{unit && <span className="ml-0.5 text-item-title font-medium text-dim">{unit}</span>}
+				{unit && <span {...stylex.props(sx.ml05, sx.fontMedium, sx.textDim, typography.itemTitle)}>{unit}</span>}
 			</div>
-			{sub && <div className="mt-1 truncate text-meta text-faint">{sub}</div>}
+			{sub && <div {...stylex.props(sx.mt1, sx.truncate, sx.textFaint, typography.meta)}>{sub}</div>}
 		</Card>
 	);
 }
@@ -587,32 +964,32 @@ function PersonRepoBars({
 		// Rows are contiguous rather than spaced: their padding is the rhythm, so
 		// travelling down the list never crosses a gap that would drop the
 		// readout and raise it again.
-		<div ref={wrapRef} className="relative flex flex-col">
+		<div ref={wrapRef} {...stylex.props(sx.relative, sx.flex, sx.flexCol)}>
 			{rows.map((p, i) => (
 				<div
 					key={p.name}
 					className={cn(
-						"-mx-2 flex items-center gap-3 rounded-row px-2 py-1.5 text-label",
-						hover?.index === i && "bg-hover",
+						mergeStylexClassName("", sx.Mx2, sx.flex, sx.itemsCenter, sx.gap3, sx.roundedRow, sx.px2, sx.py15, typography.label),
+						hover?.index === i && mergeStylexClassName("", sx.bgHover),
 					)}
 					onMouseMove={(e) => show(i, e)}
 					onClick={(e) => show(i, e)}
 					onMouseLeave={clear}
 				>
-					<span className="flex w-[20%] min-w-28 items-center gap-2">
+					<span {...stylex.props(sx.flex, sx.w20, sx.minW28, sx.itemsCenter, sx.gap2)}>
 						<UserAvatar name={p.name} size={18} />
-						<span className="min-w-0 truncate text-fg">{p.name}</span>
+						<span {...stylex.props(sx.minW0, sx.truncate, sx.textFg)}>{p.name}</span>
 					</span>
-					<span className="h-3 min-w-0 flex-1">
+					<span {...stylex.props(sx.h3, sx.minW0, sx.flex1)}>
 						<span
-							className="flex h-3 min-w-3 overflow-hidden rounded-[999px]"
+							{...stylex.props(sx.flex, sx.h3, sx.minW3, sx.overflowHidden, sx.rounded999px)}
 							style={{ width: `${Math.max(1.5, (100 * p.total) / maxTotal)}%` }}
 							onMouseLeave={() => setSegment(null)}
 						>
 							{p.segments.map((s) => (
 								<span
 									key={s.repo || "(none)"}
-									className="block h-3"
+									{...stylex.props(sx.block, sx.h3)}
 									style={{
 										width: `${(100 * s[metric.key]) / p.total}%`,
 										background: colorOf(s.repo),
@@ -622,32 +999,32 @@ function PersonRepoBars({
 							))}
 						</span>
 					</span>
-					<span className="w-14 shrink-0 text-right tabular-nums text-dim">{metric.format(p.total)}</span>
+					<span {...mergeStylexProps("", sx.tabularNums, sx.w14, sx.shrink0, sx.textRight, sx.textDim)}>{metric.format(p.total)}</span>
 				</div>
 			))}
 			{hover && row && (
 				<ChartTooltip
 					ref={tipRef}
-					className="-translate-x-1/2"
+					className={mergeStylexOverrideClassName("", sx.TranslateX12)}
 					style={{ left, top: above ? hover.top - tip.h - 8 : hover.bottom + 8 }}
 				>
 					{/* Same size as the row's own picture, so the readout draws the
 					    image the row already fetched instead of asking GitHub for a
 					    second size and opening on a blank tile. */}
-					<div className="mb-1.5 flex items-center gap-1.5">
+					<div {...stylex.props(sx.mb15, sx.flex, sx.itemsCenter, sx.gap15)}>
 						<UserAvatar name={row.name} size={18} />
-						<span className="text-meta font-semibold text-fg">{row.name}</span>
+						<span {...stylex.props(sx.fontSemibold, sx.textFg, typography.meta)}>{row.name}</span>
 					</div>
-					<table className="border-collapse text-meta">
+					<table {...stylex.props(sx.borderCollapse, typography.meta)}>
 						<thead>
-							<tr className="text-faint">
+							<tr {...stylex.props(sx.textFaint)}>
 								<th />
 								{REPO_METRICS.map((m) => (
 									// The column the bars are drawn in reads a step up from
 									// the two that are along for the ride.
 									<th
 										key={m.key}
-										className={cn("pb-0.5 pl-3 text-right font-medium", m.key === metric.key && "text-dim")}
+										className={cn(mergeStylexClassName("", sx.pb05, sx.pl3, sx.textRight, sx.fontMedium), m.key === metric.key && mergeStylexClassName("", sx.textDim))}
 									>
 										{m.label}
 									</th>
@@ -656,10 +1033,10 @@ function PersonRepoBars({
 						</thead>
 						<tbody>
 							{row.segments.map((s) => (
-								<tr key={s.repo || "(none)"} className={segment !== null && segment !== s.repo ? "opacity-40" : undefined}>
+								<tr key={s.repo || "(none)"} className={segment !== null && segment !== s.repo ? mergeStylexClassName("", sx.opacity40) : undefined}>
 									<td>
-										<span className="flex items-center gap-1.5 whitespace-nowrap text-dim">
-											<span className="size-2 shrink-0 rounded-full" style={{ background: colorOf(s.repo) }} />
+										<span {...stylex.props(sx.flex, sx.itemsCenter, sx.gap15, sx.whitespaceNowrap, sx.textDim)}>
+											<span {...stylex.props(sx.size2, sx.shrink0, sx.roundedFull)} style={{ background: colorOf(s.repo) }} />
 											{s.repo ? repoLabel(s.repo) : "No repo"}
 										</span>
 									</td>
@@ -667,8 +1044,8 @@ function PersonRepoBars({
 										<td
 											key={m.key}
 											className={cn(
-												"pl-3 text-right tabular-nums leading-4.5",
-												m.key === metric.key ? "font-medium text-fg" : "text-dim",
+												mergeStylexClassName("", sx.pl3, sx.textRight, sx.tabularNums, sx.leading45),
+												m.key === metric.key ? mergeStylexClassName("", sx.fontMedium, sx.textFg) : mergeStylexClassName("", sx.textDim),
 											)}
 										>
 											{m.format(s[m.key])}
@@ -677,14 +1054,14 @@ function PersonRepoBars({
 								</tr>
 							))}
 							{row.segments.length > 1 && (
-								<tr className="border-t border-line">
-									<td className="pt-1 pr-2 text-faint">All repos</td>
+								<tr {...stylex.props(sx.borderT, sx.borderLine)}>
+									<td {...stylex.props(sx.pt1, sx.pr2, sx.textFaint)}>All repos</td>
 									{REPO_METRICS.map((m) => (
 										<td
 											key={m.key}
 											className={cn(
-												"pt-1 pl-3 text-right tabular-nums",
-												m.key === metric.key ? "font-medium text-fg" : "text-dim",
+												mergeStylexClassName("", sx.pt1, sx.pl3, sx.textRight, sx.tabularNums),
+												m.key === metric.key ? mergeStylexClassName("", sx.fontMedium, sx.textFg) : mergeStylexClassName("", sx.textDim),
 											)}
 										>
 											{m.format(row.segments.reduce((sum, s) => sum + s[m.key], 0))}
@@ -918,7 +1295,7 @@ export function Analytics() {
 	const metricMeta = REPO_METRICS.find((m) => m.key === repoMetric)!;
 
 	return (
-		<div className="analytics-viz flex min-h-0 flex-1 flex-col bg-bg">
+		<div {...mergeStylexProps("analytics-viz", sx.flex, sx.minH0, sx.flex1, sx.flexCol, sx.bgBg)}>
 			<style>{VIZ_STYLE}</style>
 			{/* The page's own title bar, built the way REPORTS_COLUMN_HEADER is: a
 			    sibling ABOVE the scroller rather than a sticky box inside it, so it
@@ -935,8 +1312,8 @@ export function Analytics() {
 				as="header"
 				ref={setBarEl}
 				className={cn(
-					"wco-chrome flex h-[var(--desktop-header-h)] shrink-0 items-center",
-					"phone:h-auto phone:py-2.5",
+					mergeStylexClassName("wco-chrome", sx.flex, sx.hVarDesktopHeaderH, sx.shrink0, sx.itemsCenter),
+					mergeStylexClassName("", sx.phoneHAuto, sx.phonePy25),
 					SCROLL_EDGE_DIVIDER,
 				)}
 			>
@@ -946,10 +1323,10 @@ export function Analytics() {
 				    control on their right. Analytics is a compact dashboard rather
 				    than a reading page, so its name lives here from the first frame
 				    instead of taking a second large-title row in the content. */}
-				<div className="mx-auto flex w-full max-w-[1080px] flex-wrap items-center justify-between gap-3 px-4 md:px-6">
+				<div {...mergeStylexProps("", sx.mdPx6, sx.mxAuto, sx.flex, sx.wFull, sx.maxW1080px, sx.flexWrap, sx.itemsCenter, sx.justifyBetween, sx.gap3, sx.px4)}>
 					<TopBarTitle
 						className={cn(
-							"text-item-title font-semibold text-fg",
+							mergeStylexClassName("", typography.itemTitle, sx.fontSemibold, sx.textFg),
 							DETAIL_TOPBAR_TITLE_TEXT,
 						)}
 						data-shown=""
@@ -975,18 +1352,18 @@ export function Analytics() {
 				</div>
 			</TopBar>
 
-			<div className="analytics-scroll min-h-0 flex-1 overflow-y-auto">
+			<div {...mergeStylexProps("analytics-scroll", sx.minH0, sx.flex1, sx.overflowYAuto)}>
 				{/* No top padding: every block in here opens with its own `mt-4`,
 				    which is the gap under the bar. */}
-				<div className="mx-auto w-full max-w-[1080px] px-4 pb-10 md:px-6">
-					{error && <p className="mt-4 text-body text-red">{error}</p>}
+				<div {...mergeStylexProps("", sx.mdPx6, sx.mxAuto, sx.wFull, sx.maxW1080px, sx.px4, sx.pb10)}>
+					{error && <p {...stylex.props(sx.mt4, sx.textRed, typography.body)}>{error}</p>}
 					{!data && !error && (
-						<div className="flex h-60 items-center justify-center text-body text-dim">Loading analytics…</div>
+						<div {...stylex.props(sx.flex, sx.h60, sx.itemsCenter, sx.justifyCenter, sx.textDim, typography.body)}>Loading analytics…</div>
 					)}
 
 					{data && derived && (
-						<div className={loading ? "opacity-60 transition-opacity" : "transition-opacity"}>
-							<div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+						<div className={loading ? mergeStylexClassName("", sx.opacity60, sx.transitionOpacity) : mergeStylexClassName("", sx.transitionOpacity)}>
+							<div {...mergeStylexProps("", sx.mdGridCols4, sx.mt4, sx.grid, sx.gridCols2, sx.gap3)}>
 								<StatTile
 									label="Active sessions"
 									value={fmtInt(data.totals.sessions)}
@@ -1051,14 +1428,14 @@ export function Analytics() {
 							</div>
 
 							{derived.unmeasuredDays > 0 && (
-								<p className="m-0 mt-2 text-supporting text-faint">
+								<p {...stylex.props(sx.m0, sx.mt2, sx.textFaint, typography.supporting)}>
 									Tokens and cost cover {shortDate(derived.engineLabels[0])} onwards. The engine keeps about a month of message
 									history, so the earlier {derived.unmeasuredDays === 1 ? "day" : `${derived.unmeasuredDays} days`} of
 									this range have no data left to read. Everything else on this page covers the full range.
 								</p>
 							)}
 
-							<div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2">
+							<div {...mergeStylexProps("", sx.lgGridCols2, sx.mt4, sx.grid, sx.gridCols1, sx.gap3)}>
 								<ChartCard title="Sessions per day" subtitle="Distinct sessions with agent activity" series={derived.kindSeries}>
 									<BarChart labels={derived.labels} series={derived.kindSeries} values={derived.kindValues} mode="stacked" />
 								</ChartCard>
@@ -1086,7 +1463,7 @@ export function Analytics() {
 											formatValue={fmtUsd}
 											formatTick={fmtUsdTick}
 										/>
-										<p className="m-0 mt-2 text-supporting text-faint">
+										<p {...stylex.props(sx.m0, sx.mt2, sx.textFaint, typography.supporting)}>
 											What this traffic would have cost on the API, not what was paid: every model runs on a
 											subscription pool. Counted per model request, so tool calls and sub-agents are included.
 										</p>
@@ -1109,12 +1486,12 @@ export function Analytics() {
 									title="Factory health"
 									subtitle={`Merged PRs in range: agent (${PRODUCT_NAME} sessions) vs everything else`}
 								>
-									<table className="w-full border-collapse text-label">
+									<table {...stylex.props(sx.wFull, sx.borderCollapse, typography.label)}>
 										<thead>
-											<tr className="text-left text-meta text-faint">
-												<th className="pb-1.5 font-medium">Metric</th>
-												<th className="pb-1.5 text-right font-medium">Agent PRs</th>
-												<th className="pb-1.5 text-right font-medium">Other PRs</th>
+											<tr {...stylex.props(sx.textLeft, sx.textFaint, typography.meta)}>
+												<th {...stylex.props(sx.pb15, sx.fontMedium)}>Metric</th>
+												<th {...stylex.props(sx.pb15, sx.textRight, sx.fontMedium)}>Agent PRs</th>
+												<th {...stylex.props(sx.pb15, sx.textRight, sx.fontMedium)}>Other PRs</th>
 											</tr>
 										</thead>
 										<tbody>
@@ -1131,10 +1508,10 @@ export function Analytics() {
 													["Avg lines changed", fmtInt(agent.avgLinesChanged), fmtInt(other.avgLinesChanged)],
 												];
 												return rows.map(([label, a, b]) => (
-													<tr key={label} className="border-t border-line">
-														<td className="py-1.5 text-fg">{label}</td>
-														<td className="py-1.5 text-right tabular-nums text-dim">{a}</td>
-														<td className="py-1.5 text-right tabular-nums text-dim">{b}</td>
+													<tr key={label} {...stylex.props(sx.borderT, sx.borderLine)}>
+														<td {...stylex.props(sx.py15, sx.textFg)}>{label}</td>
+														<td {...mergeStylexProps("", sx.tabularNums, sx.py15, sx.textRight, sx.textDim)}>{a}</td>
+														<td {...mergeStylexProps("", sx.tabularNums, sx.py15, sx.textRight, sx.textDim)}>{b}</td>
 													</tr>
 												));
 											})()}
@@ -1160,12 +1537,12 @@ export function Analytics() {
 											title="Review quality trend"
 											subtitle={`Earlier vs recent half of the range (split at ${shortDate(derived.splitDate)}). Is the reviewer getting better?`}
 										>
-											<table className="w-full border-collapse text-label">
+											<table {...stylex.props(sx.wFull, sx.borderCollapse, typography.label)}>
 												<thead>
-													<tr className="text-left text-meta text-faint">
-														<th className="pb-1.5 font-medium">Metric</th>
-														<th className="pb-1.5 text-right font-medium">Earlier</th>
-														<th className="pb-1.5 text-right font-medium">Recent</th>
+													<tr {...stylex.props(sx.textLeft, sx.textFaint, typography.meta)}>
+														<th {...stylex.props(sx.pb15, sx.fontMedium)}>Metric</th>
+														<th {...stylex.props(sx.pb15, sx.textRight, sx.fontMedium)}>Earlier</th>
+														<th {...stylex.props(sx.pb15, sx.textRight, sx.fontMedium)}>Recent</th>
 													</tr>
 												</thead>
 												<tbody>
@@ -1185,16 +1562,16 @@ export function Analytics() {
 															["Withheld by noise filter", fmtInt(earlier.withheld), fmtInt(recent.withheld)],
 														];
 														return rows.map(([label, a, b]) => (
-															<tr key={label} className="border-t border-line">
-																<td className="py-1.5 text-fg">{label}</td>
-																<td className="py-1.5 text-right tabular-nums text-dim">{a}</td>
-																<td className="py-1.5 text-right tabular-nums text-dim">{b}</td>
+															<tr key={label} {...stylex.props(sx.borderT, sx.borderLine)}>
+																<td {...stylex.props(sx.py15, sx.textFg)}>{label}</td>
+																<td {...mergeStylexProps("", sx.tabularNums, sx.py15, sx.textRight, sx.textDim)}>{a}</td>
+																<td {...mergeStylexProps("", sx.tabularNums, sx.py15, sx.textRight, sx.textDim)}>{b}</td>
 															</tr>
 														));
 													})()}
 												</tbody>
 											</table>
-											<p className="m-0 mt-2 text-supporting text-faint">
+											<p {...stylex.props(sx.m0, sx.mt2, sx.textFaint, typography.supporting)}>
 												Addressed = author acted on the finding · pushback = author explicitly rejected it · reviews-run
 												metrics collect from Jul 28 on. High addressed rate + low pushback/missed bugs = healthier reviews.
 											</p>
@@ -1203,79 +1580,79 @@ export function Analytics() {
 								)}
 							</div>
 
-							<div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2">
+							<div {...mergeStylexProps("", sx.lgGridCols2, sx.mt4, sx.grid, sx.gridCols1, sx.gap3)}>
 								<ChartCard title="Models" subtitle="Tokens and cost per model">
-									<div className="overflow-x-auto">
-										<table className="w-full border-collapse text-label">
+									<div {...stylex.props(sx.overflowXAuto)}>
+										<table {...stylex.props(sx.wFull, sx.borderCollapse, typography.label)}>
 											<thead>
-												<tr className="text-left text-meta text-faint">
+												<tr {...stylex.props(sx.textLeft, sx.textFaint, typography.meta)}>
 													{/* Headline numbers first, breakdown after: at phone width the
 													    table scrolls, and Tokens/Cost are what must survive the cut. */}
-													<th className="pb-1.5 font-medium">Model</th>
-													<th className="pb-1.5 text-right font-medium">Requests</th>
-													<th className="pb-1.5 text-right font-medium">Tokens</th>
-													<th className="pb-1.5 text-right font-medium">Cost</th>
-													<th className="pb-1.5 text-right font-medium">In</th>
-													<th className="pb-1.5 text-right font-medium">Out</th>
-													<th className="pb-1.5 text-right font-medium">Cache read</th>
+													<th {...stylex.props(sx.pb15, sx.fontMedium)}>Model</th>
+													<th {...stylex.props(sx.pb15, sx.textRight, sx.fontMedium)}>Requests</th>
+													<th {...stylex.props(sx.pb15, sx.textRight, sx.fontMedium)}>Tokens</th>
+													<th {...stylex.props(sx.pb15, sx.textRight, sx.fontMedium)}>Cost</th>
+													<th {...stylex.props(sx.pb15, sx.textRight, sx.fontMedium)}>In</th>
+													<th {...stylex.props(sx.pb15, sx.textRight, sx.fontMedium)}>Out</th>
+													<th {...stylex.props(sx.pb15, sx.textRight, sx.fontMedium)}>Cache read</th>
 												</tr>
 											</thead>
 											<tbody>
 												{data.models.slice(0, 10).map((m) => (
-													<tr key={m.model} className="border-t border-line">
-														<td className="max-w-32 truncate py-1.5 text-fg" title={m.model}>
+													<tr key={m.model} {...stylex.props(sx.borderT, sx.borderLine)}>
+														<td {...stylex.props(sx.maxW32, sx.truncate, sx.py15, sx.textFg)} title={m.model}>
 															{m.model}
 														</td>
-														<td className="py-1.5 text-right tabular-nums text-dim">{fmtInt(m.requests ?? m.turns)}</td>
-														<td className="py-1.5 text-right tabular-nums text-fg">
+														<td {...mergeStylexProps("", sx.tabularNums, sx.py15, sx.textRight, sx.textDim)}>{fmtInt(m.requests ?? m.turns)}</td>
+														<td {...mergeStylexProps("", sx.tabularNums, sx.py15, sx.textRight, sx.textFg)}>
 															{fmt(
 																m.totalTokens ??
 																	m.inputTokens + m.outputTokens + m.cacheReadTokens + m.cacheWriteTokens,
 															)}
 														</td>
-														<td className="py-1.5 text-right tabular-nums text-dim">{fmtUsdCell(m.costUsd ?? 0)}</td>
-														<td className="py-1.5 text-right tabular-nums text-dim">{fmt(m.inputTokens)}</td>
-														<td className="py-1.5 text-right tabular-nums text-dim">{fmt(m.outputTokens)}</td>
-														<td className="py-1.5 text-right tabular-nums text-dim">{fmt(m.cacheReadTokens)}</td>
+														<td {...mergeStylexProps("", sx.tabularNums, sx.py15, sx.textRight, sx.textDim)}>{fmtUsdCell(m.costUsd ?? 0)}</td>
+														<td {...mergeStylexProps("", sx.tabularNums, sx.py15, sx.textRight, sx.textDim)}>{fmt(m.inputTokens)}</td>
+														<td {...mergeStylexProps("", sx.tabularNums, sx.py15, sx.textRight, sx.textDim)}>{fmt(m.outputTokens)}</td>
+														<td {...mergeStylexProps("", sx.tabularNums, sx.py15, sx.textRight, sx.textDim)}>{fmt(m.cacheReadTokens)}</td>
 													</tr>
 												))}
 											</tbody>
 										</table>
 									</div>
 									{(data.totals.unpricedRequests ?? 0) > 0 && (
-										<p className="m-0 mt-2 text-supporting text-faint">
+										<p {...stylex.props(sx.m0, sx.mt2, sx.textFaint, typography.supporting)}>
 											A dash means the model carries no catalog price, so its requests are left out of the total.
 										</p>
 									)}
 								</ChartCard>
 								<ChartCard title="Repos" subtitle="Sessions, turns and PRs per repo">
-									<div className="overflow-x-auto">
-										<table className="w-full border-collapse text-label">
+									<div {...stylex.props(sx.overflowXAuto)}>
+										<table {...stylex.props(sx.wFull, sx.borderCollapse, typography.label)}>
 											<thead>
-												<tr className="text-left text-meta text-faint">
-													<th className="pb-1.5 font-medium">Repo</th>
-													<th className="pb-1.5 text-right font-medium">Sessions</th>
-													<th className="pb-1.5 text-right font-medium">Turns</th>
-													<th className="pb-1.5 text-right font-medium">Opened</th>
-													<th className="pb-1.5 text-right font-medium">Merged</th>
-													<th className="pb-1.5 text-right font-medium">Share</th>
+												<tr {...stylex.props(sx.textLeft, sx.textFaint, typography.meta)}>
+													<th {...stylex.props(sx.pb15, sx.fontMedium)}>Repo</th>
+													<th {...stylex.props(sx.pb15, sx.textRight, sx.fontMedium)}>Sessions</th>
+													<th {...stylex.props(sx.pb15, sx.textRight, sx.fontMedium)}>Turns</th>
+													<th {...stylex.props(sx.pb15, sx.textRight, sx.fontMedium)}>Opened</th>
+													<th {...stylex.props(sx.pb15, sx.textRight, sx.fontMedium)}>Merged</th>
+													<th {...stylex.props(sx.pb15, sx.textRight, sx.fontMedium)}>Share</th>
 												</tr>
 											</thead>
 											<tbody>
 												{data.repos.map((r) => (
-													<tr key={r.repo || "(none)"} className="border-t border-line">
-														<td className={`max-w-32 truncate py-1.5 ${r.repo ? "text-fg" : "text-faint"}`}>
+													<tr key={r.repo || "(none)"} {...stylex.props(sx.borderT, sx.borderLine)}>
+														<td className={[mergeStylexClassName("", sx.maxW32, sx.truncate, sx.py15), r.repo ? mergeStylexClassName("", sx.textFg) : mergeStylexClassName("", sx.textFaint)].filter(Boolean).join(" ")}>
 															{r.repo ? repoLabel(r.repo) : "No repo"}
 														</td>
-														<td className="py-1.5 text-right tabular-nums text-dim">{fmtInt(r.sessions || 0)}</td>
-														<td className="py-1.5 text-right tabular-nums text-dim">{fmtInt(r.turns || 0)}</td>
-														<td className="py-1.5 text-right tabular-nums text-dim">
-															{fmtInt(r.prsOpened)} <span className="text-faint">/ {fmtInt(r.allOpened)}</span>
+														<td {...mergeStylexProps("", sx.tabularNums, sx.py15, sx.textRight, sx.textDim)}>{fmtInt(r.sessions || 0)}</td>
+														<td {...mergeStylexProps("", sx.tabularNums, sx.py15, sx.textRight, sx.textDim)}>{fmtInt(r.turns || 0)}</td>
+														<td {...mergeStylexProps("", sx.tabularNums, sx.py15, sx.textRight, sx.textDim)}>
+															{fmtInt(r.prsOpened)} <span {...stylex.props(sx.textFaint)}>/ {fmtInt(r.allOpened)}</span>
 														</td>
-														<td className="py-1.5 text-right tabular-nums text-dim">
-															{fmtInt(r.prsMerged)} <span className="text-faint">/ {fmtInt(r.allMerged)}</span>
+														<td {...mergeStylexProps("", sx.tabularNums, sx.py15, sx.textRight, sx.textDim)}>
+															{fmtInt(r.prsMerged)} <span {...stylex.props(sx.textFaint)}>/ {fmtInt(r.allMerged)}</span>
 														</td>
-														<td className="py-1.5 text-right tabular-nums text-fg">
+														<td {...mergeStylexProps("", sx.tabularNums, sx.py15, sx.textRight, sx.textFg)}>
 															{r.allMerged ? `${Math.round((100 * r.prsMerged) / r.allMerged)}%` : "–"}
 														</td>
 													</tr>
@@ -1283,42 +1660,42 @@ export function Analytics() {
 											</tbody>
 										</table>
 									</div>
-									<p className="m-0 mt-2 text-supporting text-faint">
+									<p {...stylex.props(sx.m0, sx.mt2, sx.textFaint, typography.supporting)}>
 										Opened/Merged = {PRODUCT_NAME} PRs / all PRs in range · share = {PRODUCT_NAME}'s cut of merges.
 									</p>
 								</ChartCard>
 							</div>
 
-							<div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2">
+							<div {...mergeStylexProps("", sx.lgGridCols2, sx.mt4, sx.grid, sx.gridCols1, sx.gap3)}>
 								<ChartCard title="People" subtitle="Sessions and turns per person">
-									<div className="overflow-x-auto">
-										<table className="w-full border-collapse text-label">
+									<div {...stylex.props(sx.overflowXAuto)}>
+										<table {...stylex.props(sx.wFull, sx.borderCollapse, typography.label)}>
 											<thead>
-												<tr className="text-left text-meta text-faint">
-													<th className="pb-1.5 font-medium">Person</th>
-													<th className="pb-1.5 text-right font-medium">Created</th>
-													<th className="pb-1.5 text-right font-medium">Active</th>
-													<th className="pb-1.5 text-right font-medium">Turns</th>
+												<tr {...stylex.props(sx.textLeft, sx.textFaint, typography.meta)}>
+													<th {...stylex.props(sx.pb15, sx.fontMedium)}>Person</th>
+													<th {...stylex.props(sx.pb15, sx.textRight, sx.fontMedium)}>Created</th>
+													<th {...stylex.props(sx.pb15, sx.textRight, sx.fontMedium)}>Active</th>
+													<th {...stylex.props(sx.pb15, sx.textRight, sx.fontMedium)}>Turns</th>
 												</tr>
 											</thead>
 											<tbody>
 												{data.people.slice(0, 12).map((p) => (
-													<tr key={p.name} className="border-t border-line">
+													<tr key={p.name} {...stylex.props(sx.borderT, sx.borderLine)}>
 														{/* A surface row carries real work but names nobody, so it is
 														    left out of the People active count. Dim it, or the table
 														    and that number look like they disagree. */}
 														<td
-															className={`max-w-40 py-1.5 ${p.unattributed ? "text-faint" : "text-fg"}`}
+															className={[mergeStylexClassName("", sx.maxW40, sx.py15), p.unattributed ? mergeStylexClassName("", sx.textFaint) : mergeStylexClassName("", sx.textFg)].filter(Boolean).join(" ")}
 															title={p.unattributed ? `Sessions from ${p.name} with no person recorded` : undefined}
 														>
-															<span className="flex items-center gap-2">
+															<span {...stylex.props(sx.flex, sx.itemsCenter, sx.gap2)}>
 																{p.unattributed ? null : <UserAvatar name={p.name} size={18} />}
-																<span className="min-w-0 truncate">{p.name}</span>
+																<span {...stylex.props(sx.minW0, sx.truncate)}>{p.name}</span>
 															</span>
 														</td>
-														<td className="py-1.5 text-right tabular-nums text-dim">{fmtInt(p.sessionsCreated)}</td>
-														<td className="py-1.5 text-right tabular-nums text-dim">{fmtInt(p.sessionsActive)}</td>
-														<td className="py-1.5 text-right tabular-nums text-dim">{fmtInt(p.turns)}</td>
+														<td {...mergeStylexProps("", sx.tabularNums, sx.py15, sx.textRight, sx.textDim)}>{fmtInt(p.sessionsCreated)}</td>
+														<td {...mergeStylexProps("", sx.tabularNums, sx.py15, sx.textRight, sx.textDim)}>{fmtInt(p.sessionsActive)}</td>
+														<td {...mergeStylexProps("", sx.tabularNums, sx.py15, sx.textRight, sx.textDim)}>{fmtInt(p.turns)}</td>
 													</tr>
 												))}
 											</tbody>
@@ -1326,25 +1703,25 @@ export function Analytics() {
 									</div>
 								</ChartCard>
 								<ChartCard title="Automations" subtitle="Runs, turns and errors per automation">
-									<div className="overflow-x-auto">
-										<table className="w-full border-collapse text-label">
+									<div {...stylex.props(sx.overflowXAuto)}>
+										<table {...stylex.props(sx.wFull, sx.borderCollapse, typography.label)}>
 											<thead>
-												<tr className="text-left text-meta text-faint">
-													<th className="pb-1.5 font-medium">Automation</th>
-													<th className="pb-1.5 text-right font-medium">Runs</th>
-													<th className="pb-1.5 text-right font-medium">Turns</th>
-													<th className="pb-1.5 text-right font-medium">Errors</th>
+												<tr {...stylex.props(sx.textLeft, sx.textFaint, typography.meta)}>
+													<th {...stylex.props(sx.pb15, sx.fontMedium)}>Automation</th>
+													<th {...stylex.props(sx.pb15, sx.textRight, sx.fontMedium)}>Runs</th>
+													<th {...stylex.props(sx.pb15, sx.textRight, sx.fontMedium)}>Turns</th>
+													<th {...stylex.props(sx.pb15, sx.textRight, sx.fontMedium)}>Errors</th>
 												</tr>
 											</thead>
 											<tbody>
 												{data.automations.slice(0, 12).map((a) => (
-													<tr key={a.name} className="border-t border-line">
-														<td className="max-w-44 truncate py-1.5 text-fg" title={a.name}>
+													<tr key={a.name} {...stylex.props(sx.borderT, sx.borderLine)}>
+														<td {...stylex.props(sx.maxW44, sx.truncate, sx.py15, sx.textFg)} title={a.name}>
 															{a.name}
 														</td>
-														<td className="py-1.5 text-right tabular-nums text-dim">{fmtInt(a.runs)}</td>
-														<td className="py-1.5 text-right tabular-nums text-dim">{fmtInt(a.turns)}</td>
-														<td className={`py-1.5 text-right tabular-nums ${a.errors ? "text-red" : "text-faint"}`}>
+														<td {...mergeStylexProps("", sx.tabularNums, sx.py15, sx.textRight, sx.textDim)}>{fmtInt(a.runs)}</td>
+														<td {...mergeStylexProps("", sx.tabularNums, sx.py15, sx.textRight, sx.textDim)}>{fmtInt(a.turns)}</td>
+														<td className={[mergeStylexClassName("", sx.py15, sx.textRight, sx.tabularNums), a.errors ? mergeStylexClassName("", sx.textRed) : mergeStylexClassName("", sx.textFaint)].filter(Boolean).join(" ")}>
 															{fmtInt(a.errors)}
 														</td>
 													</tr>
@@ -1356,7 +1733,7 @@ export function Analytics() {
 							</div>
 
 							{allRepoRows.length > 0 && (
-								<div className="mt-4">
+								<div {...stylex.props(sx.mt4)}>
 									<ChartCard
 										title="Repo activity per person"
 										subtitle={
@@ -1397,12 +1774,12 @@ export function Analytics() {
 							)}
 
 							{data.prs.length > 0 && (
-								<div className="mt-4">
+								<div {...stylex.props(sx.mt4)}>
 									<ChartCard
 										title={`Pull requests from ${PRODUCT_NAME}`}
 										subtitle={`${fmtInt(data.prs.length)} PRs opened or merged in range`}
 									>
-										<div className="flex flex-col">
+										<div {...stylex.props(sx.flex, sx.flexCol)}>
 											{(showAllPrs ? data.prs : data.prs.slice(0, 12)).map((pr) => {
 												const state = PR_STATE[pr.state] || PR_STATE.OPEN;
 												return (
@@ -1410,19 +1787,18 @@ export function Analytics() {
 														key={`${pr.repo}#${pr.number}`}
 														href={pr.url}
 														target="_blank"
-														rel="noopener noreferrer"
-														className="-mx-2 flex items-center gap-2.5 rounded-row px-2 py-1.5 text-label no-underline hover:bg-hover"
+														rel="noopener noreferrer" {...mergeStylexProps("", sx.hoverBgHover, sx.Mx2, sx.flex, sx.itemsCenter, sx.gap25, sx.roundedRow, sx.px2, sx.py15, sx.noUnderline, typography.label)}
 													>
 														<span
-															className="size-2 shrink-0 rounded-full"
+															{...stylex.props(sx.size2, sx.shrink0, sx.roundedFull)}
 															style={{ background: state.color }}
 														/>
-														<span className="shrink-0 tabular-nums text-faint">
+														<span {...mergeStylexProps("", sx.tabularNums, sx.shrink0, sx.textFaint)}>
 															{repoLabel(pr.repo)}#{pr.number}
 														</span>
-														<span className="min-w-0 flex-1 truncate text-fg">{pr.title}</span>
-														<span className="hidden shrink-0 text-faint sm:inline">{state.label}</span>
-														<span className="shrink-0 tabular-nums text-faint">
+														<span {...stylex.props(sx.minW0, sx.flex1, sx.truncate, sx.textFg)}>{pr.title}</span>
+														<span {...mergeStylexProps("", sx.smInline, sx.hidden, sx.shrink0, sx.textFaint)}>{state.label}</span>
+														<span {...mergeStylexProps("", sx.tabularNums, sx.shrink0, sx.textFaint)}>
 															{shortDate(pr.mergedAt || pr.createdAt)}
 														</span>
 													</a>
@@ -1432,7 +1808,7 @@ export function Analytics() {
 										{data.prs.length > 12 && (
 											<Button
 												size="sm"
-												className="mt-2 text-control-label"
+												className={mergeStylexOverrideClassName("", sx.mt2, typography.controlLabel)}
 												onClick={() => setShowAllPrs((v) => !v)}
 											>
 												{showAllPrs ? "Show fewer" : `Show all ${fmtInt(data.prs.length)}`}

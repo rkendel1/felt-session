@@ -14,7 +14,7 @@ test("the Desk modal keeps its full conversation until Clear chat", async () => 
 	expect(overlay).not.toContain("staleAfterMs");
 	// Transcript virtualization must bind to the modal's own scrolling pane.
 	expect(conversation).toContain(
-		'"viewer-messages min-h-0 flex-1 overflow-y-auto',
+		'mergeStylexProps("viewer-messages", sx.minH0, sx.flex1, sx.overflowYAuto',
 	);
 	expect(conversation).toContain(
 		"entries.filter((e) => !e.timestamp || e.timestamp > hideBefore)",

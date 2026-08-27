@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useIsPhone } from "../hooks/useIsPhone";
 import { useScrollEdge } from "../hooks/useScrollEdge";
-import { cn } from "../ui/cn";
+import { cn, mergeStylexProps, mergeStylexClassName, mergeStylexOverrideClassName } from "../ui/cn";
 import { useAuthStatus } from "./UserPicker";
 import {
 	SETTINGS_BACK,
@@ -63,6 +63,240 @@ import { RunnersPanel } from "./settings/RunnersPanel";
 import { SettingsAccountCard, SettingsAccountFooter } from "./SettingsAccount";
 import { SetupPanel } from "./Setup";
 import type { Workspace } from "../lib/types";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	relative: {
+			position: "relative"
+	},
+	minW0: {
+			minWidth: "0"
+	},
+	flex1: {
+			flex: "1"
+	},
+	block: {
+			display: "block"
+	},
+	truncate: {
+			textOverflow: "ellipsis",
+			whiteSpace: "nowrap",
+			overflow: "hidden"
+	},
+	fontNormal: {
+			fontWeight: "var(--font-weight-normal)"
+	},
+	textFaint: {
+			color: "var(--text-faint)"
+	},
+	px25: {
+			paddingInline: "10px"
+	},
+	py3: {
+			paddingBlock: "12px"
+	},
+	absolute: {
+			position: "absolute"
+	},
+	left3: {
+			left: "12px"
+	},
+	right3: {
+			right: "12px"
+	},
+	minH0: {
+			minHeight: "0"
+	},
+	overflowHidden: {
+			overflow: "hidden"
+	},
+	mb2: {
+			marginBottom: "8px"
+	},
+	mt5: {
+			marginTop: "20px"
+	},
+	px1: {
+			paddingInline: "4px"
+	},
+	fontSemibold: {
+			fontWeight: "var(--font-weight-semibold)"
+	},
+	rounded2xl: {
+			borderRadius: "calc(22px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	border: {
+			borderStyle: "solid",
+			borderWidth: "1px"
+	},
+	borderDividerSoft: {
+			borderColor: "var(--divider-soft)"
+	},
+	bgSettingsPlate: {
+			backgroundColor: "var(--settings-plate)"
+	},
+	flex: {
+			display: "flex"
+	},
+	wFull: {
+			width: "100%"
+	},
+	itemsCenter: {
+			alignItems: "center"
+	},
+	gap3: {
+			gap: "12px"
+	},
+	border0: {
+			borderStyle: "solid",
+			borderWidth: "0"
+	},
+	bgTransparent: {
+			backgroundColor: "transparent"
+	},
+	px35: {
+			paddingInline: "14px"
+	},
+	textLeft: {
+			textAlign: "left"
+	},
+	h7: {
+			height: "28px"
+	},
+	w7: {
+			width: "28px"
+	},
+	shrink0: {
+			flexShrink: "0"
+	},
+	justifyCenter: {
+			justifyContent: "center"
+	},
+	textDim: {
+			color: "var(--text-dim)"
+	},
+	fontMedium: {
+			fontWeight: "var(--font-weight-medium)"
+	},
+	textFg: {
+			color: "var(--text)"
+	},
+	mt6: {
+			marginTop: "24px"
+	},
+	leadingNormal: { lineHeight: "var(--leading-normal)" },
+	searchIcon: {
+		pointerEvents: "none",
+		position: "absolute",
+		top: "50%",
+		transform: "translateY(-50%)",
+		color: "var(--text-faint)",
+	},
+	searchIconSheet: { left: "14px" },
+	searchIconDesktop: { left: "8px" },
+	searchInputSheet: {
+		height: "40px",
+		borderRadius: "calc(infinity * 1px)",
+		borderColor: "transparent",
+		backgroundColor: "var(--bg-raised)",
+		paddingLeft: "44px",
+
+		cornerShape: "var(--cs)",},
+	searchInputDesktop: { paddingLeft: "32px" },
+	searchInputValueSheet: { paddingRight: "44px" },
+	searchInputValueDesktop: { paddingRight: "32px" },
+	clearSearch: {
+		position: "absolute",
+		top: "50%",
+		display: "flex",
+		transform: "translateY(-50%)",
+		cursor: "pointer",
+		alignItems: "center",
+		justifyContent: "center",
+		borderStyle: "none",
+		backgroundColor: "transparent",
+		color: "var(--text-faint)",
+		":hover": { "@media (hover: hover)": {
+			backgroundColor: "var(--hover)",
+			color: "var(--text)",
+		} },
+	},
+	clearSearchSheet: {
+		right: "6px",
+		width: "32px",
+		height: "32px",
+		borderRadius: "calc(infinity * 1px)",
+
+		cornerShape: "var(--cs)",},
+	clearSearchDesktop: {
+		right: "4px",
+		width: "24px",
+		height: "24px",
+		borderRadius: "calc(7px * var(--rf))",
+
+		cornerShape: "var(--cs)",},
+	pageEase: {
+		transitionProperty: "transform",
+		transitionDuration: "var(--dur-lg)",
+		transitionTimingFunction: "var(--ease)",
+	},
+	insetPage: { position: "absolute", inset: 0 },
+	rootPageBack: { transform: "translateX(-33.333333%)" },
+	detailPage: {
+		position: "absolute",
+		inset: 0,
+		display: "flex",
+		flexDirection: "column",
+		backgroundColor: "var(--bg)",
+	},
+	detailVisible: { transform: "translateX(0)" },
+	detailHidden: { transform: "translateX(100%)" },
+
+	afterAbsolute: {
+		"::after": {
+			"content": "var(--tw-content)",
+			"position": "absolute"
+		}
+	},
+	afterBottom0: {
+		"::after": {
+			"content": "var(--tw-content)",
+			"bottom": "0"
+		}
+	},
+	afterLeft54px: {
+		"::after": {
+			"content": "var(--tw-content)",
+			"left": "54px"
+		}
+	},
+	afterRight0: {
+		"::after": {
+			"content": "var(--tw-content)",
+			"right": "0"
+		}
+	},
+	afterHPx: {
+		"::after": {
+			"content": "var(--tw-content)",
+			"height": "1px"
+		}
+	},
+	afterBgDividerSoft: {
+		"::after": {
+			"content": "var(--tw-content)",
+			"backgroundColor": "var(--divider-soft)"
+		}
+	},
+	activeBgHover: {
+		":active": {
+			"backgroundColor": "var(--hover)"
+		}
+	},
+});
 
 // The full-window Settings surface: a left sub-nav + a scrolling body, reached
 // from the "Settings" item in the account menu. Designed to grow — each area is
@@ -94,7 +328,7 @@ const GALLERY_SECTIONS = new Set<SettingsSectionKey>(["library", "setup"]);
 // roles stay compact at 110%. The descendant rules deliberately beat local
 // one-off leading utilities so every section follows the page-level rhythm.
 const SETTINGS_LEADING =
-	"leading-normal [&_*]:!leading-normal " +
+	"[&_*]:!leading-normal " +
 	"[&_h1]:!leading-[1.1] [&_h2]:!leading-[1.1] [&_h3]:!leading-[1.1] " +
 	"[&_h4]:!leading-[1.1] [&_h5]:!leading-[1.1] [&_h6]:!leading-[1.1] " +
 	"[&_.font-title]:!leading-[1.1] [&_.text-item-title]:!leading-[1.1] " +
@@ -150,13 +384,10 @@ function NavSearch({
 	// or stick the strip around it without moving the icons off the field.
 	return (
 		<div className={className} ref={ref}>
-			<div className="relative">
+			<div {...stylex.props(sx.relative)}>
 				<IconSearch
 					size={sheet ? 20 : 18}
-					className={cn(
-						"pointer-events-none absolute top-1/2 -translate-y-1/2 text-faint",
-						sheet ? "left-3.5" : "left-2",
-					)}
+					className={mergeStylexOverrideClassName("", sx.searchIcon, sheet ? sx.searchIconSheet : sx.searchIconDesktop)}
 				/>
 				<Input
 					value={value}
@@ -173,13 +404,12 @@ function NavSearch({
 					size={sheet ? "lg" : "md"}
 					className={cn(
 						"[&::-webkit-search-cancel-button]:hidden",
-						// `rounded-full`, not the app's squircle corner: a capsule is what
-						// iOS puts a search field in, and base.css grants the squircle to
-						// every `rounded-*` EXCEPT this one, so it is also the spelling
-						// that gets true round ends rather than a superellipse.
-						sheet
-							? cn("h-10 rounded-full border-transparent bg-raised pl-11 text-input-phone", value && "pr-11")
-							: cn("pl-8", value && "pr-8"),
+						stylex.props(
+							// A true capsule, rather than the app's squircle corner.
+							sheet ? sx.searchInputSheet : sx.searchInputDesktop,
+							sheet && typography.inputPhone,
+							Boolean(value) && (sheet ? sx.searchInputValueSheet : sx.searchInputValueDesktop),
+						).className,
 					)}
 					onChange={(e) => onChange(e.target.value)}
 					onKeyDown={(e) => {
@@ -197,10 +427,10 @@ function NavSearch({
 					<button
 						type="button"
 						aria-label="Clear search"
-						className={cn(
-							"absolute top-1/2 flex -translate-y-1/2 cursor-pointer items-center justify-center border-none bg-transparent text-faint hover:bg-hover hover:text-fg",
+						{...stylex.props(
+							sx.clearSearch,
 							// Round inside a capsule; the desktop field keeps the app's corner.
-							sheet ? "right-1.5 size-8 rounded-full" : "right-1 size-6 rounded-md",
+							sheet ? sx.clearSearchSheet : sx.clearSearchDesktop,
 						)}
 						onClick={() => onChange("")}
 					>
@@ -328,7 +558,7 @@ export function Settings({
 	const firstHit = shown[0]?.hits[0]?.item;
 
 	return (
-		<div className={cn(SETTINGS_PAGE, SETTINGS_LEADING)}>
+		<div className={cn(SETTINGS_PAGE, SETTINGS_LEADING, stylex.props(sx.leadingNormal).className)}>
 			{/* Back and search stay put; only the section list scrolls, so neither
 			    they nor the account footer are lost once the list outgrows the nav. */}
 			<aside className={SETTINGS_NAV}>
@@ -358,10 +588,10 @@ export function Settings({
 									onClick={() => onSelect(s.key)}
 								>
 									<span className={SETTINGS_NAV_ICON}>{s.icon}</span>
-									<span className="min-w-0 flex-1">
+									<span {...stylex.props(sx.minW0, sx.flex1)}>
 										{s.label}
 										{hint && (
-											<span className="block truncate text-meta font-normal text-faint">
+											<span {...stylex.props(sx.block, sx.truncate, sx.fontNormal, sx.textFaint, typography.meta)}>
 												{hint}
 											</span>
 										)}
@@ -371,7 +601,7 @@ export function Settings({
 						</div>
 					))}
 					{shown.length === 0 && (
-						<div className="px-2.5 py-3 text-meta text-faint">
+						<div {...stylex.props(sx.px25, sx.py3, sx.textFaint, typography.meta)}>
 							Nothing matches “{query}”.
 						</div>
 					)}
@@ -459,20 +689,18 @@ function MobileSettings({
 	const detail = section ?? null;
 	const shownSection = detail ?? lastSection;
 	const shownLabel = SECTIONS.find((s) => s.key === shownSection)?.label;
-	const pageEase = "transition-transform duration-[var(--dur-lg)] ease-[var(--ease)]";
-
 	return (
 		<PhonePage
 			onClose={onBack}
 			label="Settings"
-			className={cn("settings-sheet", SETTINGS_LEADING)}
+			className={cn("settings-sheet", SETTINGS_LEADING, stylex.props(sx.leadingNormal).className)}
 		>
 			{(dismiss) => (
 				<>
 					<PhoneTopBar>
 						{detail && (
 							<SheetIconButton
-								className="absolute left-3"
+								className={mergeStylexOverrideClassName("", sx.absolute, sx.left3)}
 								onClick={() => onShowRoot?.()}
 								aria-label="Back to settings"
 							>
@@ -487,7 +715,7 @@ function MobileSettings({
 							{detail ? shownLabel : "Settings"}
 						</PhoneTopBarTitle>
 						<SheetIconButton
-							className="absolute right-3"
+							className={mergeStylexOverrideClassName("", sx.absolute, sx.right3)}
 							onClick={dismiss}
 							aria-label="Close settings"
 						>
@@ -495,45 +723,44 @@ function MobileSettings({
 						</SheetIconButton>
 					</PhoneTopBar>
 
-					<div className="relative min-h-0 flex-1 overflow-hidden">
+					<div {...stylex.props(sx.relative, sx.minH0, sx.flex1, sx.overflowHidden)}>
 						{/* Root page: grouped section list over a bottom search bar.
 						    Parked slightly left while a detail page covers it, iOS-style. */}
 						<div
-							className={cn("absolute inset-0", pageEase, detail && "-translate-x-1/3")}
+							{...stylex.props(sx.insetPage, sx.pageEase, detail && sx.rootPageBack)}
 							aria-hidden={!!detail}
 						>
 							<div className={SETTINGS_SHEET_LIST}>
 								{shown.map((g) => (
 									<div key={g.group}>
-										<div className="mb-2 mt-5 px-1 text-control-label font-semibold text-faint">
+										<div {...stylex.props(sx.mb2, sx.mt5, sx.px1, sx.fontSemibold, sx.textFaint, typography.controlLabel)}>
 											{g.group}
 										</div>
-										<div className="overflow-hidden rounded-2xl border border-divider-soft bg-settings-plate">
+										<div {...stylex.props(sx.overflowHidden, sx.rounded2xl, sx.border, sx.borderDividerSoft, sx.bgSettingsPlate)}>
 											{g.hits.map(({ item: s, hint }) => (
 												<button
-													key={s.key}
-													className="relative flex w-full items-center gap-3 border-0 bg-transparent px-3.5 py-3 text-left after:absolute after:bottom-0 after:left-[54px] after:right-0 after:h-px after:bg-divider-soft last:after:hidden active:bg-hover"
+													key={s.key} {...mergeStylexProps("last:after:hidden", sx.afterAbsolute, sx.afterBottom0, sx.afterLeft54px, sx.afterRight0, sx.afterHPx, sx.afterBgDividerSoft, sx.activeBgHover, sx.relative, sx.flex, sx.wFull, sx.itemsCenter, sx.gap3, sx.border0, sx.bgTransparent, sx.px35, sx.py3, sx.textLeft)}
 													onClick={() => onSelect(s.key)}
 												>
-													<span className="flex h-7 w-7 shrink-0 items-center justify-center text-dim">
+													<span {...stylex.props(sx.flex, sx.h7, sx.w7, sx.shrink0, sx.itemsCenter, sx.justifyCenter, sx.textDim)}>
 														{s.icon}
 													</span>
-												<span className="min-w-0 flex-1 text-item-title font-medium text-fg">
+												<span {...stylex.props(sx.minW0, sx.flex1, sx.fontMedium, sx.textFg, typography.itemTitle)}>
 														{s.label}
 														{hint && (
-															<span className="block truncate text-meta font-normal text-faint">
+															<span {...stylex.props(sx.block, sx.truncate, sx.fontNormal, sx.textFaint, typography.meta)}>
 																{hint}
 															</span>
 														)}
 													</span>
-													<IconChevronRight size={20} className="shrink-0 text-faint" />
+													<IconChevronRight size={20} className={mergeStylexOverrideClassName("", sx.shrink0, sx.textFaint)} />
 												</button>
 											))}
 										</div>
 									</div>
 								))}
 								{shown.length === 0 && (
-									<div className="mt-6 px-1 text-supporting text-faint">
+									<div {...stylex.props(sx.mt6, sx.px1, sx.textFaint, typography.supporting)}>
 										Nothing matches “{query}”.
 									</div>
 								)}
@@ -555,10 +782,10 @@ function MobileSettings({
 
 						{/* Detail page: the picked section's panel, slid in from the right. */}
 						<div
-							className={cn(
-								"absolute inset-0 flex flex-col bg-surface",
-								pageEase,
-								detail ? "translate-x-0" : "translate-x-full",
+							{...stylex.props(
+								sx.detailPage,
+								sx.pageEase,
+								detail ? sx.detailVisible : sx.detailHidden,
 							)}
 							aria-hidden={!detail}
 						>

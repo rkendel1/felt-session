@@ -1,5 +1,21 @@
 import * as React from "react";
-import { cn } from "./cn";
+import { cn, mergeStylexProps, mergeStylexClassName } from "./cn";
+import * as stylex from "@stylexjs/stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	overflowHidden: {
+			overflow: "hidden"
+	},
+
+	roundedXl: {
+		"borderRadius": "calc(18px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	bgPanel: {
+		"backgroundColor": "var(--bg-panel)"
+	},
+});
 
 type CardElement = "article" | "div" | "section" | "ul";
 
@@ -21,7 +37,7 @@ export function Card({ as: Component = "div", className, ...props }: CardProps) 
 			// paints a plate lighter than a fill alone can hold and adds `border`
 			// at the call site. That is the documented carve-out and it belongs
 			// there, not here. This primitive stays borderless.
-			"rounded-xl bg-panel",
+			mergeStylexClassName("", sx.roundedXl, sx.bgPanel),
 			// `as="ul"` is one of the shapes this primitive offers, and the
 			// browser's own list styling doesn't know that: a card rendered as a
 			// list arrives with 40px of marker indent and 14px of vertical margin,
@@ -36,11 +52,7 @@ export function Card({ as: Component = "div", className, ...props }: CardProps) 
 
 export function CardList({ className, ...props }: CardProps) {
 	return (
-		<Card
-			className={cn(
-				"overflow-hidden [&>*+*]:border-t [&>*+*]:border-line",
-				className,
-			)}
+		<Card {...mergeStylexProps(cn("[&>*+*]:border-t [&>*+*]:border-line", className), sx.overflowHidden)}
 			{...props}
 		/>
 	);

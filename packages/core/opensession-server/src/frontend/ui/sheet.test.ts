@@ -8,8 +8,8 @@ test("settings uses a full-screen phone page without sheet drag chrome", async (
 
 	expect(settingsSource).toContain("<PhonePage");
 	expect(settingsSource).not.toContain('className={cn("settings-sheet h-[93dvh]"');
-	expect(sheetSource).toContain(
-		'"inset-0 h-dvh max-h-none rounded-none bg-surface',
-	);
+	expect(sheetSource).toContain('"height": "100dvh"');
+	expect(sheetSource).toContain('"maxHeight": "none"');
+	expect(sheetSource).toContain('"borderRadius": "0"');
 	expect(sheetSource).toContain("phone && !phonePage && showPhoneGrabber");
 });

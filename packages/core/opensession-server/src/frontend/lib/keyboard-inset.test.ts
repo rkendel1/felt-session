@@ -7,7 +7,7 @@ test("the phone palette rests on top of the keyboard instead of behind it", asyn
 
 	// The sheet is bottom-anchored in a fixed viewport, so the keyboard's own
 	// height is the only thing that keeps the composer on screen.
-	expect(sheet).toContain("phone:pb-[var(--kb-inset,0px)]");
+	expect(sheet).toContain("sharedClassStyles.phonePbVarKbInset0px");
 	expect(sheet).not.toContain("phone:pb-0 phone:pt-3");
 	// And it may never grow past the strip the keyboard leaves.
 	expect(sheet).toContain("phone:[body.kb-open_&]:max-h-[min(43dvh,100%)]");

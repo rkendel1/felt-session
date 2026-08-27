@@ -6,6 +6,107 @@ import { Button } from "../ui/button";
 import { getCurrentUser } from "./UserPicker";
 import { Input } from "../ui/input";
 import { Badge } from "../ui/badge";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+import { mergeStylexProps, mergeStylexClassName, mergeStylexOverrideClassName } from "../ui/cn";
+import { motionStyles } from "../styles/animations.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	flex: {
+			display: "flex"
+	},
+	flexCol: {
+			flexDirection: "column"
+	},
+	px2: {
+			paddingInline: "8px"
+	},
+	py15: {
+			paddingBlock: "6px"
+	},
+	Mx2: {
+			marginInline: "-8px"
+	},
+	textXs: {
+			fontSize: "var(--type-label)",
+			lineHeight: "var(--tw-leading,var(--text-xs--line-height))"
+	},
+	textFaint: {
+			color: "var(--text-faint)"
+	},
+	itemsCenter: {
+			alignItems: "center"
+	},
+	gap2: {
+			gap: "8px"
+	},
+	roundedMd: {
+			borderRadius: "calc(7px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	textFg: {
+			color: "var(--text)"
+	},
+	noUnderline: {
+			textDecorationLine: "none"
+	},
+	truncate: {
+			textOverflow: "ellipsis",
+			whiteSpace: "nowrap",
+			overflow: "hidden"
+	},
+	shrink0: {
+			flexShrink: "0"
+	},
+	mlAuto: {
+			marginLeft: "auto"
+	},
+	mt2: {
+			marginTop: "8px"
+	},
+	minW0: {
+			minWidth: "0"
+	},
+	flex1: {
+			flex: "1"
+	},
+	mt15: {
+			marginTop: "6px"
+	},
+	textRed: {
+			color: "var(--red)"
+	},
+
+	w15: {
+		"width": "6px"
+	},
+	h15: {
+		"height": "6px"
+	},
+	roundedFull: {
+		"borderRadius": "3.40282e38px"
+	,
+		cornerShape: "round"},
+
+	bgYellow: {
+		"backgroundColor": "var(--yellow)"
+	},
+	animatePulse: {
+		"animation": "var(--animate-pulse)"
+	},
+	bgLine: {
+		"backgroundColor": "var(--border)"
+	},
+
+	hoverBgSurface: {
+		"@media (hover: hover)": {
+			":hover": {
+				"backgroundColor": "var(--bg)"
+			}
+		}
+	},
+});
 
 /**
  * Sessions related to a PR: primarily via the server-enriched `prs` refs
@@ -150,9 +251,9 @@ export function PrSessionsList({
 	}
 
 	return (
-		<div className="flex flex-col">
+		<div {...stylex.props(sx.flex, sx.flexCol)}>
 			{sessions.length === 0 && (
-				<div className="px-2 py-1.5 -mx-2 text-xs text-faint">
+				<div {...stylex.props(sx.px2, sx.py15, sx.Mx2, sx.textXs, sx.textFaint)}>
 					No sessions are linked to this PR yet.
 				</div>
 			)}
@@ -166,41 +267,38 @@ export function PrSessionsList({
 						if (e.metaKey || e.ctrlKey || e.shiftKey) return;
 						e.preventDefault();
 						onOpenSession?.(s.id);
-					}}
-					className="-mx-2 flex items-center gap-2 rounded-md px-2 py-1.5 text-item-title text-fg no-underline hover:bg-surface"
+					}} {...mergeStylexProps("", sx.hoverBgSurface, sx.Mx2, sx.flex, sx.itemsCenter, sx.gap2, sx.roundedMd, sx.px2, sx.py15, sx.textFg, sx.noUnderline, typography.itemTitle)}
 				>
 					<span
-						className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-							s.isRunning ? "bg-yellow animate-pulse" : "bg-line"
-						}`}
+						className={[mergeStylexClassName("", sx.w15, sx.h15, sx.roundedFull, sx.shrink0), s.isRunning ? mergeStylexClassName("", sx.bgYellow, motionStyles.pulse) : mergeStylexClassName("", sx.bgLine)].filter(Boolean).join(" ")}
 					/>
-					<span className="truncate">{s.title}</span>
+					<span {...stylex.props(sx.truncate)}>{s.title}</span>
 					{s.id === currentSessionId && (
 						<Badge variant="outline">
 							current
 						</Badge>
 					)}
 					{s.archived && (
-						<span className="shrink-0 text-meta text-faint">archived</span>
+						<span {...stylex.props(sx.shrink0, sx.textFaint, typography.meta)}>archived</span>
 					)}
 					{s.startedBy && (
-						<span className="text-faint text-label shrink-0">{s.startedBy}</span>
+						<span {...stylex.props(sx.textFaint, sx.shrink0, typography.label)}>{s.startedBy}</span>
 					)}
-					<span className="text-faint text-label shrink-0 ml-auto">
+					<span {...stylex.props(sx.textFaint, sx.shrink0, sx.mlAuto, typography.label)}>
 						{relativeTime(s.lastActivity)}
 					</span>
 				</a>
 			))}
 			{canCompose && (
 				<form
-					className="mt-2 flex items-center gap-2"
+					{...stylex.props(sx.mt2, sx.flex, sx.itemsCenter, sx.gap2)}
 					onSubmit={(e) => {
 						e.preventDefault();
 						handleStart();
 					}}
 				>
 					<Input
-						className="min-w-0 flex-1"
+						className={mergeStylexOverrideClassName("", sx.minW0, sx.flex1)}
 						placeholder="Start a new session on this PR…"
 						value={prompt}
 						onChange={(e) => setPrompt(e.target.value)}
@@ -209,14 +307,14 @@ export function PrSessionsList({
 					<Button
 						type="submit"
 						variant="primary"
-						className="shrink-0 text-xs"
+						className={mergeStylexOverrideClassName("", sx.shrink0, sx.textXs)}
 						disabled={starting || !prompt.trim()}
 					>
 						{starting ? "Starting…" : "Start"}
 					</Button>
 				</form>
 			)}
-			{error && <div className="mt-1.5 text-xs text-red">{error}</div>}
+			{error && <div {...stylex.props(sx.mt15, sx.textXs, sx.textRed)}>{error}</div>}
 		</div>
 	);
 }

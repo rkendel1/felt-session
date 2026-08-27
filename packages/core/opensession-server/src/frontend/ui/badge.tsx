@@ -1,5 +1,126 @@
 import * as React from "react";
-import { cn } from "./cn";
+import { cn, mergeStylexProps, mergeStylexClassName } from "./cn";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	size15: {
+			width: "6px",
+			height: "6px"
+	},
+	shrink0: {
+			flexShrink: "0"
+	},
+	roundedFull: {
+			borderRadius: "calc(infinity * 1px)"
+	,
+		cornerShape: "round"},
+	bgCurrent: {
+			backgroundColor: "currentColor"
+	},
+	inlineFlex: {
+			display: "inline-flex"
+	},
+	itemsCenter: {
+			alignItems: "center"
+	},
+	gap1: {
+			gap: "4px"
+	},
+	roundedSm: {
+			borderRadius: "calc(4px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	px15: {
+			paddingInline: "6px"
+	},
+	py05: {
+			paddingBlock: "2px"
+	},
+	whitespaceNowrap: {
+			whiteSpace: "nowrap"
+	},
+
+	outline: {
+		"outlineStyle": "var(--tw-outline-style)",
+		"outlineWidth": "1px"
+	},
+
+	border: {
+		"borderStyle": "var(--tw-border-style)",
+		"borderWidth": "1px"
+	},
+	borderLine: {
+		"borderColor": "var(--border)"
+	},
+	textDim: {
+		"color": "var(--text-dim)"
+	},
+	borderAccent40: {
+		"borderColor": "var(--accent)",
+		"@supports (color: color-mix(in lab, red, red))": {
+			"borderColor": "color-mix(in oklab, var(--accent) 40%, transparent)"
+		}
+	},
+	textAccent: {
+		"color": "var(--accent-ink)"
+	},
+	borderGreen40: {
+		"borderColor": "var(--green)",
+		"@supports (color: color-mix(in lab, red, red))": {
+			"borderColor": "color-mix(in oklab, var(--green) 40%, transparent)"
+		}
+	},
+	textGreen: {
+		"color": "var(--green)"
+	},
+	borderYellow40: {
+		"borderColor": "var(--yellow)",
+		"@supports (color: color-mix(in lab, red, red))": {
+			"borderColor": "color-mix(in oklab, var(--yellow) 40%, transparent)"
+		}
+	},
+	textYellow: {
+		"color": "var(--yellow)"
+	},
+	borderRed40: {
+		"borderColor": "var(--red)",
+		"@supports (color: color-mix(in lab, red, red))": {
+			"borderColor": "color-mix(in oklab, var(--red) 40%, transparent)"
+		}
+	},
+	textRed: {
+		"color": "var(--red)"
+	},
+	borderBlue40: {
+		"borderColor": "var(--blue)",
+		"@supports (color: color-mix(in lab, red, red))": {
+			"borderColor": "color-mix(in oklab, var(--blue) 40%, transparent)"
+		}
+	},
+	textBlue: {
+		"color": "var(--blue)"
+	},
+	bgActive: {
+		"backgroundColor": "var(--bg-active)"
+	},
+	bgAccentSoft: {
+		"backgroundColor": "var(--accent-soft)"
+	},
+	bgGreenSoft: {
+		"backgroundColor": "var(--green-soft)"
+	},
+	bgYellowSoft: {
+		"backgroundColor": "var(--yellow-soft)"
+	},
+	bgRedSoft: {
+		"backgroundColor": "var(--red-soft)"
+	},
+	bgBlueSoft: {
+		"backgroundColor": "var(--blue-soft)"
+	},
+});
 
 /**
  * Badge — a label that reports state, not an action.
@@ -35,12 +156,12 @@ type Tone = "neutral" | "accent" | "success" | "warning" | "danger" | "info";
 type Variant = "soft" | "outline";
 
 const soft: Record<Tone, string> = {
-	neutral: "bg-active text-dim",
-	accent: "bg-accent-soft text-accent",
-	success: "bg-green-soft text-green",
-	warning: "bg-yellow-soft text-yellow",
-	danger: "bg-red-soft text-red",
-	info: "bg-blue-soft text-blue",
+	neutral: mergeStylexClassName("", sx.bgActive, sx.textDim),
+	accent: mergeStylexClassName("", sx.bgAccentSoft, sx.textAccent),
+	success: mergeStylexClassName("", sx.bgGreenSoft, sx.textGreen),
+	warning: mergeStylexClassName("", sx.bgYellowSoft, sx.textYellow),
+	danger: mergeStylexClassName("", sx.bgRedSoft, sx.textRed),
+	info: mergeStylexClassName("", sx.bgBlueSoft, sx.textBlue),
 };
 
 // The outline set borrows the tone's own ink for its edge at low strength, so
@@ -50,12 +171,12 @@ const outline: Record<Tone, string> = {
 	// that a soft badge reads against, and faint ink on top of that leaves the
 	// label barely there — which matters most here, since the neutral outline
 	// is the one that carries names (a branch, "current") rather than states.
-	neutral: "border border-line text-dim",
-	accent: "border border-accent/40 text-accent",
-	success: "border border-green/40 text-green",
-	warning: "border border-yellow/40 text-yellow",
-	danger: "border border-red/40 text-red",
-	info: "border border-blue/40 text-blue",
+	neutral: mergeStylexClassName("", sx.border, sx.borderLine, sx.textDim),
+	accent: mergeStylexClassName("", sx.border, sx.borderAccent40, sx.textAccent),
+	success: mergeStylexClassName("", sx.border, sx.borderGreen40, sx.textGreen),
+	warning: mergeStylexClassName("", sx.border, sx.borderYellow40, sx.textYellow),
+	danger: mergeStylexClassName("", sx.border, sx.borderRed40, sx.textRed),
+	info: mergeStylexClassName("", sx.border, sx.borderBlue40, sx.textBlue),
 };
 
 export type BadgeProps = React.ComponentPropsWithoutRef<"span"> & {
@@ -74,18 +195,12 @@ export function Badge({
 	...rest
 }: BadgeProps) {
 	return (
-		<span
-			className={cn(
-				"inline-flex shrink-0 items-center gap-1 rounded-sm px-1.5 py-0.5",
-				"text-meta whitespace-nowrap",
-				variant === "outline" ? outline[tone] : soft[tone],
-				className,
-			)}
+		<span {...mergeStylexProps(cn(variant === mergeStylexClassName("", sx.outline) ? outline[tone] : soft[tone], className), sx.inlineFlex, sx.shrink0, sx.itemsCenter, sx.gap1, sx.roundedSm, sx.px15, sx.py05, typography.meta, sx.whitespaceNowrap)}
 			{...rest}
 		>
 			{dot && (
 				<span
-					className="size-1.5 shrink-0 rounded-full bg-current"
+					{...stylex.props(sx.size15, sx.shrink0, sx.roundedFull, sx.bgCurrent)}
 					aria-hidden="true"
 				/>
 			)}

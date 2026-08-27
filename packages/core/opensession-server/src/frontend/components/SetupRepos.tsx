@@ -1,3 +1,5 @@
+import { mergeStylexProps, mergeStylexOverrideClassName } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import React, { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Button } from "../ui/button";
 import { Field, Input } from "../ui/input";
@@ -49,6 +51,210 @@ import {
 	type SetupStatus,
 } from "./setup-shared";
 import { Badge } from "../ui/badge";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	mb3: {
+			marginBottom: "calc(4px * 3)"
+	},
+	itemsStart: {
+			alignItems: "flex-start"
+	},
+	flex: {
+			display: "flex"
+	},
+	itemsCenter: {
+			alignItems: "center"
+	},
+	justifyBetween: {
+			justifyContent: "space-between"
+	},
+	gap2: {
+			gap: "calc(4px * 2)"
+	},
+	minW0: {
+			minWidth: "0"
+	},
+	truncate: {
+			overflow: "hidden",
+			textOverflow: "ellipsis",
+			whiteSpace: "nowrap"
+	},
+	hidden: {
+			display: "none"
+	},
+	shrink0: {
+			flexShrink: "0"
+	},
+	fontMono: {
+			fontFamily: "var(--mono)"
+	},
+	textDim: {
+			color: "var(--text-dim)"
+	},
+	flex1: {
+			flex: "1"
+	},
+	maxW28: {
+			maxWidth: "calc(4px * 28)"
+	},
+	flexCol: {
+			flexDirection: "column"
+	},
+	gap4: {
+			gap: "calc(4px * 4)"
+	},
+	gap25: {
+			gap: "calc(4px * 2.5)"
+	},
+	roundedFull: {
+			borderRadius: "calc(infinity * 1px)",
+		cornerShape: "round"
+	},
+	roundedSm: {
+			borderRadius: "calc(6px * var(--rf))",
+		cornerShape: "var(--cs)"
+	},
+	roundedMd: {
+			borderRadius: "calc(7px * var(--rf))",
+
+		cornerShape: "var(--cs)",},
+	outlineNone: {
+			outlineStyle: "none"
+	},
+	w248px: {
+			width: "248px"
+	},
+	p3: {
+			padding: "calc(4px * 3)"
+	},
+	mb2: {
+			marginBottom: "calc(4px * 2)"
+	},
+	fontMedium: {
+			fontWeight: "var(--font-weight-medium)"
+	},
+	hFull: {
+			height: "100%"
+	},
+	wFull: {
+			width: "100%"
+	},
+	roundedControl: {
+			borderRadius: "calc(12px * var(--rf))",
+
+		cornerShape: "var(--cs)",},
+	objectCover: {
+			objectFit: "cover"
+	},
+	justifyCenter: {
+			justifyContent: "center"
+	},
+	border: {
+			borderStyle: "solid",
+			borderWidth: "1px"
+	},
+	borderDashed: {
+			borderStyle: "dashed"
+	},
+	borderLine: {
+			borderColor: "var(--border)"
+	},
+	mt3: {
+			marginTop: "calc(4px * 3)"
+	},
+	cursorPointer: {
+			cursor: "pointer"
+	},
+	pt1: {
+			paddingTop: "4px"
+	},
+	h5: {
+			height: "calc(4px * 5)"
+	},
+	w5: {
+			width: "calc(4px * 5)"
+	},
+	textFg: {
+			color: "var(--text)"
+	},
+	mt15: {
+			marginTop: "calc(4px * 1.5)"
+	},
+	leadingRelaxed: {
+			lineHeight: "var(--leading-relaxed)"
+	},
+	textFaint: {
+			color: "var(--text-faint)"
+	},
+	mt2: {
+			marginTop: "calc(4px * 2)"
+	},
+	text15px: {
+			fontSize: "15px"
+	},
+	fontBold: {
+			fontWeight: "var(--font-weight-bold)"
+	},
+	gap3: {
+			gap: "calc(4px * 3)"
+	},
+	borderB: {
+			borderBottomStyle: "solid",
+			borderBottomWidth: "1px"
+	},
+	px1: {
+			paddingInline: "4px"
+	},
+	py2: {
+			paddingBlock: "calc(4px * 2)"
+	},
+	itemsBaseline: {
+			alignItems: "baseline"
+	},
+	mt05: {
+			marginTop: "calc(4px * 0.5)"
+	},
+	minH240px: {
+			minHeight: "240px"
+	},
+	textCenter: {
+			textAlign: "center"
+	},
+	maxWFull: {
+			maxWidth: "100%"
+	},
+	breakAll: {
+			wordBreak: "break-all"
+	},
+	maxW38ch: {
+			maxWidth: "38ch"
+	},
+	mt25: {
+			marginTop: "calc(4px * 2.5)"
+	},
+	maxH320px: {
+			maxHeight: "320px"
+	},
+	overflowYAuto: {
+			overflowY: "auto"
+	},
+	borderT: {
+			borderTopStyle: "solid",
+			borderTopWidth: "1px"
+	},
+	pt3: {
+			paddingTop: "calc(4px * 3)"
+	},
+	mt1: {
+			marginTop: "4px"
+	},
+	maxH240px: {
+			maxHeight: "240px"
+	},
+});
 
 // Settings → Setup → Repositories: the registered repos sessions work in,
 // plus an add flow. With a GitHub credential (a connected account or the bot
@@ -105,12 +311,12 @@ export function ReposSection({
 				// step, where the label needs no space above it. On the settings
 				// page it follows the default-repository card and keeps the
 				// group's own mt-9, which is what separates the two.
-				className={cn("first:mt-0", compact && "text-body text-fg/65")}
+				className={cn("first:mt-0", compact && utilityClassName("text-body text-fg/65"))}
 				actions={
 					<Button
 						size="sm"
 						variant="primary"
-						className="bg-fg text-bg hover:bg-fg/85"
+						className={utilityClassName("bg-fg text-bg hover:bg-fg/85")}
 						icon={pendingRepo ? <Spinner /> : <IconPlus size={16} />}
 						disabled={pendingRepo !== null}
 						onClick={() => setPickerOpen(true)}
@@ -133,10 +339,10 @@ export function ReposSection({
 			    pushing the registered repos down the page to browse a second
 			    list made the two read as one. Adding stays a detour. */}
 			{pickerError && !pickerOpen && (
-				<InlineAlert className="mb-3">{pickerError}</InlineAlert>
+				<InlineAlert className={mergeStylexOverrideClassName("", sx.mb3)}>{pickerError}</InlineAlert>
 			)}
 			<Modal.Root open={pickerOpen} onOpenChange={setPickerOpen}>
-				<Modal.Content widthClassName="max-w-[34rem]" initialFocus={pickerInput}>
+				<Modal.Content widthClassName={utilityClassName("max-w-[34rem]")} initialFocus={pickerInput}>
 					<Modal.Header
 						title="Add repository"
 						description="Clone a remote repository or register a Git checkout already on the server."
@@ -228,25 +434,25 @@ function RepositoryRow({
 	const lifecycle = repoLifecycleState(repo);
 
 	return (
-		<SettingRow className="items-start">
+		<SettingRow className={mergeStylexOverrideClassName("", sx.itemsStart)}>
 			<RepoTileButton
 				repo={appearance}
 				id={repo.id}
 				onChanged={onAppearanceChanged}
 			/>
 			<SettingRowText>
-				<div className="flex items-center justify-between gap-2">
-					<SettingRowTitle className="min-w-0 truncate">{repo.label}</SettingRowTitle>
-					<span className="hidden shrink-0 phone:inline-flex">
+				<div {...stylex.props(sx.flex, sx.itemsCenter, sx.justifyBetween, sx.gap2)}>
+					<SettingRowTitle className={mergeStylexOverrideClassName("", sx.minW0, sx.truncate)}>{repo.label}</SettingRowTitle>
+					<span {...mergeStylexProps("phone:inline-flex", sx.hidden, sx.shrink0)} >
 						<StateChip tone={lifecycle.tone} label={lifecycle.label} />
 					</span>
 				</div>
-				<SettingRowDescription className="truncate font-mono text-meta">
+				<SettingRowDescription className={mergeStylexOverrideClassName("", sx.truncate, sx.fontMono, typography.meta)}>
 					{repo.path}
 				</SettingRowDescription>
 			</SettingRowText>
-			<div className="flex shrink-0 items-center gap-2">
-				<span className="phone:hidden">
+			<div {...stylex.props(sx.flex, sx.shrink0, sx.itemsCenter, sx.gap2)}>
+				<span className={utilityClassName("phone:hidden")}>
 					<StateChip tone={lifecycle.tone} label={lifecycle.label} />
 				</span>
 				<RepoActionsMenu
@@ -373,9 +579,9 @@ setSaving(null);
 				</Menu.Trigger>
 				<Menu.Popup align="end" sideOffset={4}>
 					<Menu.Item onClick={openBranchDialog}>
-						<IconBranches size={17} className="text-dim" />
-						<span className="min-w-0 flex-1 truncate">Default branch</span>
-						<Menu.Shortcut className="max-w-28 truncate font-mono">
+						<IconBranches size={17} className={mergeStylexOverrideClassName("", sx.textDim)} />
+						<span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>Default branch</span>
+						<Menu.Shortcut className={mergeStylexOverrideClassName("", sx.maxW28, sx.truncate, sx.fontMono)}>
 							{defaultBranch}
 						</Menu.Shortcut>
 					</Menu.Item>
@@ -386,7 +592,7 @@ setSaving(null);
 						onCheckedChange={(next) => void saveWorktreeMode(next)}
 						closeOnClick
 					>
-						<span className="min-w-0 flex-1 truncate">Use isolated worktrees</span>
+						<span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>Use isolated worktrees</span>
 						<Menu.Check on={isolatedWorktrees} />
 					</Menu.CheckboxItem>
 				</Menu.Popup>
@@ -404,12 +610,12 @@ setSaving(null);
 				disablePointerDismissal={saving === "branch"}
 			>
 				<Modal.Content initialFocus={branchInputRef}>
-					<form className="flex flex-col gap-4" onSubmit={saveBranch}>
+					<form {...stylex.props(sx.flex, sx.flexCol, sx.gap4)} onSubmit={saveBranch}>
 						<Modal.Header
 							title={
-								<span className="flex items-center gap-2.5">
+								<span {...stylex.props(sx.flex, sx.itemsCenter, sx.gap25)}>
 									<RepoTile name={repo.id} size={28} />
-									<span className="min-w-0 truncate">Default branch</span>
+									<span {...stylex.props(sx.minW0, sx.truncate)}>Default branch</span>
 								</span>
 							}
 							description={`Choose the branch new sessions use for ${repo.label}.`}
@@ -417,7 +623,7 @@ setSaving(null);
 						<Field label="Branch">
 							<Input
 								ref={branchInputRef}
-								className="font-mono phone:min-h-11 phone:text-input-phone"
+								className={mergeStylexOverrideClassName("phone:min-h-11 phone:text-input-phone", sx.fontMono)}
 								value={branch}
 								onChange={(event) => {
 									setBranch(event.target.value);
@@ -436,7 +642,7 @@ setSaving(null);
 							<Button
 								type="button"
 								variant="ghost"
-								className="phone:min-h-11"
+								className={utilityClassName("phone:min-h-11")}
 								disabled={saving === "branch"}
 								onClick={() => setBranchDialogOpen(false)}
 							>
@@ -445,7 +651,7 @@ setSaving(null);
 							<Button
 								type="submit"
 								variant="primary"
-								className="phone:min-h-11"
+								className={utilityClassName("phone:min-h-11")}
 								disabled={!normalized || !changed || !!saving}
 							>
 								{saving === "branch" ? "Saving…" : "Save"}
@@ -523,23 +729,25 @@ setBusy(false);
 	return (
 		<Popover.Root>
 			<Popover.Trigger
-				className={cn(
-					"shrink-0 outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent,#6b8afd)]",
-					repo?.iconSource === "github" ? "rounded-full" : "rounded-sm",
+				className={mergeStylexOverrideClassName(
+					"focus-visible:ring-2 focus-visible:ring-[var(--accent,#6b8afd)]",
+					sx.shrink0,
+					sx.outlineNone,
+					repo?.iconSource === "github" ? sx.roundedFull : sx.roundedSm,
 				)}
 				aria-label={`Change ${id}'s icon`}
 			>
 				<RepoTile name={id} size={28} glow={glow} className="ring-1 ring-inset ring-line" />
 			</Popover.Trigger>
-			<Popover.Popup className="w-[248px] p-3" initialFocus>
-				<div className="mb-2 text-meta font-medium text-dim">Icon</div>
+			<Popover.Popup className={mergeStylexOverrideClassName("", sx.w248px, sx.p3)} initialFocus>
+				<div {...stylex.props(sx.mb2, sx.fontMedium, sx.textDim, typography.meta)}>Icon</div>
 				{/* Faded while automatic is on: these choices aren't in effect.
 				    Still live, though — picking one is how you leave automatic,
 				    so the fade never becomes a mode you have to escape first. */}
 				<div
 					className={cn(
-						"grid grid-cols-6 gap-2 transition-opacity duration-150",
-						autoActive && "opacity-40",
+						utilityClassName("grid grid-cols-6 gap-2 transition-opacity duration-150"),
+						autoActive && utilityClassName("opacity-40"),
 					)}
 				>
 					{REPO_TILE_COLORS.map((color) => (
@@ -564,7 +772,7 @@ setBusy(false);
 					<img
 						src={repoGithubAvatarUrl(id)}
 						alt=""
-						className="hidden"
+						{...stylex.props(sx.hidden)}
 						onLoad={() => setAvatarOk(true)}
 						onError={() => setAvatarOk(false)}
 					/>
@@ -578,7 +786,7 @@ setBusy(false);
 							<img
 								src={repoGithubAvatarUrl(id)}
 								alt=""
-								className="h-full w-full rounded-control object-cover"
+								{...stylex.props(sx.hFull, sx.wFull, sx.roundedControl, sx.objectCover)}
 							/>
 						</TileChoice>
 					)}
@@ -588,7 +796,7 @@ setBusy(false);
 						disabled={busy}
 						onClick={() => fileInput.current?.click()}
 					>
-						<span className="flex h-full w-full items-center justify-center rounded-control border border-dashed border-line text-dim">
+						<span {...stylex.props(sx.flex, sx.hFull, sx.wFull, sx.itemsCenter, sx.justifyCenter, sx.roundedControl, sx.border, sx.borderDashed, sx.borderLine, sx.textDim)}>
 							<IconArrowUpToLine size={14} />
 						</span>
 					</TileChoice>
@@ -596,7 +804,7 @@ setBusy(false);
 						ref={fileInput}
 						type="file"
 						accept="image/*"
-						className="hidden"
+						{...stylex.props(sx.hidden)}
 						onChange={(e) => {
 							const file = e.target.files?.[0];
 							// Cleared so picking the same file twice still fires.
@@ -608,11 +816,11 @@ setBusy(false);
 				{/* The default, as a switch: it's a mode, not a thirteenth
 				    choice. Off pins whatever it was giving, so leaving
 				    automatic never lands the repo somewhere it wasn't. */}
-				<label className="mt-3 flex cursor-pointer items-center gap-2 pt-1">
-					<span className="h-5 w-5 shrink-0">
+				<label {...stylex.props(sx.mt3, sx.flex, sx.cursorPointer, sx.itemsCenter, sx.gap2, sx.pt1)}>
+					<span {...stylex.props(sx.h5, sx.w5, sx.shrink0)}>
 						<LetterTile id={id} color={repo?.autoColor} />
 					</span>
-					<span className="min-w-0 flex-1 text-control-label text-fg">
+					<span {...stylex.props(sx.minW0, sx.flex1, sx.textFg, typography.controlLabel)}>
 						Automatic
 					</span>
 					<Switch
@@ -627,14 +835,14 @@ setBusy(false);
 						}
 					/>
 				</label>
-				<div className="mt-1.5 text-supporting leading-relaxed text-faint">
+				<div {...stylex.props(sx.mt15, sx.leadingRelaxed, sx.textFaint, typography.supporting)}>
 					{busy
 						? "Working…"
 						: avatarOk
 							? `Automatic keeps this repo on a color no other repo has. The avatar is ${repo?.ghRepo?.split("/")[0]}’s. Every repo that owner has shows the same picture.`
 							: "Automatic keeps this repo on a color no other repo has."}
 				</div>
-				{error && <InlineAlert className="mt-2">{error}</InlineAlert>}
+				{error && <InlineAlert className={mergeStylexOverrideClassName("", sx.mt2)}>{error}</InlineAlert>}
 			</Popover.Popup>
 		</Popover.Root>
 	);
@@ -663,9 +871,9 @@ function TileChoice({
 			disabled={disabled}
 			onClick={onClick}
 			className={cn(
-				"h-7 w-7 rounded-control outline-none transition-transform",
-				"hover:scale-110 focus-visible:ring-2 focus-visible:ring-[var(--accent,#6b8afd)]",
-				active && "ring-2 ring-fg ring-offset-2 ring-offset-panel",
+				utilityClassName("h-7 w-7 rounded-control outline-none transition-transform"),
+				utilityClassName("hover:scale-110 focus-visible:ring-2 focus-visible:ring-[var(--accent,#6b8afd)]"),
+				active && utilityClassName("ring-2 ring-fg ring-offset-2 ring-offset-panel"),
 			)}
 		>
 			{children}
@@ -678,7 +886,7 @@ function TileChoice({
 function LetterTile({ id, color }: { id: string; color?: string }) {
 	return (
 		<span
-			className="flex h-full w-full items-center justify-center rounded-control text-[15px] font-bold"
+			{...stylex.props(sx.flex, sx.hFull, sx.wFull, sx.itemsCenter, sx.justifyCenter, sx.roundedControl, sx.text15px, sx.fontBold)}
 			style={{ background: repoIconFill(color ?? repoColor(id)), color: REPO_TILE_INK }}
 		>
 			{repoLetter(id)}
@@ -735,10 +943,10 @@ function RepoPickRow({
 	onAdd: () => void;
 }) {
 	return (
-		<div className="flex items-center gap-3 border-b border-line px-1 py-2 last:border-b-0">
-			<div className="min-w-0 flex-1">
-				<div className="flex min-w-0 items-baseline gap-2">
-					<span className="truncate text-control-label font-medium text-fg">
+		<div {...mergeStylexProps("last:border-b-0", sx.flex, sx.itemsCenter, sx.gap3, sx.borderB, sx.borderLine, sx.px1, sx.py2)} >
+			<div {...stylex.props(sx.minW0, sx.flex1)}>
+				<div {...stylex.props(sx.flex, sx.minW0, sx.itemsBaseline, sx.gap2)}>
+					<span {...stylex.props(sx.truncate, sx.fontMedium, sx.textFg, typography.controlLabel)}>
 						{repo.fullName}
 					</span>
 					{repo.private && (
@@ -748,7 +956,7 @@ function RepoPickRow({
 					)}
 				</div>
 				{repo.description && (
-					<div className="mt-0.5 truncate text-supporting text-faint">
+					<div {...stylex.props(sx.mt05, sx.truncate, sx.textFaint, typography.supporting)}>
 						{repo.description}
 					</div>
 				)}
@@ -825,22 +1033,22 @@ function AddRepoPicker({
 		// No surface of its own: the dialog is already the card this sits on.
 		<div>
 			{pendingRepo && (
-				<div className="flex min-h-[240px] flex-col items-center justify-center text-center">
-					<LoadingState className="max-w-full [&>div]:max-w-full">
-						<span className="max-w-full break-all">
+				<div {...stylex.props(sx.flex, sx.minH240px, sx.flexCol, sx.itemsCenter, sx.justifyCenter, sx.textCenter)}>
+					<LoadingState className={mergeStylexOverrideClassName("[&>div]:max-w-full", sx.maxWFull)} >
+						<span {...stylex.props(sx.maxWFull, sx.breakAll)}>
 							{pendingRepo.action === "clone" ? "Cloning " : "Registering "}
 							{pendingRepo.label}…
 						</span>
 					</LoadingState>
-					<p className="m-0 mt-2 max-w-[38ch] text-supporting leading-relaxed text-dim">
+					<p {...mergeStylexProps("m-0", sx.mt2, sx.maxW38ch, sx.leadingRelaxed, sx.textDim, typography.supporting)} >
 						You can close this window. The repository will appear here when it is
 						ready.
 					</p>
 				</div>
 			)}
-			<div className={pendingRepo ? "hidden" : undefined}>
+			<div className={pendingRepo ? utilityClassName("hidden") : undefined}>
 				<Segmented
-					className="mb-3 w-full"
+					className={mergeStylexOverrideClassName("", sx.mb3, sx.wFull)}
 					label="Repository source"
 					value={mode}
 					onValueChange={(value) => {
@@ -848,22 +1056,22 @@ function AddRepoPicker({
 						setError(null);
 					}}
 				>
-					<SegmentedOption value="remote" className="flex flex-1 justify-center">
+					<SegmentedOption value="remote" className={mergeStylexOverrideClassName("", sx.flex, sx.flex1, sx.justifyCenter)}>
 						Remote
 					</SegmentedOption>
-					<SegmentedOption value="local" className="flex flex-1 justify-center">
+					<SegmentedOption value="local" className={mergeStylexOverrideClassName("", sx.flex, sx.flex1, sx.justifyCenter)}>
 						Local folder
 					</SegmentedOption>
 				</Segmented>
 				{mode === "local" && (
 					<>
-						<div className="text-supporting leading-relaxed text-dim">
+						<div {...stylex.props(sx.leadingRelaxed, sx.textDim, typography.supporting)}>
 							Use a Git checkout on the server with a working origin remote.
 						</div>
-						<div className="mt-2.5 flex items-center gap-2 phone:flex-col phone:items-stretch">
+						<div {...mergeStylexProps("phone:flex-col phone:items-stretch", sx.mt25, sx.flex, sx.itemsCenter, sx.gap2)} >
 							<input
 								ref={inputRef}
-								className={cn(settingsInputClass, "min-w-0 flex-1 font-mono")}
+								className={cn(settingsInputClass, utilityClassName("min-w-0 flex-1 font-mono"))}
 								value={localPath}
 								onChange={(e) => setLocalPath(e.target.value)}
 								placeholder="/srv/repos/repository"
@@ -885,7 +1093,7 @@ function AddRepoPicker({
 						</div>
 					</>
 				)}
-				<div className={mode === "remote" ? undefined : "hidden"}>
+				<div className={mode === "remote" ? undefined : utilityClassName("hidden")}>
 					<RemoteRepoPicker
 						active={mode === "remote" && !pendingRepo}
 						inputRef={inputRef}
@@ -893,7 +1101,7 @@ function AddRepoPicker({
 					/>
 				</div>
 			</div>
-			{error && <InlineAlert className="mt-2.5">{error}</InlineAlert>}
+			{error && <InlineAlert className={mergeStylexOverrideClassName("", sx.mt25)}>{error}</InlineAlert>}
 		</div>
 	);
 }
@@ -995,9 +1203,9 @@ function RemoteRepoPicker({
 						autoCapitalize="none"
 						spellCheck={false}
 					/>
-					<div className="mt-2 max-h-[320px] overflow-y-auto">
+					<div {...stylex.props(sx.mt2, sx.maxH320px, sx.overflowYAuto)}>
 						{filtered.length === 0 ? (
-							<EmptyState placement="row" className="px-1">
+							<EmptyState placement="row" className={mergeStylexOverrideClassName("", sx.px1)}>
 								No repositories match.
 							</EmptyState>
 						) : (
@@ -1013,7 +1221,7 @@ function RemoteRepoPicker({
 							))
 						)}
 					</div>
-					<div className="mt-2 text-meta text-faint">
+					<div {...stylex.props(sx.mt2, sx.textFaint, typography.meta)}>
 						Browsing the{
 							browse.source === "user" ? " connected account" : " GitHub App installation"
 						}. Only repos that credential can reach are listed.
@@ -1021,7 +1229,7 @@ function RemoteRepoPicker({
 				</>
 			) : (
 				<>
-					<div className="text-supporting leading-relaxed text-dim">
+					<div {...stylex.props(sx.leadingRelaxed, sx.textDim, typography.supporting)}>
 						{browseFailed ? (
 							<>Couldn&rsquo;t load the GitHub repo list right now.</>
 						) : browse?.appConfigured ? (
@@ -1042,7 +1250,7 @@ function RemoteRepoPicker({
 					</div>
 					{browse?.appConfigured && browse.appInstallUrl && (
 						<Button
-							className="mt-2.5"
+							className={mergeStylexOverrideClassName("", sx.mt25)}
 							variant="primary"
 							render={
 								<a href={browse.appInstallUrl} target="_blank" rel="noreferrer" />
@@ -1051,10 +1259,10 @@ function RemoteRepoPicker({
 							Install GitHub App
 						</Button>
 					)}
-					<div className="mt-2.5 flex items-center gap-2">
+					<div {...stylex.props(sx.mt25, sx.flex, sx.itemsCenter, sx.gap2)}>
 						<input
 							ref={inputRef}
-							className={cn(settingsInputClass, "flex-1 font-mono")}
+							className={cn(settingsInputClass, utilityClassName("flex-1 font-mono"))}
 							value={manual}
 							onChange={(e) => setManual(e.target.value)}
 							placeholder="owner/name"
@@ -1078,17 +1286,17 @@ function RemoteRepoPicker({
 			)}
 			{(csConfigured || csError) && (
 				<>
-					<div className="mt-3 border-t border-line pt-3 text-meta font-medium text-dim">
+					<div {...stylex.props(sx.mt3, sx.borderT, sx.borderLine, sx.pt3, sx.fontMedium, sx.textDim, typography.meta)}>
 						code.storage
 					</div>
 					{csError ? (
-						<InlineAlert className="mt-1.5">
+						<InlineAlert className={mergeStylexOverrideClassName("", sx.mt15)}>
 							code.storage is configured but its repo list failed: {csError}
 						</InlineAlert>
 					) : (
-						<div className="mt-1 max-h-[240px] overflow-y-auto">
+						<div {...stylex.props(sx.mt1, sx.maxH240px, sx.overflowYAuto)}>
 							{csFiltered.length === 0 ? (
-								<EmptyState placement="row" className="px-1">
+								<EmptyState placement="row" className={mergeStylexOverrideClassName("", sx.px1)}>
 									{filter.trim()
 										? "No code.storage repositories match."
 										: "No repositories visible to the org's signing key."}

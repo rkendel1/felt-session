@@ -15,6 +15,183 @@ import { CheckRow } from "./CheckRow";
 import { GitStatusRows } from "./GitStatus";
 import { CommitIcon } from "./PrViews";
 import { FileRow, ReviewerRow } from "./PrRows";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../../styles/typography.stylex";
+import { mergeStylexProps, mergeStylexClassName, mergeStylexOverrideClassName } from "../../ui/cn";
+import { motionStyles } from "../../styles/animations.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	m0: {
+			margin: "0"
+	},
+	px2: {
+			paddingInline: "8px"
+	},
+	pt1: {
+			paddingTop: "4px"
+	},
+	textRed: {
+			color: "var(--red)"
+	},
+	animatePulse14sInfinite: {
+			animation: "1.4s infinite pulse"
+	},
+	inlineFlex: {
+			display: "inline-flex"
+	},
+	gap15: {
+			gap: "6px"
+	},
+	textGreen: {
+			color: "var(--green)"
+	},
+	textYellow: {
+			color: "var(--yellow)"
+	},
+	mt1: {
+			marginTop: "4px"
+	},
+	textFaint: {
+			color: "var(--text-faint)"
+	},
+	flex: {
+			display: "flex"
+	},
+	flexCol: {
+			flexDirection: "column"
+	},
+	itemsStart: {
+			alignItems: "flex-start"
+	},
+	gap2: {
+			gap: "8px"
+	},
+	px15: {
+			paddingInline: "6px"
+	},
+	minW0: {
+			minWidth: "0"
+	},
+	flex1: {
+			flex: "1"
+	},
+	block: {
+			display: "block"
+	},
+	truncate: {
+			textOverflow: "ellipsis",
+			whiteSpace: "nowrap",
+			overflow: "hidden"
+	},
+	textFg: {
+			color: "var(--text)"
+	},
+	whitespacePreWrap: {
+			whiteSpace: "pre-wrap"
+	},
+	leadingRelaxed: {
+			lineHeight: "var(--leading-relaxed)"
+	},
+	textDim: {
+			color: "var(--text-dim)"
+	},
+	shrink0: {
+			flexShrink: "0"
+	},
+	itemsCenter: {
+			alignItems: "center"
+	},
+	gap3: {
+			gap: "12px"
+	},
+	pt15: {
+			paddingTop: "6px"
+	},
+	border0: {
+			borderStyle: "solid",
+			borderWidth: "0"
+	},
+	bgTransparent: {
+			backgroundColor: "transparent"
+	},
+	p0: {
+			padding: "0"
+	},
+	fontMedium: {
+			fontWeight: "var(--font-weight-medium)"
+	},
+	w4: {
+			width: "16px"
+	},
+	justifyCenter: {
+			justifyContent: "center"
+	},
+	scrollMt72px: {
+			scrollMarginTop: "72px"
+	},
+	borderB: {
+			borderBottomStyle: "solid",
+			borderBottomWidth: "1px"
+	},
+	borderLine: {
+			borderColor: "var(--border)"
+	},
+	py4: {
+			paddingBlock: "16px"
+	},
+	mb15: {
+			marginBottom: "6px"
+	},
+	px1: {
+			paddingInline: "4px"
+	},
+	fontSemibold: {
+			fontWeight: "var(--font-weight-semibold)"
+	},
+	pb1: {
+			paddingBottom: "4px"
+	},
+	pt2: {
+			paddingTop: "8px"
+	},
+
+	rotate90: {
+		"rotate": "90deg"
+	},
+
+	tabularNums: {
+		"--tw-numeric-spacing": "tabular-nums",
+		"fontVariantNumeric": "var(--tw-ordinal,) var(--tw-slashed-zero,) var(--tw-numeric-figure,) var(--tw-numeric-spacing,) var(--tw-numeric-fraction,)"
+	},
+	hoverTextFg: {
+		"@media (hover: hover)": {
+			":hover": {
+				"color": "var(--text)"
+			}
+		}
+	},
+	wFull: {
+		"width": "100%"
+	},
+	roundedRow: {
+		"borderRadius": "calc(12px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	py15: {
+		"paddingBlock": "6px"
+	},
+	textLeft: {
+		"textAlign": "left"
+	},
+	hoverBgHover: {
+		"@media (hover: hover)": {
+			":hover": {
+				"backgroundColor": "var(--hover)"
+			}
+		}
+	},
+});
 
 /**
  * The Overview page's metadata column: status, reviewers, checks, commits, the
@@ -118,7 +295,7 @@ export function ReviewRail({
           merging={merging}
           mergeScheduled={mergeScheduled}
         />
-        {mergeError && <p className="m-0 px-2 pt-1 text-supporting text-red">{mergeError}</p>}
+        {mergeError && <p {...stylex.props(sx.m0, sx.px2, sx.pt1, sx.textRed, typography.supporting)}>{mergeError}</p>}
       </RailSection>
 
       {caps.reviewers && reviewers.length > 0 && (
@@ -139,7 +316,7 @@ export function ReviewRail({
                 {checkSummary.failed > 0 ? (
                   <IconX size={15} />
                 ) : checkSummary.pending > 0 ? (
-                  <span className="pr-check-mark-pending animate-[pulse_1.4s_infinite]">●</span>
+                  <span {...mergeStylexProps("pr-check-mark-pending", sx.animatePulse14sInfinite)}>●</span>
                 ) : (
                   <IconCheck size={15} />
                 )}
@@ -153,15 +330,15 @@ export function ReviewRail({
                   : "All passed"
             }
             trailing={
-              <span className="inline-flex gap-1.5 text-meta tabular-nums">
-                {checkSummary.passed > 0 && <span className="text-green">{checkSummary.passed}</span>}
-                {checkSummary.failed > 0 && <span className="text-red">{checkSummary.failed}</span>}
-                {checkSummary.pending > 0 && <span className="text-yellow">{checkSummary.pending}</span>}
+              <span {...mergeStylexProps("", sx.tabularNums, sx.inlineFlex, sx.gap15, typography.meta)}>
+                {checkSummary.passed > 0 && <span {...stylex.props(sx.textGreen)}>{checkSummary.passed}</span>}
+                {checkSummary.failed > 0 && <span {...stylex.props(sx.textRed)}>{checkSummary.failed}</span>}
+                {checkSummary.pending > 0 && <span {...stylex.props(sx.textYellow)}>{checkSummary.pending}</span>}
               </span>
             }
           />
           {checksOpen && (
-            <div className="mt-1">
+            <div {...stylex.props(sx.mt1)}>
               {checkSummary.deployments.length > 0 && (
                 <RailGroupLabel>Deployments</RailGroupLabel>
               )}
@@ -184,29 +361,29 @@ export function ReviewRail({
           <RollupRow
             open={commitsOpen}
             onToggle={() => setCommitsOpen((o) => !o)}
-            icon={<span className="text-faint"><CommitIcon /></span>}
+            icon={<span {...stylex.props(sx.textFaint)}><CommitIcon /></span>}
             label={`${commits.length} commit${commits.length === 1 ? "" : "s"}`}
           />
           {commitsOpen && (
-            <div className="mt-1 flex flex-col gap-1.5">
+            <div {...stylex.props(sx.mt1, sx.flex, sx.flexCol, sx.gap15)}>
               {commits.map((commit) => (
-                <div className="flex items-start gap-2 px-1.5" key={commit.oid}>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-label text-fg" title={commit.messageHeadline}>
+                <div {...stylex.props(sx.flex, sx.itemsStart, sx.gap2, sx.px15)} key={commit.oid}>
+                  <span {...stylex.props(sx.minW0, sx.flex1)}>
+                    <span {...stylex.props(sx.block, sx.truncate, sx.textFg, typography.label)} title={commit.messageHeadline}>
                       {commit.messageHeadline}
                     </span>
-                    <span className="block truncate text-meta text-faint">{commit.author}</span>
+                    <span {...stylex.props(sx.block, sx.truncate, sx.textFaint, typography.meta)}>{commit.author}</span>
                     {caps.commitNotes &&
                       commit.notes?.map((note) => (
                         <span
-                          className="mt-1 block whitespace-pre-wrap text-supporting leading-relaxed text-dim"
+                          {...stylex.props(sx.mt1, sx.block, sx.whitespacePreWrap, sx.leadingRelaxed, sx.textDim, typography.supporting)}
                           key={note.ref}
                         >
                           {note.text}
                         </span>
                       ))}
                   </span>
-                  <code className="shrink-0 text-meta text-faint">{commit.oid.slice(0, 7)}</code>
+                  <code {...stylex.props(sx.shrink0, sx.textFaint, typography.meta)}>{commit.oid.slice(0, 7)}</code>
                 </div>
               ))}
             </div>
@@ -219,31 +396,29 @@ export function ReviewRail({
           <RollupRow
             open={filesOpen}
             onToggle={() => setFilesOpen((o) => !o)}
-            icon={<IconFile size={15} className="text-faint" />}
+            icon={<IconFile size={15} className={mergeStylexOverrideClassName("", sx.textFaint)} />}
             label={`${files.length} file${files.length === 1 ? "" : "s"}`}
             trailing={
-              <span className="inline-flex items-center gap-1.5 text-meta">
-                <span className="text-green">+{pr.additions}</span>
-                <span className="text-red">−{pr.deletions}</span>
+              <span {...stylex.props(sx.inlineFlex, sx.itemsCenter, sx.gap15, typography.meta)}>
+                <span {...stylex.props(sx.textGreen)}>+{pr.additions}</span>
+                <span {...stylex.props(sx.textRed)}>−{pr.deletions}</span>
               </span>
             }
           />
           {filesOpen && (
-            <div className="mt-1">
+            <div {...stylex.props(sx.mt1)}>
               {shownFiles.map((file: PrFile) => (
                 <FileRow file={file} key={file.path} onClick={() => onOpenFile(file.path)} />
               ))}
-              <div className="flex items-center gap-3 px-1.5 pt-1.5">
+              <div {...stylex.props(sx.flex, sx.itemsCenter, sx.gap3, sx.px15, sx.pt15)}>
                 {files.length > 8 && (
-                  <button
-                    className="border-0 bg-transparent p-0 text-meta font-medium text-dim hover:text-fg"
+                  <button {...mergeStylexProps("", sx.hoverTextFg, sx.border0, sx.bgTransparent, sx.p0, sx.fontMedium, sx.textDim, typography.meta)}
                     onClick={() => setAllFiles((o) => !o)}
                   >
                     {allFiles ? "Show fewer" : `Show all ${files.length}`}
                   </button>
                 )}
-                <button
-                  className="border-0 bg-transparent p-0 text-meta font-medium text-dim hover:text-fg"
+                <button {...mergeStylexProps("", sx.hoverTextFg, sx.border0, sx.bgTransparent, sx.p0, sx.fontMedium, sx.textDim, typography.meta)}
                   onClick={onOpenFiles}
                 >
                   Open files changed
@@ -261,15 +436,15 @@ export function ReviewRail({
             onClick={onOpenSessions}
             title="Sessions working on this pull request"
           >
-            <span className="inline-flex w-4 shrink-0 items-center justify-center [&>svg]:block">
-              <IconMessages size={15} className="text-faint" />
+            <span {...mergeStylexProps("[&>svg]:block", sx.inlineFlex, sx.w4, sx.shrink0, sx.itemsCenter, sx.justifyCenter)}>
+              <IconMessages size={15} className={mergeStylexOverrideClassName("", sx.textFaint)} />
             </span>
-            <span className="min-w-0 flex-1 truncate font-medium">
+            <span {...stylex.props(sx.minW0, sx.flex1, sx.truncate, sx.fontMedium)}>
               {sessionCount > 0
                 ? `${sessionCount} session${sessionCount === 1 ? "" : "s"}`
                 : "No sessions"}
             </span>
-            <IconChevronRight size={14} className="shrink-0 text-faint" />
+            <IconChevronRight size={14} className={mergeStylexOverrideClassName("", sx.shrink0, sx.textFaint)} />
           </button>
         </RailSection>
       )}
@@ -298,9 +473,9 @@ function RailSection({
   ref?: React.Ref<HTMLElement>;
 }) {
   return (
-    <section className="scroll-mt-[72px] border-b border-line py-4 first:pt-0 last:border-b-0" ref={ref}>
-      <div className="mb-1.5 flex items-center gap-2 px-1">
-        <h3 className="m-0 text-meta font-semibold text-faint">{title}</h3>
+    <section {...mergeStylexProps("first:pt-0 last:border-b-0", sx.scrollMt72px, sx.borderB, sx.borderLine, sx.py4)} ref={ref}>
+      <div {...stylex.props(sx.mb15, sx.flex, sx.itemsCenter, sx.gap2, sx.px1)}>
+        <h3 {...stylex.props(sx.m0, sx.fontSemibold, sx.textFaint, typography.meta)}>{title}</h3>
         {action}
       </div>
       {children}
@@ -309,13 +484,13 @@ function RailSection({
 }
 
 function RailGroupLabel({ children }: { children: React.ReactNode }) {
-  return <div className="px-1.5 pb-1 pt-2 text-meta font-semibold text-faint">{children}</div>;
+  return <div {...stylex.props(sx.px15, sx.pb1, sx.pt2, sx.fontSemibold, sx.textFaint, typography.meta)}>{children}</div>;
 }
 
 /** Shared shape for the rail's one-line summaries, whether they expand in
  *  place or lead somewhere. */
 const RAIL_ROW =
-  "flex w-full items-center gap-2 rounded-row border-0 bg-transparent px-1.5 py-1.5 text-left text-label text-fg hover:bg-hover";
+  mergeStylexClassName("", sx.flex, sx.wFull, sx.itemsCenter, sx.gap2, sx.roundedRow, sx.border0, sx.bgTransparent, sx.px15, sx.py15, sx.textLeft, typography.label, sx.textFg, sx.hoverBgHover);
 
 /** A one-line summary that opens its own detail in place. */
 function RollupRow({
@@ -333,12 +508,12 @@ function RollupRow({
 }) {
   return (
     <button className={RAIL_ROW} onClick={onToggle} aria-expanded={open}>
-      <span className="inline-flex w-4 shrink-0 items-center justify-center [&>svg]:block">{icon}</span>
-      <span className="min-w-0 flex-1 truncate font-medium">{label}</span>
+      <span {...mergeStylexProps("[&>svg]:block", sx.inlineFlex, sx.w4, sx.shrink0, sx.itemsCenter, sx.justifyCenter)}>{icon}</span>
+      <span {...stylex.props(sx.minW0, sx.flex1, sx.truncate, sx.fontMedium)}>{label}</span>
       {trailing}
       <IconChevronRight
         size={14}
-        className={`shrink-0 text-faint ${open ? "rotate-90" : ""}`}
+        className={[mergeStylexClassName("", sx.shrink0, sx.textFaint), open ? mergeStylexClassName("", sx.rotate90) : ""].filter(Boolean).join(" ")}
       />
     </button>
   );

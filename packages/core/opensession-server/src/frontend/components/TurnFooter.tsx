@@ -3,7 +3,6 @@ import type { TranscriptEntry } from "../lib/types";
 import { Menu } from "../ui/menu";
 import { Popover } from "../ui/popover";
 import { Tooltip } from "../ui/tooltip";
-import { cn } from "../ui/cn";
 import { CodeHighlight } from "./LazyCode";
 import { TOOL_CODE_WELL } from "../lib/tool-classes";
 import {
@@ -23,6 +22,143 @@ import { tidyPath, type PathRoot } from "../lib/tidy-path";
 import { useIsPhone } from "../hooks/useIsPhone";
 import { pointerCanHover } from "../lib/pointer";
 import { ExtBadge } from "./lang-marks";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+import { mergeStylexProps, mergeStylexClassName, mergeStylexOverrideClassName } from "../ui/cn";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	mr15: {
+			marginRight: "6px"
+	},
+	pl1: {
+			paddingLeft: "4px"
+	},
+	fontMedium: {
+			fontWeight: "var(--font-weight-medium)"
+	},
+	leading4: {
+			lineHeight: "16px"
+	},
+	textFaint: {
+			color: "var(--text-faint)"
+	},
+	textGreen: {
+			color: "var(--green)"
+	},
+	maxW380px: {
+			maxWidth: "380px"
+	},
+	my1: {
+			marginBlock: "4px"
+	},
+	flex: {
+			display: "flex"
+	},
+	itemsCenter: {
+			alignItems: "center"
+	},
+	gap2: {
+			gap: "8px"
+	},
+	px25: {
+			paddingInline: "10px"
+	},
+	py15: {
+			paddingBlock: "6px"
+	},
+	textXs: {
+			fontSize: "var(--type-label)",
+			lineHeight: "var(--tw-leading,var(--text-xs--line-height))"
+	},
+	pt05: {
+			paddingTop: "2px"
+	},
+	py1: {
+			paddingBlock: "4px"
+	},
+	minW0: {
+			minWidth: "0"
+	},
+	flex1: {
+			flex: "1"
+	},
+	truncate: {
+			textOverflow: "ellipsis",
+			whiteSpace: "nowrap",
+			overflow: "hidden"
+	},
+	textDim: {
+			color: "var(--text-dim)"
+	},
+	size4: {
+			width: "16px",
+			height: "16px"
+	},
+	flexShrink0: {
+			flexShrink: "0"
+	},
+	mb15: {
+			marginBottom: "6px"
+	},
+	gap15: {
+			gap: "6px"
+	},
+	px1: {
+			paddingInline: "4px"
+	},
+	flexCol: {
+			flexDirection: "column"
+	},
+	overflowYAuto: {
+			overflowY: "auto"
+	},
+	ml1: {
+			marginLeft: "4px"
+	},
+	h6: {
+			height: "24px"
+	},
+	roundedMd: {
+			borderRadius: "calc(7px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	px15: {
+			paddingInline: "6px"
+	},
+	textRed: { color: "var(--red)" },
+	mxAuto: { marginInline: "auto" },
+	mb18px: { marginBottom: "18px" },
+	wFull: { width: "100%" },
+	maxWSessionCol: { maxWidth: "var(--session-col)" },
+	flexWrap: { flexWrap: "wrap" },
+	gapX05: { columnGap: "2px" },
+	gapY15: { rowGap: "6px" },
+	size6: { width: "24px", height: "24px" },
+	cursorPointer: { cursor: "pointer" },
+	justifyCenter: { justifyContent: "center" },
+	roundedSm: { borderRadius: "calc(4px * var(--rf))" ,
+		cornerShape: "var(--cs)"},
+	border0: { borderStyle: "solid", borderWidth: 0 },
+	bgTransparent: { backgroundColor: "transparent" },
+	p0: { padding: 0 },
+	buttonTone: { color: "var(--text-faint)", ":hover": { "@media (hover: hover)": { backgroundColor: "var(--hover)", color: "var(--text-dim)" } } },
+	gap05: { gap: "2px" },
+	maxW180px: { maxWidth: "180px" },
+	pr1: { paddingRight: "4px" },
+	hoverBg: { ":hover": { "@media (hover: hover)": { backgroundColor: "var(--hover)" } } },
+	chip: { marginLeft: "4px", display: "flex", height: "24px", minWidth: 0, alignItems: "center", gap: "6px", overflow: "hidden", borderRadius: "calc(12px * var(--rf))", borderStyle: "solid", borderWidth: 0, backgroundColor: "color-mix(in srgb, var(--text) 3%, transparent)", paddingBlock: 0, paddingLeft: "4px", textAlign: "left",
+		cornerShape: "var(--cs)",},
+	pr15: { paddingRight: "6px" },
+	diffCard: { width: "min(620px, calc(100vw - 24px))", padding: "8px" },
+	footerText: { fontWeight: "var(--font-weight-medium)", lineHeight: "16px" },
+	turnFooterLift: { marginTop: "-10px" },
+	lineStats: { display: "flex", flexShrink: 0, alignItems: "center", gap: "4px", fontWeight: "var(--font-weight-medium)", lineHeight: "16px" },
+
+	maxHMin60vh420px: {
+		"maxHeight": "min(60vh,420px)"
+	},
+});
 
 export interface TouchedFile {
   path: string;
@@ -46,7 +182,7 @@ export interface TouchedFile {
  * measurement does not move the row's own start. On the measured wrapper the
  * same class shifts the whole row and remains part of its virtual position.
  */
-export const TURN_FOOTER_LIFT = "-mt-2.5";
+export const TURN_FOOTER_LIFT = stylex.props(sx.turnFooterLift).className;
 
 interface Props {
   /** The turn's final answer entry — copy copies its markdown, fork forks from it. */
@@ -92,31 +228,30 @@ export const TurnFooter = function TurnFooter({
 
   const duration = formatDuration(durationMs);
 
+  const rootStyles = stylex.props(sx.mxAuto, sx.mb18px, sx.flex, sx.wFull, sx.maxWSessionCol, sx.flexWrap, sx.itemsCenter, sx.gapX05, sx.gapY15);
   return (
     <div
-      className={cn(
-        "mx-auto mb-[18px] flex w-full max-w-[var(--session-col)] flex-wrap items-center gap-x-0.5 gap-y-1.5",
-        className
-      )}
+      {...rootStyles}
+      className={[rootStyles.className, className].filter(Boolean).join(" ")}
     >
       {duration && (
-        <span className="mr-1.5 pl-1 text-meta font-medium leading-4 text-faint">
+        <span {...stylex.props(sx.mr15, sx.pl1, sx.fontMedium, sx.leading4, sx.textFaint, typography.meta)}>
           {duration}
         </span>
       )}
       {assets.map((path) => (
         <AssetChip key={path} path={path} />
       ))}
-      <div className={ACTIONS}>
+      <div {...ACTIONS}>
         <Tooltip label={copied ? "Copied" : "Copy message"}>
           <button
             type="button"
             onClick={doCopy}
-            className={BTN}
+            {...BTN}
             aria-label={copied ? "Copied" : "Copy message"}
           >
             {copied ? (
-              <IconCheck size={20} className="text-green" />
+              <IconCheck size={20} className={mergeStylexOverrideClassName("", sx.textGreen)} />
             ) : (
               <IconCopy size={20} />
             )}
@@ -124,7 +259,7 @@ export const TurnFooter = function TurnFooter({
         </Tooltip>
         <Menu.Root>
           <Menu.Trigger
-            className={BTN + " data-[popup-open]:bg-hover data-[popup-open]:text-dim"}
+            {...BTN} className={`${BTN.className} data-[popup-open]:bg-hover data-[popup-open]:text-dim`}
             aria-label="More message actions"
           >
             <IconDotsHorizontal size={20} />
@@ -133,21 +268,21 @@ export const TurnFooter = function TurnFooter({
             side="bottom"
             align="start"
             sideOffset={4}
-            className="max-w-[380px]"
+            className={mergeStylexOverrideClassName("", sx.maxW380px)}
           >
             {onFork && (
               <Menu.Item onClick={() => onFork(entry.id)}>
-                <IconBranches size={20} className="text-faint" />
+                <IconBranches size={20} className={mergeStylexOverrideClassName("", sx.textFaint)} />
                 Fork from here
               </Menu.Item>
             )}
-            {onFork && <Menu.Separator className="my-1" />}
-            <div className="flex items-center gap-2 px-2.5 py-1.5 text-xs font-medium text-faint">
+            {onFork && <Menu.Separator className={mergeStylexOverrideClassName("", sx.my1)} />}
+            <div {...stylex.props(sx.flex, sx.itemsCenter, sx.gap2, sx.px25, sx.py15, sx.textXs, sx.fontMedium, sx.textFaint)}>
               <IconClock size={20} />
               {fullTime(entry.timestamp)}
             </div>
             {entry.model && (
-              <div className="flex items-center gap-2 px-2.5 py-1.5 text-xs font-medium text-faint">
+              <div {...stylex.props(sx.flex, sx.itemsCenter, sx.gap2, sx.px25, sx.py15, sx.textXs, sx.fontMedium, sx.textFaint)}>
                 <IconSparkle size={20} />
                 Written by {messageModelLabel(entry.model)}
               </div>
@@ -157,20 +292,20 @@ export const TurnFooter = function TurnFooter({
                 same-named files a turn touched is worth more than the space. */}
             {files.length > 0 && (
               <>
-                <Menu.Separator className="my-1" />
+                <Menu.Separator className={mergeStylexOverrideClassName("", sx.my1)} />
                 {/* GroupLabel MUST live inside a Group — bare it throws Base UI
                     error #31 and white-screens the app on open. */}
                 <Menu.Group>
-                  <Menu.GroupLabel className="px-2.5 pt-0.5">
+                  <Menu.GroupLabel className={mergeStylexOverrideClassName("", sx.px25, sx.pt05)}>
                     Changed files
                   </Menu.GroupLabel>
                   {files.slice(0, MAX_MENU_FILES).map((f) => (
                     <div
                       key={f.path}
-                      className="flex items-center gap-2 px-2.5 py-1 text-xs font-medium text-faint"
+                      {...stylex.props(sx.flex, sx.itemsCenter, sx.gap2, sx.px25, sx.py1, sx.textXs, sx.fontMedium, sx.textFaint)}
                     >
                       <ExtBadge name={fileName(f.path)} />
-                      <span className="min-w-0 flex-1 truncate text-dim">
+                      <span {...stylex.props(sx.minW0, sx.flex1, sx.truncate, sx.textDim)}>
                         {tidyPath(f.path, pathRoots)}
                       </span>
                       <LineStats
@@ -180,7 +315,7 @@ export const TurnFooter = function TurnFooter({
                     </div>
                   ))}
                   {files.length > MAX_MENU_FILES && (
-                    <div className="px-2.5 py-1 text-xs font-medium text-faint">
+                    <div {...stylex.props(sx.px25, sx.py1, sx.textXs, sx.fontMedium, sx.textFaint)}>
                       +{files.length - MAX_MENU_FILES} more
                     </div>
                   )}
@@ -252,14 +387,13 @@ function turnFooterPropsEqual(prev: Props, next: Props): boolean {
   return true;
 }
 
-const BTN =
-  "flex size-6 flex-shrink-0 cursor-pointer items-center justify-center rounded-sm border-0 bg-transparent p-0 text-faint hover:bg-hover hover:text-dim";
+const BTN = stylex.props(sx.flex, sx.size6, sx.flexShrink0, sx.cursorPointer, sx.itemsCenter, sx.justifyCenter, sx.roundedSm, sx.border0, sx.bgTransparent, sx.p0, sx.buttonTone);
 
 /** The whole row is always on the page, and muted rather than hidden: an
  * action you can see is one you know exists, and `text-faint` on a transparent
  * button is quiet enough to read past. The colour is the only thing separating
  * it from the answer — hover and focus still bring both up. */
-const ACTIONS = "flex items-center gap-0.5";
+const ACTIONS = stylex.props(sx.flex, sx.itemsCenter, sx.gap05);
 
 /** Named files in the row; the rest collapse into MoreChip. A phone seats one;
  * the ⋯ menu is the complete list either way. */
@@ -281,7 +415,6 @@ function messageModelLabel(id: string): string {
 }
 
 /** Shared line box for asset names and the expanded work summary's stats. */
-const FOOTER_TEXT = "text-label font-medium leading-4";
 
 /**
  * One scratch file the turn wrote. Clicking lifts it over the conversation;
@@ -300,15 +433,15 @@ function AssetChip({ path }: { path: string }) {
   const body = (
     <>
       <ExtBadge name={name} />
-      <span className={cn("max-w-[180px] truncate text-dim", FOOTER_TEXT)}>
+      <span {...stylex.props(sx.maxW180px, sx.truncate, sx.textDim, typography.label, sx.footerText)}>
         {name}
       </span>
-      <IconArrowUpRight size={20} className="size-4 flex-shrink-0 text-faint" />
+      <IconArrowUpRight size={20} className={mergeStylexOverrideClassName("", sx.size4, sx.flexShrink0, sx.textFaint)} />
     </>
   );
   if (!asset.available)
     return (
-      <span className={cn(CHIP, "pr-1")}>
+      <span {...stylex.props(sx.chip, sx.pr1)}>
         {body}
       </span>
     );
@@ -317,7 +450,7 @@ function AssetChip({ path }: { path: string }) {
       <button
         type="button"
         onClick={() => asset.open(path)}
-        className={cn(CHIP, "cursor-pointer pr-1 hover:bg-hover")}
+        {...stylex.props(sx.chip, sx.cursorPointer, sx.pr1, sx.hoverBg)}
       >
         {body}
       </button>
@@ -327,8 +460,6 @@ function AssetChip({ path }: { path: string }) {
 
 /** The shared chip shell: the footer's file and asset chips are the same
  * object with different tails (± counts, or a way in). */
-const CHIP =
-  "ml-1 flex h-6 min-w-0 items-center gap-1.5 overflow-hidden rounded-control border-0 bg-fg/[0.03] py-0 pl-1 text-left";
 
 /**
  * One file the turn wrote, with the ±lines it moved there, and on click the
@@ -359,7 +490,7 @@ function FileChip({
   const body = (
     <>
       <ExtBadge name={name} />
-      <span className={cn("max-w-[180px] truncate text-dim", FOOTER_TEXT)}>
+      <span {...stylex.props(sx.maxW180px, sx.truncate, sx.textDim, typography.label, sx.footerText)}>
         {name}
       </span>
       <LineStats additions={file.additions} deletions={file.deletions} />
@@ -368,7 +499,7 @@ function FileChip({
   if (!diff)
     return (
       <Tooltip label={path}>
-        <span className={cn(CHIP, "pr-1.5")}>{body}</span>
+        <span {...stylex.props(sx.chip, sx.pr15)}>{body}</span>
       </Tooltip>
     );
   return (
@@ -377,15 +508,12 @@ function FileChip({
         openOnHover
         delay={300}
         closeDelay={120}
-        className={cn(
-          CHIP,
-          "cursor-pointer pr-1.5 hover:bg-hover data-[popup-open]:bg-hover"
-        )}
+        {...mergeStylexProps(`${stylex.props(sx.chip, sx.cursorPointer, sx.pr15, sx.hoverBg).className} data-[popup-open]:bg-hover`, sx.chip, sx.cursorPointer, sx.pr15, sx.hoverBg)}
         aria-label={`Show what this turn wrote to ${name}`}
       >
         {body}
       </Popover.Trigger>
-      <Popover.Popup side="top" align="start" elevation="lg" className={DIFF_CARD}>
+      <Popover.Popup side="top" align="start" elevation="lg" {...DIFF_CARD}>
         <FileDiffCard file={file} roots={roots} />
       </Popover.Popup>
     </Popover.Root>
@@ -401,7 +529,7 @@ function turnDiff(file: TouchedFile): string {
 
 /** Wide enough for real code, still a card. Shared, so the file chip and the
  * fold header's counts open the same object rather than two sizes of it. */
-const DIFF_CARD = "w-[min(620px,calc(100vw-24px))] p-2";
+const DIFF_CARD = stylex.props(sx.diffCard);
 
 /** One file inside a diff card: its path over what the turn wrote there. A
  * file whose tool only reported a path keeps the heading and drops the well. */
@@ -417,10 +545,10 @@ function FileDiffCard({
   const diff = turnDiff(file);
   return (
     <div>
-      <div className="mb-1.5 flex items-center gap-1.5 px-1">
+      <div {...stylex.props(sx.mb15, sx.flex, sx.itemsCenter, sx.gap15, sx.px1)}>
         <ExtBadge name={name} />
         <span
-          className={cn("min-w-0 flex-1 truncate text-dim", FOOTER_TEXT)}
+          {...stylex.props(sx.minW0, sx.flex1, sx.truncate, sx.textDim, typography.label, sx.footerText)}
           title={path}
         >
           {path}
@@ -498,7 +626,7 @@ export function TurnLineStatsCard({
     <>
       <span
         ref={anchor}
-        className="flex flex-shrink-0 items-center"
+        {...stylex.props(sx.flex, sx.flexShrink0, sx.itemsCenter)}
         onMouseEnter={() => {
           if (pointerCanHover()) schedule(true, CARD_OPEN_MS);
         }}
@@ -521,10 +649,9 @@ export function TurnLineStatsCard({
             align="start"
             elevation="lg"
             anchor={anchor}
-            className={DIFF_CARD}
+            {...DIFF_CARD}
           >
-            <div
-              className="flex max-h-[min(60vh,420px)] flex-col gap-2 overflow-y-auto"
+            <div {...mergeStylexProps("", sx.maxHMin60vh420px, sx.flex, sx.flexCol, sx.gap2, sx.overflowYAuto)}
               onMouseEnter={hold}
               onMouseLeave={() => schedule(false, CARD_CLOSE_MS)}
             >
@@ -532,7 +659,7 @@ export function TurnLineStatsCard({
                 <FileDiffCard key={f.path} file={f} roots={roots} />
               ))}
               {rest > 0 && (
-                <div className={cn("px-1 text-faint", FOOTER_TEXT)}>
+                <div {...stylex.props(sx.px1, sx.textFaint, typography.label, sx.footerText)}>
                   +{rest} more {rest === 1 ? "file" : "files"}
                 </div>
               )}
@@ -555,8 +682,8 @@ function MoreChip({ files }: { files: TouchedFile[] }) {
         (files.length > 12 ? ", …" : "")
       }
     >
-      <span className="ml-1 flex h-6 flex-shrink-0 items-center gap-1.5 rounded-md px-1.5">
-        <span className={cn("text-faint", FOOTER_TEXT)}>
+      <span {...stylex.props(sx.ml1, sx.flex, sx.h6, sx.flexShrink0, sx.itemsCenter, sx.gap15, sx.roundedMd, sx.px15)}>
+        <span {...stylex.props(sx.textFaint, typography.label, sx.footerText)}>
           +{files.length} more
         </span>
         <LineStats additions={additions} deletions={deletions} />
@@ -574,15 +701,14 @@ export function LineStats({
   deletions: number;
   className?: string;
 }) {
+  const statsStyles = stylex.props(sx.lineStats, typography.label);
   return (
     <span
-      className={cn(
-        "flex flex-shrink-0 items-center gap-1 text-label font-medium leading-4",
-        className
-      )}
+      {...statsStyles}
+      className={[statsStyles.className, className].filter(Boolean).join(" ")}
     >
-      <span className="text-green">+{additions}</span>
-      <span className="text-red">-{deletions}</span>
+      <span {...stylex.props(sx.textGreen)}>+{additions}</span>
+      <span {...stylex.props(sx.textRed)}>-{deletions}</span>
     </span>
   );
 }

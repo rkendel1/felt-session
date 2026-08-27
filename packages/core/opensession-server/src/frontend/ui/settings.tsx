@@ -1,15 +1,72 @@
+import { mergeStylexProps } from "./cn";
+import { utilityClassName } from "./cn";
 import * as React from "react";
 import { Card } from "./card";
 import { cn } from "./cn";
 import { fieldClasses } from "./input";
 import { markTileClass } from "../lib/mark-tile";
 import { Skeleton, SkeletonBar } from "./state";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	minW0: {
+			minWidth: "0"
+	},
+	fontTitle: {
+			fontWeight: "var(--title-weight)"
+	},
+	tracking002em: {
+			letterSpacing: "-0.02em"
+	},
+	textFg: {
+			color: "var(--text)"
+	},
+	mt15: {
+			marginTop: "calc(4px * 1.5)"
+	},
+	leadingRelaxed: {
+			lineHeight: "var(--leading-relaxed)"
+	},
+	textDim: {
+			color: "var(--text-dim)"
+	},
+	flex: {
+			display: "flex"
+	},
+	shrink0: {
+			flexShrink: "0"
+	},
+	itemsCenter: {
+			alignItems: "center"
+	},
+	gap2: {
+			gap: "calc(4px * 2)"
+	},
+	gap15: {
+			gap: "calc(4px * 1.5)"
+	},
+	flexShrink0: {
+			flexShrink: "0"
+	},
+	h15: {
+			height: "calc(4px * 1.5)"
+	},
+	w15: {
+			width: "calc(4px * 1.5)"
+	},
+	roundedFull: {
+			borderRadius: "calc(infinity * 1px)",
+
+		cornerShape: "round",},
+});
 
 export function SettingsPanel({
 	className,
 	...props
 }: React.ComponentPropsWithoutRef<"div">) {
-	return <div className={cn("w-full max-w-[720px]", className)} {...props} />;
+	return <div className={cn(utilityClassName("w-full max-w-[720px]"), className)} {...props} />;
 }
 
 /**
@@ -31,20 +88,20 @@ export function SettingsHeader({
 }) {
 	return (
 		<header
-			className={cn("mb-5 flex items-start justify-between gap-4 px-5", className)}
+			className={cn(utilityClassName("mb-5 flex items-start justify-between gap-4 px-5"), className)}
 			{...props}
 		>
-			<div className="min-w-0">
-				<h1 className="m-0 text-page-title font-title tracking-[-0.02em] text-fg [.settings-sheet_&]:hidden">
+			<div {...stylex.props(sx.minW0)}>
+				<h1 {...mergeStylexProps("m-0 [.settings-sheet_&]:hidden", sx.fontTitle, sx.tracking002em, sx.textFg, typography.pageTitle)} >
 					{title}
 				</h1>
 				{description && (
-					<p className="m-0 mt-1.5 text-supporting leading-relaxed text-dim [.settings-sheet_&]:mt-0">
+					<p {...mergeStylexProps("m-0 [.settings-sheet_&]:mt-0", sx.mt15, sx.leadingRelaxed, sx.textDim, typography.supporting)} >
 						{description}
 					</p>
 				)}
 			</div>
-			{actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
+			{actions && <div {...stylex.props(sx.flex, sx.shrink0, sx.itemsCenter, sx.gap2)}>{actions}</div>}
 		</header>
 	);
 }
@@ -67,13 +124,13 @@ export function SettingsGroupLabel({
 			className={cn(
 				// mt-9: a group's card and the hint under it read as one block, so
 				// the space above the next label is what separates the groups.
-				"mb-2 mt-9 flex min-h-6 flex-wrap items-center justify-between gap-x-2 gap-y-1.5 px-5 text-label font-semibold text-faint",
+				utilityClassName("mb-2 mt-9 flex min-h-6 flex-wrap items-center justify-between gap-x-2 gap-y-1.5 px-5 text-label font-semibold text-faint"),
 				className,
 			)}
 			{...props}
 		>
-			<span className="min-w-0">{children}</span>
-			{actions && <div className="flex shrink-0 items-center gap-1.5">{actions}</div>}
+			<span {...stylex.props(sx.minW0)}>{children}</span>
+			{actions && <div {...stylex.props(sx.flex, sx.shrink0, sx.itemsCenter, sx.gap15)}>{actions}</div>}
 		</div>
 	);
 }
@@ -107,7 +164,7 @@ export function SettingsGroupLabel({
  * `divider-soft` is `line` at a third, so it lands well under the rules it
  * contains and the block reads as one object rather than a frame. */
 const settingsSurface =
-	"rounded-2xl border border-divider-soft bg-settings-plate";
+	utilityClassName("rounded-2xl border border-divider-soft bg-settings-plate");
 
 /**
  * The rule between two groups of rows: inset from the card's edges, so it
@@ -142,7 +199,7 @@ export function SettingCard({
 		<Card
 			className={cn(
 				settingsSurface,
-				"overflow-hidden",
+				utilityClassName("overflow-hidden"),
 				settingGroupRule,
 				className,
 			)}
@@ -160,7 +217,7 @@ export function SettingGroup({
 	className,
 	...props
 }: React.ComponentPropsWithoutRef<"div">) {
-	return <div className={cn("flex flex-col", className)} {...props} />;
+	return <div className={cn(utilityClassName("flex flex-col"), className)} {...props} />;
 }
 
 /**
@@ -208,7 +265,7 @@ export function SettingCardSkeleton({
 		<Skeleton label={label} className={className} {...props}>
 			<SettingCard>
 				{GHOST_ROWS.slice(0, rows).map((row) => (
-					<SettingRow key={row.title} className={cn(icon !== undefined && "gap-3")}>
+					<SettingRow key={row.title} className={cn(icon !== undefined && utilityClassName("gap-3"))}>
 						{icon !== undefined && (
 							// Inline size, like IconTile's own: the tile scale is a
 							// number a caller passes, not a step in the class scale.
@@ -219,7 +276,7 @@ export function SettingCardSkeleton({
 						)}
 						<SettingRowText>
 							<SkeletonBar className={row.title} />
-							<SkeletonBar className={cn("mt-2 h-2.5", row.description)} />
+							<SkeletonBar className={cn(utilityClassName("mt-2 h-2.5"), row.description)} />
 						</SettingRowText>
 					</SettingRow>
 				))}
@@ -251,7 +308,7 @@ export function SettingsSection({
 	className,
 	...props
 }: React.ComponentPropsWithoutRef<"div">) {
-	return <Card className={cn(settingsSurface, "p-5", className)} {...props} />;
+	return <Card className={cn(settingsSurface, utilityClassName("p-5"), className)} {...props} />;
 }
 
 /**
@@ -273,7 +330,7 @@ export function SettingRow({
 }: React.ComponentPropsWithoutRef<"div">) {
 	return (
 		<div
-			className={cn("flex flex-wrap items-center gap-x-4 gap-y-2.5 px-5 py-4", className)}
+			className={cn(utilityClassName("flex flex-wrap items-center gap-x-4 gap-y-2.5 px-5 py-4"), className)}
 			{...props}
 		/>
 	);
@@ -283,7 +340,7 @@ export function SettingRowText({
 	className,
 	...props
 }: React.ComponentPropsWithoutRef<"div">) {
-	return <div className={cn("min-w-0 flex-1 max-sm:min-w-[55%]", className)} {...props} />;
+	return <div className={cn(utilityClassName("min-w-0 flex-1 max-sm:min-w-[55%]"), className)} {...props} />;
 }
 
 export function SettingRowTitle({
@@ -294,7 +351,7 @@ export function SettingRowTitle({
 	// surface can scale from outside (FirstMile promotes these one heading
 	// step) without the primitive knowing who is hosting it.
 	return (
-		<div data-setting-title="" className={cn("text-item-title font-medium text-fg", className)} {...props} />
+		<div data-setting-title="" className={cn(utilityClassName("text-item-title font-medium text-fg"), className)} {...props} />
 	);
 }
 
@@ -305,7 +362,7 @@ export function SettingRowDescription({
 	return (
 		<div
 			data-setting-description=""
-			className={cn("mt-1 text-supporting text-dim", className)}
+			className={cn(utilityClassName("mt-1 text-supporting text-dim"), className)}
 			{...props}
 		/>
 	);
@@ -315,7 +372,7 @@ export function SettingRowControl({
 	className,
 	...props
 }: React.ComponentPropsWithoutRef<"div">) {
-	return <div className={cn("ml-auto shrink-0", className)} {...props} />;
+	return <div className={cn(utilityClassName("ml-auto shrink-0"), className)} {...props} />;
 }
 
 /**
@@ -326,8 +383,8 @@ export function SettingRowControl({
  */
 export function StatusChip({ label, dot }: { label: string; dot: string }) {
 	return (
-		<span className="flex flex-shrink-0 items-center gap-1.5 text-label text-dim">
-			<span className="h-1.5 w-1.5 rounded-full" style={{ background: dot }} />
+		<span {...stylex.props(sx.flex, sx.flexShrink0, sx.itemsCenter, sx.gap15, sx.textDim, typography.label)}>
+			<span {...stylex.props(sx.h15, sx.w15, sx.roundedFull)} style={{ background: dot }} />
 			{label}
 		</span>
 	);
@@ -350,7 +407,7 @@ export function SettingsHint({
 	return (
 		<div
 			data-settings-hint=""
-			className={cn("mt-2 px-5 text-supporting text-faint", className)}
+			className={cn(utilityClassName("mt-2 px-5 text-supporting text-faint"), className)}
 			{...props}
 		/>
 	);
@@ -377,7 +434,7 @@ export function SettingsForm({
 }: React.ComponentPropsWithoutRef<"div">) {
 	return (
 		<div
-			className={cn(settingsSurface, "mb-3 flex flex-col gap-3.5 p-5", className)}
+			className={cn(settingsSurface, utilityClassName("mb-3 flex flex-col gap-3.5 p-5"), className)}
 			{...props}
 		/>
 	);
@@ -388,7 +445,7 @@ export function SettingsFormTitle({
 	...props
 }: React.ComponentPropsWithoutRef<"div">) {
 	return (
-		<div data-setting-title="" className={cn("mb-4 text-item-title font-semibold text-fg", className)} {...props} />
+		<div data-setting-title="" className={cn(utilityClassName("mb-4 text-item-title font-semibold text-fg"), className)} {...props} />
 	);
 }
 
@@ -396,7 +453,7 @@ export function SettingsFormRow({
 	className,
 	...props
 }: React.ComponentPropsWithoutRef<"div">) {
-	return <div className={cn("grid grid-cols-2 gap-3 max-sm:grid-cols-1", className)} {...props} />;
+	return <div className={cn(utilityClassName("grid grid-cols-2 gap-3 max-sm:grid-cols-1"), className)} {...props} />;
 }
 
 export function SettingsField({
@@ -405,7 +462,7 @@ export function SettingsField({
 }: React.ComponentPropsWithoutRef<"label">) {
 	return (
 		<label
-			className={cn("mb-3 flex min-w-0 flex-col gap-1.5 text-label font-medium text-dim", className)}
+			className={cn(utilityClassName("mb-3 flex min-w-0 flex-col gap-1.5 text-label font-medium text-dim"), className)}
 			{...props}
 		/>
 	);
@@ -421,5 +478,5 @@ export function SettingsFormActions({
 	className,
 	...props
 }: React.ComponentPropsWithoutRef<"div">) {
-	return <div className={cn("mt-1 flex justify-end gap-2", className)} {...props} />;
+	return <div className={cn(utilityClassName("mt-1 flex justify-end gap-2"), className)} {...props} />;
 }

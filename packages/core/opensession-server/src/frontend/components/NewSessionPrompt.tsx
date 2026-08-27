@@ -27,8 +27,146 @@ import { useSessionNameProjection } from "../hooks/useSessionNameProjection";
 import { useFileMentions } from "./useFileMentions";
 import { ImageThumbs } from "./ImageThumbs";
 import { FileChips } from "./FileChips";
-import { cn } from "../ui/cn";
+import { cn, mergeStylexClassName } from "../ui/cn";
 import { getCurrentUser } from "./UserPicker";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	relative: {
+			position: "relative"
+	},
+	srOnly: {
+			clipPath: "inset(50%)",
+			whiteSpace: "nowrap",
+			borderWidth: "0",
+			width: "1px",
+			height: "1px",
+			margin: "-1px",
+			padding: "0",
+			position: "absolute",
+			overflow: "hidden"
+	},
+
+	pointerEventsNone: {
+		"pointerEvents": "none"
+	},
+	absolute: {
+		"position": "absolute"
+	},
+	inset0: {
+		"inset": "0"
+	},
+	z0: {
+		"zIndex": "0"
+	},
+	hFull: {
+		"height": "100%"
+	},
+	selectNone: {
+		"WebkitUserSelect": "none",
+		"userSelect": "none"
+	},
+	overflowHidden: {
+		"overflow": "hidden"
+	},
+	breakWords: {
+		"overflowWrap": "break-word"
+	},
+	whitespacePreWrap: {
+		"whiteSpace": "pre-wrap"
+	},
+	Mx4px: {
+		"marginInline": "-4px"
+	},
+	wCalc1008px: {
+		"width": "calc(100% + 8px)"
+	},
+	px6px: {
+		"paddingInline": "6px"
+	},
+	py2px: {
+		"paddingBlock": "2px"
+	},
+	z1: {
+		"zIndex": "1"
+	},
+	textTransparent: {
+		"color": "transparent"
+	},
+	caretVarText: {
+		"caretColor": "var(--text)"
+	},
+
+	minH0: {
+		"minHeight": "0"
+	},
+	flex1: {
+		"flex": "1"
+	},
+	overflowXHidden: {
+		"overflowX": "hidden"
+	},
+	overflowYAuto: {
+		"overflowY": "auto"
+	},
+	overscrollContain: {
+		"overscrollBehavior": "contain"
+	},
+	px4: {
+		"paddingInline": "16px"
+	},
+	pt1: {
+		"paddingTop": "4px"
+	},
+	ScrollbarWidthNone: {
+		"scrollbarWidth": "none"
+	},
+	block: {
+		"display": "block"
+	},
+	minH132px: {
+		"minHeight": "132px"
+	},
+	wFull: {
+		"width": "100%"
+	},
+	resizeNone: {
+		"resize": "none"
+	},
+	borderNone: {
+		"--tw-border-style": "none",
+		"borderStyle": "none"
+	},
+	bgTransparent: {
+		"backgroundColor": "transparent"
+	},
+	fontSans: {
+		"fontFamily": "var(--sans)"
+	},
+	leading155: {
+		"--tw-leading": "1.55",
+		"lineHeight": "1.55"
+	},
+	textFg: {
+		"color": "var(--text)"
+	},
+	outlineNone: {
+		"--tw-outline-style": "none",
+		"outlineStyle": "none"
+	},
+	placeholderTextFaint: {
+		"::placeholder": {
+			"color": "var(--text-faint)"
+		}
+	},
+	disabledOpacity60: {
+		":disabled": {
+			"opacity": ".6"
+		}
+	},
+});
 
 /** One scroll surface for the prompt and its attachments. Keeping the image in
  *  this flow means it travels with the text instead of pinning over it.
@@ -39,9 +177,9 @@ import { getCurrentUser } from "./UserPicker";
  *  appears once the prompt scrolls, the header and the prompt read as one
  *  block, and that gap read as a hole in it. */
 const BODY =
-	"relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-4 pt-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden";
+	mergeStylexClassName("[&::-webkit-scrollbar]:hidden", sx.relative, sx.minH0, sx.flex1, sx.overflowXHidden, sx.overflowYAuto, sx.overscrollContain, sx.px4, sx.pt1, sx.ScrollbarWidthNone);
 const TEXTAREA =
-	"block min-h-[132px] w-full resize-none overflow-hidden border-none bg-transparent font-sans text-body leading-[1.55] text-fg outline-none placeholder:text-faint disabled:opacity-60";
+	mergeStylexClassName("", sx.block, sx.minH132px, sx.wFull, sx.resizeNone, sx.overflowHidden, sx.borderNone, sx.bgTransparent, sx.fontSans, typography.body, sx.leading155, sx.textFg, sx.outlineNone, sx.placeholderTextFaint, sx.disabledOpacity60);
 
 /** How long the draft has to hold still before the palette is handed it. This
  *  is the branch-name suggestion's debounce, moved down here: the palette is
@@ -364,7 +502,7 @@ export function NewSessionPrompt({
 			ref={attachPromptBody}
 		>
 			{mentions.popup}
-			<div className="relative">
+			<div {...stylex.props(sx.relative)}>
 				{sessionPill && (
 					// `composer-hl` stays as a hook: the pill spans inside this
 					// mirror are written as innerHTML by lib/composer-highlight.ts,
@@ -377,7 +515,7 @@ export function NewSessionPrompt({
 						className={cn(
 							"composer-hl",
 							TEXTAREA,
-							"pointer-events-none absolute inset-0 z-0 h-full select-none overflow-hidden break-words whitespace-pre-wrap",
+							mergeStylexClassName("", sx.pointerEventsNone, sx.absolute, sx.inset0, sx.z0, sx.hFull, sx.selectNone, sx.overflowHidden, sx.breakWords, sx.whitespacePreWrap),
 							// Padding here is two things added together, and both are
 							// load-bearing. 4px of it is clearance: a pill's wash reaches
 							// past its own box (base.css), so one at either end of a line
@@ -387,7 +525,7 @@ export function NewSessionPrompt({
 							// field keeps, unlike the session composer, which zeroes it.
 							// Without it every glyph here sits two pixels left of the one
 							// it paints over, which puts the wash off the word.
-							"-mx-[4px] w-[calc(100%+8px)] px-[6px] py-[2px]",
+							mergeStylexClassName("", sx.Mx4px, sx.wCalc1008px, sx.px6px, sx.py2px),
 						)}
 						aria-hidden="true"
 						dangerouslySetInnerHTML={{ __html: sessionHighlightHtml }}
@@ -399,7 +537,7 @@ export function NewSessionPrompt({
 					className={cn(
 						TEXTAREA,
 						sessionPill &&
-							"relative z-[1] break-words text-transparent caret-[var(--text)]",
+							mergeStylexClassName("", sx.relative, sx.z1, sx.breakWords, sx.textTransparent, sx.caretVarText),
 					)}
 					value={sessionNames.displayText}
 					onBeforeInput={sessionNames.handleBeforeInput}
@@ -497,7 +635,7 @@ export function NewSessionPrompt({
 			    nothing out loud. This is the same news for a reader who cannot
 			    see them. */}
 			{attachingLabel(staging) && (
-				<span className="sr-only" role="status">
+				<span {...stylex.props(sx.srOnly)} role="status">
 					{attachingLabel(staging)}
 				</span>
 			)}

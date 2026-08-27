@@ -1,3 +1,5 @@
+import { mergeStylexProps, mergeStylexOverrideClassName } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import { BASE_PATH } from "../lib/base";
 import React, { useCallback, useEffect, useState } from "react";
 import { cn } from "../ui/cn";
@@ -11,6 +13,117 @@ import { SectionHeading } from "./Connections";
 import { SettingCard, rowMenuTriggerClasses } from "../ui/settings";
 import type { FeedDescriptor, Project } from "../lib/types";
 import { fieldClasses } from "../ui/input";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	flex: {
+			display: "flex"
+	},
+	itemsCenter: {
+			alignItems: "center"
+	},
+	gap3: {
+			gap: "calc(4px * 3)"
+	},
+	px5: {
+			paddingInline: "calc(4px * 5)"
+	},
+	py3: {
+			paddingBlock: "calc(4px * 3)"
+	},
+	minW0: {
+			minWidth: "0"
+	},
+	flex1: {
+			flex: "1"
+	},
+	fontMedium: {
+			fontWeight: "var(--font-weight-medium)"
+	},
+	textFg: {
+			color: "var(--text)"
+	},
+	truncate: {
+			overflow: "hidden",
+			textOverflow: "ellipsis",
+			whiteSpace: "nowrap"
+	},
+	textDim: {
+			color: "var(--text-dim)"
+	},
+	wFull: {
+			width: "100%"
+	},
+	gap2: {
+			gap: "calc(4px * 2)"
+	},
+	transitionColors: {
+			transitionProperty: "color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, --tw-gradient-from, --tw-gradient-via, --tw-gradient-to",
+			transitionTimingFunction: "var(--tw-ease, var(--ease))",
+			transitionDuration: "var(--tw-duration, var(--dur-micro))"
+	},
+	maxH60vh: {
+			maxHeight: "60vh"
+	},
+	overflowYAuto: {
+			overflowY: "auto"
+	},
+	px1: {
+			paddingInline: "4px"
+	},
+	grid: {
+			display: "grid"
+	},
+	gridCols2: {
+			gridTemplateColumns: "repeat(2, minmax(0, 1fr))"
+	},
+	flexShrink0: {
+			flexShrink: "0"
+	},
+	maxH28: {
+			maxHeight: "calc(4px * 28)"
+	},
+	overflowAuto: {
+			overflow: "auto"
+	},
+	roundedMd: {
+			borderRadius: "calc(7px * var(--rf))",
+
+		cornerShape: "var(--cs)",},
+	border: {
+			borderStyle: "solid",
+			borderWidth: "1px"
+	},
+	borderLine: {
+			borderColor: "var(--border)"
+	},
+	bgSurface: {
+			backgroundColor: "var(--bg)"
+	},
+	p2: {
+			padding: "calc(4px * 2)"
+	},
+	leadingSnug: {
+			lineHeight: "var(--leading-snug)"
+	},
+	gridCols3: {
+			gridTemplateColumns: "repeat(3, minmax(0, 1fr))"
+	},
+	gridCols1fr2fr: {
+			gridTemplateColumns: "1fr 2fr"
+	},
+	mt2: {
+			marginTop: "calc(4px * 2)"
+	},
+	mt3: {
+			marginTop: "calc(4px * 3)"
+	},
+	textFaint: {
+			color: "var(--text-faint)"
+	},
+});
 
 /**
  * Connections → Projects. A *project* is a source of work with its own sidebar
@@ -81,7 +194,7 @@ function suggestMap(sample: Record<string, any>) {
 // ── component ────────────────────────────────────────────────────────────────
 
 const inputCls = fieldClasses("md");
-const labelCls = "mb-1 mt-3 block text-meta font-semibold text-faint";
+const labelCls = utilityClassName("mb-1 mt-3 block text-meta font-semibold text-faint");
 
 export function ProjectsSection() {
 	const [feeds, setFeeds] = useState<FeedDescriptor[] | null>(null);
@@ -131,11 +244,11 @@ const res = await fetch(`${BASE_PATH}/api/feeds`);
 			{!!repoProjects.length && (
 				<SettingCard>
 					{repoProjects.map((p) => (
-						<div key={p.key} className="flex items-center gap-3 px-5 py-3">
+						<div key={p.key} {...stylex.props(sx.flex, sx.itemsCenter, sx.gap3, sx.px5, sx.py3)}>
 							<IconTile name={p.id} size={30} />
-							<div className="min-w-0 flex-1">
-								<div className="text-item-title font-medium text-fg">{p.label}</div>
-								<div className="truncate text-label text-dim">
+							<div {...stylex.props(sx.minW0, sx.flex1)}>
+								<div {...stylex.props(sx.fontMedium, sx.textFg, typography.itemTitle)}>{p.label}</div>
+								<div {...stylex.props(sx.truncate, sx.textDim, typography.label)}>
 									Repository · {p.repo?.ghRepo}
 									{p.repo?.defaultBranch ? ` · ${p.repo.defaultBranch}` : ""}
 									{p.repo?.sharedCheckout ? " · shared checkout" : ""}
@@ -150,12 +263,12 @@ const res = await fetch(`${BASE_PATH}/api/feeds`);
 				{(feeds || []).map((f) => (
 					<div
 						key={f.id}
-						className="group flex items-center gap-3 px-5 py-3"
+						{...mergeStylexProps("group", sx.flex, sx.itemsCenter, sx.gap3, sx.px5, sx.py3)}
 					>
 						<IconTile name={f.id} size={30} />
-						<div className="min-w-0 flex-1">
-							<div className="text-item-title font-medium text-fg">{f.title}</div>
-							<div className="truncate text-label text-dim">
+						<div {...stylex.props(sx.minW0, sx.flex1)}>
+							<div {...stylex.props(sx.fontMedium, sx.textFg, typography.itemTitle)}>{f.title}</div>
+							<div {...stylex.props(sx.truncate, sx.textDim, typography.label)}>
 								{f.fromConfig ? "Config project" : "Built-in"} · ref {f.refKind}
 								{f.mcpServers?.length ? ` · MCP: ${f.mcpServers.join(", ")}` : ""}
 							</div>
@@ -164,7 +277,7 @@ const res = await fetch(`${BASE_PATH}/api/feeds`);
 							<button
 								className={cn(
 									rowMenuTriggerClasses,
-									"opacity-0 transition-[color,opacity,background] hover:text-red group-hover:opacity-100",
+									utilityClassName("opacity-0 transition-[color,opacity,background] hover:text-red group-hover:opacity-100"),
 								)}
 								onClick={() => remove(f.id)}
 								aria-label={`Remove ${f.title}`}
@@ -175,7 +288,7 @@ const res = await fetch(`${BASE_PATH}/api/feeds`);
 					</div>
 				))}
 				<button
-					className="flex w-full items-center gap-2 px-5 py-3 text-control-label font-medium text-dim transition-colors hover:bg-hover hover:text-fg"
+					{...mergeStylexProps("hover:bg-hover hover:text-fg", sx.flex, sx.wFull, sx.itemsCenter, sx.gap2, sx.px5, sx.py3, sx.fontMedium, sx.textDim, sx.transitionColors, typography.controlLabel)}
 					onClick={() => setOpen(true)}
 				>
 					<IconPlus size={16} /> New project
@@ -359,16 +472,16 @@ setBusy(null);
 
 	return (
 		<Modal.Root open={open} onOpenChange={(v) => !v && onClose()}>
-			<Modal.Content widthClassName="max-w-[34rem]">
+			<Modal.Content widthClassName={utilityClassName("max-w-[34rem]")}>
 				<Modal.Header
 					title="New project"
 					description="A sidebar feed built from one MCP tool call. Pick a server and its list-tool, fetch a sample, then adjust the mapping."
 				/>
-				<div className="max-h-[60vh] overflow-y-auto px-1">
+				<div {...stylex.props(sx.maxH60vh, sx.overflowYAuto, sx.px1)}>
 					<label className={labelCls}>Name</label>
 					<input className={inputCls} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Videos, Tickets, Posts…" />
 
-					<div className="grid grid-cols-2 gap-3">
+					<div {...stylex.props(sx.grid, sx.gridCols2, sx.gap3)}>
 						<div>
 							<label className={labelCls}>MCP server</label>
 							<OptionSelect
@@ -397,11 +510,11 @@ setBusy(null);
 					</div>
 
 					<label className={labelCls}>Tool args (JSON)</label>
-					<div className="flex gap-2">
+					<div {...stylex.props(sx.flex, sx.gap2)}>
 						<input className={inputCls} value={argsText} onChange={(e) => setArgsText(e.target.value)} />
 						<Button
 							variant="primary"
-							className="flex-shrink-0 text-control-label"
+							className={mergeStylexOverrideClassName("", sx.flexShrink0, typography.controlLabel)}
 							onClick={fetchSample}
 							disabled={!server || !tool || !!busy}
 						>
@@ -412,11 +525,11 @@ setBusy(null);
 					{sampleItem && (
 						<>
 							<label className={labelCls}>Sample item (items path: “{path || "(root)"}”)</label>
-							<pre className="max-h-28 overflow-auto rounded-md border border-line bg-surface p-2 text-meta leading-snug text-dim">{sampleItem}</pre>
+							<pre {...stylex.props(sx.maxH28, sx.overflowAuto, sx.roundedMd, sx.border, sx.borderLine, sx.bgSurface, sx.p2, sx.leadingSnug, sx.textDim, typography.meta)}>{sampleItem}</pre>
 						</>
 					)}
 
-					<div className="grid grid-cols-3 gap-3">
+					<div {...stylex.props(sx.grid, sx.gridCols3, sx.gap3)}>
 						{(["id", "title", "preview", "ts", "url", "thumbnail"] as const).map((k) => (
 							<div key={k}>
 								<label className={labelCls}>
@@ -434,11 +547,11 @@ setBusy(null);
 					</div>
 
 					<label className={labelCls}>Panel (optional): tab label and {"{id}"}-templated embed URL</label>
-					<div className="grid grid-cols-[1fr_2fr] gap-3">
+					<div {...stylex.props(sx.grid, sx.gridCols1fr2fr, sx.gap3)}>
 						<input className={inputCls} value={panelLabel} onChange={(e) => setPanelLabel(e.target.value)} placeholder="Video" />
 						<input className={inputCls} value={panelEmbed} onChange={(e) => setPanelEmbed(e.target.value)} placeholder="https://…/{id}/embed" />
 					</div>
-					<div className="mt-2 grid grid-cols-[1fr_2fr] gap-3">
+					<div {...stylex.props(sx.mt2, sx.grid, sx.gridCols1fr2fr, sx.gap3)}>
 						<input className={inputCls} value={panelLinkLabel} onChange={(e) => setPanelLinkLabel(e.target.value)} placeholder="Open" />
 						<input className={inputCls} value={panelLinkHref} onChange={(e) => setPanelLinkHref(e.target.value)} placeholder="https://…/{id}" />
 					</div>
@@ -446,11 +559,11 @@ setBusy(null);
 					<label className={labelCls}>Tile color</label>
 					<input className={inputCls} value={tileBg} onChange={(e) => setTileBg(e.target.value)} />
 
-					{error && <InlineAlert className="mt-3">{error}</InlineAlert>}
-					{busy && <div className="mt-3 text-label text-faint">{busy}</div>}
+					{error && <InlineAlert className={mergeStylexOverrideClassName("", sx.mt3)}>{error}</InlineAlert>}
+					{busy && <div {...stylex.props(sx.mt3, sx.textFaint, typography.label)}>{busy}</div>}
 				</div>
 				<Modal.Footer>
-					<div className="flex-1" />
+					<div {...stylex.props(sx.flex1)} />
 					<Modal.Close
 						render={
 							<Button variant="ghost">
@@ -460,7 +573,7 @@ setBusy(null);
 					/>
 					<Button
 						variant="primary"
-						className="px-5"
+						className={mergeStylexOverrideClassName("", sx.px5)}
 						onClick={save}
 						disabled={!canSave || !!busy}
 					>

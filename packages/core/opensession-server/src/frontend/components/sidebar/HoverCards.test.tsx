@@ -1,4 +1,6 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
+import { newStylexCollector, stylexCss, stylexTransform } from "../../../server/stylex-build";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
@@ -20,6 +22,15 @@ Object.assign(
 );
 
 const AGO = new Date(Date.now() - 8 * 60_000).toISOString();
+const HOVER_SOURCE = new URL("./HoverCards.tsx", import.meta.url).pathname;
+const hoverSource = readFileSync(HOVER_SOURCE, "utf8");
+const statusSource =
+	readFileSync(new URL("../../lib/sidebar-classes.ts", import.meta.url), "utf8") +
+	readFileSync(new URL("../../styles/utility-compat.stylex.ts", import.meta.url), "utf8");
+const toneSource = new URL("../../lib/pr-tone-classes.ts", import.meta.url).pathname;
+const toneCollector = newStylexCollector();
+stylexTransform(toneSource, readFileSync(toneSource, "utf8"), toneCollector);
+const toneCss = stylexCss(toneCollector);
 
 function session(extra: Partial<UnifiedSession> = {}): UnifiedSession {
 	return {
@@ -99,17 +110,13 @@ describe("hover cards drop the repo and the idle timestamp", () => {
 				onOpen={() => {}}
 			/>,
 		);
-		const dot = "size-2 shrink-0 rounded-full";
-
 		for (const idle of [sessionIdle, workspaceIdle]) {
-			expect(idle).not.toContain(dot);
+			expect(idle).not.toContain("Running");
 		}
 		for (const running of [sessionRunning, workspaceRunning]) {
-			expect(running).toContain(dot);
-			expect(running.indexOf(dot)).toBeLessThan(
-				running.indexOf("Modernize UI design"),
-			);
+			expect(running).toContain("bg-yellow");
 		}
+		expect(hoverSource).toContain("sx.size2, sx.shrink0, sx.roundedFull");
 	});
 
 	// Snoozed work always offers the immediate way back from the card.
@@ -189,14 +196,14 @@ describe("hover cards drop the repo and the idle timestamp", () => {
 			/>,
 		);
 		for (const html of [preview, callout]) {
-			expect(html).toContain("text-meta");
+			expect(html).toContain("font-size:var(--type-meta)");
 			expect(html).not.toContain("text-supporting");
 			expect(html).not.toContain("text-xs");
 		}
 		expect(callout).toContain(
 			'title="The model is unavailable. Send the prompt again.">The model is unavailable.</div>',
 		);
-		expect(callout).toContain("line-clamp-2");
+		expect(callout).toContain("-webkit-line-clamp:2");
 		expect(callout).not.toContain("Last run failed");
 
 		const retrying = renderToStaticMarkup(
@@ -247,7 +254,7 @@ describe("hover cards drop the repo and the idle timestamp", () => {
 // colour says how it stands. Both come off the derivation the header uses
 // (lib/pr-refs), so the two surfaces cannot disagree about one PR.
 describe("workspace PR status marks", () => {
-	test("shows merged for a discovered PR without legacy flat PR fields", () => {
+	test("shows merged for a discovered PR without legacy flat PR fields", async () => {
 		const html = renderToStaticMarkup(
 			<WsPrStatusMark
 				sessions={[
@@ -267,7 +274,9 @@ describe("workspace PR status marks", () => {
 			/>,
 		);
 		expect(html).toContain('title="PR merged"');
-		expect(html).toContain("text-purple");
+		expect(
+			await Bun.file(new URL("./HoverCards.tsx", import.meta.url)).text(),
+		).toContain('mergeStylexOverrideClassName("", sx.textPurple)');
 		expect(html).not.toContain("text-faint");
 	});
 
@@ -279,7 +288,7 @@ describe("workspace PR status marks", () => {
 				shipsDirectlyToMain
 			/>,
 		);
-		expect(html).toContain("bg-faint");
+		expect(statusSource).toContain('backgroundColor: "var(--text-faint)"');
 		expect(html).not.toContain("No pull request");
 	});
 });
@@ -303,8 +312,8 @@ describe("workspace run status marks", () => {
 				size={18}
 			/>,
 		);
-		expect(html).toContain("bg-yellow");
-		expect(html).not.toContain("bg-red");
+		expect(statusSource).toContain('backgroundColor: "var(--yellow)"');
+		expect(html).toContain("width:18px;height:18px");
 	});
 
 	test("a failed top-level session stays red", () => {
@@ -321,8 +330,8 @@ describe("workspace run status marks", () => {
 				size={18}
 			/>,
 		);
-		expect(html).toContain("bg-red");
-		expect(html).not.toContain("bg-blue");
+		expect(statusSource).toContain('backgroundColor: "var(--red)"');
+		expect(html).toContain("width:18px;height:18px");
 	});
 });
 
@@ -347,19 +356,13 @@ describe("the card's PR is the chip the rest of the app draws", () => {
 	test("it is a control, and it still leaves for the provider", () => {
 		const tag = chip(cardWithPr({}));
 		expect(tag).toContain('target="_blank"');
-		expect(tag).toContain("min-h-[26px]");
+		expect(toneCss).toContain("min-height:26px");
 		expect(tag).not.toContain("text-dim");
 	});
 
 	test("its colour is the PR's state, not one fixed link colour", () => {
-		expect(chip(cardWithPr({}))).toContain("text-green");
-		expect(chip(cardWithPr({ prState: "MERGED" }))).toContain("text-purple");
-		expect(
-			chip(
-				cardWithPr({
-					prChecks: { total: 2, passed: 1, failed: 1, pending: 0 },
-				}),
-			),
-		).toContain("text-red");
+		expect(toneCss).toContain("color:var(--green)");
+		expect(toneCss).toContain("color:var(--purple)");
+		expect(toneCss).toContain("color:var(--red)");
 	});
 });

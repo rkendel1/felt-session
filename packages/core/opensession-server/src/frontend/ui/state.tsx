@@ -1,8 +1,310 @@
 import * as React from "react";
 import { IconX } from "../components/icons";
-import { cn } from "./cn";
+import { cn, mergeStylexProps, mergeStylexClassName, mergeStylexOverrideClassName } from "./cn";
 import { PageLoader } from "./page-loader";
 import { Spinner } from "./spinner";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+import { motionStyles } from "../styles/animations.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	textFaint: {
+			color: "var(--text-faint)"
+	},
+	fontMedium: {
+			fontWeight: "var(--font-weight-medium)"
+	},
+	textFg: {
+			color: "var(--text)"
+	},
+	textDim: {
+			color: "var(--text-dim)"
+	},
+	inlineFlex: {
+			display: "inline-flex"
+	},
+	itemsCenter: {
+			alignItems: "center"
+	},
+	gap2: {
+			gap: "8px"
+	},
+	AnimationGhostInVarDurVarEase180msBoth: {
+			animation: "ghost-in var(--dur) var(--ease) .18s both"
+	},
+	mt2: {
+			marginTop: "8px"
+	},
+	h25: {
+			height: "10px"
+	},
+	w26: {
+			width: "26%"
+	},
+	mxAuto: {
+			marginInline: "auto"
+	},
+	mb45: {
+			marginBottom: "18px"
+	},
+	flex: {
+			display: "flex"
+	},
+	wFull: {
+			width: "100%"
+	},
+	maxWVarSessionCol: {
+			maxWidth: "var(--session-col)"
+	},
+	flexCol: {
+			flexDirection: "column"
+	},
+	gap25: {
+			gap: "10px"
+	},
+	minW0: {
+			minWidth: "0"
+	},
+	flex1: {
+			flex: "1"
+	},
+	focusRing: {
+			":focus-visible": {
+					outline: "2px solid var(--accent-ink)",
+					outlineOffset: "2px"
+			}
+	},
+	shrink0: {
+			flexShrink: "0"
+	},
+	selfCenter: {
+			alignSelf: "center"
+	},
+	whitespaceNowrap: {
+			whiteSpace: "nowrap"
+	},
+	underline: {
+			textDecorationLine: "underline"
+	},
+	underlineOffset2: {
+			textUnderlineOffset: "2px"
+	},
+	opacity80: {
+			opacity: ".8"
+	},
+	transitionOpacity: {
+			transitionProperty: "opacity",
+			transitionTimingFunction: "var(--tw-ease,var(--ease))",
+			transitionDuration: "var(--tw-duration,var(--dur-micro))"
+	},
+	relative: {
+			position: "relative"
+	},
+	Mr1: {
+			marginRight: "-4px"
+	},
+	size6: {
+			width: "24px",
+			height: "24px"
+	},
+	justifyCenter: {
+			justifyContent: "center"
+	},
+	roundedControl: {
+			borderRadius: "calc(12px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	opacity60: {
+			opacity: ".6"
+	},
+	leadingSnug: {
+			lineHeight: "var(--leading-snug)"
+	},
+	maxW46ch: {
+			maxWidth: "46ch"
+	},
+	mt1: {
+			marginTop: "4px"
+	},
+	animatePulse: {
+			animation: "var(--animate-pulse)"
+	},
+	h3: {
+			height: "12px"
+	},
+	roundedSm: {
+			borderRadius: "calc(4px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	bgHover: {
+			backgroundColor: "var(--hover)"
+	},
+	border: {
+			borderStyle: "solid",
+			borderWidth: "1px"
+	},
+	borderLine: {
+			borderColor: "var(--border)"
+	},
+	bgPanel: {
+			backgroundColor: "var(--bg-panel)"
+	},
+	px35: {
+			paddingInline: "14px"
+	},
+	py11px: {
+			paddingBlock: "11px"
+	},
+	py13px: {
+			paddingBlock: "13px"
+	},
+	selfEnd: {
+			alignSelf: "flex-end"
+	},
+	roundedLg: {
+			borderRadius: "calc(14px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	itemsStart: {
+			alignItems: "flex-start"
+	},
+	roundedMd: {
+			borderRadius: "calc(7px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	px3: {
+			paddingInline: "12px"
+	},
+	py25: {
+			paddingBlock: "10px"
+	},
+	textSm: {
+			fontSize: "var(--type-label)",
+			lineHeight: "var(--tw-leading,var(--text-sm--line-height))"
+	},
+	cursorPointer: {
+			cursor: "pointer"
+	},
+	mt05: {
+			marginTop: "2px"
+	},
+	opacity90: {
+			opacity: ".9"
+	},
+
+	gap15: {
+		"gap": "6px"
+	},
+	gap05: {
+		"gap": "2px"
+	},
+
+	py10: {
+		"paddingBlock": "40px"
+	},
+	textCenter: {
+		"textAlign": "center"
+	},
+	rounded2xl: {
+		"borderRadius": "calc(22px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	bgRaised: {
+		"backgroundColor": "var(--bg-raised)"
+	},
+	px5: {
+		"paddingInline": "20px"
+	},
+	py4: {
+		"paddingBlock": "16px"
+	},
+	w62: {
+		"width": "62%"
+	},
+	w41: {
+		"width": "41%"
+	},
+	w73: {
+		"width": "73%"
+	},
+	w52: {
+		"width": "52%"
+	},
+	w35: {
+		"width": "35%"
+	},
+	w66: {
+		"width": "66%"
+	},
+	w47: {
+		"width": "47%"
+	},
+	w58: {
+		"width": "58%"
+	},
+	borderRed40: {
+		"borderColor": "var(--red)",
+		"@supports (color: color-mix(in lab, red, red))": {
+			"borderColor": "color-mix(in oklab, var(--red) 40%, transparent)"
+		}
+	},
+	bgRedSoft: {
+		"backgroundColor": "var(--red-soft)"
+	},
+	textRed: {
+		"color": "var(--red)"
+	},
+	borderYellow40: {
+		"borderColor": "var(--yellow)",
+		"@supports (color: color-mix(in lab, red, red))": {
+			"borderColor": "color-mix(in oklab, var(--yellow) 40%, transparent)"
+		}
+	},
+	bgYellowSoft: {
+		"backgroundColor": "var(--yellow-soft)"
+	},
+	textYellow: {
+		"color": "var(--yellow)"
+	},
+	borderBlue40: {
+		"borderColor": "var(--blue)",
+		"@supports (color: color-mix(in lab, red, red))": {
+			"borderColor": "color-mix(in oklab, var(--blue) 40%, transparent)"
+		}
+	},
+	bgBlueSoft: {
+		"backgroundColor": "var(--blue-soft)"
+	},
+	textBlue: {
+		"color": "var(--blue)"
+	},
+	hoverOpacity100: {
+		"@media (hover: hover)": {
+			":hover": {
+				"opacity": "1"
+			}
+		}
+	},
+	beforeAbsolute: {
+		"::before": {
+			"content": "var(--tw-content)",
+			"position": "absolute"
+		}
+	},
+	beforeInset2: {
+		"::before": {
+			"content": "var(--tw-content)",
+			"inset": "-8px"
+		}
+	},
+	beforeContent: {
+		"::before": {
+			"--tw-content": "\"\"",
+			"content": "var(--tw-content)"
+		}
+	},
+});
 
 /**
  * Async-state primitives — one language for "nothing here yet", "fetching"
@@ -48,13 +350,13 @@ export type StatePlacement = "block" | "card" | "row";
 const placements: Record<StatePlacement, string> = {
 	// Stands in for a whole region: the `.loading`/`.empty` look (40px of air,
 	// centred) so it reads as "this area is empty", not "this row is".
-	block: "flex flex-col items-center justify-center gap-2 py-10 text-center",
+	block: mergeStylexClassName("", sx.flex, sx.flexCol, sx.itemsCenter, sx.justifyCenter, sx.gap2, sx.py10, sx.textCenter),
 	// Stands in for a card: borrows SettingCard's surface so the page's rhythm
 	// survives the emptiness.
-	card: "rounded-2xl bg-raised px-5 py-4",
+	card: mergeStylexClassName("", sx.rounded2xl, sx.bgRaised, sx.px5, sx.py4),
 	// Lives inside a card's row list: matches SettingRow's padding so it lands
 	// on the same left edge as the rows it replaces.
-	row: "px-5 py-4",
+	row: mergeStylexClassName("", sx.px5, sx.py4),
 };
 
 export function EmptyState({
@@ -77,14 +379,14 @@ export function EmptyState({
 	const block = placement === "block";
 	return (
 		<div className={cn(placements[placement], className)} {...props}>
-			{block && icon && <span className="text-faint">{icon}</span>}
-			{title && <div className="text-control-label font-medium text-fg">{title}</div>}
+			{block && icon && <span {...stylex.props(sx.textFaint)}>{icon}</span>}
+			{title && <div {...stylex.props(sx.fontMedium, sx.textFg, typography.controlLabel)}>{title}</div>}
 			{children && (
-				<div className={cn("text-supporting leading-snug text-dim", block && "max-w-[46ch]")}>
+				<div {...stylex.props(typography.supporting, sx.leadingSnug, sx.textDim, block && sx.maxW46ch)}>
 					{children}
 				</div>
 			)}
-			{action && <div className={cn(block ? "mt-1" : "mt-2")}>{action}</div>}
+			{action && <div {...stylex.props(block && sx.mt1, !(block) && sx.mt2)}>{action}</div>}
 		</div>
 	);
 }
@@ -114,8 +416,8 @@ export function LoadingState({
 			className={cn(placements[placement], className)}
 			{...props}
 		>
-			{block && spinner && <PageLoader className="text-dim" />}
-			<div className="inline-flex items-center gap-2 text-supporting text-faint">
+			{block && spinner && <PageLoader className={mergeStylexOverrideClassName("", sx.textDim)} />}
+			<div {...stylex.props(sx.inlineFlex, sx.itemsCenter, sx.gap2, sx.textFaint, typography.supporting)}>
 				{!block && spinner && <Spinner />}
 				{children}
 			</div>
@@ -152,10 +454,10 @@ export function Skeleton({
 			role="status"
 			aria-live="polite"
 			aria-label={label}
-			className="[animation:ghost-in_var(--dur)_var(--ease)_180ms_both]"
+			{...stylex.props(sx.AnimationGhostInVarDurVarEase180msBoth)}
 			{...props}
 		>
-			<div className={cn("animate-pulse", className)}>{children}</div>
+			<div {...mergeStylexProps(cn(className), motionStyles.pulse)}>{children}</div>
 		</div>
 	);
 }
@@ -170,7 +472,7 @@ export function SkeletonBar({
 	className,
 	...props
 }: React.ComponentPropsWithoutRef<"div">) {
-	return <div className={cn("h-3 rounded-sm bg-hover", className)} {...props} />;
+	return <div {...mergeStylexProps(cn(className), sx.h3, sx.roundedSm, sx.bgHover)} {...props} />;
 }
 
 /**
@@ -180,14 +482,14 @@ export function SkeletonBar({
  * width: Tailwind only compiles class names it can find in the source.
  */
 const SKELETON_WIDTHS = [
-	"w-[62%]",
-	"w-[41%]",
-	"w-[73%]",
-	"w-[52%]",
-	"w-[35%]",
-	"w-[66%]",
-	"w-[47%]",
-	"w-[58%]",
+	mergeStylexClassName("", sx.w62),
+	mergeStylexClassName("", sx.w41),
+	mergeStylexClassName("", sx.w73),
+	mergeStylexClassName("", sx.w52),
+	mergeStylexClassName("", sx.w35),
+	mergeStylexClassName("", sx.w66),
+	mergeStylexClassName("", sx.w47),
+	mergeStylexClassName("", sx.w58),
 ];
 
 /**
@@ -226,30 +528,19 @@ export function ListSkeleton({
 	const divided = variant === "rows";
 	return (
 		<Skeleton
-			label={label}
-			className={cn(
-				"flex flex-col",
-				cards
-					? "gap-1.5"
+			label={label} {...mergeStylexProps(cn(cards
+					? mergeStylexClassName("", sx.gap15)
 					: divided
 						? "[&>*+*]:border-t [&>*+*]:border-line"
-						: "gap-0.5",
-				className,
-			)}
+						: mergeStylexClassName("", sx.gap05), className), sx.flex, sx.flexCol)}
 			{...props}
 		>
 			{Array.from({ length: rows }, (_, i) => (
 				<div
-					key={i}
-					className={cn(
-						cards
-							? "rounded-control border border-line bg-panel px-3.5 py-[11px]"
-							: "px-3.5 py-[13px]",
-						rowClassName,
-					)}
+					key={i} {...mergeStylexProps(cn(rowClassName), cards && sx.roundedControl, cards && sx.border, cards && sx.borderLine, cards && sx.bgPanel, cards && sx.px35, cards && sx.py11px, !(cards) && sx.px35, !(cards) && sx.py13px)}
 				>
 					<SkeletonBar className={SKELETON_WIDTHS[i % SKELETON_WIDTHS.length]} />
-					{cards && <SkeletonBar className="mt-2 h-2.5 w-[26%]" />}
+					{cards && <SkeletonBar className={mergeStylexOverrideClassName("", sx.mt2, sx.h25, sx.w26)} />}
 				</div>
 			))}
 		</Skeleton>
@@ -287,13 +578,13 @@ export function TranscriptSkeleton({
 	...props
 }: React.ComponentPropsWithoutRef<"div"> & { label?: string }) {
 	return (
-		<Skeleton label={label} className={cn("flex flex-col", className)} {...props}>
+		<Skeleton label={label} {...mergeStylexProps(cn(className), sx.flex, sx.flexCol)} {...props}>
 			{TRANSCRIPT_GHOST_TURNS.map((turn) => (
 				<React.Fragment key={turn.bubble}>
-					<div className="mx-auto mb-4.5 flex w-full max-w-[var(--session-col)] flex-col">
-						<SkeletonBar className={cn("self-end rounded-lg", turn.bubble)} />
+					<div {...stylex.props(sx.mxAuto, sx.mb45, sx.flex, sx.wFull, sx.maxWVarSessionCol, sx.flexCol)}>
+						<SkeletonBar {...mergeStylexProps(cn(turn.bubble), sx.selfEnd, sx.roundedLg)} />
 					</div>
-					<div className="mx-auto mb-4.5 flex w-full max-w-[var(--session-col)] flex-col gap-2.5">
+					<div {...stylex.props(sx.mxAuto, sx.mb45, sx.flex, sx.wFull, sx.maxWVarSessionCol, sx.flexCol, sx.gap25)}>
 						{turn.lines.map((width) => (
 							<SkeletonBar key={width} className={width} />
 						))}
@@ -311,9 +602,9 @@ type AlertVariant = "error" | "warn" | "info";
 // spells it; a hand-written color-mix here is a second vocabulary for one
 // recipe.
 const alertVariants: Record<AlertVariant, string> = {
-	error: "border-red/40 bg-red-soft text-red",
-	warn: "border-yellow/40 bg-yellow-soft text-yellow",
-	info: "border-blue/40 bg-blue-soft text-blue",
+	error: mergeStylexClassName("", sx.borderRed40, sx.bgRedSoft, sx.textRed),
+	warn: mergeStylexClassName("", sx.borderYellow40, sx.bgYellowSoft, sx.textYellow),
+	info: mergeStylexClassName("", sx.borderBlue40, sx.bgBlueSoft, sx.textBlue),
 };
 
 export function InlineAlert({
@@ -338,27 +629,20 @@ export function InlineAlert({
 }) {
 	return (
 		<div
-			role="alert"
-			className={cn(
-				"flex items-start gap-2 rounded-md border px-3 py-2.5 text-sm",
-				alertVariants[variant],
-				onDismiss && "cursor-pointer",
-				className,
-			)}
+			role="alert" {...mergeStylexProps(cn(alertVariants[variant], className), sx.flex, sx.itemsStart, sx.gap2, sx.roundedMd, sx.border, sx.px3, sx.py25, sx.textSm, onDismiss && sx.cursorPointer)}
 			onClick={(e) => {
 				onClick?.(e);
 				onDismiss?.();
 			}}
 			{...props}
 		>
-			<div className="min-w-0 flex-1">
-				{title && <div className="font-medium">{title}</div>}
-				<div className={cn("min-w-0", title && "mt-0.5 opacity-90")}>{children}</div>
+			<div {...stylex.props(sx.minW0, sx.flex1)}>
+				{title && <div {...stylex.props(sx.fontMedium)}>{title}</div>}
+				<div {...stylex.props(sx.minW0, Boolean(title) && sx.mt05, Boolean(title) && sx.opacity90)}>{children}</div>
 			</div>
 			{onRetry && (
 				<button
-					type="button"
-					className="focus-ring shrink-0 self-center whitespace-nowrap text-supporting font-medium underline underline-offset-2 opacity-80 transition-opacity hover:opacity-100"
+					type="button" {...mergeStylexProps("", sx.hoverOpacity100, sx.focusRing, sx.shrink0, sx.selfCenter, sx.whitespaceNowrap, sx.fontMedium, sx.underline, sx.underlineOffset2, sx.opacity80, sx.transitionOpacity, typography.supporting)}
 					onClick={(e) => {
 						e.stopPropagation();
 						onRetry();
@@ -370,10 +654,7 @@ export function InlineAlert({
 			{onDismiss && (
 				<button
 					type="button"
-					aria-label="Dismiss"
-					// Visually 24px so it sits inside the box's 10px padding; the
-					// pseudo-element takes the hit area out to 40px.
-					className="focus-ring relative -mr-1 flex size-6 shrink-0 items-center justify-center rounded-control opacity-60 transition-opacity hover:opacity-100 before:absolute before:-inset-2 before:content-['']"
+					aria-label="Dismiss" {...mergeStylexProps("", sx.hoverOpacity100, sx.beforeAbsolute, sx.beforeInset2, sx.beforeContent, sx.focusRing, sx.relative, sx.Mr1, sx.flex, sx.size6, sx.shrink0, sx.itemsCenter, sx.justifyCenter, sx.roundedControl, sx.opacity60, sx.transitionOpacity)}
 					onClick={(e) => {
 						e.stopPropagation();
 						onDismiss();

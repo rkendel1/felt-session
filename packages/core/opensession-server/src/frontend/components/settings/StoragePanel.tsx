@@ -24,6 +24,40 @@ import {
 import { InlineAlert } from "../../ui/state";
 import { Switch } from "../../ui/switch";
 import { toast } from "../../ui/toast";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../../styles/typography.stylex";
+import { mergeStylexClassName, mergeStylexOverrideClassName } from "../../ui/cn";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	wFull: {
+			width: "100%"
+	},
+	mb3: {
+			marginBottom: "12px"
+	},
+	flex: {
+			display: "flex"
+	},
+	minH10: {
+			minHeight: "40px"
+	},
+	itemsCenter: {
+			alignItems: "center"
+	},
+	justifyBetween: {
+			justifyContent: "space-between"
+	},
+	gap4: {
+			gap: "16px"
+	},
+	fontMedium: {
+			fontWeight: "var(--font-weight-medium)"
+	},
+	textDim: {
+			color: "var(--text-dim)"
+	},
+});
 
 interface StorageDraft {
 	provider: "local" | "s3";
@@ -175,7 +209,7 @@ setBusy(null);
 							label="Storage backend"
 							value={draft.provider}
 							disabled={!!busy}
-							className="w-full"
+							className={mergeStylexOverrideClassName("", sx.wFull)}
 							options={[
 								{ value: "local", label: "Local disk" },
 								{ value: "s3", label: "S3-compatible" },
@@ -257,7 +291,7 @@ setBusy(null);
 										onChange={(event) => patch({ prefix: event.target.value })}
 									/>
 								</SettingsField>
-								<label className="mb-3 flex min-h-10 items-center justify-between gap-4 text-label font-medium text-dim">
+								<label {...stylex.props(sx.mb3, sx.flex, sx.minH10, sx.itemsCenter, sx.justifyBetween, sx.gap4, sx.fontMedium, sx.textDim, typography.label)}>
 									Path-style URLs
 									<Switch
 										aria-label="Path-style URLs"

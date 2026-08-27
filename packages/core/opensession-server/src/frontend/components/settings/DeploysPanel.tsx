@@ -17,6 +17,23 @@ import {
 } from "../../ui/settings";
 import { EmptyState, InlineAlert } from "../../ui/state";
 import { SettingRow } from "./shared";
+import * as stylex from "@stylexjs/stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	underline: {
+			textDecorationLine: "underline"
+	},
+	flex: {
+			display: "flex"
+	},
+	itemsCenter: {
+			alignItems: "center"
+	},
+	gap1: {
+			gap: "4px"
+	},
+});
 
 // ── Deploys: internal web apps agents published with opensession-publish.
 // They outlive the session that made them, so this is where a human sees what
@@ -76,7 +93,7 @@ export function DeploysPanel() {
 									{d.lastError ? ` · last error: ${d.lastError}` : ""}
 									<br />
 									<a
-										className="underline"
+										{...stylex.props(sx.underline)}
 										href={`/d/${d.name}/`}
 										target="_blank"
 										rel="noreferrer"
@@ -86,7 +103,7 @@ export function DeploysPanel() {
 									{d.sessionId ? (
 										<>
 											{" · "}
-											<a className="underline" href={`/session/${d.sessionId}`}>
+											<a {...stylex.props(sx.underline)} href={`/session/${d.sessionId}`}>
 												published from this session
 											</a>
 										</>
@@ -94,7 +111,7 @@ export function DeploysPanel() {
 								</>
 							}
 							control={
-								<div className="flex items-center gap-1">
+								<div {...stylex.props(sx.flex, sx.itemsCenter, sx.gap1)}>
 									{d.currentVersion > 1 && (
 										<Button
 											size="sm"

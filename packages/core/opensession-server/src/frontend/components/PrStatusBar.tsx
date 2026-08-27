@@ -61,7 +61,7 @@ import { Tooltip } from "../ui/tooltip";
 import { ContextMenu, Menu, MENU_ICON } from "../ui/menu";
 import { Spinner } from "../ui/spinner";
 import { Skeleton, SkeletonBar } from "../ui/state";
-import { cn } from "../ui/cn";
+import { cn, mergeStylexProps, mergeStylexClassName, mergeStylexOverrideClassName } from "../ui/cn";
 import { useShortcutLabel } from "../hooks/useShortcutBindings";
 import { useDeferredMergePhase } from "../hooks/useDeferredMerge";
 import {
@@ -86,6 +86,427 @@ import {
 	IconPlus,
 	IconArchive,
 } from "./icons";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	inlineFlex: {
+			display: "inline-flex"
+	},
+	size18px: {
+			width: "18px",
+			height: "18px"
+	},
+	shrink0: {
+			flexShrink: "0"
+	},
+	itemsCenter: {
+			alignItems: "center"
+	},
+	justifyCenter: {
+			justifyContent: "center"
+	},
+	translateY05px: {
+			translate: "0 .5px"
+	},
+	TextBoxTrimBothCapAlphabetic: {
+			textBox: "trim-both cap alphabetic"
+	},
+	noUnderline: {
+			textDecorationLine: "none"
+	},
+	grow: {
+			flexGrow: "1"
+	},
+	textGreen: {
+			color: "var(--green)"
+	},
+	minW0: {
+			minWidth: "0"
+	},
+	gap1: {
+			gap: "4px"
+	},
+	size4: {
+			width: "16px",
+			height: "16px"
+	},
+	roundedFull: {
+			borderRadius: "calc(infinity * 1px)"
+	,
+		cornerShape: "round"},
+	w58: {
+			width: "58%"
+	},
+	flex: {
+			display: "flex"
+	},
+	gap2: {
+			gap: "8px"
+	},
+	ml15: {
+			marginLeft: "6px"
+	},
+	bgWhite20: {
+			backgroundColor: "color-mix(in srgb, var(--color-white) 20%, transparent)"
+	},
+	px15: {
+			paddingInline: "6px"
+	},
+	block: {
+			display: "block"
+	},
+	truncate: {
+			textOverflow: "ellipsis",
+			whiteSpace: "nowrap",
+			overflow: "hidden"
+	},
+	textFg: {
+			color: "var(--text)"
+	},
+	textFaint: {
+			color: "var(--text-faint)"
+	},
+	opacity0: {
+			opacity: "0"
+	},
+	transitionOpacity: {
+			transitionProperty: "opacity",
+			transitionTimingFunction: "var(--tw-ease,var(--ease))",
+			transitionDuration: "var(--tw-duration,var(--dur-micro))"
+	},
+	duration150: {
+			transitionDuration: ".15s"
+	},
+	flexCol: {
+			flexDirection: "column"
+	},
+	gap05: {
+			gap: "2px"
+	},
+	fontNormal: {
+			fontWeight: "var(--font-weight-normal)"
+	},
+	textTooltipFg60: {
+			color: "var(--tooltip-fg)"
+	},
+	mx5: {
+			marginInline: "20px"
+	},
+	mb2: {
+			marginBottom: "8px"
+	},
+	mt1: {
+			marginTop: "4px"
+	},
+	leadingSnug: {
+			lineHeight: "var(--leading-snug)"
+	},
+	textRed: {
+			color: "var(--red)"
+	},
+	flex1: {
+			flex: "1"
+	},
+
+	minH30px: {
+		"minHeight": "30px"
+	},
+	gap15: {
+		"gap": "6px"
+	},
+	roundedControl: {
+		"borderRadius": "calc(12px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	border: {
+		"borderStyle": "var(--tw-border-style)",
+		"borderWidth": "1px"
+	},
+	px25: {
+		"paddingInline": "10px"
+	},
+	py5px: {
+		"paddingBlock": "5px"
+	},
+	leadingNone: {
+		"--tw-leading": "1",
+		"lineHeight": "1"
+	},
+	fontSemibold: {
+		"--tw-font-weight": "var(--font-weight-semibold)",
+		"fontWeight": "var(--font-weight-semibold)"
+	},
+	whitespaceNowrap: {
+		"whiteSpace": "nowrap"
+	},
+	easeInOut: {
+		"--tw-ease": "var(--ease)",
+		"transitionTimingFunction": "var(--ease)"
+	},
+	hoverBrightness108: {
+		"@media (hover: hover)": {
+			":hover": {
+				"--tw-brightness": "brightness(1.08)",
+				"filter": "var(--tw-blur,) var(--tw-brightness,) var(--tw-contrast,) var(--tw-grayscale,) var(--tw-hue-rotate,) var(--tw-invert,) var(--tw-saturate,) var(--tw-sepia,) var(--tw-drop-shadow,)"
+			}
+		}
+	},
+	activeScale098: {
+		":active": {
+			"scale": ".98"
+		}
+	},
+	activeBrightness098: {
+		":active": {
+			"--tw-brightness": "brightness(.98)",
+			"filter": "var(--tw-blur,) var(--tw-brightness,) var(--tw-contrast,) var(--tw-grayscale,) var(--tw-hue-rotate,) var(--tw-invert,) var(--tw-saturate,) var(--tw-sepia,) var(--tw-drop-shadow,)"
+		}
+	},
+	focusVisibleOutline2: {
+		":focusVisible": {
+			"outlineStyle": "var(--tw-outline-style)",
+			"outlineWidth": "2px"
+		}
+	},
+	focusVisibleOutlineVarAccentInk: {
+		":focusVisible": {
+			"outlineColor": "var(--accent-ink)"
+		}
+	},
+	focusVisibleOutlineOffset2: {
+		":focusVisible": {
+			"outlineOffset": "2px"
+		}
+	},
+	disabledCursorDefault: {
+		":disabled": {
+			"cursor": "default"
+		}
+	},
+	disabledOpacity60: {
+		":disabled": {
+			"opacity": ".6"
+		}
+	},
+	disabledShadowNone: {
+		":disabled": {
+			"--tw-shadow": "0 0 transparent",
+			"boxShadow": "var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow)"
+		}
+	},
+	pl65px: {
+		"paddingLeft": "6.5px"
+	},
+	Max440pxPx15: {
+		"paddingInline": "6px"
+	},
+	Max440pxGap0: {
+		"gap": "0"
+	},
+	Max440pxHidden: {
+		"display": "none"
+	},
+	minH32px: {
+		"minHeight": "32px"
+	},
+	cursorPointer: {
+		"cursor": "pointer"
+	},
+	roundedSm: {
+		"borderRadius": "calc(4px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	borderNone: {
+		"--tw-border-style": "none",
+		"borderStyle": "none"
+	},
+	bgTransparent: {
+		"backgroundColor": "transparent"
+	},
+	p0: {
+		"padding": "0"
+	},
+	textLeft: {
+		"textAlign": "left"
+	},
+	focusRing: {
+		":focusVisible": {
+			"outline": "2px solid var(--accent-ink)",
+			"outlineOffset": "2px"
+		},
+		"@media (forced-colors: active)": {
+			":focusVisible": {
+				"outlineColor": "highlight"
+			}
+		}
+	},
+	phoneFlex: {
+		"@media (max-width: 720px)": {
+			"display": "flex"
+		}
+	},
+	phoneFlexCol: {
+		"@media (max-width: 720px)": {
+			"flexDirection": "column"
+		}
+	},
+	phoneJustifyCenter: {
+		"@media (max-width: 720px)": {
+			"justifyContent": "center"
+		}
+	},
+
+	transitionBackgroundColorBorderColorColorFilterTransform: {
+		"transitionProperty": "background-color,border-color,color,filter,transform",
+		"transitionTimingFunction": "var(--tw-ease,var(--ease))",
+		"transitionDuration": "var(--tw-duration,var(--dur-micro))"
+	},
+
+	bgVarGreen: {
+		"backgroundColor": "var(--green)"
+	},
+	borderColorMixInSrgbVarGreen78Black: {
+		"borderColor": "var(--green)",
+		"@supports (color: color-mix(in lab, red, red))": {
+			"borderColor": "color-mix(in srgb,var(--green) 78%,black)"
+		}
+	},
+	textWhite: {
+		"color": "var(--color-white)"
+	},
+	bgVarPurple: {
+		"backgroundColor": "var(--purple)"
+	},
+	borderColorMixInSrgbVarPurple78Black: {
+		"borderColor": "var(--purple)",
+		"@supports (color: color-mix(in lab, red, red))": {
+			"borderColor": "color-mix(in srgb,var(--purple) 78%,black)"
+		}
+	},
+	bgVarRed: {
+		"backgroundColor": "var(--red)"
+	},
+	borderColorMixInSrgbVarRed78Black: {
+		"borderColor": "var(--red)",
+		"@supports (color: color-mix(in lab, red, red))": {
+			"borderColor": "color-mix(in srgb,var(--red) 78%,black)"
+		}
+	},
+	borderColorMixInSrgbVarRed45Transparent: {
+		"borderColor": "var(--red)",
+		"@supports (color: color-mix(in lab, red, red))": {
+			"borderColor": "color-mix(in srgb,var(--red) 45%,transparent)"
+		}
+	},
+	bgColorMixInSrgbVarRed12VarControlSurface: {
+		"backgroundColor": "var(--red)",
+		"@supports (color: color-mix(in lab, red, red))": {
+			"backgroundColor": "color-mix(in srgb,var(--red) 12%,var(--control-surface))"
+		}
+	},
+	hoverBgRedSoft: {
+		"@media (hover: hover)": {
+			":hover": {
+				"backgroundColor": "var(--red-soft)"
+			}
+		}
+	},
+	hoverBrightness100: {
+		"@media (hover: hover)": {
+			":hover": {
+				"--tw-brightness": "brightness(100%)",
+				"filter": "var(--tw-blur,) var(--tw-brightness,) var(--tw-contrast,) var(--tw-grayscale,) var(--tw-hue-rotate,) var(--tw-invert,) var(--tw-saturate,) var(--tw-sepia,) var(--tw-drop-shadow,)"
+			}
+		}
+	},
+	borderColorMixInSrgbVarYellow35Transparent: {
+		"borderColor": "var(--yellow)",
+		"@supports (color: color-mix(in lab, red, red))": {
+			"borderColor": "color-mix(in srgb,var(--yellow) 35%,transparent)"
+		}
+	},
+	bgColorMixInSrgbVarYellow10VarControlSurface: {
+		"backgroundColor": "var(--yellow)",
+		"@supports (color: color-mix(in lab, red, red))": {
+			"backgroundColor": "color-mix(in srgb,var(--yellow) 10%,var(--control-surface))"
+		}
+	},
+	textYellow: {
+		"color": "var(--yellow)"
+	},
+	hoverBgColorMixInSrgbVarYellow16VarControlSurface: {
+		"@media (hover: hover)": {
+			":hover": {
+				"backgroundColor": "var(--yellow)"
+			},
+			"@supports (color: color-mix(in lab, red, red))": {
+				":hover": {
+					"backgroundColor": "color-mix(in srgb,var(--yellow) 16%,var(--control-surface))"
+				}
+			}
+		}
+	},
+	bgVarText: {
+		"backgroundColor": "var(--text)"
+	},
+	textVarBg: {
+		"color": "var(--bg)"
+	},
+	borderColorMixInSrgbVarText84Transparent: {
+		"borderColor": "var(--text)",
+		"@supports (color: color-mix(in lab, red, red))": {
+			"borderColor": "color-mix(in srgb,var(--text) 84%,transparent)"
+		}
+	},
+	bgRaised: {
+		"backgroundColor": "var(--bg-raised)"
+	},
+	borderLineStrong: {
+		"borderColor": "var(--border-strong)"
+	},
+	hoverBgHover: {
+		"@media (hover: hover)": {
+			":hover": {
+				"backgroundColor": "var(--hover)"
+			}
+		}
+	},
+	borderDashed: {
+		"--tw-border-style": "dashed",
+		"borderStyle": "dashed"
+	},
+	borderColorMixInSrgbVarPurple45Transparent: {
+		"borderColor": "var(--purple)",
+		"@supports (color: color-mix(in lab, red, red))": {
+			"borderColor": "color-mix(in srgb,var(--purple) 45%,transparent)"
+		}
+	},
+	textPurple: {
+		"color": "var(--purple)"
+	},
+	shadowNone: {
+		"--tw-shadow": "0 0 transparent",
+		"boxShadow": "var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow)"
+	},
+	hoverBgColorMixInSrgbVarPurple10Transparent: {
+		"@media (hover: hover)": {
+			":hover": {
+				"backgroundColor": "var(--purple)"
+			},
+			"@supports (color: color-mix(in lab, red, red))": {
+				":hover": {
+					"backgroundColor": "color-mix(in srgb,var(--purple) 10%,transparent)"
+				}
+			}
+		}
+	},
+	tabularNums: {
+		"--tw-numeric-spacing": "tabular-nums",
+		"fontVariantNumeric": "var(--tw-ordinal,) var(--tw-slashed-zero,) var(--tw-numeric-figure,) var(--tw-numeric-spacing,) var(--tw-numeric-fraction,)"
+	},
+});
 
 /**
  * Conductor-style status strip at the top of the right Workspace panel: the PR
@@ -190,28 +611,28 @@ function PrBarButton({
 }: PrBarButtonProps) {
 	const tones = {
 		green:
-			"bg-[var(--green)] border-[color-mix(in_srgb,var(--green)_78%,black)] text-white",
+			mergeStylexClassName("", sx.bgVarGreen, sx.borderColorMixInSrgbVarGreen78Black, sx.textWhite),
 		purple:
-			"bg-[var(--purple)] border-[color-mix(in_srgb,var(--purple)_78%,black)] text-white",
-		red: "bg-[var(--red)] border-[color-mix(in_srgb,var(--red)_78%,black)] text-white",
+			mergeStylexClassName("", sx.bgVarPurple, sx.borderColorMixInSrgbVarPurple78Black, sx.textWhite),
+		red: mergeStylexClassName("", sx.bgVarRed, sx.borderColorMixInSrgbVarRed78Black, sx.textWhite),
 		"status-red":
-			"border-[color-mix(in_srgb,var(--red)_45%,transparent)] bg-[color-mix(in_srgb,var(--red)_12%,var(--control-surface))] text-red hover:bg-red-soft hover:brightness-100",
+			mergeStylexClassName("", sx.borderColorMixInSrgbVarRed45Transparent, sx.bgColorMixInSrgbVarRed12VarControlSurface, sx.textRed, sx.hoverBgRedSoft, sx.hoverBrightness100),
 		"status-yellow":
-			"border-[color-mix(in_srgb,var(--yellow)_35%,transparent)] bg-[color-mix(in_srgb,var(--yellow)_10%,var(--control-surface))] text-yellow hover:bg-[color-mix(in_srgb,var(--yellow)_16%,var(--control-surface))] hover:brightness-100",
+			mergeStylexClassName("", sx.borderColorMixInSrgbVarYellow35Transparent, sx.bgColorMixInSrgbVarYellow10VarControlSurface, sx.textYellow, sx.hoverBgColorMixInSrgbVarYellow16VarControlSurface, sx.hoverBrightness100),
 		solid:
-			"bg-[var(--text)] text-[var(--bg)] border-[color-mix(in_srgb,var(--text)_84%,transparent)]",
-		secondary: "bg-raised text-fg border-line-strong hover:bg-hover hover:brightness-100",
+			mergeStylexClassName("", sx.bgVarText, sx.textVarBg, sx.borderColorMixInSrgbVarText84Transparent),
+		secondary: mergeStylexClassName("", sx.bgRaised, sx.textFg, sx.borderLineStrong, sx.hoverBgHover, sx.hoverBrightness100),
 		// The open outline beside a filled button: purple ink on the strip's own
 		// band, dashed, so it reads as the road not yet taken next to the solid
 		// action. Nothing to fill and nothing to lift, so it drops the shadow.
 		"purple-dashed":
-			"border-dashed border-[color-mix(in_srgb,var(--purple)_45%,transparent)] bg-transparent text-purple shadow-none hover:bg-[color-mix(in_srgb,var(--purple)_10%,transparent)] hover:brightness-100",
+			mergeStylexClassName("", sx.borderDashed, sx.borderColorMixInSrgbVarPurple45Transparent, sx.bgTransparent, sx.textPurple, sx.shadowNone, sx.hoverBgColorMixInSrgbVarPurple10Transparent, sx.hoverBrightness100),
 	} as const;
 	return (
 		<button
 			type="button"
 			className={cn(
-				"inline-flex min-h-[30px] items-center justify-center gap-1.5 rounded-control border px-2.5 py-[5px] text-label leading-none font-semibold whitespace-nowrap smooth-shadow-sm transition-[background-color,border-color,color,filter,transform] duration-150 ease-in-out hover:brightness-[1.08] active:scale-[0.98] active:brightness-[0.98] focus-visible:outline-2 focus-visible:outline-[var(--accent-ink)] focus-visible:outline-offset-2 disabled:cursor-default disabled:opacity-60 disabled:shadow-none",
+				mergeStylexClassName("smooth-shadow-sm", sx.transitionBackgroundColorBorderColorColorFilterTransform, sx.inlineFlex, sx.minH30px, sx.itemsCenter, sx.justifyCenter, sx.gap15, sx.roundedControl, sx.border, sx.px25, sx.py5px, typography.label, sx.leadingNone, sx.fontSemibold, sx.whitespaceNowrap, sx.duration150, sx.easeInOut, sx.hoverBrightness108, sx.activeScale098, sx.activeBrightness098, sx.focusVisibleOutline2, sx.focusVisibleOutlineVarAccentInk, sx.focusVisibleOutlineOffset2, sx.disabledCursorDefault, sx.disabledOpacity60, sx.disabledShadowNone),
 				tones[tone],
 				// A leading glyph carries its own margin: the icon set draws in a
 				// 4.75–19.25 span of a 24 grid, so an 18px box holds ~3.5px of
@@ -221,13 +642,13 @@ function PrBarButton({
 				// and close the inner gap so the two read as one group rather than
 				// two things. Icon-only callers override px themselves, so this
 				// never lands on a lone glyph.
-				icon && "gap-1 pl-[6.5px]",
+				icon && mergeStylexClassName("", sx.gap1, sx.pl65px),
 				className,
 			)}
 			{...props}
 		>
 			{icon && (
-				<span className="inline-flex size-[18px] shrink-0 items-center justify-center [&_svg]:block [&_svg]:stroke-[1.7]">
+				<span {...mergeStylexProps("[&_svg]:block [&_svg]:stroke-[1.7]", sx.inlineFlex, sx.size18px, sx.shrink0, sx.itemsCenter, sx.justifyCenter)}>
 					{icon}
 				</span>
 			)}
@@ -243,7 +664,7 @@ function PrBarButton({
 			    the geometric center reads a touch high. It settles the label
 			    without going back to a nudge that has to carry the whole
 			    correction. */}
-			<span className="translate-y-[0.5px] [text-box:trim-both_cap_alphabetic]">
+			<span {...stylex.props(sx.translateY05px, sx.TextBoxTrimBothCapAlphabetic)}>
 				{children}
 			</span>
 		</button>
@@ -278,30 +699,30 @@ function PrCopyItems({ pr }: { pr: PrDetails }) {
 		<>
 			<ContextMenu.Item
 				render={
-					<a href={pr.url} target="_blank" rel="noopener" className="no-underline" />
+					<a href={pr.url} target="_blank" rel="noopener" {...stylex.props(sx.noUnderline)} />
 				}
 			>
 				<IconArrowUpRight size={20} className={MENU_ICON} />
-				<span className="grow">Open on {provider.name}</span>
+				<span {...stylex.props(sx.grow)}>Open on {provider.name}</span>
 			</ContextMenu.Item>
 			<ContextMenu.Item closeOnClick={false} onClick={() => copy("link", pr.url)}>
 				{copied === "link" ? (
-					<IconCheck size={20} className="text-green" />
+					<IconCheck size={20} className={mergeStylexOverrideClassName("", sx.textGreen)} />
 				) : (
 					<IconCopy size={20} className={MENU_ICON} />
 				)}
-				<span className="grow">{copied === "link" ? "Copied" : "Copy link"}</span>
+				<span {...stylex.props(sx.grow)}>{copied === "link" ? "Copied" : "Copy link"}</span>
 			</ContextMenu.Item>
 			<ContextMenu.Item
 				closeOnClick={false}
 				onClick={() => copy("number", `#${pr.number}`)}
 			>
 				{copied === "number" ? (
-					<IconCheck size={20} className="text-green" />
+					<IconCheck size={20} className={mergeStylexOverrideClassName("", sx.textGreen)} />
 				) : (
 					<IconHash size={20} className={MENU_ICON} />
 				)}
-				<span className="grow">{copied === "number" ? "Copied" : "Copy number"}</span>
+				<span {...stylex.props(sx.grow)}>{copied === "number" ? "Copied" : "Copy number"}</span>
 			</ContextMenu.Item>
 		</>
 	);
@@ -327,7 +748,7 @@ function PrNumberChip({
 	const prChord = useShortcutLabel("open-pr");
 
 	return (
-		<div className="inline-flex items-center">
+		<div {...stylex.props(sx.inlineFlex, sx.itemsCenter)}>
 			<ContextMenu.Root>
 				<ContextMenu.Trigger
 					render={
@@ -341,7 +762,7 @@ function PrNumberChip({
 				>
 					{/* Cap band plus the same half pixel as the action button beside
 					    it, so the pair reads level. */}
-					<span className="translate-y-[0.5px] [text-box:trim-both_cap_alphabetic]">
+					<span {...stylex.props(sx.translateY05px, sx.TextBoxTrimBothCapAlphabetic)}>
 						#{pr.number}
 					</span>
 				</ContextMenu.Trigger>
@@ -403,7 +824,7 @@ function PrRefChips({
 					? "green"
 					: "muted";
 	return (
-		<div className="inline-flex min-w-0 items-center gap-1">
+		<div {...stylex.props(sx.inlineFlex, sx.minW0, sx.itemsCenter, sx.gap1)}>
 			{inline.map((ref) => (
 				<Tooltip key={`${ref.repo} ${ref.branch}`} label={refLabel(ref)}>
 					<button
@@ -437,7 +858,7 @@ function PrRefChips({
 								<span
 								className={`${PR_SIB_DOT} ${PR_SIB_DOT_BG[refTone(ref)]}`}
 							/>
-								<span className="grow">
+								<span {...stylex.props(sx.grow)}>
 									{repoLabel(ref.repo)} #{ref.number}
 								</span>
 							</Menu.Item>
@@ -619,12 +1040,12 @@ export function PrStatusBar({
 	const prSettled = pr?.state === "MERGED" || pr?.state === "CLOSED";
 	const checksPr = pr && !prSettled && checksSummary.total > 0 ? pr : null;
 	const checksTone = checksSummary.failed > 0
-		? "text-red"
+		? mergeStylexClassName("", sx.textRed)
 		: checksSummary.pending > 0
-			? "text-yellow"
+			? mergeStylexClassName("", sx.textYellow)
 			: checksSummary.passed > 0
-				? "text-green"
-				: "text-faint";
+				? mergeStylexClassName("", sx.textGreen)
+				: mergeStylexClassName("", sx.textFaint);
 	const checksLabel = `${checksSummary.total} check${checksSummary.total === 1 ? "" : "s"}`;
 
 	async function run(name: string, fn: () => Promise<unknown>) {
@@ -706,8 +1127,8 @@ setBusy(null);
 				<div className={WS_SUMMARY_BAND}>
 					<Skeleton label="Loading PR status">
 						<div className={WS_SUMMARY_STATUS_ROW}>
-							<SkeletonBar className="size-4 shrink-0 rounded-full" />
-							<SkeletonBar className="w-[58%]" />
+							<SkeletonBar className={mergeStylexOverrideClassName("", sx.size4, sx.shrink0, sx.roundedFull)} />
+							<SkeletonBar className={mergeStylexOverrideClassName("", sx.w58)} />
 						</div>
 					</Skeleton>
 					{children}
@@ -766,10 +1187,10 @@ setBusy(null);
 				const canArchive = !isArchived && openSiblings === 0;
 				if (!onNewSession && !canArchive && !isArchived) return null;
 				return (
-					<div className="flex items-center gap-2">
+					<div {...stylex.props(sx.flex, sx.itemsCenter, sx.gap2)}>
 						{onNewSession && (
 							<PrBarButton
-								className={cn(actionBtn, "@max-[440px]:px-1.5 @max-[440px]:gap-0")}
+								className={cn(actionBtn, mergeStylexClassName("", sx.Max440pxPx15, sx.Max440pxGap0))}
 								// The open outline: carrying the work on is the choice
 								// beside the filed-away one, not the same weight as it.
 								tone="purple-dashed"
@@ -780,7 +1201,7 @@ setBusy(null);
 							>
 								{/* The label is the first thing to go on a narrow panel: the
 								    headline beside it is what the strip exists to say. */}
-								<span className="@max-[440px]:hidden">Continue</span>
+								<span className={mergeStylexClassName("", sx.Max440pxHidden)}>Continue</span>
 							</PrBarButton>
 						)}
 						{isArchived ? (
@@ -943,7 +1364,7 @@ setBusy(null);
 				if (mergeScheduled)
 					return (
 						<MergeUndoControl
-							className={variant === "header" ? "min-h-[32px]" : undefined}
+							className={variant === "header" ? mergeStylexClassName("", sx.minH32px) : undefined}
 							onUndo={handleMerge}
 						/>
 					);
@@ -970,7 +1391,7 @@ setBusy(null);
 								? "Merge stack"
 								: "Merge"}
 						{stackMerge && !merging && (
-							<span className="ml-1.5 rounded-full bg-white/20 px-1.5 tabular-nums">
+							<span {...mergeStylexProps("", sx.tabularNums, sx.ml15, sx.roundedFull, sx.bgWhite20, sx.px15)}>
 								{stackMerge.layers.length}
 							</span>
 						)}
@@ -1000,7 +1421,7 @@ setBusy(null);
 		// wrapper would drop the focus ring with the box.
 		const labelClass = cn(
 			WS_SUMMARY_LABEL,
-			"group/prsum cursor-pointer rounded-sm border-none bg-transparent p-0 text-left focus-ring phone:flex phone:flex-col phone:justify-center",
+			mergeStylexClassName("group/prsum", sx.cursorPointer, sx.roundedSm, sx.borderNone, sx.bgTransparent, sx.p0, sx.textLeft, sx.focusRing, sx.phoneFlex, sx.phoneFlexCol, sx.phoneJustifyCenter),
 		);
 		const provider = pr ? providerFromUrl(pr.url) : null;
 		const externalHint = provider
@@ -1011,23 +1432,22 @@ setBusy(null);
 		// competing with the state or the primary action.
 		const labelBody = (
 			<>
-				<span className="block truncate text-item-title text-fg">
+				<span {...stylex.props(sx.block, sx.truncate, sx.textFg, typography.itemTitle)}>
 					{headlineLabel}
 				</span>
 				{pr && provider && (
-					<span className="flex items-center gap-1 truncate text-meta text-faint group-hover/prsum:text-dim">
-						<BrandMark name={provider.key} size={12} className="shrink-0" />
-						<span className="shrink-0">#{pr.number}</span>
+					<span {...mergeStylexProps("group-hover/prsum:text-dim", sx.flex, sx.itemsCenter, sx.gap1, sx.truncate, sx.textFaint, typography.meta)}>
+						<BrandMark name={provider.key} size={12} className={mergeStylexOverrideClassName("", sx.shrink0)} />
+						<span {...stylex.props(sx.shrink0)}>#{pr.number}</span>
 						{checksPr && (
 							<>
 								<span aria-hidden="true">·</span>
-								<span className={cn("truncate", checksTone)}>{checksLabel}</span>
+								<span className={cn(mergeStylexClassName("", sx.truncate), checksTone)}>{checksLabel}</span>
 							</>
 						)}
 						<IconArrowUpRight
 							dense
-							size={12}
-							className="shrink-0 opacity-0 transition-opacity duration-150 group-hover/prsum:opacity-100 group-focus-visible/prsum:opacity-100"
+							size={12} {...mergeStylexProps("group-hover/prsum:opacity-100 group-focus-visible/prsum:opacity-100", sx.shrink0, sx.opacity0, sx.transitionOpacity, sx.duration150)}
 						/>
 					</span>
 				)}
@@ -1066,7 +1486,7 @@ setBusy(null);
 						checks={checksPr.checks}
 						trigger={
 							<a
-								className={cn(labelClass, "no-underline")}
+								className={cn(labelClass, mergeStylexClassName("", sx.noUnderline))}
 								href={checksPr.url}
 								target="_blank"
 								rel="noopener"
@@ -1080,10 +1500,10 @@ setBusy(null);
 				) : pr ? (
 					<Tooltip
 						label={
-							<span className="flex flex-col gap-0.5">
+							<span {...stylex.props(sx.flex, sx.flexCol, sx.gap05)}>
 								<span>Open review</span>
 								{externalHint && (
-									<span className="font-normal text-tooltip-fg/60">
+									<span {...stylex.props(sx.fontNormal, sx.textTooltipFg60)}>
 										{externalHint}
 									</span>
 								)}
@@ -1094,7 +1514,7 @@ setBusy(null);
 						multiline
 					>
 						<a
-							className={cn(labelClass, "no-underline")}
+							className={cn(labelClass, mergeStylexClassName("", sx.noUnderline))}
 							href={pr.url}
 							target="_blank"
 							rel="noopener"
@@ -1160,7 +1580,7 @@ setBusy(null);
 					<div className={summaryRowClass}>{rowBody}</div>
 				)}
 				{error && (
-					<p role="alert" className="mx-5 mb-2 mt-1 text-meta leading-snug text-red">
+					<p role="alert" {...stylex.props(sx.mx5, sx.mb2, sx.mt1, sx.leadingSnug, sx.textRed, typography.meta)}>
 						{error}
 					</p>
 				)}
@@ -1283,7 +1703,7 @@ setBusy(null);
 					</button>
 				</Tooltip>
 			)}
-			<span className="flex-1" />
+			<span {...stylex.props(sx.flex1)} />
 			{error && <span className={PR_BAR_ERROR} title={error}>{error}</span>}
 			{renderAction()}
 		</div>

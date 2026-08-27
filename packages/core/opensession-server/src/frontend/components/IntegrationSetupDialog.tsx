@@ -1,3 +1,5 @@
+import { mergeStylexProps, mergeStylexOverrideClassName } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import { useEffect, useState, type ReactNode } from "react";
 import { Button } from "../ui/button";
 import { Disclosure } from "../ui/disclosure";
@@ -33,6 +35,107 @@ import {
 	type SetupIntegration,
 	type SetupScopeGroup,
 } from "./setup-shared";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	mt15: {
+			marginTop: "calc(4px * 1.5)"
+	},
+	block: {
+			display: "block"
+	},
+	flex: {
+			display: "flex"
+	},
+	flexCol: {
+			flexDirection: "column"
+	},
+	gap2: {
+			gap: "calc(4px * 2)"
+	},
+	px1: {
+			paddingInline: "4px"
+	},
+	fontSemibold: {
+			fontWeight: "var(--font-weight-semibold)"
+	},
+	textFg: {
+			color: "var(--text)"
+	},
+	mt05: {
+			marginTop: "calc(4px * 0.5)"
+	},
+	leadingRelaxed: {
+			lineHeight: "var(--leading-relaxed)"
+	},
+	textDim: {
+			color: "var(--text-dim)"
+	},
+	border0: {
+			borderStyle: "solid",
+			borderWidth: "0px"
+	},
+	bgPanel: {
+			backgroundColor: "var(--bg-panel)"
+	},
+	p4: {
+			padding: "calc(4px * 4)"
+	},
+	itemsCenter: {
+			alignItems: "center"
+	},
+	gap25: {
+			gap: "calc(4px * 2.5)"
+	},
+	gap4: {
+			gap: "calc(4px * 4)"
+	},
+	minW0: {
+			minWidth: "0"
+	},
+	flex1: {
+			flex: "1"
+	},
+	fontMedium: {
+			fontWeight: "var(--font-weight-medium)"
+	},
+	flexWrap: {
+			flexWrap: "wrap"
+	},
+	minW12rem: {
+			minWidth: "12rem"
+	},
+	mlAuto: {
+			marginLeft: "auto"
+	},
+	mt3: {
+			marginTop: "calc(4px * 3)"
+	},
+	mt0: {
+			marginTop: "0"
+	},
+	mt25: {
+			marginTop: "calc(4px * 2.5)"
+	},
+	gap15: {
+			gap: "calc(4px * 1.5)"
+	},
+	pl5: {
+			paddingLeft: "calc(4px * 5)"
+	},
+	roundedLg: {
+			borderRadius: "calc(14px * var(--rf))",
+
+		cornerShape: "var(--cs)",},
+	bgSurface: {
+			backgroundColor: "var(--bg)"
+	},
+	p3: {
+			padding: "calc(4px * 3)"
+	},
+});
 
 // One integration's whole configuration, in the order you work through it:
 // the switch and the credential fields first, the provider's recipe behind a
@@ -43,7 +146,7 @@ import {
 
 function Value({ value }: { value: string }) {
 	return (
-		<span className="mt-1.5 block">
+		<span {...stylex.props(sx.mt15, sx.block)}>
 			<CopyableCode value={value} />
 		</span>
 	);
@@ -59,16 +162,16 @@ function ConfigurationSection({
 	children: ReactNode;
 }) {
 	return (
-		<section className="flex flex-col gap-2">
-			<header className="px-1">
-				<h3 className="m-0 text-item-title font-semibold text-fg">{title}</h3>
+		<section {...stylex.props(sx.flex, sx.flexCol, sx.gap2)}>
+			<header {...stylex.props(sx.px1)}>
+				<h3 {...mergeStylexProps("m-0", sx.fontSemibold, sx.textFg, typography.itemTitle)} >{title}</h3>
 				{description && (
-					<p className="m-0 mt-0.5 text-supporting leading-relaxed text-dim">
+					<p {...mergeStylexProps("m-0", sx.mt05, sx.leadingRelaxed, sx.textDim, typography.supporting)} >
 						{description}
 					</p>
 				)}
 			</header>
-			<SettingsSection className="border-0 bg-panel p-4">{children}</SettingsSection>
+			<SettingsSection className={mergeStylexOverrideClassName("", sx.border0, sx.bgPanel, sx.p4)}>{children}</SettingsSection>
 		</section>
 	);
 }
@@ -454,17 +557,17 @@ export function IntegrationSetupDialog({
 	if (integration.id === "github" && githubManifestSetup) {
 		return (
 			<Modal.Root open={open} onOpenChange={onOpenChange}>
-				<Modal.Content widthClassName="max-w-[34rem]">
+				<Modal.Content widthClassName={utilityClassName("max-w-[34rem]")}>
 					<Modal.Header
 						title={
-							<span className="flex items-center gap-2.5">
+							<span {...stylex.props(sx.flex, sx.itemsCenter, sx.gap25)}>
 								<IconTile name="github" size={28} />
 								GitHub App
 							</span>
 						}
 						description="Create and install the App that connects GitHub to Open Session."
 					/>
-					<SettingsSection className="flex flex-col gap-4 border-0 bg-panel p-4">
+					<SettingsSection className={mergeStylexOverrideClassName("", sx.flex, sx.flexCol, sx.gap4, sx.border0, sx.bgPanel, sx.p4)}>
 						{githubManifestSetup}
 					</SettingsSection>
 					<Modal.Footer>
@@ -477,13 +580,13 @@ export function IntegrationSetupDialog({
 
 	return (
 		<Modal.Root open={open} onOpenChange={onOpenChange}>
-			<Modal.Content widthClassName="max-w-[40rem]">
+			<Modal.Content widthClassName={utilityClassName("max-w-[40rem]")}>
 				<Modal.Header
 					title={
 						integration.id === "github" ? (
 							integration.label
 						) : (
-							<span className="flex items-center gap-2.5">
+							<span {...stylex.props(sx.flex, sx.itemsCenter, sx.gap25)}>
 								<IconTile name={integration.id} size={28} />
 								{integration.label}
 							</span>
@@ -493,17 +596,17 @@ export function IntegrationSetupDialog({
 				/>
 
 				{(canToggle || integration.env.length > 0) && (
-					<div className="flex flex-col gap-4">
+					<div {...stylex.props(sx.flex, sx.flexCol, sx.gap4)}>
 						{canToggle && (
-							<SettingsSection className="flex items-center gap-4 border-0 bg-panel p-4">
+							<SettingsSection className={mergeStylexOverrideClassName("", sx.flex, sx.itemsCenter, sx.gap4, sx.border0, sx.bgPanel, sx.p4)}>
 								{integration.id === "github" && (
 									<IconTile name="github" size={40} />
 								)}
-								<div className="min-w-0 flex-1">
-									<div className="text-item-title font-medium text-fg">
+								<div {...stylex.props(sx.minW0, sx.flex1)}>
+									<div {...stylex.props(sx.fontMedium, sx.textFg, typography.itemTitle)}>
 										Enable {integration.label}
 									</div>
-									<div className="mt-0.5 text-supporting text-dim">
+									<div {...stylex.props(sx.mt05, sx.textDim, typography.supporting)}>
 										Takes effect after you restart Open Session.
 									</div>
 								</div>
@@ -554,8 +657,8 @@ export function IntegrationSetupDialog({
 						)}
 						{integration.id === "slack" && (
 							<ConfigurationSection title="Event delivery">
-								<div className="flex flex-wrap items-center gap-4">
-									<div className="min-w-[12rem] flex-1 text-supporting text-dim">
+								<div {...stylex.props(sx.flex, sx.flexWrap, sx.itemsCenter, sx.gap4)}>
+									<div {...stylex.props(sx.minW12rem, sx.flex1, sx.textDim, typography.supporting)}>
 										{transport === "socket"
 											? "Uses an outbound connection and needs no public webhook URL."
 											: "Slack posts events to this instance's public webhook URL."}
@@ -564,18 +667,18 @@ export function IntegrationSetupDialog({
 										label="Slack event delivery"
 										value={transport}
 										onValueChange={(next) => pickTransport(next as SlackTransport)}
-										className="ml-auto phone:ml-0 phone:w-full"
+										className={mergeStylexOverrideClassName("phone:ml-0 phone:w-full", sx.mlAuto)}
 									>
-										<SegmentedOption value="socket" disabled={saving} className="phone:min-h-11 phone:flex-1">
+										<SegmentedOption value="socket" disabled={saving} className={utilityClassName("phone:min-h-11 phone:flex-1")}>
 											Socket Mode
 										</SegmentedOption>
-										<SegmentedOption value="http" disabled={saving || !httpAvailable} className="phone:min-h-11 phone:flex-1">
+										<SegmentedOption value="http" disabled={saving || !httpAvailable} className={utilityClassName("phone:min-h-11 phone:flex-1")}>
 											HTTP
 										</SegmentedOption>
 									</Segmented>
 								</div>
 								{transport === "http" && !httpAvailable && (
-									<InlineAlert variant="warn" className="mt-3">
+									<InlineAlert variant="warn" className={mergeStylexOverrideClassName("", sx.mt3)}>
 										This instance has no public webhook URL. Choose Socket Mode or configure a public URL first.
 									</InlineAlert>
 								)}
@@ -590,7 +693,7 @@ export function IntegrationSetupDialog({
 										: "Credentials stay on this server and are never shown back."
 								}
 							>
-								<div className="flex flex-col gap-4">
+								<div {...stylex.props(sx.flex, sx.flexCol, sx.gap4)}>
 									{visibleEnv.map((envVar) => (
 										<SecretField
 											key={envVar.name}
@@ -641,22 +744,22 @@ export function IntegrationSetupDialog({
 				<Disclosure
 					title="Setup guide"
 					defaultOpen={!configured}
-					actions={<LinkChips links={setupLinks} className="mt-0" />}
+					actions={<LinkChips links={setupLinks} className={mergeStylexOverrideClassName("", sx.mt0)} />}
 				>
-					<div className="flex flex-col gap-4">
+					<div {...stylex.props(sx.flex, sx.flexCol, sx.gap4)}>
 						{guide.intro}
 						<SetupSteps steps={guide.steps} />
 						{guide.scopes && (
 							<GuideBlock title="Bot scopes">
 								<ScopeGroups groups={guide.scopes} />
 								{guide.scopesNote && (
-									<p className="m-0 mt-2.5 text-supporting text-dim">{guide.scopesNote}</p>
+									<p {...mergeStylexProps("m-0", sx.mt25, sx.textDim, typography.supporting)} >{guide.scopesNote}</p>
 								)}
 							</GuideBlock>
 						)}
 						{guide.permissions && (
 							<GuideBlock title="Permissions">
-								<ul className="m-0 flex flex-col gap-1.5 pl-5 text-supporting leading-relaxed text-dim">
+								<ul {...mergeStylexProps("m-0", sx.flex, sx.flexCol, sx.gap15, sx.pl5, sx.leadingRelaxed, sx.textDim, typography.supporting)} >
 									{guide.permissions.map((permission, index) => (
 										<li key={index}>{permission}</li>
 									))}
@@ -664,7 +767,7 @@ export function IntegrationSetupDialog({
 							</GuideBlock>
 						)}
 						{guide.note && (
-							<div className="rounded-lg bg-surface p-3 text-supporting leading-relaxed text-dim">
+							<div {...stylex.props(sx.roundedLg, sx.bgSurface, sx.p3, sx.leadingRelaxed, sx.textDim, typography.supporting)}>
 								{guide.note}
 							</div>
 						)}

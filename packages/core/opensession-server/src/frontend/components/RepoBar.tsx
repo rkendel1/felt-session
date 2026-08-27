@@ -14,6 +14,198 @@ import { Button } from "../ui/button";
 import { Modal } from "../ui/modal";
 import { IconCheck, IconPlus, IconX, IconChevronRight } from "./icons";
 import { RepoTile, repoLabel } from "./RepoTile";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+import { mergeStylexProps, mergeStylexClassName, mergeStylexOverrideClassName } from "../ui/cn";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	flex: {
+			display: "flex"
+	},
+	wFull: {
+			width: "100%"
+	},
+	cursorPointer: {
+			cursor: "pointer"
+	},
+	itemsCenter: {
+			alignItems: "center"
+	},
+	gap7px: {
+			gap: "7px"
+	},
+	whitespaceNowrap: {
+			whiteSpace: "nowrap"
+	},
+	roundedControl: {
+			borderRadius: "calc(12px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	border: {
+			borderStyle: "solid",
+			borderWidth: "1px"
+	},
+	borderLineStrong: {
+			borderColor: "var(--border-strong)"
+	},
+	bgTransparent: {
+			backgroundColor: "transparent"
+	},
+	px3: {
+			paddingInline: "12px"
+	},
+	py7px: {
+			paddingBlock: "7px"
+	},
+	fontMedium: {
+			fontWeight: "var(--font-weight-medium)"
+	},
+	textFaint: {
+			color: "var(--text-faint)"
+	},
+	minW0: {
+			minWidth: "0"
+	},
+	flex1: {
+			flex: "1"
+	},
+	flexCol: {
+			flexDirection: "column"
+	},
+	gap05: {
+			gap: "2px"
+	},
+	textLeft: {
+			textAlign: "left"
+	},
+	fontSemibold: {
+			fontWeight: "var(--font-weight-semibold)"
+	},
+	leadingNone: {
+			lineHeight: "1"
+	},
+	truncate: {
+			textOverflow: "ellipsis",
+			whiteSpace: "nowrap",
+			overflow: "hidden"
+	},
+	leading12: {
+			lineHeight: "1.2"
+	},
+	textFg: {
+			color: "var(--text)"
+	},
+	shrink0: {
+			flexShrink: "0"
+	},
+	inlineFlex: {
+			display: "inline-flex"
+	},
+	minH11: {
+			minHeight: "44px"
+	},
+	maxWFull: {
+			maxWidth: "100%"
+	},
+	roundedMd: {
+			borderRadius: "calc(7px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	border0: {
+			borderStyle: "solid",
+			borderWidth: "0"
+	},
+	px15: {
+			paddingInline: "6px"
+	},
+	textDim: {
+			color: "var(--text-dim)"
+	},
+	ml1: {
+			marginLeft: "4px"
+	},
+	Mx15: {
+			marginInline: "-6px"
+	},
+	My1: {
+			marginBlock: "-4px"
+	},
+	py1: {
+			paddingBlock: "4px"
+	},
+	maxW180px: {
+			maxWidth: "180px"
+	},
+	TranslateYPx: {
+			translate: "0 -1px"
+	},
+	minW230px: {
+			minWidth: "230px"
+	},
+	px25: {
+			paddingInline: "10px"
+	},
+	py2: {
+			paddingBlock: "8px"
+	},
+	rounded: {
+			borderRadius: "var(--radius-xs)"
+	,
+		cornerShape: "var(--cs)"},
+	p05: {
+			padding: "2px"
+	},
+	py15: {
+			paddingBlock: "6px"
+	},
+	maxW240px: {
+			maxWidth: "240px"
+	},
+	pt15: {
+			paddingTop: "6px"
+	},
+	pb05: {
+			paddingBottom: "2px"
+	},
+	leadingSnug: {
+			lineHeight: "var(--leading-snug)"
+	},
+	maxW220px: {
+			maxWidth: "220px"
+	},
+	textRed: {
+			color: "var(--red)"
+	},
+
+	hoverBgHover: {
+		"@media (hover: hover)": {
+			":hover": {
+				"backgroundColor": "var(--hover)"
+			}
+		}
+	},
+	hoverTextFg: {
+		"@media (hover: hover)": {
+			":hover": {
+				"color": "var(--text)"
+			}
+		}
+	},
+	transitionColorBackgroundColorScale: {
+		"transitionProperty": "color,background-color,scale",
+		"transitionTimingFunction": "var(--tw-ease,var(--ease))",
+		"transitionDuration": "var(--tw-duration,var(--dur-micro))"
+	},
+	activeScale096: {
+		":active": {
+			"scale": ".96"
+		}
+	},
+	gap2: {
+		"gap": "8px"
+	},
+});
 
 interface Props {
   sessionId: string;
@@ -160,50 +352,47 @@ setBusy(null);
   };
 
   // Static (non-menu-item) row — current repo when it can't switch, attached rows.
-  const staticRow = "flex items-center gap-2 rounded-md px-2.5 py-2 text-control-label text-fg";
+  const staticRow = mergeStylexClassName("", sx.flex, sx.itemsCenter, sx.gap2, sx.roundedMd, sx.px25, sx.py2, typography.controlLabel, sx.textFg);
 
   const trigger =
     variant === "menu-row" ? (
       // ⋯ overflow menu row (phone): matches the other menu items' shape.
-      <Menu.Trigger
-        className="flex w-full cursor-pointer items-center gap-[7px] whitespace-nowrap rounded-control border border-line-strong bg-transparent px-3 py-[7px] text-control-label font-medium text-faint hover:bg-hover hover:text-fg data-[popup-open]:bg-hover data-[popup-open]:text-fg"
+      <Menu.Trigger {...mergeStylexProps("data-[popup-open]:bg-hover data-[popup-open]:text-fg", sx.hoverBgHover, sx.hoverTextFg, sx.flex, sx.wFull, sx.cursorPointer, sx.itemsCenter, sx.gap7px, sx.whitespaceNowrap, sx.roundedControl, sx.border, sx.borderLineStrong, sx.bgTransparent, sx.px3, sx.py7px, sx.fontMedium, sx.textFaint, typography.controlLabel)}
         title="Switch or attach another repo"
       >
         <RepoTile name={primary} size={18} />
-        <span className="flex min-w-0 flex-1 flex-col gap-0.5 text-left">
-          <span className="text-meta font-semibold leading-none text-faint">Repository</span>
-          <span className="truncate text-control-label leading-[1.2] text-fg">
+        <span {...stylex.props(sx.flex, sx.minW0, sx.flex1, sx.flexCol, sx.gap05, sx.textLeft)}>
+          <span {...stylex.props(sx.fontSemibold, sx.leadingNone, sx.textFaint, typography.meta)}>Repository</span>
+          <span {...stylex.props(sx.truncate, sx.leading12, sx.textFg, typography.controlLabel)}>
             {busy ?? repoLabel(primary)}
             {attached.length > 0 && (
-              <span className="text-faint"> +{attached.length}</span>
+              <span {...stylex.props(sx.textFaint)}> +{attached.length}</span>
             )}
           </span>
         </span>
-        <IconChevronRight size={16} className="shrink-0 text-faint" />
+        <IconChevronRight size={16} className={mergeStylexOverrideClassName("", sx.shrink0, sx.textFaint)} />
       </Menu.Trigger>
     ) : variant === "hero" ? (
-      <Menu.Trigger
-        className="inline-flex min-h-11 max-w-full shrink-0 cursor-pointer items-center rounded-md border-0 bg-transparent px-1.5 text-label font-medium text-dim transition-[color,background-color,scale] hover:bg-hover hover:text-fg active:scale-[0.96] data-[popup-open]:bg-hover data-[popup-open]:text-fg"
+      <Menu.Trigger {...mergeStylexProps("data-[popup-open]:bg-hover data-[popup-open]:text-fg", sx.transitionColorBackgroundColorScale, sx.hoverBgHover, sx.hoverTextFg, sx.activeScale096, sx.inlineFlex, sx.minH11, sx.maxWFull, sx.shrink0, sx.cursorPointer, sx.itemsCenter, sx.roundedMd, sx.border0, sx.bgTransparent, sx.px15, sx.fontMedium, sx.textDim, typography.label)}
         title="Switch or attach another repository"
         aria-label={`Repository: ${repoLabel(primary)}. Change repository`}
       >
-        <span className="truncate">{busy ?? repoLabel(primary)}</span>
+        <span {...stylex.props(sx.truncate)}>{busy ?? repoLabel(primary)}</span>
         {attached.length > 0 && (
-          <span className="ml-1 text-faint">+{attached.length}</span>
+          <span {...stylex.props(sx.ml1, sx.textFaint)}>+{attached.length}</span>
         )}
       </Menu.Trigger>
     ) : (
-      <Menu.Trigger
-        className="-mx-1.5 -my-1 flex min-w-0 shrink-0 cursor-pointer items-center gap-[7px] rounded-md border-0 bg-transparent px-1.5 py-1 text-item-title font-medium text-fg hover:bg-hover data-[popup-open]:bg-hover"
+      <Menu.Trigger {...mergeStylexProps("data-[popup-open]:bg-hover", sx.hoverBgHover, sx.Mx15, sx.My1, sx.flex, sx.minW0, sx.shrink0, sx.cursorPointer, sx.itemsCenter, sx.gap7px, sx.roundedMd, sx.border0, sx.bgTransparent, sx.px15, sx.py1, sx.fontMedium, sx.textFg, typography.itemTitle)}
         title="Click to switch or attach another repo"
       >
         <RepoTile name={primary} />
         {/* Type sits optically high beside a centered image tile: its descender
             space otherwise makes the word look low even when the line boxes agree. */}
-        <span className="max-w-[180px] -translate-y-px truncate">{busy ?? repoLabel(primary)}</span>
+        <span {...stylex.props(sx.maxW180px, sx.TranslateYPx, sx.truncate)}>{busy ?? repoLabel(primary)}</span>
         {attached.length > 0 && (
           <span
-            className="text-label text-dim"
+            {...stylex.props(sx.textDim, typography.label)}
             title={attached.map((r) => repoLabel(r.repo)).join(", ")}
           >
             +{attached.length}
@@ -216,9 +405,9 @@ setBusy(null);
     <>
       <Menu.Root open={open} onOpenChange={setOpen}>
         {trigger}
-        <Menu.Popup align="start" sideOffset={6} className="min-w-[230px]">
+        <Menu.Popup align="start" sideOffset={6} className={mergeStylexOverrideClassName("", sx.minW230px)}>
           {!repos.length ? (
-            <div className="px-2.5 py-2 text-label text-faint">Loading…</div>
+            <div {...stylex.props(sx.px25, sx.py2, sx.textFaint, typography.label)}>Loading…</div>
           ) : (
             <>
               {switchable ? (
@@ -227,15 +416,15 @@ setBusy(null);
                 [{ id: primary }, ...switchTargets].map((p) => (
                   <Menu.Item key={p.id} onClick={() => switchPrimary(p.id)}>
                     <RepoTile name={p.id} />
-                    <span className="min-w-0 flex-1 truncate">{repoLabel(p.id)}</span>
-                    <Menu.Check on={p.id === primary} size={20} className="text-dim" />
+                    <span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>{repoLabel(p.id)}</span>
+                    <Menu.Check on={p.id === primary} size={20} className={mergeStylexOverrideClassName("", sx.textDim)} />
                   </Menu.Item>
                 ))
               ) : (
                 <div className={staticRow}>
                   <RepoTile name={primary} />
-                  <span className="min-w-0 flex-1 truncate">{repoLabel(primary)}</span>
-                  <IconCheck size={20} className="text-dim" />
+                  <span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>{repoLabel(primary)}</span>
+                  <IconCheck size={20} className={mergeStylexOverrideClassName("", sx.textDim)} />
                 </div>
               )}
               {attached.length > 0 && (
@@ -246,11 +435,10 @@ setBusy(null);
                     {attached.map((r) => (
                       <div key={r.repo} className={staticRow} title={`${r.dir} · branch ${r.branch}`}>
                         <RepoTile name={r.repo} />
-                        <span className="min-w-0 flex-1 truncate">
-                          {repoLabel(r.repo)} <span className="text-faint">· {r.branch}</span>
+                        <span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>
+                          {repoLabel(r.repo)} <span {...stylex.props(sx.textFaint)}>· {r.branch}</span>
                         </span>
-                        <button
-                          className="cursor-pointer rounded border-0 bg-transparent p-0.5 text-faint hover:text-fg"
+                        <button {...mergeStylexProps("", sx.hoverTextFg, sx.cursorPointer, sx.rounded, sx.border0, sx.bgTransparent, sx.p05, sx.textFaint)}
                           onClick={() => detach(r.repo)}
                           title="Detach (leaves the worktree on disk)"
                           aria-label={`Detach ${repoLabel(r.repo)}`}
@@ -273,24 +461,24 @@ setBusy(null);
                       title="Attach to this session as an isolated worktree"
                     >
                       <RepoTile name={p.id} />
-                      <span className="min-w-0 flex-1 truncate">{repoLabel(p.id)}</span>
-                      <IconPlus size={18} className="text-faint" />
+                      <span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>{repoLabel(p.id)}</span>
+                      <IconPlus size={18} className={mergeStylexOverrideClassName("", sx.textFaint)} />
                     </Menu.Item>
                   ))
                 ) : (
-                  <div className="px-2.5 py-1.5 text-label text-faint">
+                  <div {...stylex.props(sx.px25, sx.py15, sx.textFaint, typography.label)}>
                     No more repos to attach
                   </div>
                 )}
               </Menu.Group>
               {!switchable ? (
-                <div className="max-w-[240px] px-2.5 pt-1.5 pb-0.5 text-supporting leading-snug text-faint">
+                <div {...stylex.props(sx.maxW240px, sx.px25, sx.pt15, sx.pb05, sx.leadingSnug, sx.textFaint, typography.supporting)}>
                   Ask sessions read the shared checkout, so there's no primary repo
                   to switch.
                 </div>
               ) : (
                 hasWork && (
-                  <div className="max-w-[240px] px-2.5 pt-1.5 pb-0.5 text-supporting leading-snug text-faint">
+                  <div {...stylex.props(sx.maxW240px, sx.px25, sx.pt15, sx.pb05, sx.leadingSnug, sx.textFaint, typography.supporting)}>
                     Switching keeps your current changes in the {repoLabel(primary)} worktree.
                     They won't move to the new repo.
                   </div>
@@ -301,7 +489,7 @@ setBusy(null);
         </Menu.Popup>
       </Menu.Root>
       {error && (
-        <span className="max-w-[220px] truncate text-meta text-red" title={error}>
+        <span {...stylex.props(sx.maxW220px, sx.truncate, sx.textRed, typography.meta)} title={error}>
           {error}
         </span>
       )}
@@ -321,7 +509,7 @@ setBusy(null);
             }
           />
           <Modal.Footer>
-            <div className="flex-1" />
+            <div {...stylex.props(sx.flex1)} />
             <Modal.Close
               render={
                 <Button variant="ghost">
@@ -341,7 +529,7 @@ setBusy(null);
       {/* Breadcrumb separator between the repo and the session title — only in
           the desktop header, not the compact/menu-row phone variants. */}
       {variant === "breadcrumb" && (
-        <IconChevronRight size={18} className="shrink-0 text-faint" />
+        <IconChevronRight size={18} className={mergeStylexOverrideClassName("", sx.shrink0, sx.textFaint)} />
       )}
     </>
   );

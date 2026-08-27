@@ -1,6 +1,20 @@
 import React, { } from "react";
 import type { UnifiedSession, WSServerMessage } from "../lib/types";
 import { PrPanel } from "./PrPanel";
+import * as stylex from "@stylexjs/stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	hFull: {
+			height: "100%"
+	},
+	minH0: {
+			minHeight: "0"
+	},
+	bgSurface: {
+			backgroundColor: "var(--bg)"
+	},
+});
 
 interface Props {
 	repo: string;
@@ -37,7 +51,7 @@ export function PrQueuePreview({
 				)[0] || null);
 
 	return (
-		<div className="h-full min-h-0 bg-surface">
+		<div {...stylex.props(sx.hFull, sx.minH0, sx.bgSurface)}>
 			<PrPanel
 				onOpenPr={onOpenPr}
 				sessionId={session?.id || ""}

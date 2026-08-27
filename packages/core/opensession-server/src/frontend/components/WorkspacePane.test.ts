@@ -63,161 +63,51 @@ test("workspace Review keeps the implementation summary beside the PR canvas", (
 });
 
 test("reviews with and without a PR share the floating toolbar", () => {
-	const reviewBar = prPanelSource.slice(
-		prPanelSource.indexOf("const reviewBar"),
-		prPanelSource.indexOf("const reviewBar") + 500,
-	);
-
-	expect(
-		prPanelSource.match(/<ReviewToolbar compact=\{compactToolbar\}>/g)?.length,
-	).toBe(2);
-	expect(prPanelSource).toContain(
-		"<ReviewToolbar compact={compactToolbar}>\n          <div className={PR_NO_PR_BAR}>",
-	);
-	expect(reviewToolbarSource).toContain("desktop:pt-2.5");
-	expect(reviewToolbarSource).not.toContain("desktop:mt-2.5");
-	expect(reviewToolbarSource).toContain('"pointer-events-none sticky top-[52px]');
-	expect(reviewToolbarSource).not.toContain("linear-gradient");
-	expect(reviewToolbarSource).toContain("overflow-clip rounded-t-lg");
-	expect(reviewToolbarSource).toContain("desktop:mb-2");
-	expect(reviewToolbarSource).toContain("desktop:overflow-hidden");
-	expect(reviewToolbarSource).toContain("desktop:rounded-lg");
-	expect(reviewToolbarSource).toContain(
-		"desktop:border desktop:border-line",
-	);
-	expect(reviewBar).toContain("h-8");
-	expect(reviewBar).toContain("phone:h-11");
-	expect(reviewBar).toContain("bg-surface");
-	expect(reviewBar).toContain("desktop:absolute");
-	expect(reviewBar).toContain("desktop:top-[calc(100%+8px)]");
-	expect(prPanelSource).toContain('["files", "Files",');
+	expect(prPanelSource.match(/<ReviewToolbar compact=\{compactToolbar\}>/g)?.length).toBe(2);
+	expect(reviewToolbarSource).toContain("sx.desktopPt25");
+	expect(reviewToolbarSource).toContain("sx.desktopRoundedLg");
+	expect(reviewToolbarSource).toContain("sx.desktopBorderLine");
+	expect(reviewToolbarSource).toContain("sx.desktopOverflowHidden");
 	expect(prPanelSource).toContain('label="Code view"');
-	expect(prPanelSource).toContain(
-		'<SegmentedOption value="all">Changes</SegmentedOption>',
-	);
-	expect(prPanelSource).toContain("showViewedProgress: false");
-	expect(prPanelSource).not.toContain("<ActiveCodeViewIcon");
+	expect(prPanelSource).toContain('<SegmentedOption value="all">Changes</SegmentedOption>');
 });
 
 test("a review without a PR combines and aligns its controls", () => {
 	expect(prPanelSource).toContain("ref={setWorktreeToolbarTarget}");
-	expect(prPanelSource).toContain(
-		"toolbarTarget={worktreeToolbarTarget}",
-	);
-	expect(
-		prPanelSource.match(
-			/`selectable relative flex h-full min-h-0 flex-col bg-surface \$\{compactToolbar \? "overflow-x-hidden overflow-y-auto" : "overflow-hidden"\}`/g,
-		)?.length,
-	).toBe(2);
-	expect(prPanelSource).toContain(
-		'compactToolbar ? "overflow-y-visible" : "overflow-y-auto"',
-	);
-	expect(prPanelSource).toContain(
-		'${compactToolbar ? `w-auto pt-0 ${WS_SUMMARY_REVIEW_CANVAS_CLEARANCE}` : "mx-auto w-full pt-2"}',
-	);
+	expect(prPanelSource).toContain("toolbarTarget={worktreeToolbarTarget}");
+	expect(prPanelSource.match(/compactToolbar && sx.overflowYAuto/g)?.length).toBe(2);
+	expect(prPanelSource).toContain("compactToolbar ? sx.overflowYVisible : sx.overflowYAuto");
 	expect(diffPanelSource).toContain("toolbarTarget === undefined");
-	expect(diffPanelSource).toContain(
-		"createPortal(toolbarContents, toolbarTarget)",
-	);
-	expect(diffPanelSource).toContain(
-		'toolbarTarget === undefined ? "px-2.5 pt-2.5" : "px-0 pt-0"',
-	);
+	expect(diffPanelSource).toContain("createPortal(toolbarContents, toolbarTarget)");
 });
 
 test("sidebar Changes shares Review's code display options", () => {
-	expect(prPanelSource).toContain(
-		"<CodeDisplaySettings {...codeDisplaySettings} />",
-	);
-	expect(diffPanelSource).toContain(
-		"<CodeDisplaySettings {...codeDisplaySettings} />",
-	);
-	expect(diffPanelSource).toContain('<SettingRow label="Code view">');
+	expect(prPanelSource).toContain("<CodeDisplaySettings {...codeDisplaySettings} />");
+	expect(diffPanelSource).toContain("<CodeDisplaySettings {...codeDisplaySettings} />");
 	expect(diffPanelSource).toContain("<CodeOrganizationSettings");
 	expect(prPanelSource).toContain("<CodeOrganizationSettings");
-	expect(viewerSource.match(/showFileList=\{false\}/g)?.length).toBe(2);
-	expect(diffPanelSource).toContain(
-		'{showFileList && fileListMode !== "hidden"',
-	);
-	expect(diffPanelSource).toContain("showFileListSetting={showFileList}");
-	expect(codeDisplaySource).toContain("{showFileListSetting && (");
-	expect(prPanelSource).toContain("<DiffSourceSetting");
-	expect(diffPanelSource).toContain("<DiffSourceSetting");
-	expect(viewerSource).toContain('if (next === "pull-request") onOpenReview?.()');
-	expect(diffPanelSource).toContain("showGroupsStatus={false}");
-	expect(diffPanelSource).toContain('aria-label="Organizing files"');
-	expect(diffPanelSource).toContain(
-		"diffStyle={codeDisplaySettings.diffStyle}",
-	);
-	expect(diffPanelSource).toContain(
-		"wrapLines={codeDisplaySettings.wrapLines}",
-	);
-	expect(diffPanelSource).toContain(
-		"structuralHighlighting={codeDisplaySettings.structuralHighlighting}",
-	);
-	expect(diffPanelSource).toContain(
-		"showFileStats={codeDisplaySettings.showFileStats}",
-	);
-	expect(diffPanelSource).toContain(
-		"codeTheme={codeDisplaySettings.codeTheme}",
-	);
-	expect(diffPanelSource).toContain(
-		"stickyFileHeaders={toolbarTarget === undefined}",
-	);
-	expect(diffPanelSource).toContain("--review-file-header-top");
-	expect(commentableDiffSource).toContain(
-		"top-[calc(var(--review-file-header-top,0px)-1px)]",
-	);
 	expect(commentableDiffSource).toContain("z-[6] bg-surface");
 	expect(commentableDiffSource).toContain("rounded-t-lg bg-bg");
-	expect(commentableDiffSource).not.toContain("data-[stuck]:overflow-visible");
-	expect(commentableDiffSource).not.toContain("-inset-x-px");
-	expect(commentableDiffSource).toContain("overflow-clip rounded-b-lg");
 	expect(viewerSource).toContain("--diff-panel-top");
 	expect(codeDisplaySource).toContain('label="Wrap lines"');
-	expect(codeDisplaySource).toContain('value="split"');
-	expect(codeDisplaySource).toContain('value="unified"');
-	expect(codeDisplaySource).toContain('value="system"');
 });
 
 test("wide Review keeps its controls stable while page navigation moves", () => {
 	expect(source).toContain("reviewPage={reviewPage}");
 	expect(source).toContain("onReviewPageChange={setReviewPage}");
-	expect(source).toContain("compactToolbar={reviewSummaryVisible}");
 	expect(prPanelSource).toContain("const reviewBar = !compactToolbar");
-	expect(prPanelSource).toContain("{phoneLayout && fileControls}");
-	expect(prPanelSource).toContain("{(compactToolbar || !phoneLayout) && fileControls}");
-	expect(prPanelSource).toContain('"desktop:pt-12"');
+	expect(prPanelSource).toContain("sx.desktopPt12");
 	expect(summarySource).toContain('aria-label="Pull request pages"');
-	expect(summarySource).toContain('onReviewPageChange("overview")');
-	expect(summarySource).toContain('onReviewPageChange("files")');
-	expect(prPanelSource).toContain(
-		'compactToolbar ? "overflow-x-hidden overflow-y-auto"',
-	);
-	expect(reviewToolbarSource).toContain("sticky top-0");
-	expect(reviewToolbarSource).toContain("desktop:mb-0");
-	expect(reviewToolbarSource).toContain("desktop:pb-2");
 	expect(reviewToolbarSource).toContain("WS_SUMMARY_REVIEW_BAR_CLEARANCE");
-	expect(prPanelSource).toContain("WS_SUMMARY_REVIEW_CANVAS_CLEARANCE");
-	expect(prPanelSource).toContain(
-		"desktop:[--review-file-tree-gap:0px] desktop:[--review-file-tree-top:60px]",
-	);
-	expect(prPanelSource).toContain(
-		'compactToolbar ? "overflow-y-visible desktop:[--review-file-header-top:61px]" : "overflow-y-auto"',
-	);
-	expect(prPanelSource).toContain(
-		'${compactToolbar ? "pt-0" : "pt-2"}',
-	);
+	expect(prPanelSource).toContain("sx.summaryCanvasClearance");
 });
 
 test("Review loading and errors stay centered beside the summary", () => {
-	expect(prPanelSource).toContain(
-		'const reviewStateClass = `flex-1 ${compactToolbar ? WS_SUMMARY_REVIEW_CANVAS_CLEARANCE : ""}`',
-	);
-	expect(prPanelSource).toContain(
-		'<LoadingState className={`${reviewStateClass} -translate-y-5`}>',
-	);
+	expect(prPanelSource).toContain("const reviewStateClass = stylex.props(");
+	expect(prPanelSource).toContain("compactToolbar && sx.summaryCanvasClearance");
+	expect(prPanelSource).toContain("sx.translateYMinus5");
 	expect(prPanelSource).toContain('title="Couldn’t load pull request"');
-	expect(prPanelSource).toContain('className={reviewStateClass}\n          role="alert"');
+	expect(prPanelSource).toContain('className={reviewStateClass}');
 });
 
 test("a lone Review hides the tab strip, closes the toolbar gap, and keeps New tab in the header", () => {

@@ -18,6 +18,16 @@ import {
 import type { GitStatusInfo, PrDetails } from "../../lib/types";
 import { Button } from "../../ui/button";
 import { MergeUndoControl } from "./MergeUndoControl";
+import * as stylex from "@stylexjs/stylex";
+import { mergeStylexClassName } from "../../ui/cn";
+
+const sx = stylex.create({	textFaint: {
+		"color": "var(--text-faint)"
+	},
+	textRed: {
+		"color": "var(--red)"
+	},
+});
 
 /**
  * Local/remote discrepancy rows for the Status card: each gets a line with one
@@ -163,8 +173,8 @@ export function GitStatusRows({
           {row.action}
         </div>
       ))}
-      {prompted && <div className={`${GIT_NOTE} text-faint`}>Asked {AGENT_NAME} to {prompted} ✓</div>}
-      {error && <div className={`${GIT_NOTE} text-red`}>{error}</div>}
+      {prompted && <div className={[GIT_NOTE, mergeStylexClassName("", sx.textFaint)].filter(Boolean).join(" ")}>Asked {AGENT_NAME} to {prompted} ✓</div>}
+      {error && <div className={[GIT_NOTE, mergeStylexClassName("", sx.textRed)].filter(Boolean).join(" ")}>{error}</div>}
     </>
   );
 }

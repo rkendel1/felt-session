@@ -91,23 +91,24 @@ describe("renderIndexHtml", () => {
 		inputsHash: "x",
 		entryName: "App-abc.js",
 		cssName: "global-def.css",
-		twName: "tailwind-ghi.css",
-		assets: ["App-abc.js", "global-def.css", "tailwind-ghi.css"],
+		styleEngine: "stylex-v1" as const,
+		sxName: "stylex-ghi.css",
+		assets: ["App-abc.js", "global-def.css", "stylex-ghi.css"],
 	};
 
 	it("points the source shell at the compiled assets and fills the instance blob", () => {
 		const html = renderIndexHtml(meta);
 		expect(html).toContain(`<script type="module" crossorigin src="/App-abc.js"></script>`);
 		expect(html).toContain(`<link rel="stylesheet" href="/global-def.css">`);
-		expect(html).toContain(`<link rel="stylesheet" href="/tailwind-ghi.css">`);
+		expect(html).toContain(`<link rel="stylesheet" href="/stylex-ghi.css">`);
 		expect(html).toMatch(/window\.__OPENSESSION_INSTANCE__ = \{"productName":/);
 		expect(html).not.toContain("window.__OPENSESSION_INSTANCE__ || {}");
 	});
 
-	it("omits the Tailwind link when no sheet compiled", () => {
-		const html = renderIndexHtml({ ...meta, twName: null });
-		expect(html).not.toContain('href="/tailwind-');
-		expect(bundleVersion({ ...meta, twName: null })).toBe("App-abc.js|global-def.css|no-tw");
+	it("versions the mandatory StyleX sheet", () => {
+		expect(bundleVersion(meta)).toBe(
+			"App-abc.js|global-def.css|stylex-ghi.css",
+		);
 	});
 
 	it("only enables Agentation through the explicit runtime flag", () => {
@@ -149,15 +150,16 @@ describe("activateFrontendRelease", () => {
 			join(sourceRoot, "index.html"),
 			'<html><head><title>Open Session</title></head><body><script>window.__OPENSESSION_INSTANCE__ = window.__OPENSESSION_INSTANCE__ || {};</script><script type="module" src="./App.tsx"></script></body></html>',
 		);
-		for (const name of ["App-new.js", "global-new.css"]) writeFileSync(join(dist, name), name);
+		for (const name of ["App-new.js", "global-new.css", "stylex-new.css"]) writeFileSync(join(dist, name), name);
 		writeFileSync(
 			join(dist, ".bundle-meta.json"),
 			JSON.stringify({
 				inputsHash: "inputs",
 				entryName: "App-new.js",
 				cssName: "global-new.css",
-				twName: null,
-				assets: ["App-new.js", "global-new.css"],
+				styleEngine: "stylex-v1",
+				sxName: "stylex-new.css",
+				assets: ["App-new.js", "global-new.css", "stylex-new.css"],
 			}),
 		);
 		const restoreRoot = __setFrontendReleaseRootForTest(process.cwd());
@@ -168,7 +170,7 @@ describe("activateFrontendRelease", () => {
 			promotedAt: "2026-08-27T10:00:00.000Z",
 		});
 		restore = restoreRoot;
-		expect(version).toBe("App-new.js|global-new.css|no-tw");
+		expect(version).toBe("App-new.js|global-new.css|stylex-new.css");
 		expect(activeFrontendReleaseRoot()).toBe(releaseRoot);
 		expect(JSON.parse(readFileSync(join(scratch, "frontend-current.json"), "utf8"))).toMatchObject({ sha, baseSha });
 	});

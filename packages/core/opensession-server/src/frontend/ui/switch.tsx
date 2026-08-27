@@ -1,6 +1,120 @@
 import * as React from "react";
 import { Switch as BaseSwitch } from "@base-ui/react/switch";
-import { cn } from "./cn";
+import { cn, mergeStylexProps, mergeStylexClassName } from "./cn";
+import * as stylex from "@stylexjs/stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	cursorPointer: {
+			cursor: "pointer"
+	},
+	outlineNone: {
+			outlineStyle: "none"
+	},
+	pointerEventsNone: {
+			pointerEvents: "none"
+	},
+
+	relative: {
+		"position": "relative"
+	},
+	inlineFlex: {
+		"display": "inline-flex"
+	},
+	shrink0: {
+		"flexShrink": "0"
+	},
+	roundedFull: {
+		"borderRadius": "3.40282e38px"
+	,
+		cornerShape: "round"},
+	bgActive: {
+		"backgroundColor": "var(--bg-active)"
+	},
+	h5: {
+		"height": "20px"
+	},
+	w11: {
+		"width": "44px"
+	},
+	h6: {
+		"height": "24px"
+	},
+	w54px: {
+		"width": "54px"
+	},
+	transitionColors: {
+		"transitionProperty": "color,background-color,border-color,outline-color,text-decoration-color,fill,stroke,--tw-gradient-from,--tw-gradient-via,--tw-gradient-to",
+		"transitionTimingFunction": "var(--tw-ease,var(--ease))",
+		"transitionDuration": "var(--tw-duration,var(--dur-micro))"
+	},
+	durationVarDurMicro: {
+		"--tw-duration": "var(--dur-micro)",
+		"transitionDuration": "var(--dur-micro)"
+	},
+	easeVarEase: {
+		"--tw-ease": "var(--ease)",
+		"transitionTimingFunction": "var(--ease)"
+	},
+	absolute: {
+		"position": "absolute"
+	},
+	left05: {
+		"left": "2px"
+	},
+	top05: {
+		"top": "2px"
+	},
+	bgWhite: {
+		"backgroundColor": "var(--color-white)"
+	},
+	h4: {
+		"height": "16px"
+	},
+	w26px: {
+		"width": "26px"
+	},
+	w8: {
+		"width": "32px"
+	},
+	focusVisibleRing2: {
+		":focusVisible": {
+			"--tw-ring-shadow": "var(--tw-ring-inset,) 0 0 0 calc(2px + var(--tw-ring-offset-width)) var(--tw-ring-color,currentcolor)",
+			"boxShadow": "var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow)"
+		}
+	},
+	focusVisibleRingAccent50: {
+		":focusVisible": {
+			"--tw-ring-color": "var(--accent)"
+		},
+		"@supports (color: color-mix(in lab, red, red))": {
+			":focusVisible": {
+				"--tw-ring-color": "color-mix(in oklab, var(--accent) 50%, transparent)"
+			}
+		}
+	},
+	focusVisibleRingOffset2: {
+		":focusVisible": {
+			"--tw-ring-offset-width": "2px",
+			"--tw-ring-offset-shadow": "var(--tw-ring-inset,) 0 0 0 var(--tw-ring-offset-width) var(--tw-ring-offset-color)"
+		}
+	},
+	focusVisibleRingOffsetBg: {
+		":focusVisible": {
+			"--tw-ring-offset-color": "var(--bg)"
+		}
+	},
+
+	shadow01px3pxRgba0000220001pxRgba000007: {
+		"--tw-shadow": "0 1px 3px var(--tw-shadow-color,color-mix(in srgb, var(--color-black) 22%, transparent)), 0 0 0 1px var(--tw-shadow-color,color-mix(in srgb, var(--color-black) 7%, transparent))",
+		"boxShadow": "var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow)"
+	},
+	transitionTranslateBackgroundColor: {
+		"transitionProperty": "translate,background-color",
+		"transitionTimingFunction": "var(--tw-ease,var(--ease))",
+		"transitionDuration": "var(--tw-duration,var(--dur-micro))"
+	},
+});
 
 type SwitchSize = "md" | "sm";
 
@@ -18,13 +132,13 @@ type SwitchSize = "md" | "sm";
  *  which Base UI sets on the real thing and the indicator sets by hand. */
 const trackClasses = (size: SwitchSize) =>
 	cn(
-		"relative inline-flex shrink-0 rounded-full bg-active",
-		size === "sm" ? "h-5 w-11" : "h-6 w-[54px]",
+		mergeStylexClassName("", sx.relative, sx.inlineFlex, sx.shrink0, sx.roundedFull, sx.bgActive),
+		size === "sm" ? mergeStylexClassName("", sx.h5, sx.w11) : mergeStylexClassName("", sx.h6, sx.w54px),
 		// The checked track is the selected app accent, matching native
 		// controls, through --accent-control: Black and Honey swap it for
 		// a blue in dark mode, where a white or yellow track stops reading
 		// as "on". Every other accent resolves straight through.
-		"transition-colors duration-[var(--dur-micro)] ease-[var(--ease)] data-[checked]:bg-accent-control",
+		mergeStylexClassName("data-[checked]:bg-accent-control", sx.transitionColors, sx.durationVarDurMicro, sx.easeVarEase),
 	);
 
 /** The knob is a 32×20 capsule, not a circle. That wider shape is most of
@@ -32,10 +146,10 @@ const trackClasses = (size: SwitchSize) =>
  *  and the capsule, at 26×16. */
 const thumbClasses = (size: SwitchSize) =>
 	cn(
-		"absolute left-0.5 top-0.5 rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.22),0_0_0_1px_rgba(0,0,0,0.07)] transition-[translate,background-color] duration-[var(--dur-micro)] ease-[var(--ease)] data-[checked]:bg-on-accent-control",
+		mergeStylexClassName("data-[checked]:bg-on-accent-control", sx.shadow01px3pxRgba0000220001pxRgba000007, sx.transitionTranslateBackgroundColor, sx.absolute, sx.left05, sx.top05, sx.roundedFull, sx.bgWhite, sx.durationVarDurMicro, sx.easeVarEase),
 		size === "sm"
-			? "h-4 w-[26px] data-[checked]:translate-x-[14px]"
-			: "h-5 w-8 data-[checked]:translate-x-[18px]",
+			? mergeStylexClassName("data-[checked]:translate-x-[14px]", sx.h4, sx.w26px)
+			: mergeStylexClassName("data-[checked]:translate-x-[18px]", sx.h5, sx.w8),
 	);
 
 const STRETCH_ANIMATION_ID = "switch-thumb-stretch";
@@ -78,14 +192,7 @@ export function Switch({
 }: SwitchProps) {
 	const thumbRef = React.useRef<HTMLSpanElement>(null);
 	return (
-		<BaseSwitch.Root
-			className={cn(
-				trackClasses(size),
-				"cursor-pointer outline-none",
-				"focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-2 focus-visible:ring-offset-bg",
-				"data-[disabled]:cursor-default data-[disabled]:opacity-40",
-				className,
-			)}
+		<BaseSwitch.Root {...mergeStylexProps(cn(trackClasses(size), mergeStylexClassName("", sx.focusVisibleRing2, sx.focusVisibleRingAccent50, sx.focusVisibleRingOffset2, sx.focusVisibleRingOffsetBg), "data-[disabled]:cursor-default data-[disabled]:opacity-40", className), sx.cursorPointer, sx.outlineNone)}
 			onCheckedChange={(checked, eventDetails) => {
 				if (thumbRef.current) animateThumbTravel(thumbRef.current, checked);
 				onCheckedChange?.(checked, eventDetails);
@@ -121,8 +228,7 @@ export function SwitchIndicator({
 	return (
 		<span
 			aria-hidden
-			data-checked={checked}
-			className={cn(trackClasses(size), "pointer-events-none", className)}
+			data-checked={checked} {...mergeStylexProps(cn(trackClasses(size), className), sx.pointerEventsNone)}
 		>
 			<span data-checked={checked} className={thumbClasses(size)} />
 		</span>

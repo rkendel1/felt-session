@@ -214,7 +214,7 @@ describe("grouped tool run row", () => {
 		);
 
 		expect(html).toContain(">Error<");
-		expect(html).toContain("text-faint opacity-70");
+		expect(html).toContain("color:var(--text-faint);opacity:.7");
 		expect(html).not.toContain("text-red/70");
 		expect(html).not.toContain("text-red/80");
 		expect(html).not.toContain("border-red/25");

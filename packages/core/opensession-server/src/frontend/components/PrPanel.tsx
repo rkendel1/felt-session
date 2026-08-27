@@ -74,9 +74,7 @@ import {
 } from "../lib/pr-focus";
 import { providerFromUrl, prCapabilities } from "../lib/provider";
 import { pollWhileVisible, PR_WEBHOOK_FALLBACK_POLL_MS } from "../lib/poll";
-import {
-  WS_SUMMARY_REVIEW_CANVAS_CLEARANCE,
-} from "../lib/workspace-summary-classes";
+
 import { Textarea } from "../ui/input";
 import {
   IconBranches,
@@ -111,7 +109,7 @@ import {
 
 import { checkClass, isDeployment, summarize } from "../lib/pr-status-derive";
 import { prStatusMark } from "../lib/pr-status";
-import { PR_NO_PR_BAR, PR_REPO_TABS } from "../lib/pr-tone-classes";
+
 import { formatPrCommentPrompt, stripHtmlComments } from "../lib/pr-prompts";
 import { CheckRow } from "./pr/CheckRow";
 import { PrStateIcon } from "./pr/PrStateIcon";
@@ -137,6 +135,624 @@ import {
   deferredMergeKey,
   scheduleDeferredMerge,
 } from "../lib/deferred-merge";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+import { mergeStylexProps, mergeStylexClassName, mergeStylexOverrideClassName } from "../ui/cn";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	minW0: {
+			minWidth: "0"
+	},
+	maxW180px: {
+			maxWidth: "180px"
+	},
+	px2: {
+			paddingInline: "8px"
+	},
+	truncate: {
+			textOverflow: "ellipsis",
+			whiteSpace: "nowrap",
+			overflow: "hidden"
+	},
+	shrink0: {
+			flexShrink: "0"
+	},
+	textFaint: {
+			color: "var(--text-faint)"
+	},
+	w280px: {
+			width: "280px"
+	},
+	p15: {
+			padding: "6px"
+	},
+	py15: {
+			paddingBlock: "6px"
+	},
+	fontMedium: {
+			fontWeight: "var(--font-weight-medium)"
+	},
+	flex: {
+			display: "flex"
+	},
+	flexCol: {
+			flexDirection: "column"
+	},
+	gap05: {
+			gap: "2px"
+	},
+	textDim: {
+			color: "var(--text-dim)"
+	},
+	flex1: {
+			flex: "1"
+	},
+	block: {
+			display: "block"
+	},
+	textFg: {
+			color: "var(--text)"
+	},
+	mt15: {
+			marginTop: "6px"
+	},
+	borderT: {
+			borderTopStyle: "solid",
+			borderTopWidth: "1px"
+	},
+	borderDividerSoft: {
+			borderColor: "var(--divider-soft)"
+	},
+	px1: {
+			paddingInline: "4px"
+	},
+	pt15: {
+			paddingTop: "6px"
+	},
+	minH0: {
+			minHeight: "0"
+	},
+	textRed: {
+			color: "var(--red)"
+	},
+	mlAuto: {
+			marginLeft: "auto"
+	},
+	itemsCenter: {
+			alignItems: "center"
+	},
+	gap25: {
+			gap: "10px"
+	},
+	mxAuto: {
+			marginInline: "auto"
+	},
+	wFull: {
+			width: "100%"
+	},
+	maxW760px: {
+			maxWidth: "760px"
+	},
+	px4: {
+			paddingInline: "16px"
+	},
+	pt4: {
+			paddingTop: "16px"
+	},
+	gap4: {
+			gap: "16px"
+	},
+	py4: {
+			paddingBlock: "16px"
+	},
+	w340px: {
+			width: "340px"
+	},
+	p3: {
+			padding: "12px"
+	},
+	mx2: {
+			marginInline: "8px"
+	},
+	my15: {
+			marginBlock: "6px"
+	},
+	hPx: {
+			height: "1px"
+	},
+	bgLine: {
+			backgroundColor: "var(--border)"
+	},
+	gap15: {
+			gap: "6px"
+	},
+	h8: {
+			height: "32px"
+	},
+	overflowXAuto: {
+			overflowX: "auto"
+	},
+	overflowYHidden: {
+			overflowY: "hidden"
+	},
+	bgSurface: {
+			backgroundColor: "var(--bg)"
+	},
+	ScrollbarWidthNone: {
+			scrollbarWidth: "none"
+	},
+	selfStretch: {
+			alignSelf: "stretch"
+	},
+	h10: {
+			height: "40px"
+	},
+	gap7px: {
+			gap: "7px"
+	},
+	itemsBaseline: {
+			alignItems: "baseline"
+	},
+	gap1: {
+			gap: "4px"
+	},
+	leading12: {
+			lineHeight: "1.2"
+	},
+	fontNormal: {
+			fontWeight: "var(--font-weight-normal)"
+	},
+	noUnderline: {
+			textDecorationLine: "none"
+	},
+	Mr15: {
+			marginRight: "-6px"
+	},
+	gap5: {
+			gap: "20px"
+	},
+	py12: {
+			paddingBlock: "48px"
+	},
+	textCenter: {
+			textAlign: "center"
+	},
+	textSm: {
+			fontSize: "var(--type-label)",
+			lineHeight: "var(--tw-leading,var(--text-sm--line-height))"
+	},
+	ml2: {
+			marginLeft: "8px"
+	},
+	border0: {
+			borderStyle: "solid",
+			borderWidth: "0"
+	},
+	bgTransparent: {
+			backgroundColor: "transparent"
+	},
+	textLink: {
+			color: "var(--link)"
+	},
+	mb4: {
+			marginBottom: "16px"
+	},
+	roundedSm: {
+			borderRadius: "calc(4px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	border: {
+			borderStyle: "solid",
+			borderWidth: "1px"
+	},
+	borderLine: {
+			borderColor: "var(--border)"
+	},
+	bgPanel: {
+			backgroundColor: "var(--bg-panel)"
+	},
+	px3: {
+			paddingInline: "12px"
+	},
+	py2: {
+			paddingBlock: "8px"
+	},
+	textXs: {
+			fontSize: "var(--type-label)",
+			lineHeight: "var(--tw-leading,var(--text-xs--line-height))"
+	},
+	mb7: {
+			marginBottom: "28px"
+	},
+	grid: {
+			display: "grid"
+	},
+	leadingRelaxed: {
+			lineHeight: "var(--leading-relaxed)"
+	},
+	m0: {
+			margin: "0"
+	},
+	fontSemibold: {
+			fontWeight: "var(--font-weight-semibold)"
+	},
+	tracking001em: {
+			letterSpacing: "-.01em"
+	},
+	mt1: {
+			marginTop: "4px"
+	},
+	maxW680px: {
+			maxWidth: "680px"
+	},
+	mb8: {
+			marginBottom: "32px"
+	},
+	scrollMt64px: {
+			scrollMarginTop: "64px"
+	},
+	mb3: {
+			marginBottom: "12px"
+	},
+	absolute: {
+			position: "absolute"
+	},
+	inset0: {
+			inset: "0"
+	},
+	z20: {
+			zIndex: "20"
+	},
+	cursorDefault: {
+			cursor: "default"
+	},
+	bgBlack25: {
+			backgroundColor: "color-mix(in srgb, var(--color-black) 25%, transparent)"
+	},
+	mb2: {
+			marginBottom: "8px"
+	},
+	pointerEventsNone: {
+			pointerEvents: "none"
+	},
+	bottom4: {
+			bottom: "16px"
+	},
+	left4: {
+			left: "16px"
+	},
+	right4: {
+			right: "16px"
+	},
+	z10: {
+			zIndex: "10"
+	},
+	minH54px: {
+			minHeight: "54px"
+	},
+	gap3: {
+			gap: "12px"
+	},
+	roundedMd: {
+			borderRadius: "calc(7px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	borderLineStrong: {
+			borderColor: "var(--border-strong)"
+	},
+	bgPanel95: {
+			backgroundColor: "var(--bg-panel)"
+	},
+	smoothShadowSoft: {
+			boxShadow: "0 3px 10px -3px var(--smooth-shadow-color), 0 20px 56px -16px var(--smooth-shadow-color)"
+	},
+	pointerEventsAuto: {
+			pointerEvents: "auto"
+	},
+	flexWrap: {
+			flexWrap: "wrap"
+	},
+	justifyEnd: {
+			justifyContent: "flex-end"
+	},
+	gap2: {
+			gap: "8px"
+	},
+	leftAuto: {
+			left: "auto"
+	},
+	topAuto: {
+			top: "auto"
+	},
+	translateX0: {
+			translate: "0 0"
+	},
+	translateY0: {
+			translate: "0 0"
+	},
+	originBottomRight: {
+			transformOrigin: "100% 100%"
+	},
+	focusRing: {
+			":focus-visible": {
+					outline: "2px solid var(--accent-ink)",
+					outlineOffset: "2px"
+			}
+	},
+	cursorPointer: {
+			cursor: "pointer"
+	},
+	itemsStart: {
+			alignItems: "flex-start"
+	},
+	roundedRow: {
+			borderRadius: "calc(12px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	py25: {
+			paddingBlock: "10px"
+	},
+	textLeft: {
+			textAlign: "left"
+	},
+	mtPx: {
+			marginTop: "1px"
+	},
+	size4: {
+			width: "16px",
+			height: "16px"
+	},
+	justifyCenter: {
+			justifyContent: "center"
+	},
+	roundedFull: {
+			borderRadius: "calc(infinity * 1px)"
+	,
+		cornerShape: "round"},
+	transitionColors: {
+			transitionProperty: "color,background-color,border-color,outline-color,text-decoration-color,fill,stroke,--tw-gradient-from,--tw-gradient-via,--tw-gradient-to",
+			transitionTimingFunction: "var(--tw-ease,var(--ease))",
+			transitionDuration: "var(--tw-duration,var(--dur-micro))"
+	},
+	size15: {
+			width: "6px",
+			height: "6px"
+	},
+	bgOnAccent: {
+			backgroundColor: "var(--on-accent)"
+	},
+	opacity0: {
+			opacity: "0"
+	},
+	h20: {
+			height: "80px"
+	},
+	resizeNone: {
+			resize: "none"
+	},
+	px05: {
+			paddingInline: "2px"
+	},
+	justifyBetween: {
+			justifyContent: "space-between"
+	},
+	bgRedSoft: {
+			backgroundColor: "var(--red-soft)"
+	},
+  phoneMinH9: {
+    "@media (max-width: 720px)": { minHeight: "36px" },
+  },
+  phoneMaxW104px: {
+    "@media (max-width: 720px)": { maxWidth: "104px" },
+  },
+  minH10: { minHeight: "40px" },
+  hoverBgHover: { ":hover": { "@media (hover: hover)": { backgroundColor: "var(--hover)" } } },
+  phoneMinH11: {
+    "@media (max-width: 720px)": { minHeight: "44px" },
+  },
+  bgActive: { backgroundColor: "var(--bg-active)" },
+  relative: { position: "relative" },
+  hFull: { height: "100%" },
+  overflowXHidden: { overflowX: "hidden" },
+  overflowYAuto: { overflowY: "auto" },
+  overflowHidden: { overflow: "hidden" },
+  overflowYVisible: { overflowY: "visible" },
+  smPx5: {
+    "@media (min-width: 640px)": { paddingInline: "20px" },
+  },
+  maxW1500px: { maxWidth: "1500px" },
+  pb2: { paddingBottom: "8px" },
+  phoneWFull: {
+    "@media (max-width: 720px)": { width: "100%" },
+  },
+  phonePx1: {
+    "@media (max-width: 720px)": { paddingInline: "4px" },
+  },
+  wAuto: { width: "auto" },
+  pt0: { paddingTop: "0" },
+  pt2: { paddingTop: "8px" },
+  summaryCanvasClearance: {
+    "@media (min-width: 721px)": { marginRight: "312px" },
+  },
+  translateYMinus5: { translate: "0 -20px" },
+  repoTabs: {
+    display: "flex",
+    gap: "4px",
+    overflowX: "auto",
+    borderBottomStyle: "solid",
+    borderBottomWidth: "1px",
+    borderColor: "var(--divider)",
+    paddingInline: "12px",
+    paddingBlock: "8px",
+  },
+  noPrBar: {
+    display: "flex",
+    flexShrink: 0,
+    alignItems: "center",
+    gap: "8px",
+    overflowX: "auto",
+    paddingInline: "12px",
+    paddingBlock: "8px",
+    whiteSpace: "nowrap",
+    scrollbarWidth: "none",
+    "@media (max-width: 720px)": {
+      borderBottomStyle: "solid",
+      borderBottomWidth: "1px",
+      borderColor: "var(--divider)",
+    },
+  },
+  w264px: { width: "264px" },
+  desktopMrMinus15: {
+    "@media (min-width: 721px)": { marginRight: "-6px" },
+  },
+  phoneH11: {
+    "@media (max-width: 720px)": { height: "44px" },
+  },
+  phoneGap2: {
+    "@media (max-width: 720px)": { gap: "8px" },
+  },
+  hoverTextFg: { ":hover": { "@media (hover: hover)": { color: "var(--text)" } } },
+  minW5: { minWidth: "20px" },
+  px7px: { paddingInline: "7px" },
+  pyPx: { paddingBlock: "1px" },
+  tabularNums: { fontVariantNumeric: "tabular-nums" },
+  bgAccentSoft: { backgroundColor: "var(--accent-soft)" },
+  textAccent: { color: "var(--accent-ink)" },
+  desktopReviewBar: {
+    "@media (min-width: 721px)": {
+      position: "absolute",
+      left: "8px",
+      top: "calc(100% + 8px)",
+      zIndex: 20,
+      borderRadius: "calc(14px * var(--rf))",
+      borderStyle: "solid",
+      borderWidth: "1px",
+      borderColor: "var(--border)",
+    },
+  },
+  phoneReviewBar: {
+    "@media (max-width: 720px)": {
+      height: "44px",
+      gap: "8px",
+      paddingInline: "8px",
+      boxShadow: "inset 0 -1px 0 var(--border)",
+    },
+  },
+  phonePx3: {
+    "@media (max-width: 720px)": { paddingInline: "12px" },
+  },
+  mr15: { marginRight: "6px" },
+  h6: { height: "24px" },
+  roundedControl: { borderRadius: "calc(12px * var(--rf))" ,
+    cornerShape: "var(--cs)"},
+  textPurple: { color: "var(--purple)" },
+  textYellow: { color: "var(--yellow)" },
+  textGreen: { color: "var(--green)" },
+  bgStatusPurple: {
+    backgroundColor: "color-mix(in srgb, var(--purple) 10%, transparent)",
+  },
+  bgStatusMuted: { backgroundColor: "var(--hover)" },
+  bgStatusYellow: {
+    backgroundColor: "color-mix(in srgb, var(--yellow) 9%, transparent)",
+  },
+  bgGreenSoft: { backgroundColor: "var(--green-soft)" },
+  hoverTextLink: { ":hover": { "@media (hover: hover)": { color: "var(--link)" } } },
+  inlineFlex: { display: "inline-flex" },
+  size8: { width: "32px", height: "32px" },
+  mrMinus15: { marginRight: "-6px" },
+  desktopFlexNone: {
+    "@media (min-width: 721px)": { flex: "none" },
+  },
+  desktopPt12: {
+    "@media (min-width: 721px)": { paddingTop: "48px" },
+  },
+  pb24: { paddingBottom: "96px" },
+  phonePb36: {
+    "@media (max-width: 720px)": { paddingBottom: "144px" },
+  },
+  pb4: { paddingBottom: "16px" },
+  maxW1120px: { maxWidth: "1120px" },
+  px6: { paddingInline: "24px" },
+  py6: { paddingBlock: "24px" },
+  phoneFlexCol: {
+    "@media (max-width: 720px)": { flexDirection: "column" },
+  },
+  phoneItemsStretch: {
+    "@media (max-width: 720px)": { alignItems: "stretch" },
+  },
+  gap6: { gap: "24px" },
+  gap8: { gap: "32px" },
+  guideGrid: { gridTemplateColumns: "54px minmax(0, 1fr)" },
+  right5: { right: "20px" },
+  top108px: { top: "108px" },
+  top16: { top: "64px" },
+  z30: { zIndex: "30" },
+  w460px: { width: "460px" },
+  maxWCalc40px: { maxWidth: "calc(100% - 40px)" },
+  p4: { padding: "16px" },
+  backdropBlur: {
+    WebkitBackdropFilter: "blur(8px)",
+    backdropFilter: "blur(8px)",
+  },
+  mt05: { marginTop: "2px" },
+  maxW30rem: { maxWidth: "30rem" },
+  modalPosition: {
+    bottom: "max(1rem, env(safe-area-inset-bottom))",
+    left: "auto",
+    right: "16px",
+    top: "auto",
+    translate: "0 0",
+    transformOrigin: "100% 100%",
+    "@media (max-width: 720px)": {
+      left: "50%",
+      right: "auto",
+      translate: "-50% 0",
+      transformOrigin: "50% 100%",
+    },
+  },
+  transitionBgBorder: {
+    transitionProperty: "background-color,border-color",
+    transitionTimingFunction: "var(--tw-ease,var(--ease))",
+    transitionDuration: "var(--tw-duration,var(--dur-micro))",
+  },
+
+	desktopReviewFileTreeGap0px: {
+		"@media (min-width: 721px)": {
+			"--review-file-tree-gap": "0px"
+		}
+	},
+	desktopReviewFileTreeTop60px: {
+		"@media (min-width: 721px)": {
+			"--review-file-tree-top": "60px"
+		}
+	},
+	ReviewFileHeaderTop0px: {
+		"--review-file-header-top": "0px"
+	},
+
+	desktopReviewFileHeaderTop61px: {
+		"@media (min-width: 721px)": {
+			"--review-file-header-top": "61px"
+		}
+	},
+});
+
+const STATUS_TEXT_STYLE = {
+  purple: sx.textPurple,
+  muted: sx.textFaint,
+  red: sx.textRed,
+  yellow: sx.textYellow,
+  green: sx.textGreen,
+} as const;
+
+const STATUS_BG_STYLE = {
+  purple: sx.bgStatusPurple,
+  muted: sx.bgStatusMuted,
+  red: sx.bgRedSoft,
+  yellow: sx.bgStatusYellow,
+  green: sx.bgGreenSoft,
+} as const;
 
 // Re-exported so existing importers of these (formerly local) helpers keep working.
 export {
@@ -1403,13 +2019,13 @@ toast(e.message || "Couldn't unlink the PR");
             <Button
               variant="ghost"
               size="sm"
-              className="min-w-0 max-w-[180px] px-2 text-label phone:min-h-9 phone:max-w-[104px]"
+              className={mergeStylexOverrideClassName("", sx.minW0, sx.maxW180px, sx.px2, typography.label, sx.phoneMinH9, sx.phoneMaxW104px)}
               aria-label={`Switch review target. Current: ${active?.label || "repository"}`}
               caret
             >
-              <span className="truncate">{active?.label}</span>
+              <span {...stylex.props(sx.truncate)}>{active?.label}</span>
               {!headerCompact && (
-                <span className="shrink-0 text-faint">
+                <span {...stylex.props(sx.shrink0, sx.textFaint)}>
                   +{targets.length - 1}
                 </span>
               )}
@@ -1421,12 +2037,12 @@ toast(e.message || "Couldn't unlink the PR");
         side="bottom"
         align="start"
         initialFocus
-        className="w-[280px] p-1.5"
+        className={mergeStylexOverrideClassName("", sx.w280px, sx.p15)}
       >
-        <div className="px-2 py-1.5 text-meta font-medium text-faint">
+        <div {...stylex.props(sx.px2, sx.py15, sx.fontMedium, sx.textFaint, typography.meta)}>
           Review target
         </div>
-        <div className="flex flex-col gap-0.5">
+        <div {...stylex.props(sx.flex, sx.flexCol, sx.gap05)}>
           {targets.map((target) => {
             const selected = target.key === active?.key;
             const detail = target.linked
@@ -1440,31 +2056,44 @@ toast(e.message || "Couldn't unlink the PR");
               <button
                 key={target.key}
                 type="button"
-                className={`flex min-h-10 w-full items-center gap-2 rounded-md border-0 px-2 text-left hover:bg-hover phone:min-h-11 ${selected ? "bg-active" : "bg-transparent"}`}
+                {...stylex.props(
+                  sx.flex,
+                  sx.minH10,
+                  sx.wFull,
+                  sx.itemsCenter,
+                  sx.gap2,
+                  sx.roundedMd,
+                  sx.border0,
+                  sx.px2,
+                  sx.textLeft,
+                  sx.hoverBgHover,
+                  sx.phoneMinH11,
+                  selected ? sx.bgActive : sx.bgTransparent,
+                )}
                 aria-current={selected ? "page" : undefined}
                 onClick={() => {
                   setTargetPickerOpen(false);
                   setActiveKey(target.key);
                 }}
               >
-                <IconBranches size={17} className="shrink-0 text-dim" />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-label font-medium text-fg">
+                <IconBranches size={17} className={mergeStylexOverrideClassName("", sx.shrink0, sx.textDim)} />
+                <span {...stylex.props(sx.minW0, sx.flex1)}>
+                  <span {...stylex.props(sx.block, sx.truncate, sx.fontMedium, sx.textFg, typography.label)}>
                     {target.label}
                   </span>
-                  <span className="block truncate text-meta text-faint">
+                  <span {...stylex.props(sx.block, sx.truncate, sx.textFaint, typography.meta)}>
                     {detail}
                   </span>
                 </span>
                 {selected && (
-                  <IconCheck size={16} className="shrink-0 text-fg" />
+                  <IconCheck size={16} className={mergeStylexOverrideClassName("", sx.shrink0, sx.textFg)} />
                 )}
               </button>
             );
           })}
         </div>
         {linkable && (
-          <div className="mt-1.5 border-t border-divider-soft px-1 pt-1.5">
+          <div {...stylex.props(sx.mt15, sx.borderT, sx.borderDividerSoft, sx.px1, sx.pt15)}>
             <LinkPrControl
               sessionId={sessionId}
               variant="action"
@@ -1476,17 +2105,22 @@ toast(e.message || "Couldn't unlink the PR");
     </Popover.Root>
   ) : null;
   const switcher = showBar ? (
-    <div className={PR_REPO_TABS}>{targetPicker}</div>
+    <div {...stylex.props(sx.repoTabs)}>{targetPicker}</div>
   ) : null;
 
-  const reviewStateClass = `flex-1 ${compactToolbar ? WS_SUMMARY_REVIEW_CANVAS_CLEARANCE : ""}`;
+  const reviewStateClass = stylex.props(
+    sx.flex1,
+    compactToolbar && sx.summaryCanvasClearance,
+  ).className;
 
   if (loading)
     return (
-      <div className="flex min-h-0 flex-1 flex-col">
+      <div {...stylex.props(sx.flex, sx.minH0, sx.flex1, sx.flexCol)}>
         {switcher}
-        <LoadingState className={`${reviewStateClass} -translate-y-5`}>
-          <span className="text-control-label font-medium text-fg">
+        <LoadingState
+          className={`${reviewStateClass} ${stylex.props(sx.translateYMinus5).className}`}
+        >
+          <span {...stylex.props(sx.fontMedium, sx.textFg, typography.controlLabel)}>
             Loading pull request…
           </span>
         </LoadingState>
@@ -1495,12 +2129,12 @@ toast(e.message || "Couldn't unlink the PR");
 
   if (loadError && !pr)
     return (
-      <div className="flex min-h-0 flex-1 flex-col">
+      <div {...stylex.props(sx.flex, sx.minH0, sx.flex1, sx.flexCol)}>
         {switcher}
         <EmptyState
           className={reviewStateClass}
           role="alert"
-          icon={<IconX size={22} className="text-red" />}
+          icon={<IconX size={22} className={mergeStylexOverrideClassName("", sx.textRed)} />}
           title="Couldn’t load pull request"
           action={
             <Button
@@ -1538,11 +2172,23 @@ toast(e.message || "Couldn't unlink the PR");
     };
     return (
       <div
-        className={`selectable relative flex h-full min-h-0 flex-col bg-surface ${compactToolbar ? "overflow-x-hidden overflow-y-auto" : "overflow-hidden"}`}
+        className={`selectable ${stylex.props(
+          sx.relative,
+          sx.flex,
+          sx.hFull,
+          sx.minH0,
+          sx.flexCol,
+          sx.bgSurface,
+          compactToolbar && sx.overflowXHidden,
+          compactToolbar && sx.overflowYAuto,
+          !compactToolbar && sx.overflowHidden,
+        ).className}`}
         data-review-canvas="true"
       >
         <ReviewToolbar compact={compactToolbar}>
-          <div className={PR_NO_PR_BAR}>
+          <div
+            className={`[&>*]:shrink-0 [&::-webkit-scrollbar]:hidden ${stylex.props(sx.noPrBar).className}`}
+          >
             {targetPicker}
             {/* Opening the PR is what this state is for, so its action leads
                 before the shared diff controls. */}
@@ -1550,7 +2196,7 @@ toast(e.message || "Couldn't unlink the PR");
               <Button
                 variant="primary"
                 size="sm"
-                className="phone:min-h-11"
+                className={mergeStylexOverrideClassName("", sx.phoneMinH11)}
                 icon={<IconPullRequest size={20} />}
                 disabled={prRequested}
                 onClick={createPr}
@@ -1568,7 +2214,7 @@ toast(e.message || "Couldn't unlink the PR");
             {showWorktreeDiff && (
               <div
                 ref={setWorktreeToolbarTarget}
-                className="ml-auto flex shrink-0 items-center gap-2.5 text-label"
+                {...stylex.props(sx.mlAuto, sx.flex, sx.shrink0, sx.itemsCenter, sx.gap25, typography.label)}
               />
             )}
           </div>
@@ -1577,16 +2223,30 @@ toast(e.message || "Couldn't unlink the PR");
             owns the scrollport and the toolbar stays outside it. With the
             summary, the shared outer scrollport lets its toolbar stick. */}
         <main
-          className={`min-h-0 flex-1 bg-surface ${compactToolbar ? "overflow-y-visible" : "overflow-y-auto"}`}
+          {...stylex.props(
+            sx.minH0,
+            sx.flex1,
+            sx.bgSurface,
+            compactToolbar ? sx.overflowYVisible : sx.overflowYAuto,
+          )}
         >
           {walkthrough && (
-            <div className="mx-auto w-full max-w-[760px] px-4 pt-4 sm:px-5">
+            <div {...stylex.props(sx.mxAuto, sx.wFull, sx.maxW760px, sx.px4, sx.pt4, sx.smPx5)}>
               <WalkthroughCard walkthrough={walkthrough} />
             </div>
           )}
           {showWorktreeDiff ? (
             <div
-              className={`max-w-[1500px] px-2 pb-2 phone:w-full phone:px-1 ${compactToolbar ? `w-auto pt-0 ${WS_SUMMARY_REVIEW_CANVAS_CLEARANCE}` : "mx-auto w-full pt-2"}`}
+              {...stylex.props(
+                sx.maxW1500px,
+                sx.px2,
+                sx.pb2,
+                sx.phoneWFull,
+                sx.phonePx1,
+                compactToolbar ? sx.wAuto : sx.wFull,
+                compactToolbar ? sx.pt0 : sx.pt2,
+                compactToolbar ? sx.summaryCanvasClearance : sx.mxAuto,
+              )}
               data-no-pr-worktree-diff
             >
               <DiffPanel
@@ -1598,7 +2258,7 @@ toast(e.message || "Couldn't unlink the PR");
               />
             </div>
           ) : (
-            <div className="mx-auto flex w-full max-w-[760px] flex-col gap-4 px-4 py-4 sm:px-5">
+            <div {...stylex.props(sx.mxAuto, sx.flex, sx.wFull, sx.maxW760px, sx.flexCol, sx.gap4, sx.px4, sx.py4, sx.smPx5)}>
               <PrCard title="Git status">
                 <GitStatusRows
                   git={git}
@@ -1651,7 +2311,10 @@ toast(e.message || "Couldn't unlink the PR");
         : "Submit review";
   const rail = (
     <ReviewRail
-      className={railStacked ? "min-w-0" : "w-[264px] shrink-0"}
+      className={stylex.props(
+        railStacked ? sx.minW0 : sx.w264px,
+        !railStacked && sx.shrink0,
+      ).className}
       pr={pr}
       git={git}
       sessionId={sessionId}
@@ -1682,7 +2345,7 @@ toast(e.message || "Couldn't unlink the PR");
             <Button
               variant="ghost"
               size="sm"
-              className="desktop:-mr-1.5"
+              className={mergeStylexOverrideClassName("", sx.desktopMrMinus15)}
               aria-label="Code view settings"
               icon={<IconSliders size={18} />}
             />
@@ -1697,12 +2360,12 @@ toast(e.message || "Couldn't unlink the PR");
         side="bottom"
         align="end"
         initialFocus
-        className="flex w-[340px] flex-col gap-0.5 p-3"
+        className={mergeStylexOverrideClassName("", sx.flex, sx.w340px, sx.flexCol, sx.gap05, sx.p3)}
       >
         {worktreeAvailable && (
           <>
             <DiffSourceSetting value={diffSource} onValueChange={setDiffSource} />
-            <div aria-hidden className="mx-2 my-1.5 h-px bg-line" />
+            <div aria-hidden {...stylex.props(sx.mx2, sx.my15, sx.hPx, sx.bgLine)} />
           </>
         )}
         <SettingRow label="Code view">
@@ -1732,7 +2395,7 @@ toast(e.message || "Couldn't unlink the PR");
           </Segmented>
         </SettingRow>
 
-        <div aria-hidden className="mx-2 my-1.5 h-px bg-line" />
+        <div aria-hidden {...stylex.props(sx.mx2, sx.my15, sx.hPx, sx.bgLine)} />
 
         <CodeOrganizationSettings
           settings={organizationSettings}
@@ -1740,7 +2403,7 @@ toast(e.message || "Couldn't unlink the PR");
           defaultOrderLabel="Pull request"
         />
 
-        <div aria-hidden className="mx-2 my-1.5 h-px bg-line" />
+        <div aria-hidden {...stylex.props(sx.mx2, sx.my15, sx.hPx, sx.bgLine)} />
 
         <CodeDisplaySettings {...codeDisplaySettings} />
       </Popover.Popup>
@@ -1760,17 +2423,39 @@ toast(e.message || "Couldn't unlink the PR");
       key={key}
       role="tab"
       aria-selected={page === key}
-      className={`flex h-8 shrink-0 items-center gap-1.5 border-0 bg-transparent px-3 text-label font-medium transition-colors phone:h-11 phone:text-control-label ${
-        page === key ? "text-fg" : "text-dim hover:text-fg"
-      }`}
+      {...stylex.props(
+        sx.flex,
+        sx.h8,
+        sx.shrink0,
+        sx.itemsCenter,
+        sx.gap15,
+        sx.border0,
+        sx.bgTransparent,
+        sx.px3,
+        typography.label,
+        sx.fontMedium,
+        sx.transitionColors,
+        sx.phoneH11,
+        page === key ? sx.textFg : sx.textDim,
+        page !== key && sx.hoverTextFg,
+      )}
       onClick={() => setPage(key)}
     >
       {label}
       {count !== undefined && (
         <span
-          className={`min-w-5 rounded-full px-[7px] py-px text-center text-meta font-semibold tabular-nums ${
-            page === key ? "bg-accent-soft text-accent" : "bg-active text-dim"
-          }`}
+          {...stylex.props(
+            sx.minW5,
+            sx.roundedFull,
+            sx.px7px,
+            sx.pyPx,
+            sx.textCenter,
+            typography.meta,
+            sx.fontSemibold,
+            sx.tabularNums,
+            page === key ? sx.bgAccentSoft : sx.bgActive,
+            page === key ? sx.textAccent : sx.textDim,
+          )}
         >
           {count}
         </span>
@@ -1780,12 +2465,19 @@ toast(e.message || "Couldn't unlink the PR");
 
   const fileControls = page === "files" && (
     <div
-      className={`flex shrink-0 items-center gap-1.5 phone:gap-2 ${compactToolbar ? "" : "ml-auto"}`}
+      {...stylex.props(
+        sx.flex,
+        sx.shrink0,
+        sx.itemsCenter,
+        sx.gap15,
+        sx.phoneGap2,
+        !compactToolbar && sx.mlAuto,
+      )}
     >
       {diffSource === "worktree" ? (
         <div
           ref={setWorktreeToolbarTarget}
-          className="flex shrink-0 items-center gap-2.5 text-label"
+          {...stylex.props(sx.flex, sx.shrink0, sx.itemsCenter, sx.gap25, typography.label)}
         />
       ) : (
         <>
@@ -1802,7 +2494,7 @@ toast(e.message || "Couldn't unlink the PR");
           )}
           <div
             ref={setDiffControlsTarget}
-            className="flex shrink-0 items-center gap-1.5 phone:gap-2"
+            {...stylex.props(sx.flex, sx.shrink0, sx.itemsCenter, sx.gap15, sx.phoneGap2)}
           />
           {codeSettings}
         </>
@@ -1811,9 +2503,23 @@ toast(e.message || "Couldn't unlink the PR");
   );
 
   const reviewBar = !compactToolbar && (
-    <div className="flex h-8 shrink-0 items-center gap-1.5 overflow-x-auto overflow-y-hidden bg-surface [scrollbar-width:none] desktop:absolute desktop:left-2 desktop:top-[calc(100%+8px)] desktop:z-20 desktop:rounded-lg desktop:border desktop:border-line phone:h-11 phone:gap-2 phone:px-2 phone:shadow-[inset_0_-1px_0_var(--border)] [&::-webkit-scrollbar]:hidden">
+    <div
+      className={`[&::-webkit-scrollbar]:hidden ${stylex.props(
+        sx.flex,
+        sx.h8,
+        sx.shrink0,
+        sx.itemsCenter,
+        sx.gap15,
+        sx.overflowXAuto,
+        sx.overflowYHidden,
+        sx.bgSurface,
+        sx.ScrollbarWidthNone,
+        sx.desktopReviewBar,
+        sx.phoneReviewBar,
+      ).className}`}
+    >
       <div
-        className="flex shrink-0 items-center gap-0.5 self-stretch"
+        {...stylex.props(sx.flex, sx.shrink0, sx.itemsCenter, sx.gap05, sx.selfStretch)}
         role="tablist"
         aria-orientation="horizontal"
         aria-label="Pull request pages"
@@ -1826,7 +2532,17 @@ toast(e.message || "Couldn't unlink the PR");
 
   return (
     <div
-      className={`selectable relative flex h-full min-h-0 flex-col bg-surface ${compactToolbar ? "overflow-x-hidden overflow-y-auto" : "overflow-hidden"}`}
+      className={`selectable ${stylex.props(
+        sx.relative,
+        sx.flex,
+        sx.hFull,
+        sx.minH0,
+        sx.flexCol,
+        sx.bgSurface,
+        compactToolbar && sx.overflowXHidden,
+        compactToolbar && sx.overflowYAuto,
+        !compactToolbar && sx.overflowHidden,
+      ).className}`}
       data-review-canvas="true"
       ref={setRoot}
     >
@@ -1834,18 +2550,29 @@ toast(e.message || "Couldn't unlink the PR");
           the summary only relocates page navigation. Phone keeps one
           edge-to-edge navigation and controls row below the identity. */}
       <ReviewToolbar compact={compactToolbar}>
-      <TopBar as="header" className="h-10 shrink-0 gap-2.5 px-4 phone:px-3">
+      <TopBar as="header" className={mergeStylexOverrideClassName("", sx.h10, sx.shrink0, sx.gap25, sx.px4, sx.phonePx3)}>
         {/* State, in the app's own PR language, filled rather than drawn: the
             tone washes the whole chip and the glyph and word share its ink.
             It is its own object, so it gets more air than the pieces of the
             identity line it precedes. */}
         <Tooltip label={statusMark.label}>
           <span
-            className={`mr-1.5 flex h-6 shrink-0 items-center gap-1.5 rounded-control px-2 ${statusMark.bgClassName} ${statusMark.className}`}
+            {...stylex.props(
+              sx.mr15,
+              sx.flex,
+              sx.h6,
+              sx.shrink0,
+              sx.itemsCenter,
+              sx.gap15,
+              sx.roundedControl,
+              sx.px2,
+              STATUS_BG_STYLE[statusMark.tone],
+              STATUS_TEXT_STYLE[statusMark.tone],
+            )}
           >
             <PrStateIcon state={pr.state} isDraft={pr.isDraft} />
             {!headerCompact && (
-              <span className="text-label font-medium">{stateLabel}</span>
+              <span {...stylex.props(sx.fontMedium, typography.label)}>{stateLabel}</span>
             )}
           </span>
         </Tooltip>
@@ -1856,7 +2583,7 @@ toast(e.message || "Couldn't unlink the PR");
             `[icon] repo › title`, so the two headers read as one bar. */}
         {!headerCompact && (
           <>
-            <span className="flex shrink-0 items-center gap-[7px] text-item-title font-medium text-fg">
+            <span {...stylex.props(sx.flex, sx.shrink0, sx.itemsCenter, sx.gap7px, sx.fontMedium, sx.textFg, typography.itemTitle)}>
               <UserAvatar
                 name={pr.author}
                 login={provider.key === "github" ? pr.author : null}
@@ -1864,9 +2591,9 @@ toast(e.message || "Couldn't unlink the PR");
                 edge={false}
                 title={pr.author}
               />
-              <span className="max-w-[180px] truncate">{pr.author}</span>
+              <span {...stylex.props(sx.maxW180px, sx.truncate)}>{pr.author}</span>
             </span>
-            <IconChevronRight size={18} className="shrink-0 text-faint" />
+            <IconChevronRight size={18} className={mergeStylexOverrideClassName("", sx.shrink0, sx.textFaint)} />
           </>
         )}
         {/* Title only. Counts, commits and the sessions on this PR are the
@@ -1876,13 +2603,13 @@ toast(e.message || "Couldn't unlink the PR");
             inert. The outbound jump rides the number, which is the reference
             everywhere else in the app. */}
         <h1
-          className="flex min-w-0 flex-1 items-baseline gap-1 text-item-title font-medium leading-[1.2] text-fg"
+          {...stylex.props(sx.flex, sx.minW0, sx.flex1, sx.itemsBaseline, sx.gap1, sx.fontMedium, sx.leading12, sx.textFg, typography.itemTitle)}
           title={`${pr.title} #${pr.number}`}
         >
-          <span className="truncate">{pr.title}</span>
+          <span {...stylex.props(sx.truncate)}>{pr.title}</span>
           <Tooltip label={`Open on ${provider.name}`}>
             <a
-              className="shrink-0 font-normal text-faint no-underline hover:text-link"
+              {...stylex.props(sx.shrink0, sx.fontNormal, sx.textFaint, sx.noUnderline, sx.hoverTextLink)}
               href={pr.url}
               target="_blank"
               rel="noopener"
@@ -1912,7 +2639,20 @@ toast(e.message || "Couldn't unlink the PR");
                  so the last one in the row is outdented to put that glyph on
                  the row's content edge — where the view control below it
                  sits, since a bordered control is flush with its own box. */
-              className={`ml-auto inline-flex size-8 shrink-0 items-center justify-center rounded-control text-dim no-underline hover:bg-hover hover:text-fg ${pr.state === "OPEN" ? "" : "-mr-1.5"}`}
+              {...stylex.props(
+                sx.mlAuto,
+                sx.inlineFlex,
+                sx.size8,
+                sx.shrink0,
+                sx.itemsCenter,
+                sx.justifyCenter,
+                sx.roundedControl,
+                sx.textDim,
+                sx.noUnderline,
+                sx.hoverBgHover,
+                sx.hoverTextFg,
+                pr.state !== "OPEN" && sx.mrMinus15,
+              )}
               href={pr.staging.url}
               target="_blank"
               rel="noopener"
@@ -1933,7 +2673,9 @@ toast(e.message || "Couldn't unlink the PR");
             <Button
               variant="primary"
               size="sm"
-              className={pr.staging?.url ? undefined : "ml-auto"}
+              className={
+                pr.staging?.url ? undefined : stylex.props(sx.mlAuto).className
+              }
               onClick={() => {
                 setDiffSource("pull-request");
                 setReviewing(true);
@@ -1950,7 +2692,7 @@ toast(e.message || "Couldn't unlink the PR");
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="-mr-1.5"
+                  className={mergeStylexOverrideClassName("", sx.Mr15)}
                   aria-label="Pull request actions"
                   icon={<IconDotsHorizontal size={18} />}
                 />
@@ -1971,14 +2713,14 @@ toast(e.message || "Couldn't unlink the PR");
                   }}
                 >
                   <IconMessage size={18} className={MENU_ICON} />
-                  <span className="min-w-0 flex-1 truncate">Start review</span>
+                  <span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>Start review</span>
                 </Menu.Item>
               )}
             <Menu.Item
               render={<a href={pr.url} target="_blank" rel="noopener" />}
             >
               <BrandMark name={provider.key} size={16} className={MENU_ICON} />
-              <span className="min-w-0 flex-1 truncate">
+              <span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>
                 Open on {provider.name}
               </span>
             </Menu.Item>
@@ -1993,7 +2735,7 @@ toast(e.message || "Couldn't unlink the PR");
                 }
               >
                 <IconGlobe size={18} className={MENU_ICON} />
-                <span className="min-w-0 flex-1 truncate">Open preview</span>
+                <span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>Open preview</span>
               </Menu.Item>
             )}
             <Menu.Item
@@ -2002,7 +2744,7 @@ toast(e.message || "Couldn't unlink the PR");
               }
             >
               <IconCopy size={18} className={MENU_ICON} />
-              <span className="min-w-0 flex-1 truncate">Copy PR link</span>
+              <span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>Copy PR link</span>
             </Menu.Item>
             {pr.state === "OPEN" && (
               <>
@@ -2021,8 +2763,7 @@ toast(e.message || "Couldn't unlink the PR");
                         : "Squash and merge"}
                   </Menu.Item>
                 )}
-                <Menu.Item
-                  className="text-red data-[highlighted]:bg-red-soft"
+                <Menu.Item {...mergeStylexProps("data-[highlighted]:bg-red-soft", sx.textRed)}
                   onClick={handleClose}
                   closeOnClick={confirmClose}
                   disabled={closing}
@@ -2047,7 +2788,18 @@ toast(e.message || "Couldn't unlink the PR");
       )}
 
       <div
-        className={`flex min-h-0 flex-1 ${compactToolbar ? `${WS_SUMMARY_REVIEW_CANVAS_CLEARANCE} desktop:flex-none desktop:[--review-file-tree-gap:0px] desktop:[--review-file-tree-top:60px]` : "desktop:pt-12"}`}
+        className={
+          compactToolbar
+            ? [mergeStylexClassName("", sx.desktopReviewFileTreeGap0px, sx.desktopReviewFileTreeTop60px), stylex.props(
+                sx.flex,
+                sx.minH0,
+                sx.flex1,
+                sx.summaryCanvasClearance,
+                sx.desktopFlexNone,
+              ).className].filter(Boolean).join(" ")
+            : stylex.props(sx.flex, sx.minH0, sx.flex1, sx.desktopPt12)
+                .className
+        }
       >
         {page === "files" &&
           diffSource === "pull-request" &&
@@ -2065,7 +2817,16 @@ toast(e.message || "Couldn't unlink the PR");
           // Wide review scrolls the toolbar and canvas in one container. Once
           // the toolbar sticks, file titles clear its 10px inset, 40px row,
           // 2px border, 8px section gap, and the file card's own 1px border.
-          className={`min-w-0 flex-1 bg-surface [--review-file-header-top:0px] ${compactToolbar ? "overflow-y-visible desktop:[--review-file-header-top:61px]" : "overflow-y-auto"} ${reviewing ? "pb-24 phone:pb-36" : "pb-4"}`}
+          className={[mergeStylexClassName("", sx.ReviewFileHeaderTop0px), compactToolbar
+              ? mergeStylexClassName("", sx.desktopReviewFileHeaderTop61px)
+              : "", stylex.props(
+            sx.minW0,
+            sx.flex1,
+            sx.bgSurface,
+            compactToolbar ? sx.overflowYVisible : sx.overflowYAuto,
+            reviewing ? sx.pb24 : sx.pb4,
+            reviewing && sx.phonePb36,
+          ).className].filter(Boolean).join(" ")}
         >
           {page === "overview" ? (
             <SelectionToSession
@@ -2074,10 +2835,20 @@ toast(e.message || "Couldn't unlink the PR");
               send={send}
             >
               <div
-                className={`mx-auto w-full max-w-[1120px] px-6 py-6 phone:px-3 ${railStacked ? "flex flex-col gap-6" : "flex gap-8"}`}
+                {...stylex.props(
+                  sx.mxAuto,
+                  sx.wFull,
+                  sx.maxW1120px,
+                  sx.px6,
+                  sx.py6,
+                  sx.phonePx3,
+                  sx.flex,
+                  railStacked && sx.flexCol,
+                  railStacked ? sx.gap6 : sx.gap8,
+                )}
               >
                 {railStacked && rail}
-                <div className="flex min-w-0 flex-1 flex-col gap-5">
+                <div {...stylex.props(sx.flex, sx.minW0, sx.flex1, sx.flexCol, sx.gap5)}>
                   {walkthrough && <WalkthroughCard walkthrough={walkthrough} />}
                   <ConversationView
                     author={pr.author}
@@ -2096,7 +2867,14 @@ toast(e.message || "Couldn't unlink the PR");
             // section's own border now carries the shape instead of a wide
             // gray gutter around it.
             <div
-              className={`mx-auto max-w-[1500px] px-2 pb-2 phone:px-1 ${compactToolbar ? "pt-0" : "pt-2"}`}
+              {...stylex.props(
+                sx.mxAuto,
+                sx.maxW1500px,
+                sx.px2,
+                sx.pb2,
+                sx.phonePx1,
+                compactToolbar ? sx.pt0 : sx.pt2,
+              )}
             >
               {diffSource === "worktree" ? (
                 <DiffPanel
@@ -2121,12 +2899,12 @@ toast(e.message || "Couldn't unlink the PR");
                   onOpenLocation={scrollToFile}
                 />
               ) : !diff?.patch || !diffProps ? (
-                <div className="py-12 text-center text-sm text-faint">
+                <div {...stylex.props(sx.py12, sx.textCenter, sx.textSm, sx.textFaint)}>
                   {diffError ? (
                     <>
-                      <span className="text-red">{diffError}</span>
+                      <span {...stylex.props(sx.textRed)}>{diffError}</span>
                       <button
-                        className="ml-2 border-0 bg-transparent text-link"
+                        {...stylex.props(sx.ml2, sx.border0, sx.bgTransparent, sx.textLink)}
                         onClick={() => {
                           setDiffLoading(true);
                           setDiffError(null);
@@ -2147,17 +2925,17 @@ toast(e.message || "Couldn't unlink the PR");
               ) : codeView === "guide" ? (
                 guideLoading || (!currentGuide && !guideFailed) ? (
                   <>
-                    <div className="mb-4 rounded-sm border border-line bg-panel px-3 py-2 text-xs text-faint">
+                    <div {...stylex.props(sx.mb4, sx.roundedSm, sx.border, sx.borderLine, sx.bgPanel, sx.px3, sx.py2, sx.textXs, sx.textFaint)}>
                       Writing the review guide… You can review the file diff
                       while it groups the change by intent.
                     </div>
                     <CommentableDiff patch={diff.patch} {...diffProps} />
                   </>
                 ) : guideFailed ? (
-                  <div className="py-12 text-center text-sm text-faint">
+                  <div {...stylex.props(sx.py12, sx.textCenter, sx.textSm, sx.textFaint)}>
                     Couldn't generate a guide for this PR.
                     <button
-                      className="ml-2 border-0 bg-transparent text-link"
+                      {...stylex.props(sx.ml2, sx.border0, sx.bgTransparent, sx.textLink)}
                       onClick={() => void loadGuide()}
                     >
                       Retry
@@ -2165,16 +2943,16 @@ toast(e.message || "Couldn't unlink the PR");
                   </div>
                 ) : currentGuide ? (
                   <>
-                    <div className="mb-7 grid grid-cols-[54px_minmax(0,1fr)] gap-4 px-1">
-                      <div className="text-meta font-medium leading-relaxed text-faint">
+                    <div {...stylex.props(sx.mb7, sx.grid, sx.guideGrid, sx.gap4, sx.px1)}>
+                      <div {...stylex.props(sx.fontMedium, sx.leadingRelaxed, sx.textFaint, typography.meta)}>
                         Review guide
                       </div>
                       <div>
-                        <h2 className="m-0 text-item-title font-semibold tracking-[-0.01em] text-fg">
+                        <h2 {...stylex.props(sx.m0, sx.fontSemibold, sx.tracking001em, sx.textFg, typography.itemTitle)}>
                           {currentGuide.sections.length} focused review step
                           {currentGuide.sections.length === 1 ? "" : "s"}
                         </h2>
-                        <p className="mt-1 max-w-[680px] text-xs leading-relaxed text-dim">
+                        <p {...stylex.props(sx.mt1, sx.maxW680px, sx.textXs, sx.leadingRelaxed, sx.textDim)}>
                           {reviewing
                             ? "Review the change by intent rather than alphabetically. Comments stay pending until you finish the review."
                             : "Read the change by intent rather than alphabetically."}
@@ -2184,19 +2962,19 @@ toast(e.message || "Couldn't unlink the PR");
                     {guideSections.map((section, index, all) => (
                       <section
                         id={`review-guide-${index}`}
-                        className="mb-8 scroll-mt-[64px]"
+                        {...stylex.props(sx.mb8, sx.scrollMt64px)}
                         key={`${section.title}-${index}`}
                       >
-                        <div className="mb-3 grid grid-cols-[54px_minmax(0,1fr)] gap-4 px-1">
-                          <div className="text-meta text-faint">
+                        <div {...stylex.props(sx.mb3, sx.grid, sx.guideGrid, sx.gap4, sx.px1)}>
+                          <div {...stylex.props(sx.textFaint, typography.meta)}>
                             {String(index + 1).padStart(2, "0")} /{" "}
                             {String(all.length).padStart(2, "0")}
                           </div>
                           <div>
-                            <div className="text-item-title font-semibold text-fg">
+                            <div {...stylex.props(sx.fontSemibold, sx.textFg, typography.itemTitle)}>
                               {section.title}
                             </div>
-                            <div className="mt-1 text-supporting leading-relaxed text-dim">
+                            <div {...stylex.props(sx.mt1, sx.leadingRelaxed, sx.textDim, typography.supporting)}>
                               {section.explanation}
                             </div>
                           </div>
@@ -2231,19 +3009,31 @@ toast(e.message || "Couldn't unlink the PR");
       {sessionsOpen && (
         <>
           <button
-            className="absolute inset-0 z-20 cursor-default border-0 bg-black/25"
+            {...stylex.props(sx.absolute, sx.inset0, sx.z20, sx.cursorDefault, sx.border0, sx.bgBlack25)}
             aria-label="Close sessions"
             onClick={() => setSessionsOpen(false)}
           />
           <div
-            className={`absolute right-5 ${showBar ? "top-[108px]" : "top-16"} z-30 w-[460px] max-w-[calc(100%-40px)] rounded-md border border-line-strong bg-panel p-4 smooth-shadow-lg`}
+            className={`smooth-shadow-lg ${stylex.props(
+              sx.absolute,
+              sx.right5,
+              showBar ? sx.top108px : sx.top16,
+              sx.z30,
+              sx.w460px,
+              sx.maxWCalc40px,
+              sx.roundedMd,
+              sx.border,
+              sx.borderLineStrong,
+              sx.bgPanel,
+              sx.p4,
+            ).className}`}
           >
-            <div className="mb-2 flex items-center">
-              <span className="text-sm font-semibold text-fg">
+            <div {...stylex.props(sx.mb2, sx.flex, sx.itemsCenter)}>
+              <span {...stylex.props(sx.textSm, sx.fontSemibold, sx.textFg)}>
                 Sessions on this PR
               </span>
               <button
-                className="ml-auto border-0 bg-transparent text-item-title text-faint hover:text-fg"
+                {...stylex.props(sx.mlAuto, sx.border0, sx.bgTransparent, sx.textFaint, typography.itemTitle, sx.hoverTextFg)}
                 onClick={() => setSessionsOpen(false)}
                 aria-label="Close"
               >
@@ -2271,9 +3061,9 @@ toast(e.message || "Couldn't unlink the PR");
       {/* Review controls only exist while the person is actively reviewing.
           Passive PR browsing should not imply that a review is in progress. */}
       {reviewing && (
-        <div className="pointer-events-none absolute bottom-4 left-4 right-4 z-10 flex min-h-[54px] items-center gap-3 rounded-md border border-line-strong bg-panel/95 px-3 py-2 smooth-shadow-soft backdrop-blur phone:flex-col phone:items-stretch phone:gap-2">
-          <div className="min-w-0 flex-1">
-            <div className="text-xs font-medium text-fg">
+        <div {...stylex.props(sx.pointerEventsNone, sx.absolute, sx.bottom4, sx.left4, sx.right4, sx.z10, sx.flex, sx.minH54px, sx.itemsCenter, sx.gap3, sx.roundedMd, sx.border, sx.borderLineStrong, sx.bgPanel95, sx.px3, sx.py2, sx.smoothShadowSoft, sx.backdropBlur, sx.phoneFlexCol, sx.phoneItemsStretch, sx.phoneGap2)}>
+          <div {...stylex.props(sx.minW0, sx.flex1)}>
+            <div {...stylex.props(sx.textXs, sx.fontMedium, sx.textFg)}>
               {reviewDone === "merged"
                 ? "Approved and merged"
                 : reviewDone
@@ -2285,7 +3075,12 @@ toast(e.message || "Couldn't unlink the PR");
                       : "No pending comments"}
             </div>
             <div
-              className={`mt-0.5 truncate text-supporting ${closeError ? "text-red" : "text-faint"}`}
+              {...stylex.props(
+                sx.mt05,
+                sx.truncate,
+                typography.supporting,
+                closeError ? sx.textRed : sx.textFaint,
+              )}
               title={closeError || undefined}
             >
               {closeError ||
@@ -2294,11 +3089,11 @@ toast(e.message || "Couldn't unlink the PR");
                   : `${provider.name} has no reviews. Merge or close when you're done.`)}
             </div>
           </div>
-          <div className="pointer-events-auto flex shrink-0 flex-wrap justify-end gap-2">
+          <div {...stylex.props(sx.pointerEventsAuto, sx.flex, sx.shrink0, sx.flexWrap, sx.justifyEnd, sx.gap2)}>
             {onOpenSession && (
               <Button
                 variant="soft"
-                className="text-xs"
+                className={mergeStylexOverrideClassName("", sx.textXs)}
                 onClick={onOpenSession}
               >
                 Open workspace
@@ -2306,7 +3101,7 @@ toast(e.message || "Couldn't unlink the PR");
             )}
             <Button
               variant="soft"
-              className="text-xs"
+              className={mergeStylexOverrideClassName("", sx.textXs)}
               onClick={() => setReviewing(false)}
             >
               Exit review
@@ -2314,7 +3109,7 @@ toast(e.message || "Couldn't unlink the PR");
             {pr.state === "OPEN" && !pr.isDraft && caps.reviewComments && (
               <Button
                 variant="success"
-                className="text-xs"
+                className={mergeStylexOverrideClassName("", sx.textXs)}
                 onClick={() => setReviewOpen(true)}
               >
                 Finish review
@@ -2417,8 +3212,8 @@ function FinishReviewDialog({
   return (
     <Modal.Root open={open} onOpenChange={(next) => !next && onClose(summary)}>
       <Modal.Content
-        widthClassName="max-w-[30rem]"
-        className="bottom-[max(1rem,env(safe-area-inset-bottom))] left-auto right-4 top-auto translate-x-0 translate-y-0 origin-bottom-right phone:left-1/2 phone:right-auto phone:-translate-x-1/2 phone:origin-bottom"
+        widthClassName={stylex.props(sx.maxW30rem).className}
+        className={mergeStylexOverrideClassName("", sx.modalPosition)}
         initialFocus={summaryRef}
       >
         <Modal.Header
@@ -2430,7 +3225,7 @@ function FinishReviewDialog({
           }
         />
         <div
-          className="flex flex-col gap-1.5"
+          {...stylex.props(sx.flex, sx.flexCol, sx.gap15)}
           role="radiogroup"
           aria-label="Review verdict"
         >
@@ -2441,17 +3236,52 @@ function FinishReviewDialog({
               role="radio"
               aria-checked={event === verdict.event}
               data-active={event === verdict.event || undefined}
-              className="group focus-ring flex cursor-pointer items-start gap-2.5 rounded-row border border-line bg-surface px-3 py-2.5 text-left transition-[background-color,border-color] hover:bg-hover data-active:border-accent data-active:bg-accent-soft"
+              className={`group data-active:border-accent data-active:bg-accent-soft ${stylex.props(
+                sx.focusRing,
+                sx.flex,
+                sx.cursorPointer,
+                sx.itemsStart,
+                sx.gap25,
+                sx.roundedRow,
+                sx.border,
+                sx.borderLine,
+                sx.bgSurface,
+                sx.px3,
+                sx.py25,
+                sx.textLeft,
+                sx.transitionBgBorder,
+                sx.hoverBgHover,
+              ).className}`}
               onClick={() => onEventChange(verdict.event)}
             >
-              <span className="mt-px flex size-4 shrink-0 items-center justify-center rounded-full border border-line-strong transition-colors group-data-active:border-accent group-data-active:bg-accent">
-                <span className="size-1.5 rounded-full bg-on-accent opacity-0 group-data-active:opacity-100" />
+              <span
+                className={`group-data-active:border-accent group-data-active:bg-accent ${stylex.props(
+                  sx.mtPx,
+                  sx.flex,
+                  sx.size4,
+                  sx.shrink0,
+                  sx.itemsCenter,
+                  sx.justifyCenter,
+                  sx.roundedFull,
+                  sx.border,
+                  sx.borderLineStrong,
+                  sx.transitionColors,
+                ).className}`}
+              >
+                <span
+                  className={`group-data-active:opacity-100 ${stylex.props(
+                    sx.size15,
+                    sx.roundedFull,
+                    sx.bgOnAccent,
+                    sx.opacity0,
+                  ).className}`}
+                />
               </span>
-              <span className="flex min-w-0 flex-col gap-0.5">
-                <span className="text-label font-semibold text-fg">
+              <span {...stylex.props(sx.flex, sx.minW0, sx.flexCol, sx.gap05)}>
+                <span {...stylex.props(sx.fontSemibold, sx.textFg, typography.label)}>
                   {verdict.label}
                 </span>
-                <span className="text-supporting text-dim">{verdict.hint}</span>
+                <span {...stylex.props(sx.textDim, typography.supporting)}>{verdict.hint}</span>
               </span>
             </button>
           ))}
@@ -2459,7 +3289,7 @@ function FinishReviewDialog({
         <Textarea
           ref={summaryRef}
           size="sm"
-          className="h-20 resize-none"
+          className={mergeStylexOverrideClassName("", sx.h20, sx.resizeNone)}
           placeholder={
             event === "APPROVE" || pendingCount > 0
               ? "Summary (optional)"
@@ -2471,32 +3301,32 @@ function FinishReviewDialog({
         {event === "APPROVE" && canMerge && (
           // Quieter than the verdict rows on purpose: merging is an extra you
           // opt into here, not a fourth thing to choose between.
-          <label className="flex cursor-pointer items-center gap-2.5 px-0.5">
+          <label {...stylex.props(sx.flex, sx.cursorPointer, sx.itemsCenter, sx.gap25, sx.px05)}>
             <Checkbox
               checked={mergeAfterReview}
               onCheckedChange={onMergeAfterReviewChange}
             />
-            <span className="text-supporting text-dim">
+            <span {...stylex.props(sx.textDim, typography.supporting)}>
               Squash and merge as well
             </span>
           </label>
         )}
         {event === "APPROVE" && !canMerge && onFixChecks && (
-          <div className="flex items-center justify-between gap-3 rounded-row bg-red-soft px-3 py-2">
-            <span className="text-supporting text-red">
+          <div {...stylex.props(sx.flex, sx.itemsCenter, sx.justifyBetween, sx.gap3, sx.roundedRow, sx.bgRedSoft, sx.px3, sx.py2)}>
+            <span {...stylex.props(sx.textRed, typography.supporting)}>
               Checks must pass before you can merge.
             </span>
             <Button
               variant="danger"
               size="sm"
-              className="shrink-0"
+              className={mergeStylexOverrideClassName("", sx.shrink0)}
               onClick={() => onFixChecks(summary)}
             >
               Fix checks
             </Button>
           </div>
         )}
-        {error && <div className="text-supporting text-red">{error}</div>}
+        {error && <div {...stylex.props(sx.textRed, typography.supporting)}>{error}</div>}
         <Modal.Footer>
           <Button onClick={() => onClose(summary)}>Cancel</Button>
           <Button

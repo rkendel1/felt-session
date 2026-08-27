@@ -1,7 +1,7 @@
 import * as React from "react";
 import { Select as BaseSelect } from "@base-ui/react/select";
 import { IconCheck, IconChevronDown } from "../components/icons";
-import { cn } from "./cn";
+import { cn, mergeStylexProps, mergeStylexClassName, mergeStylexOverrideClassName } from "./cn";
 import { fieldClasses } from "./input";
 import {
 	FLOATING_OVERLAY_LAYER,
@@ -11,6 +11,155 @@ import {
 	popupSurfaceClasses,
 } from "./popup-classes";
 import { restoreSelectFocusAfterClose } from "./select-focus";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	colStart1: {
+			gridColumnStart: "1"
+	},
+	rowStart1: {
+			gridRowStart: "1"
+	},
+	flex: {
+			display: "flex"
+	},
+	size4: {
+			width: "16px",
+			height: "16px"
+	},
+	shrink0: {
+			flexShrink: "0"
+	},
+	itemsCenter: {
+			alignItems: "center"
+	},
+	justifyCenter: {
+			justifyContent: "center"
+	},
+	textDim: {
+			color: "var(--text-dim)"
+	},
+	minW0: {
+			minWidth: "0"
+	},
+	gap2: {
+			gap: "8px"
+	},
+	truncate: {
+			textOverflow: "ellipsis",
+			whiteSpace: "nowrap",
+			overflow: "hidden"
+	},
+	size17px: {
+			width: "17px",
+			height: "17px"
+	},
+	textAccent: {
+			color: "var(--accent-ink)"
+	},
+	invisible: {
+			visibility: "hidden"
+	},
+	textFaint: {
+			color: "var(--text-faint)"
+	},
+	colStart3: {
+			gridColumnStart: "3"
+	},
+	colStart2: {
+			gridColumnStart: "2"
+	},
+	outlineNone: {
+			outlineStyle: "none"
+	},
+	minWVarAnchorWidth: {
+			minWidth: "var(--anchor-width)"
+	},
+	justifyBetween: {
+			justifyContent: "space-between"
+	},
+	gap3: {
+			gap: "12px"
+	},
+	px2: {
+			paddingInline: "8px"
+	},
+	pb1: {
+			paddingBottom: "4px"
+	},
+	pt15: {
+			paddingTop: "6px"
+	},
+	fontSemibold: {
+			fontWeight: "var(--font-weight-semibold)"
+	},
+	tracking001em: {
+			letterSpacing: "-.01em"
+	},
+	Mx15: {
+			marginInline: "-6px"
+	},
+	my15: {
+			marginBlock: "6px"
+	},
+	hPx: {
+			height: "1px"
+	},
+	bgLine: {
+			backgroundColor: "var(--border)"
+	},
+
+	inlineGrid: {
+		"display": "inline-grid"
+	},
+	cursorPointer: {
+		"cursor": "pointer"
+	},
+	pr2: {
+		"paddingRight": "8px"
+	},
+	textLeft: {
+		"textAlign": "left"
+	},
+	hoverBorderLineStrong: {
+		"@media (hover: hover)": {
+			":hover": {
+				"borderColor": "var(--border-strong)"
+			}
+		}
+	},
+
+	gridColsAutoMinmax01frAuto: {
+		"gridTemplateColumns": "auto minmax(0,1fr) auto"
+	},
+	gridColsMinmax01frAuto: {
+		"gridTemplateColumns": "minmax(0,1fr) auto"
+	},
+	transitionBorderColorBoxShadow: {
+		"transitionProperty": "border-color,box-shadow",
+		"transitionTimingFunction": "var(--tw-ease,var(--ease))",
+		"transitionDuration": "var(--tw-duration,var(--dur-micro))"
+	},
+	enabledHoverSmoothShadowXs: {
+		"@media (hover: hover)": {
+			":enabled": {
+				":hover": {
+					"--smooth-shadow-color": "var(--tw-shadow-color,black)",
+					"boxShadow": "0 1px 2px -1px var(--smooth-shadow-color), 0 2px 5px -3px var(--smooth-shadow-color)"
+				}
+			},
+			"@supports (color: color-mix(in lab, red, red))": {
+				":enabled": {
+					":hover": {
+						"boxShadow": "0 1px 2px -1px color-mix(in srgb, var(--smooth-shadow-color) 5%, transparent), 0 2px 5px -3px color-mix(in srgb, var(--smooth-shadow-color) 7%, transparent)"
+					}
+				}
+			}
+		}
+	},
+});
 
 /**
  * Select on Base UI parts: a field-shaped trigger that opens the app's own
@@ -103,7 +252,7 @@ function Trigger(triggerProps: TriggerProps) {
 	// Presence, not truthiness: an icon-bearing list keeps the slot for the
 	// values that have no glyph, so the labels stay on one x.
 	const iconSlot = "icon" in triggerProps;
-	const label = iconSlot ? "col-start-2" : "col-start-1";
+	const label = iconSlot ? mergeStylexClassName("", sx.colStart2) : mergeStylexClassName("", sx.colStart1);
 	return (
 		<BaseSelect.Trigger
 			{...props}
@@ -113,38 +262,37 @@ function Trigger(triggerProps: TriggerProps) {
 					// The chevron sits in flow in its own grid column, so the
 					// field's own padding is what separates it from the edge.
 					cn(
-						"inline-grid cursor-pointer items-center gap-2 pr-2 text-left",
+						mergeStylexClassName("", sx.inlineGrid, sx.cursorPointer, sx.itemsCenter, sx.gap2, sx.pr2, sx.textLeft),
 						iconSlot
-							? "grid-cols-[auto_minmax(0,1fr)_auto]"
-							: "grid-cols-[minmax(0,1fr)_auto]",
+							? mergeStylexClassName("", sx.gridColsAutoMinmax01frAuto)
+							: mergeStylexClassName("", sx.gridColsMinmax01frAuto),
 					),
 				),
 				// A select lifts slightly under the pointer; opening still reads like
 				// focus, with the border carrying that state as on every other field.
-				"transition-[border-color,box-shadow] hover:border-line-strong enabled:hover:smooth-shadow-xs data-[popup-open]:border-accent",
+				mergeStylexClassName("data-[popup-open]:border-accent", sx.transitionBorderColorBoxShadow, sx.enabledHoverSmoothShadowXs, sx.hoverBorderLineStrong),
 				className,
 			)}
 		>
 			{iconSlot && (
-				<span className="col-start-1 row-start-1 flex size-4 shrink-0 items-center justify-center text-dim">
+				<span {...stylex.props(sx.colStart1, sx.rowStart1, sx.flex, sx.size4, sx.shrink0, sx.itemsCenter, sx.justifyCenter, sx.textDim)}>
 					{icon}
 				</span>
 			)}
-			<span className={cn("row-start-1 truncate", label)}>
+			<span {...mergeStylexProps(cn(label), sx.rowStart1, sx.truncate)}>
 				{children ?? <BaseSelect.Value placeholder={placeholder} />}
 			</span>
 			{sizeTo?.map((text, index) => (
 				<span
 					key={index}
-					aria-hidden
-					className={cn("invisible row-start-1 truncate", label)}
+					aria-hidden {...mergeStylexProps(cn(label), sx.invisible, sx.rowStart1, sx.truncate)}
 				>
 					{text}
 				</span>
 			))}
 			<IconChevronDown
 				size={16}
-				className={cn("row-start-1 shrink-0 text-faint", iconSlot ? "col-start-3" : "col-start-2")}
+				className={mergeStylexOverrideClassName("", sx.rowStart1, sx.shrink0, sx.textFaint, iconSlot && sx.colStart3, !(iconSlot) && sx.colStart2)}
 			/>
 		</BaseSelect.Trigger>
 	);
@@ -176,12 +324,10 @@ function Popup({
 				// positioning transition and turns itself off on touch, which
 				// would give this one popup two open behaviours and no
 				// animation. Anchor it below the trigger like every menu.
-				alignItemWithTrigger={false}
-				className={cn(FLOATING_OVERLAY_LAYER, "outline-none")}
+				alignItemWithTrigger={false} {...mergeStylexProps(cn(FLOATING_OVERLAY_LAYER), sx.outlineNone)}
 			>
 				<BaseSelect.Popup
-					finalFocus={() => restoreFocusRef?.current ?? true}
-					className={cn(POPUP_HOOK, popupSurfaceClasses, "min-w-[var(--anchor-width)]", className)}
+					finalFocus={() => restoreFocusRef?.current ?? true} {...mergeStylexProps(cn(POPUP_HOOK, popupSurfaceClasses, className), sx.minWVarAnchorWidth)}
 				>
 					<BaseSelect.List className={popupScrollClasses}>{children}</BaseSelect.List>
 				</BaseSelect.Popup>
@@ -202,26 +348,21 @@ function Item(itemProps: ItemProps) {
 	const iconSlot = "icon" in itemProps;
 	return (
 		<BaseSelect.Item
-			{...props}
-			className={cn(
-				popupItemClasses,
-				"justify-between gap-3 data-[disabled]:cursor-default data-[disabled]:opacity-40",
-				className,
-			)}
+			{...props} {...mergeStylexProps(cn(popupItemClasses, "data-[disabled]:cursor-default data-[disabled]:opacity-40", className), sx.justifyBetween, sx.gap3)}
 		>
-			<span className="flex min-w-0 items-center gap-2">
+			<span {...stylex.props(sx.flex, sx.minW0, sx.itemsCenter, sx.gap2)}>
 				{iconSlot && (
-					<span className="flex size-4 shrink-0 items-center justify-center text-dim">
+					<span {...stylex.props(sx.flex, sx.size4, sx.shrink0, sx.itemsCenter, sx.justifyCenter, sx.textDim)}>
 						{icon}
 					</span>
 				)}
-				<BaseSelect.ItemText className="min-w-0 truncate">{children}</BaseSelect.ItemText>
+				<BaseSelect.ItemText className={mergeStylexOverrideClassName("", sx.minW0, sx.truncate)}>{children}</BaseSelect.ItemText>
 			</span>
 			{/* The tick's column is reserved on every row, the way `ui/menu`'s
 			    `Check` reserves it: an indicator that only takes space while
 			    selected makes the picked row wider than the rest, so the popup
 			    is a different width depending on what is selected. */}
-			<span className="flex size-[17px] shrink-0 items-center justify-center text-accent">
+			<span {...stylex.props(sx.flex, sx.size17px, sx.shrink0, sx.itemsCenter, sx.justifyCenter, sx.textAccent)}>
 				<BaseSelect.ItemIndicator>
 					<IconCheck size={17} />
 				</BaseSelect.ItemIndicator>
@@ -238,17 +379,13 @@ function GroupLabel({
 }) {
 	return (
 		<BaseSelect.GroupLabel
-			{...props}
-			className={cn(
-				"px-2 pb-1 pt-1.5 text-meta font-semibold tracking-[-0.01em] text-faint",
-				className,
-			)}
+			{...props} {...mergeStylexProps(cn(className), sx.px2, sx.pb1, sx.pt15, typography.meta, sx.fontSemibold, sx.tracking001em, sx.textFaint)}
 		/>
 	);
 }
 
 function Separator({ className }: { className?: string }) {
-	return <BaseSelect.Separator className={cn("-mx-1.5 my-1.5 h-px bg-line", className)} />;
+	return <BaseSelect.Separator {...mergeStylexProps(cn(className), sx.Mx15, sx.my15, sx.hPx, sx.bgLine)} />;
 }
 
 export const Select = {

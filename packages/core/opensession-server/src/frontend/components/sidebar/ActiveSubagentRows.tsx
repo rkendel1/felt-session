@@ -7,10 +7,76 @@ import {
 	SIDEBAR_STATUS_DOT,
 } from "../../lib/sidebar-classes";
 import type { UnifiedSession } from "../../lib/types";
-import { cn } from "../../ui/cn";
+import { cn, mergeStylexClassName } from "../../ui/cn";
 import { IconArrowDownRight } from "../icons";
 import { SIDEBAR_ROW_TITLE } from "./SidebarItem";
 import type { CSSProperties } from "react";
+import * as stylex from "@stylexjs/stylex";
+
+const sx = stylex.create({	relative: {
+		"position": "relative"
+	},
+	mt05: {
+		"marginTop": "2px"
+	},
+	flex: {
+		"display": "flex"
+	},
+	wFull: {
+		"width": "100%"
+	},
+	itemsCenter: {
+		"alignItems": "center"
+	},
+	roundedRow: {
+		"borderRadius": "calc(12px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	border0: {
+		"borderStyle": "var(--tw-border-style)",
+		"borderWidth": "0"
+	},
+	bgTransparent: {
+		"backgroundColor": "transparent"
+	},
+	pyVarSidebarRowPad: {
+		"paddingBlock": "var(--sidebar-row-pad)"
+	},
+	pr2: {
+		"paddingRight": "8px"
+	},
+	textLeft: {
+		"textAlign": "left"
+	},
+	textFg: {
+		"color": "var(--text)"
+	},
+	phonePy13px: {
+		"@media (max-width: 720px)": {
+			"paddingBlock": "13px"
+		}
+	},
+	bgSelected: {
+		"backgroundColor": "var(--selected)"
+	},
+	textFaint: {
+		"color": "var(--text-faint)"
+	},
+	size15: {
+		"width": "6px",
+		"height": "6px"
+	},
+	shrink0: {
+		"flexShrink": "0"
+	},
+	roundedFull: {
+		"borderRadius": "3.40282e38px"
+	,
+		cornerShape: "round"},
+	bgYellow: {
+		"backgroundColor": "var(--yellow)"
+	},
+});
 
 function stateLabel(session: UnifiedSession): string {
 	if (session.waitingForInput) return "Waiting for input";
@@ -39,11 +105,11 @@ export function ActiveSubagentRows({
 						type="button"
 						key={session.id}
 						className={cn(
-							"group relative mt-0.5 flex w-full items-center rounded-row border-0 bg-transparent py-[var(--sidebar-row-pad)] pr-2 text-left text-fg phone:py-[13px]",
+							mergeStylexClassName("group", sx.relative, sx.mt05, sx.flex, sx.wFull, sx.itemsCenter, sx.roundedRow, sx.border0, sx.bgTransparent, sx.pyVarSidebarRowPad, sx.pr2, sx.textLeft, sx.textFg, sx.phonePy13px),
 							SIDEBAR_RAIL_GAP,
 							SIDEBAR_RAIL_PAD,
 							SIDEBAR_HOVER_LAYER,
-							selected && "bg-selected",
+							selected && mergeStylexClassName("", sx.bgSelected),
 						)}
 						// The rail a child indents to, and it is derived rather than
 						// picked: the workspace row above opens with the 22px rail at
@@ -66,18 +132,18 @@ export function ActiveSubagentRows({
 						aria-label={`${session.title}, subagent, ${label}`}
 						onClick={() => onSelect(session)}
 					>
-						<span className={cn(SIDEBAR_RAIL, "text-faint")} aria-hidden="true">
+						<span className={cn(SIDEBAR_RAIL, mergeStylexClassName("", sx.textFaint))} aria-hidden="true">
 							<IconArrowDownRight size={16} />
 						</span>
 						<span className={SIDEBAR_ROW_TITLE}>{session.title}</span>
 						<span
 							className={cn(
-								"size-1.5 shrink-0 rounded-full",
+								mergeStylexClassName("", sx.size15, sx.shrink0, sx.roundedFull),
 								session.waitingForInput
 									? SIDEBAR_STATUS_DOT.waiting
 									: session.isRunning
 										? SIDEBAR_STATUS_DOT.running
-										: "bg-yellow",
+										: mergeStylexClassName("", sx.bgYellow),
 							)}
 							aria-hidden="true"
 							title={label}

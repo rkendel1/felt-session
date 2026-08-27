@@ -19,6 +19,33 @@ import {
 } from "../../ui/settings";
 import { EmptyState, InlineAlert } from "../../ui/state";
 import { SettingRow } from "./shared";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	flex: {
+			display: "flex"
+	},
+	flexCol: {
+			flexDirection: "column"
+	},
+	gap5: {
+			gap: "20px"
+	},
+	gap3: {
+			gap: "12px"
+	},
+	m0: {
+			margin: "0"
+	},
+	leadingRelaxed: {
+			lineHeight: "var(--leading-relaxed)"
+	},
+	textFaint: {
+			color: "var(--text-faint)"
+	},
+});
 
 // ── Keychain: per-person credentials sessions can BORROW with your approval
 // (src/server/keychain.ts). Registration lives here rather than in a tool
@@ -256,8 +283,8 @@ function AddCredentialForm({
 				title="Add credential"
 				description="A session can borrow it with your approval. The secret is injected server-side, so the agent never sees it."
 			/>
-			<form className="flex flex-col gap-5" onSubmit={submit}>
-				<div className="flex flex-col gap-3">
+			<form {...stylex.props(sx.flex, sx.flexCol, sx.gap5)} onSubmit={submit}>
+				<div {...stylex.props(sx.flex, sx.flexCol, sx.gap3)}>
 					<Field label="Service">
 						<Input ref={serviceRef} value={service} onChange={(e) => setService(e.target.value)} placeholder="vercel" autoCapitalize="none" spellCheck={false} />
 					</Field>
@@ -271,7 +298,7 @@ function AddCredentialForm({
 						<Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What it is for" />
 					</Field>
 				</div>
-				<div className="flex flex-col gap-3">
+				<div {...stylex.props(sx.flex, sx.flexCol, sx.gap3)}>
 					<Field label="Injection header">
 						<Input value={header} onChange={(e) => setHeader(e.target.value)} placeholder="Authorization: Bearer" autoCapitalize="none" spellCheck={false} />
 					</Field>
@@ -283,7 +310,7 @@ function AddCredentialForm({
 					</Field>
 					{/* The hint belongs to this zone, so it sits inside it rather
 					    than floating between the fields and the actions. */}
-					<p className="m-0 text-supporting leading-relaxed text-faint">
+					<p {...stylex.props(sx.m0, sx.leadingRelaxed, sx.textFaint, typography.supporting)}>
 						Narrow the methods and paths where you can. A grant can only reach what the
 						credential allows, so this is the ceiling on anything you approve later.
 					</p>

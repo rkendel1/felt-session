@@ -6,9 +6,27 @@ import {
 	SIDEBAR_WS_DRAFT,
 	SIDEBAR_WS_ROW,
 } from "../../lib/sidebar-classes";
-import { cn } from "../../ui/cn";
+import { cn, mergeStylexClassName, mergeStylexOverrideClassName } from "../../ui/cn";
 import { IconPencil, IconPlus } from "../icons";
 import { SIDEBAR_ROW, SIDEBAR_ROW_TITLE } from "./SidebarItem";
+import * as stylex from "@stylexjs/stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	shrink0: {
+			flexShrink: "0"
+	},
+	textFaint: {
+			color: "var(--text-faint)"
+	},
+
+	bgSelected: {
+		"backgroundColor": "var(--selected)"
+	},
+	ml15: {
+		"marginLeft": "6px"
+	},
+});
 
 /**
  * The session that hasn't started yet.
@@ -49,7 +67,7 @@ export function DraftRow({
 				SIDEBAR_ROW,
 				SIDEBAR_WS_ROW,
 				SIDEBAR_HOVER_LAYER,
-				active && "bg-selected",
+				active && mergeStylexClassName("", sx.bgSelected),
 			)}
 			data-sidebar-row=""
 			data-selected={active || undefined}
@@ -57,12 +75,12 @@ export function DraftRow({
 			aria-label="New session, not started yet"
 		>
 			<span className={SIDEBAR_RAIL}>
-				<IconPlus className="shrink-0 text-faint" size={16} />
+				<IconPlus className={mergeStylexOverrideClassName("", sx.shrink0, sx.textFaint)} size={16} />
 			</span>
 			<span className={SIDEBAR_ROW_TITLE}>New session</span>
 			{draft && (
 				<span
-					className={cn(SIDEBAR_WS_DRAFT, "ml-1.5")}
+					className={cn(SIDEBAR_WS_DRAFT, mergeStylexClassName("", sx.ml15))}
 					data-ws-draft=""
 					aria-label="Unsent draft"
 				>

@@ -2,8 +2,156 @@ import { Toggle } from "@base-ui/react/toggle";
 import { ToggleGroup } from "@base-ui/react/toggle-group";
 import { motion } from "motion/react";
 import * as React from "react";
-import { cn } from "./cn";
+import { cn, mergeStylexProps, mergeStylexClassName } from "./cn";
 import { duration, ease } from "./motion";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	relative: {
+			position: "relative"
+	},
+	flex: {
+			display: "flex"
+	},
+	itemsCenter: {
+			alignItems: "center"
+	},
+	gap15: {
+			gap: "6px"
+	},
+	absolute: {
+			position: "absolute"
+	},
+	inset0: {
+			inset: "0"
+	},
+	roundedControl: {
+			borderRadius: "calc(12px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	border: {
+			borderStyle: "solid",
+			borderWidth: "1px"
+	},
+	borderVarSegmentedKnobEdge: {
+			borderColor: "var(--segmented-knob-edge)"
+	},
+	bgVarSegmentedKnobSurface: {
+			backgroundColor: "var(--segmented-knob-surface)"
+	},
+	smoothShadowSm: {
+			boxShadow: "0 1px 3px -1px var(--smooth-shadow-color), 0 4px 10px -4px var(--smooth-shadow-color)"
+	},
+	inlineFlex: {
+			display: "inline-flex"
+	},
+	roundedLg: {
+			borderRadius: "calc(14px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	bgHover: {
+			backgroundColor: "var(--hover)"
+	},
+	p05: {
+			padding: "2px"
+	},
+	cursorPointer: {
+			cursor: "pointer"
+	},
+	border0: {
+			borderStyle: "solid",
+			borderWidth: "0"
+	},
+	bgTransparent: {
+			backgroundColor: "transparent"
+	},
+	fontMedium: {
+			fontWeight: "var(--font-weight-medium)"
+	},
+	whitespaceNowrap: {
+			whiteSpace: "nowrap"
+	},
+	transitionColors: {
+			transitionProperty: "color,background-color,border-color,outline-color,text-decoration-color,fill,stroke,--tw-gradient-from,--tw-gradient-via,--tw-gradient-to",
+			transitionTimingFunction: "var(--tw-ease,var(--ease))",
+			transitionDuration: "var(--tw-duration,var(--dur-micro))"
+	},
+	durationVarDurMicro: {
+			transitionDuration: "var(--dur-micro)"
+	},
+	easeVarEase: {
+			transitionTimingFunction: "var(--ease)"
+	},
+	textFg: {
+			color: "var(--text)"
+	},
+	textDim: {
+			color: "var(--text-dim)"
+	},
+
+	phonePx3: {
+		"@media (max-width: 720px)": {
+			"paddingInline": "12px"
+		}
+	},
+	phonePy2: {
+		"@media (max-width: 720px)": {
+			"paddingBlock": "8px"
+		}
+	},
+	phoneTextItemTitle: {
+		"@media (max-width: 720px)": {
+			"fontSize": "var(--type-item-title)"
+		}
+	},
+	hoverTextFg: {
+		"@media (hover: hover)": {
+			":hover": {
+				"color": "var(--text)"
+			}
+		}
+	},
+	disabledCursorDefault: {
+		":disabled": {
+			"cursor": "default"
+		}
+	},
+	disabledTextFaint: {
+		":disabled": {
+			"color": "var(--text-faint)"
+		}
+	},
+	disabledHoverTextFaint: {
+		"@media (hover: hover)": {
+			":disabled": {
+				":hover": {
+					"color": "var(--text-faint)"
+				}
+			}
+		}
+	},
+
+	justifyCenter: {
+			justifyContent: "center"
+	},
+	textCenter: {
+			textAlign: "center"
+	},
+	px2: {
+		"paddingInline": "8px"
+	},
+	py05: {
+		"paddingBlock": "2px"
+	},
+	px25: {
+		"paddingInline": "10px"
+	},
+	py1: {
+		"paddingBlock": "4px"
+	},
+});
 
 /**
  * Segmented control — a short, exclusive choice shown in full, where every
@@ -52,8 +200,8 @@ import { duration, ease } from "./motion";
 type Size = "sm" | "md";
 
 const optionSizes: Record<Size, string> = {
-	sm: "px-2 py-0.5",
-	md: "px-2.5 py-1",
+	sm: mergeStylexClassName("", sx.px2, sx.py05),
+	md: mergeStylexClassName("", sx.px25, sx.py1),
 };
 
 const SegmentedContext = React.createContext<{
@@ -101,8 +249,7 @@ export function Segmented({
 				onValueChange={(next) => {
 					const picked = next[0];
 					if (picked !== undefined && picked !== value) onValueChange(picked);
-				}}
-				className={cn("inline-flex rounded-lg bg-hover p-0.5", className)}
+				}} {...mergeStylexProps(cn(className), sx.inlineFlex, sx.roundedLg, sx.bgHover, sx.p05)}
 				{...props}
 			>
 				{children}
@@ -121,24 +268,12 @@ export function SegmentedOption({
 	const selected = current === value;
 	return (
 		<Toggle
-			value={value}
-			className={cn(
-				"relative inline-flex cursor-pointer items-center justify-center rounded-control border-0 bg-transparent text-center text-control-label font-medium",
-				optionSizes[size],
-				"whitespace-nowrap transition-colors duration-[var(--dur-micro)] ease-[var(--ease)]",
-				// Phones get the tap box; the desktop control is a reading size.
-				"phone:px-3 phone:py-2 phone:text-item-title",
-				selected ? "text-fg" : "text-dim hover:text-fg",
-				// An option the data can't offer yet stays in place, greyed: taking
-				// it out would shift the ones beside it as the page loads.
-				"disabled:cursor-default disabled:text-faint disabled:hover:text-faint",
-				className,
-			)}
+			value={value} {...mergeStylexProps(cn(optionSizes[size], mergeStylexClassName("", sx.phonePx3, sx.phonePy2, sx.phoneTextItemTitle), selected ? "" : mergeStylexClassName("", sx.hoverTextFg), mergeStylexClassName("", sx.disabledCursorDefault, sx.disabledTextFaint, sx.disabledHoverTextFaint), className), sx.relative, sx.inlineFlex, sx.itemsCenter, sx.justifyCenter, sx.textCenter, sx.cursorPointer, sx.roundedControl, sx.border0, sx.bgTransparent, typography.controlLabel, sx.fontMedium, sx.whitespaceNowrap, sx.transitionColors, sx.durationVarDurMicro, sx.easeVarEase, selected && sx.textFg, !(selected) && sx.textDim)}
 			{...props}
 		>
 			{selected && <SegmentedKnob knobId={knobId} />}
 			{/* Above the knob, which is absolutely positioned over the option. */}
-			<span className="relative flex items-center gap-1.5">{children}</span>
+			<span {...stylex.props(sx.relative, sx.flex, sx.itemsCenter, sx.gap15)}>{children}</span>
 		</Toggle>
 	);
 }
@@ -157,7 +292,7 @@ export function SegmentedKnob({ knobId }: { knobId: string }) {
 		<motion.span
 			layoutId={knobId}
 			aria-hidden
-			className="absolute inset-0 rounded-control border border-[var(--segmented-knob-edge)] bg-[var(--segmented-knob-surface)] smooth-shadow-sm"
+			{...stylex.props(sx.absolute, sx.inset0, sx.roundedControl, sx.border, sx.borderVarSegmentedKnobEdge, sx.bgVarSegmentedKnobSurface, sx.smoothShadowSm)}
 			transition={{ type: "tween", duration: duration.base, ease }}
 		/>
 	);

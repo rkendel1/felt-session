@@ -14,8 +14,34 @@ import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { MIN_ICON_SIZE } from "../components/icons";
 import { copyToClipboard, shareOrCopyLink } from "../lib/share-link";
-import { cn } from "./cn";
+import { cn, mergeStylexProps } from "./cn";
 import { toast as fireToast } from "./toast";
+import * as stylex from "@stylexjs/stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	colStart1: {
+			gridColumnStart: "1"
+	},
+	rowStart1: {
+			gridRowStart: "1"
+	},
+	grid: {
+			display: "grid"
+	},
+	placeItemsCenter: {
+			placeItems: "center"
+	},
+	relative: {
+			position: "relative"
+	},
+	inlineGrid: {
+			display: "inline-grid"
+	},
+	textGreen: {
+			color: "var(--green)"
+	},
+});
 
 /**
  * A checkmark that draws itself on mount — the shared "success" gesture used by
@@ -82,15 +108,13 @@ export function CopyCheck({
 	// Sizing the box below the icon is not a smaller icon, it is a broken one.
 	const box = Math.max(size, MIN_ICON_SIZE);
 	return (
-		<span
-			className={cn("relative inline-grid place-items-center", className)}
+		<span {...mergeStylexProps(cn(className), sx.relative, sx.inlineGrid, sx.placeItemsCenter)}
 			style={{ width: box, height: box }}
 		>
 			<AnimatePresence initial={false} mode="popLayout">
 				{copied ? (
 					<motion.span
-						key="check"
-						className={cn("col-start-1 row-start-1 grid place-items-center text-green", checkClassName)}
+						key="check" {...mergeStylexProps(cn(checkClassName), sx.colStart1, sx.rowStart1, sx.grid, sx.placeItemsCenter, sx.textGreen)}
 						initial={{ opacity: 0, scale: 0.4, rotate: -12 }}
 						animate={{ opacity: 1, scale: 1, rotate: 0 }}
 						exit={{ opacity: 0, scale: 0.6 }}
@@ -101,7 +125,7 @@ export function CopyCheck({
 				) : (
 					<motion.span
 						key="idle"
-						className="col-start-1 row-start-1 grid place-items-center"
+						{...stylex.props(sx.colStart1, sx.rowStart1, sx.grid, sx.placeItemsCenter)}
 						initial={{ opacity: 0, scale: 0.6 }}
 						animate={{ opacity: 1, scale: 1 }}
 						exit={{ opacity: 0, scale: 0.6 }}

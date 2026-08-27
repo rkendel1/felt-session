@@ -1,3 +1,5 @@
+import { mergeStylexProps, mergeStylexOverrideClassName } from "../../ui/cn";
+import { utilityClassName } from "../../ui/cn";
 import { BASE_PATH } from "../../lib/base";
 import React, {
 	useCallback,
@@ -47,6 +49,185 @@ import {
 	IconSliders,
 	IconTrash,
 } from "../icons";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	flex: {
+			display: "flex"
+	},
+	h4: {
+			height: "calc(4px * 4)"
+	},
+	itemsCenter: {
+			alignItems: "center"
+	},
+	leadingNone: {
+			lineHeight: "1"
+	},
+	mt05: {
+			marginTop: "calc(4px * 0.5)"
+	},
+	size7: {
+			width: "calc(4px * 7)",
+			height: "calc(4px * 7)"
+	},
+	shrink0: {
+			flexShrink: "0"
+	},
+	justifyCenter: {
+			justifyContent: "center"
+	},
+	textFaint: {
+			color: "var(--text-faint)"
+	},
+	mt2: {
+			marginTop: "calc(4px * 2)"
+	},
+	grid: {
+			display: "grid"
+	},
+	maxW420px: {
+			maxWidth: "420px"
+	},
+	gridCols3: {
+			gridTemplateColumns: "repeat(3, minmax(0, 1fr))"
+	},
+	gap3: {
+			gap: "calc(4px * 3)"
+	},
+	minW0: {
+			minWidth: "0"
+	},
+	gapX2: {
+			columnGap: "calc(4px * 2)"
+	},
+	overflowHidden: {
+			overflow: "hidden"
+	},
+	textEllipsis: {
+			textOverflow: "ellipsis"
+	},
+	whitespaceNowrap: {
+			whiteSpace: "nowrap"
+	},
+	textDim: {
+			color: "var(--text-dim)"
+	},
+	h1: {
+			height: "4px"
+	},
+	roundedFull: {
+			borderRadius: "calc(infinity * 1px)",
+
+		cornerShape: "round",},
+	bgActive: {
+			backgroundColor: "var(--bg-active)"
+	},
+	textRight: {
+			textAlign: "right"
+	},
+	itemsStart: {
+			alignItems: "flex-start"
+	},
+	gapX3: {
+			columnGap: "calc(4px * 3)"
+	},
+	gap2: {
+			gap: "calc(4px * 2)"
+	},
+	truncate: {
+			overflow: "hidden",
+			textOverflow: "ellipsis",
+			whiteSpace: "nowrap"
+	},
+	mt15: {
+			marginTop: "calc(4px * 1.5)"
+	},
+	leadingRelaxed: {
+			lineHeight: "var(--leading-relaxed)"
+	},
+	textRed: {
+			color: "var(--red)"
+	},
+	gap15: {
+			gap: "calc(4px * 1.5)"
+	},
+	hidden: {
+			display: "none"
+	},
+	inlineFlex: {
+			display: "inline-flex"
+	},
+	flexWrap: {
+			flexWrap: "wrap"
+	},
+	gapY15: {
+			rowGap: "calc(4px * 1.5)"
+	},
+	mb2: {
+			marginBottom: "calc(4px * 2)"
+	},
+	flexCol: {
+			flexDirection: "column"
+	},
+	gap5: {
+			gap: "calc(4px * 5)"
+	},
+	roundedMd: {
+			borderRadius: "calc(7px * var(--rf))",
+
+		cornerShape: "var(--cs)",},
+	bgSurface: {
+			backgroundColor: "var(--bg)"
+	},
+	px4: {
+			paddingInline: "calc(4px * 4)"
+	},
+	py3: {
+			paddingBlock: "calc(4px * 3)"
+	},
+	selfStart: {
+			alignSelf: "flex-start"
+	},
+	gap35: {
+			gap: "calc(4px * 3.5)"
+	},
+	bgPanel: {
+			backgroundColor: "var(--bg-panel)"
+	},
+	px5: {
+			paddingInline: "calc(4px * 5)"
+	},
+	py35: {
+			paddingBlock: "calc(4px * 3.5)"
+	},
+	itemsEnd: {
+			alignItems: "flex-end"
+	},
+	flex1: {
+			flex: "1"
+	},
+	justifyEnd: {
+			justifyContent: "flex-end"
+	},
+	gap25: {
+			gap: "calc(4px * 2.5)"
+	},
+	textLink: {
+			color: "var(--link)"
+	},
+	underline: {
+			textDecorationLine: "underline"
+	},
+	my2: {
+			marginBlock: "calc(4px * 2)"
+	},
+	whitespacePreWrap: {
+			whiteSpace: "pre-wrap"
+	},
+});
 
 // The Claude and Codex subscription accounts runs draw from, and how full each
 // one is. Rendered by Settings → Providers; the account list and its meters live
@@ -169,11 +350,11 @@ function OwnerSelect({
 				icon={ownerIcon(value)}
 				sizeTo={quiet ? undefined : items.map((i) => i.label)}
 				children={
-					quiet ? <span className="flex h-4 items-center leading-none">{value || "Shared pool"}</span> : undefined
+					quiet ? <span {...stylex.props(sx.flex, sx.h4, sx.itemsCenter, sx.leadingNone)}>{value || "Shared pool"}</span> : undefined
 				}
 				className={cn(
 					quiet &&
-						"w-auto border-transparent bg-transparent px-2 text-dim shadow-none transition-colors hover:border-transparent hover:bg-hover enabled:hover:shadow-none focus:border-transparent data-[popup-open]:border-transparent data-[popup-open]:bg-hover phone:min-h-11 [&>svg]:size-4",
+						utilityClassName("w-auto border-transparent bg-transparent px-2 text-dim shadow-none transition-colors hover:border-transparent hover:bg-hover enabled:hover:shadow-none focus:border-transparent data-[popup-open]:border-transparent data-[popup-open]:bg-hover phone:min-h-11 [&>svg]:size-4"),
 					className,
 				)}
 			/>
@@ -192,7 +373,7 @@ function OwnerSelect({
  * column of colored tiles beside provider names that are already written out. */
 function AccountProviderMark({ name }: { name: "claude" | "codex" }) {
 	return (
-		<span className="mt-0.5 flex size-7 shrink-0 items-center justify-center text-faint">
+		<span {...stylex.props(sx.mt05, sx.flex, sx.size7, sx.shrink0, sx.itemsCenter, sx.justifyCenter, sx.textFaint)}>
 			<BrandMark name={name} size={18} />
 		</span>
 	);
@@ -231,13 +412,13 @@ function AccountStatus({
 	return (
 		<span
 			className={cn(
-				"inline-flex shrink-0 items-center gap-1.5 text-meta font-medium",
+				utilityClassName("inline-flex shrink-0 items-center gap-1.5 text-meta font-medium"),
 				statusToneClasses[tone].text,
 			)}
 			{...props}
 		>
 			{statusToneClasses[tone].dot && (
-				<span aria-hidden className={cn("size-1.5 rounded-full", statusToneClasses[tone].dot)} />
+				<span aria-hidden className={cn(utilityClassName("size-1.5 rounded-full"), statusToneClasses[tone].dot)} />
 			)}
 			{children}
 		</span>
@@ -277,7 +458,7 @@ function absoluteReset(resetsAt: string | null): string | undefined {
  */
 function MeterGroup({ children }: { children: React.ReactNode }) {
 	return (
-		<div className="mt-2 grid max-w-[420px] grid-cols-3 gap-3 text-meta phone:grid-cols-1 phone:gap-1.5">
+		<div {...mergeStylexProps("phone:grid-cols-1 phone:gap-1.5", sx.mt2, sx.grid, sx.maxW420px, sx.gridCols3, sx.gap3, typography.meta)} >
 			{children}
 		</div>
 	);
@@ -301,36 +482,36 @@ function Meter({
 	noteTitle?: string;
 }) {
 	return (
-		<div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1 phone:grid-cols-[minmax(0,1fr)_72px_minmax(38px,auto)] phone:gap-x-2 phone:gap-y-0">
+		<div {...mergeStylexProps("grid-cols-[minmax(0,1fr)_auto] gap-y-1 phone:grid-cols-[minmax(0,1fr)_72px_minmax(38px,auto)] phone:gap-x-2 phone:gap-y-0", sx.grid, sx.minW0, sx.itemsCenter, sx.gapX2)} >
 			{/* `contents` gives the desktop label and reset time separate rows.
 			    On phones they become one cell beside the track and value. */}
-			<span className="min-w-0 phone:overflow-visible phone:whitespace-normal desktop:contents">
+			<span {...mergeStylexProps("phone:overflow-visible phone:whitespace-normal desktop:contents", sx.minW0)} >
 				<span
-					className="overflow-hidden text-ellipsis whitespace-nowrap text-dim desktop:col-start-1 desktop:row-start-1"
+					{...mergeStylexProps("desktop:col-start-1 desktop:row-start-1", sx.overflowHidden, sx.textEllipsis, sx.whitespaceNowrap, sx.textDim)}
 					title={labelTitle}
 				>
 					{label}
 				</span>
 				{note ? (
 					<span
-						className="overflow-hidden text-ellipsis whitespace-nowrap text-faint desktop:col-span-2 desktop:row-start-3"
+						{...mergeStylexProps("desktop:col-span-2 desktop:row-start-3", sx.overflowHidden, sx.textEllipsis, sx.whitespaceNowrap, sx.textFaint)}
 						title={noteTitle}
 					>
-						<span className="phone:inline desktop:hidden"> · </span>
+						<span className={utilityClassName("phone:inline desktop:hidden")}> · </span>
 						{note}
 					</span>
 				) : null}
 			</span>
-			<div className="h-1 overflow-hidden rounded-full bg-active desktop:col-span-2 desktop:row-start-2 phone:col-start-2 phone:row-start-1">
+			<div {...mergeStylexProps("desktop:col-span-2 desktop:row-start-2 phone:col-start-2 phone:row-start-1", sx.h1, sx.overflowHidden, sx.roundedFull, sx.bgActive)} >
 				<div
 					className={cn(
-						"h-full rounded-full transition-[width] duration-300",
+						utilityClassName("h-full rounded-full transition-[width] duration-300"),
 						usageToneClasses[usageTone(pct)],
 					)}
 					style={{ width: `${Math.min(100, Math.max(0, pct ?? 0))}%` }}
 				/>
 			</div>
-			<span className="text-right tabular-nums text-dim desktop:col-start-2 desktop:row-start-1 phone:col-start-3 phone:row-start-1">
+			<span {...mergeStylexProps("tabular-nums desktop:col-start-2 desktop:row-start-1 phone:col-start-3 phone:row-start-1", sx.textRight, sx.textDim)} >
 				{value}
 			</span>
 		</div>
@@ -544,17 +725,17 @@ function ClaudeAccountRows({ state }: { state: ClaudeAccountsState }) {
 				)
 				.map((account) => (
 					<React.Fragment key={account.id}>
-						<SettingRow className="items-start gap-x-3 phone:px-4">
+						<SettingRow className={mergeStylexOverrideClassName("phone:px-4", sx.itemsStart, sx.gapX3)} >
 							<AccountProviderMark name="claude" />
 							<SettingRowText>
-								<div className="flex min-w-0 items-center gap-2">
-									<SettingRowTitle className="truncate">
+								<div {...stylex.props(sx.flex, sx.minW0, sx.itemsCenter, sx.gap2)}>
+									<SettingRowTitle className={mergeStylexOverrideClassName("", sx.truncate)}>
 										{providerAccountLabel(account)}
 									</SettingRowTitle>
 									<ClaudeAccountStatus a={account} />
 								</div>
 								<SettingRowDescription
-									className="truncate text-meta"
+									className={mergeStylexOverrideClassName("", sx.truncate, typography.meta)}
 									title={["Anthropic", account.plan?.replace("default_claude_", ""), account.tokenMasked]
 										.filter(Boolean)
 										.join(" · ")}
@@ -563,7 +744,7 @@ function ClaudeAccountRows({ state }: { state: ClaudeAccountsState }) {
 									{account.plan ? ` · ${account.plan.replace("default_claude_", "")}` : ""}
 								</SettingRowDescription>
 								{account.noUsageScope && !account.usage ? (
-									<div className="mt-1.5 text-meta leading-relaxed text-faint">
+									<div {...stylex.props(sx.mt15, sx.leadingRelaxed, sx.textFaint, typography.meta)}>
 										Sign in with Claude from the account menu to show usage.
 									</div>
 								) : (
@@ -573,25 +754,25 @@ function ClaudeAccountRows({ state }: { state: ClaudeAccountsState }) {
 											<ExtraUsageRow extra={account.usage?.extraUsage} />
 										</MeterGroup>
 										{account.usage?.source === "meridian" && (
-											<div className="mt-1.5 text-meta text-faint">
+											<div {...stylex.props(sx.mt15, sx.textFaint, typography.meta)}>
 												Observed through Meridian from rate-limit events during live runs. The
 												token cannot read the usage endpoint directly.
 											</div>
 										)}
 										{account.usage?.error && (
-											<div className="mt-1.5 text-meta text-red">{account.usage.error}</div>
+											<div {...stylex.props(sx.mt15, sx.textRed, typography.meta)}>{account.usage.error}</div>
 										)}
 									</>
 								)}
 							</SettingRowText>
-							<SettingRowControl className="flex items-center gap-1.5 phone:mt-1 phone:ml-0 phone:w-full phone:basis-full phone:gap-2.5 phone:pl-10">
-								<span className="hidden shrink-0 text-meta text-faint phone:inline">Used by</span>
+							<SettingRowControl className={mergeStylexOverrideClassName("phone:mt-1 phone:ml-0 phone:w-full phone:basis-full phone:gap-2.5 phone:pl-10", sx.flex, sx.itemsCenter, sx.gap15)} >
+								<span {...mergeStylexProps("phone:inline", sx.hidden, sx.shrink0, sx.textFaint, typography.meta)} >Used by</span>
 								<OwnerSelect
 									value={account.owner || ""}
 									onChange={(owner) => state.setOwner(account, owner)}
 									label={`Owner of ${providerAccountLabel(account)}`}
 									quiet
-									className="phone:ml-auto"
+									className={utilityClassName("phone:ml-auto")}
 									title={
 										account.owner
 											? `${account.owner}'s personal subscription. Their runs use it first, everyone else never does.`
@@ -607,18 +788,18 @@ function ClaudeAccountRows({ state }: { state: ClaudeAccountsState }) {
 									</Menu.Trigger>
 									<Menu.Popup align="end" sideOffset={4}>
 										<Menu.Item onClick={() => state.setSignIn(account)}>
-											<IconPlug size={16} className="text-faint" />
+											<IconPlug size={16} className={mergeStylexOverrideClassName("", sx.textFaint)} />
 											Connect usage…
 										</Menu.Item>
 										{account.authKind === "setup-token" && (
 											<Menu.Item onClick={() => state.setCredentialsPath(account)}>
-												<IconSliders size={16} className="text-faint" />
+												<IconSliders size={16} className={mergeStylexOverrideClassName("", sx.textFaint)} />
 												Usage credentials…
 											</Menu.Item>
 										)}
 										<Menu.Item
 											onClick={() => state.remove(account)}
-											className="text-red data-[highlighted]:bg-red-soft"
+											className={mergeStylexOverrideClassName("data-[highlighted]:bg-red-soft", sx.textRed)}
 										>
 											<IconTrash size={16} />
 											Remove account
@@ -667,7 +848,7 @@ export function ClaudeAccountsSection({
 				Claude
 			</SettingsGroupLabel>
 			<Modal.Root open={showAdd} onOpenChange={setShowAdd}>
-				<Modal.Content widthClassName="max-w-[32rem]">
+				<Modal.Content widthClassName={utilityClassName("max-w-[32rem]")}>
 					<AddClaudeAccountForm
 						onAccountAdded={() => {
 							void state.load();
@@ -691,7 +872,7 @@ export function ClaudeAccountsSection({
 									: `${available} available of ${state.accounts.length} connected`}
 							</SettingRowDescription>
 						</SettingRowText>
-						<span className="shrink-0 text-label text-dim">
+						<span {...stylex.props(sx.shrink0, sx.textDim, typography.label)}>
 							{available > 0
 								? "Ready"
 								: state.accounts.length > 0
@@ -726,14 +907,14 @@ function CodexAccountStatus({ account }: { account: CodexAccountInfo }) {
 function CodexUsageMeters({ account }: { account: CodexAccountInfo }) {
 	if (account.kind === "api_key")
 		return (
-			<div className="mt-1.5 text-meta text-faint">
+			<div {...stylex.props(sx.mt15, sx.textFaint, typography.meta)}>
 				Platform usage is billed at the organization level, not per API key.
 			</div>
 		);
 	if (!account.usage)
-		return <div className="mt-1.5 text-meta text-faint">Checking usage…</div>;
+		return <div {...stylex.props(sx.mt15, sx.textFaint, typography.meta)}>Checking usage…</div>;
 	if (account.usage.error)
-		return <div className="mt-1.5 text-meta text-red">{account.usage.error}</div>;
+		return <div {...stylex.props(sx.mt15, sx.textRed, typography.meta)}>{account.usage.error}</div>;
 
 	const bucketName = (bucket: CodexUsageBucket) =>
 		bucket.label || (bucket.id === "codex" ? "Codex" : bucket.id);
@@ -771,7 +952,7 @@ function CodexUsageMeters({ account }: { account: CodexAccountInfo }) {
 			)}
 			{account.usage.resetCreditsAvailable !== null &&
 				account.usage.resetCreditsAvailable > 0 && (
-					<div className="mt-1.5 text-meta text-faint">
+					<div {...stylex.props(sx.mt15, sx.textFaint, typography.meta)}>
 						{account.usage.resetCreditsAvailable} rate-limit reset
 						{account.usage.resetCreditsAvailable === 1 ? "" : "s"} available
 					</div>
@@ -855,16 +1036,16 @@ function CodexAccountRows({ state }: { state: CodexAccountsState }) {
 						left.id.localeCompare(right.id),
 				)
 				.map((account) => (
-					<SettingRow key={account.id} className="items-start gap-x-3 phone:px-4">
+					<SettingRow key={account.id} className={mergeStylexOverrideClassName("phone:px-4", sx.itemsStart, sx.gapX3)} >
 						<AccountProviderMark name="codex" />
 						<SettingRowText>
-							<div className="flex min-w-0 items-center gap-2">
-								<SettingRowTitle className="truncate">
+							<div {...stylex.props(sx.flex, sx.minW0, sx.itemsCenter, sx.gap2)}>
+								<SettingRowTitle className={mergeStylexOverrideClassName("", sx.truncate)}>
 									{providerAccountLabel(account)}
 								</SettingRowTitle>
 								<CodexAccountStatus account={account} />
 							</div>
-							<SettingRowDescription className="truncate text-meta" title={account.valueMasked}>
+							<SettingRowDescription className={mergeStylexOverrideClassName("", sx.truncate, typography.meta)} title={account.valueMasked}>
 								OpenAI · {account.kind === "api_key" ? "API key" : "ChatGPT login"}
 								{account.usage?.buckets.find((bucket) => bucket.plan)?.plan
 									? ` · ${account.usage.buckets.find((bucket) => bucket.plan)!.plan}`
@@ -873,14 +1054,14 @@ function CodexAccountRows({ state }: { state: CodexAccountsState }) {
 							</SettingRowDescription>
 							<CodexUsageMeters account={account} />
 						</SettingRowText>
-						<SettingRowControl className="flex items-center gap-1.5 phone:mt-1 phone:ml-0 phone:w-full phone:basis-full phone:gap-2.5 phone:pl-10">
-							<span className="hidden shrink-0 text-meta text-faint phone:inline">Used by</span>
+						<SettingRowControl className={mergeStylexOverrideClassName("phone:mt-1 phone:ml-0 phone:w-full phone:basis-full phone:gap-2.5 phone:pl-10", sx.flex, sx.itemsCenter, sx.gap15)} >
+							<span {...mergeStylexProps("phone:inline", sx.hidden, sx.shrink0, sx.textFaint, typography.meta)} >Used by</span>
 							<OwnerSelect
 								value={account.owner || ""}
 								onChange={(owner) => state.setOwner(account, owner)}
 								label={`Owner of ${providerAccountLabel(account)}`}
 								quiet
-								className="phone:ml-auto"
+								className={utilityClassName("phone:ml-auto")}
 								title={
 									account.owner
 										? `${account.owner}'s personal subscription. Their runs use it first, everyone else never does.`
@@ -897,7 +1078,7 @@ function CodexAccountRows({ state }: { state: CodexAccountsState }) {
 								<Menu.Popup align="end" sideOffset={4}>
 									<Menu.Item
 										onClick={() => state.remove(account)}
-										className="text-red data-[highlighted]:bg-red-soft"
+										className={mergeStylexOverrideClassName("data-[highlighted]:bg-red-soft", sx.textRed)}
 									>
 										<IconTrash size={16} />
 										Remove account
@@ -958,7 +1139,7 @@ export function CodexAccountsSection({
 									: `${available} available of ${state.accounts.length} connected`}
 							</SettingRowDescription>
 						</SettingRowText>
-						<span className="shrink-0 text-label text-dim">
+						<span {...stylex.props(sx.shrink0, sx.textDim, typography.label)}>
 							{available > 0
 								? "Ready"
 								: state.accounts.length > 0
@@ -1006,12 +1187,12 @@ function ProviderSummaryRow({
 							: `${total} account${total === 1 ? "" : "s"} · ${available} available`}
 					</SettingRowDescription>
 				</SettingRowText>
-				<SettingRowControl className="flex items-center gap-1.5">
+				<SettingRowControl className={mergeStylexOverrideClassName("", sx.flex, sx.itemsCenter, sx.gap15)}>
 					{total > 0 && (
 						<Button
 							size="sm"
 							variant="ghost"
-							className="phone:min-h-11"
+							className={utilityClassName("phone:min-h-11")}
 							aria-expanded={expanded}
 							onClick={onToggle}
 						>
@@ -1021,7 +1202,7 @@ function ProviderSummaryRow({
 					<Button
 						size="sm"
 						variant="ghost"
-						className="phone:min-h-11"
+						className={utilityClassName("phone:min-h-11")}
 						icon={<IconPlus size={16} />}
 						onClick={onAdd}
 					>
@@ -1067,7 +1248,7 @@ export function ProviderAccountsSection({
 			<SettingsGroupLabel
 				className={cn(
 					"phone:[&>span]:w-full phone:[&>div]:w-full phone:[&>div]:flex-wrap",
-					onboarding && "px-6",
+					onboarding && utilityClassName("px-6"),
 				)}
 				actions={
 				<>
@@ -1075,8 +1256,8 @@ export function ProviderAccountsSection({
 						<Button
 							size="sm"
 							variant="ghost"
-							className="phone:min-h-11"
-							icon={<IconHistory size={16} className={refreshing ? "animate-spin" : ""} />}
+							className={utilityClassName("phone:min-h-11")}
+							icon={<IconHistory size={16} className={refreshing ? utilityClassName("animate-spin") : ""} />}
 							onClick={refreshUsage}
 							disabled={refreshing}
 						>
@@ -1090,8 +1271,8 @@ export function ProviderAccountsSection({
 									size={onboarding ? "md" : "sm"}
 									variant={onboarding ? "primary" : "default"}
 									className={cn(
-										"phone:min-h-11",
-										onboarding && "bg-fg text-bg hover:bg-fg/85",
+										utilityClassName("phone:min-h-11"),
+										onboarding && utilityClassName("bg-fg text-bg hover:bg-fg/85"),
 									)}
 									icon={<IconPlus size={16} />}
 									caret={!onboarding}
@@ -1114,7 +1295,7 @@ export function ProviderAccountsSection({
 				</>
 			}
 			>
-				<span className="inline-flex flex-wrap items-center gap-x-3 gap-y-1.5">
+				<span {...stylex.props(sx.inlineFlex, sx.flexWrap, sx.itemsCenter, sx.gapX3, sx.gapY15)}>
 					Subscriptions
 					{!onboarding && (
 						<Segmented
@@ -1131,18 +1312,18 @@ export function ProviderAccountsSection({
 			</SettingsGroupLabel>
 
 			{claude.error && (
-				<InlineAlert className="mb-2" onDismiss={() => claude.setError(null)}>
+				<InlineAlert className={mergeStylexOverrideClassName("", sx.mb2)} onDismiss={() => claude.setError(null)}>
 					{claude.error}
 				</InlineAlert>
 			)}
 			{codex.error && (
-				<InlineAlert className="mb-2" onDismiss={() => codex.setError(null)}>
+				<InlineAlert className={mergeStylexOverrideClassName("", sx.mb2)} onDismiss={() => codex.setError(null)}>
 					{codex.error}
 				</InlineAlert>
 			)}
 
 			<Modal.Root open={adding === "claude"} onOpenChange={(open) => !open && setAdding(null)}>
-				<Modal.Content widthClassName="max-w-[32rem]">
+				<Modal.Content widthClassName={utilityClassName("max-w-[32rem]")}>
 					<AddClaudeAccountForm
 						onAccountAdded={() => {
 							void claude.load();
@@ -1164,7 +1345,7 @@ export function ProviderAccountsSection({
 				</Modal.Content>
 			</Modal.Root>
 
-			<SettingCard className={onboarding ? "p-1" : undefined}>
+			<SettingCard className={onboarding ? utilityClassName("p-1") : undefined}>
 				{loading ? (
 					<LoadingState placement="row">Loading accounts…</LoadingState>
 				) : empty ? (
@@ -1203,7 +1384,7 @@ export function ProviderAccountsSection({
 					</>
 				)}
 			</SettingCard>
-			<SettingsHint className={onboarding ? "mt-4 px-6" : undefined}>
+			<SettingsHint className={onboarding ? utilityClassName("mt-4 px-6") : undefined}>
 				Runs rotate through shared accounts for the selected model. Personal accounts
 				are used only for their owner's runs.
 			</SettingsHint>
@@ -1320,16 +1501,16 @@ setError(cause.message);
 					description="The setup token is connected for model runs."
 				/>
 				<form
-					className="flex flex-col gap-5"
+					{...stylex.props(sx.flex, sx.flexCol, sx.gap5)}
 					onSubmit={(event) => {
 						event.preventDefault();
 						if (login && code.trim() && !saving) void handleConnectUsage();
 					}}
 				>
-					<div className="flex flex-col gap-3 rounded-md bg-surface px-4 py-3">
+					<div {...stylex.props(sx.flex, sx.flexCol, sx.gap3, sx.roundedMd, sx.bgSurface, sx.px4, sx.py3)}>
 						{login ? (
 							<Button
-								render={<a className="self-start" href={login.url} target="_blank" rel="noreferrer" />}
+								render={<a {...stylex.props(sx.selfStart)} href={login.url} target="_blank" rel="noreferrer" />}
 								icon={<IconPlug size={16} />}
 							>
 								Open Claude sign-in
@@ -1350,7 +1531,7 @@ setError(cause.message);
 								spellCheck={false}
 							/>
 						</Field>
-						<p className="m-0 text-meta leading-relaxed text-faint">
+						<p {...mergeStylexProps("m-0", sx.leadingRelaxed, sx.textFaint, typography.meta)} >
 							You can finish later. Runs can use this account without usage tracking.
 						</p>
 					</div>
@@ -1378,13 +1559,13 @@ setError(cause.message);
 				description="Claude uses a setup token for model runs and a separate sign-in for usage tracking."
 			/>
 			<form
-				className="flex flex-col gap-5"
+				{...stylex.props(sx.flex, sx.flexCol, sx.gap5)}
 				onSubmit={(event) => {
 					event.preventDefault();
 					if (ready && !saving) void handleAddToken();
 				}}
 			>
-				<div className="flex flex-col gap-3">
+				<div {...stylex.props(sx.flex, sx.flexCol, sx.gap3)}>
 					<Field label="Email">
 						<Input
 							required
@@ -1407,7 +1588,7 @@ setError(cause.message);
 							placeholder="sk-ant-oat01-…"
 						/>
 					</Field>
-					<p className="m-0 text-meta leading-relaxed text-faint">
+					<p {...mergeStylexProps("m-0", sx.leadingRelaxed, sx.textFaint, typography.meta)} >
 						Run <code>claude setup-token</code> while signed into this Claude account. The
 						token powers model runs for about one year.
 					</p>
@@ -1507,7 +1688,7 @@ setError(e.message);
 	}
 
 	return (
-		<div className="flex flex-col gap-3.5 bg-panel px-5 py-3.5">
+		<div {...stylex.props(sx.flex, sx.flexCol, sx.gap35, sx.bgPanel, sx.px5, sx.py35)}>
 			<SettingRowDescription>
 				{account.authKind === "oauth"
 					? "Reconnect this account for model runs and usage tracking. "
@@ -1518,11 +1699,11 @@ setError(e.message);
 			</SettingRowDescription>
 
 			{login ? (
-				<div className="flex items-end gap-3.5 phone:flex-col phone:items-stretch">
-					<a className="shrink-0" href={login.url} target="_blank" rel="noreferrer">
+				<div {...mergeStylexProps("phone:flex-col phone:items-stretch", sx.flex, sx.itemsEnd, sx.gap35)} >
+					<a {...stylex.props(sx.shrink0)} href={login.url} target="_blank" rel="noreferrer">
 						<Button icon={<IconPlug size={16} />}>Open Claude sign-in</Button>
 					</a>
-					<Field className="flex-1" label="Code">
+					<Field className={mergeStylexOverrideClassName("", sx.flex1)} label="Code">
 						<Input
 							value={code}
 							onChange={(e) => setCode(e.target.value)}
@@ -1538,7 +1719,7 @@ setError(e.message);
 
 			{error && <InlineAlert>{error}</InlineAlert>}
 
-			<div className="flex justify-end gap-2.5">
+			<div {...stylex.props(sx.flex, sx.justifyEnd, sx.gap25)}>
 				<Button variant="soft" onClick={handleClose} disabled={busy}>
 					Cancel
 				</Button>
@@ -1753,7 +1934,7 @@ setError(e.message);
 			/>
 
 			<form
-				className="flex flex-col gap-5"
+				{...stylex.props(sx.flex, sx.flexCol, sx.gap5)}
 				onSubmit={(event) => {
 					event.preventDefault();
 					if (saving) return;
@@ -1766,7 +1947,7 @@ setError(e.message);
 					} else if (value.trim() && (kind !== "api_key" || name.trim())) void handleAdd();
 				}}
 			>
-			<div className="flex flex-col gap-3">
+			<div {...stylex.props(sx.flex, sx.flexCol, sx.gap3)}>
 				{kind === "api_key" && (
 					<Field label="Name">
 						<Input
@@ -1823,8 +2004,8 @@ setError(e.message);
 			{login && (
 				// A well inside the dialog, so the live sign-in stands apart
 				// from the fields without another border.
-				<div role="status" aria-live="polite" className="rounded-md bg-surface px-4 py-3 text-supporting">
-					{login.state === "starting" && <div className="text-dim">Starting sign-in…</div>}
+				<div role="status" aria-live="polite" {...stylex.props(sx.roundedMd, sx.bgSurface, sx.px4, sx.py3, typography.supporting)}>
+					{login.state === "starting" && <div {...stylex.props(sx.textDim)}>Starting sign-in…</div>}
 					{login.state === "awaiting_code" && (
 						<>
 							<div>
@@ -1833,19 +2014,19 @@ setError(e.message);
 									href={login.url}
 									target="_blank"
 									rel="noreferrer"
-									className="text-link underline"
+									{...stylex.props(sx.textLink, sx.underline)}
 								>
 									{login.url}
 								</a>{" "}
 								and sign in to the ChatGPT account.
 							</div>
-							<div className="mt-1.5">2. Enter this one-time code (expires in 15 min):</div>
+							<div {...stylex.props(sx.mt15)}>2. Enter this one-time code (expires in 15 min):</div>
 							{login.code && (
-								<div className="my-2">
-									<DeviceCode code={login.code} className="text-section-title" />
+								<div {...stylex.props(sx.my2)}>
+									<DeviceCode code={login.code} className={mergeStylexOverrideClassName("", typography.sectionTitle)} />
 								</div>
 							)}
-							<div className="text-dim">
+							<div {...stylex.props(sx.textDim)}>
 								Waiting for the sign-in to complete… this panel updates by itself.
 							</div>
 						</>
@@ -1858,7 +2039,7 @@ setError(e.message);
 					)}
 					{login.state === "error" && (
 						<InlineAlert
-							className="whitespace-pre-wrap"
+							className={mergeStylexOverrideClassName("", sx.whitespacePreWrap)}
 							onRetry={() => setLogin(null)}
 							retryLabel="Try again"
 						>
@@ -1869,25 +2050,25 @@ setError(e.message);
 			)}
 
 			{oauth && (
-				<div className="rounded-md bg-surface px-4 py-3 text-supporting">
+				<div {...stylex.props(sx.roundedMd, sx.bgSurface, sx.px4, sx.py3, typography.supporting)}>
 					<div>
 						1. Open{" "}
 						<a
 							href={oauth.url}
 							target="_blank"
 							rel="noreferrer"
-							className="text-link underline"
+							{...stylex.props(sx.textLink, sx.underline)}
 						>
 							the ChatGPT sign-in
 						</a>{" "}
 						and sign in to the account.
 					</div>
-					<div className="mt-1.5">
+					<div {...stylex.props(sx.mt15)}>
 						2. The browser lands on a <code>localhost</code> page that can't load. Copy its
 						full address (starts with <code>http://localhost:1455/…</code>) and paste it:
 					</div>
 					<Input
-						className="mt-2"
+						className={mergeStylexOverrideClassName("", sx.mt2)}
 						value={oauthCode}
 						onChange={(e) => setOauthCode(e.target.value)}
 						placeholder="http://localhost:1455/auth/callback?code=…"

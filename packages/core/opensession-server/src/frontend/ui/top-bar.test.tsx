@@ -46,9 +46,9 @@ test("phone pages and sheets share one bar and action rhythm", () => {
 		</PhoneTopBar>,
 	);
 
-	expect(html).toContain("phone:h-11");
-	expect(html).toContain("size-11");
-	expect(html).toContain("rounded-full");
+	expect(html).toContain("width:44px");
+	expect(html).toContain("height:44px");
+	expect(html).toContain("border-radius:calc(infinity * 1px)");
 	expect(html).toContain("Settings");
 });
 
@@ -61,7 +61,7 @@ test("floating controls reuse application mobile chrome", () => {
 	);
 
 	expect(html).toContain("pwa-header-back");
-	expect(html).toContain("mobile-header-control-surface");
+	// Visual glass is verified from compiled StyleX in mobile-chrome.test.ts.
 	expect(html).toContain('aria-label="Back"');
 	expect(html).toContain('aria-label="More"');
 });

@@ -1,5 +1,133 @@
 import * as React from "react";
-import { cn } from "./cn";
+import { cn, mergeStylexProps, mergeStylexClassName } from "./cn";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	fontMedium: {
+			fontWeight: "var(--font-weight-medium)"
+	},
+	textDim: {
+			color: "var(--text-dim)"
+	},
+	flex: {
+			display: "flex"
+	},
+	minW0: {
+			minWidth: "0"
+	},
+	flexCol: {
+			flexDirection: "column"
+	},
+	gap15: {
+			gap: "6px"
+	},
+	grid: {
+			display: "grid"
+	},
+	gridCols2: {
+			gridTemplateColumns: "repeat(2,minmax(0,1fr))"
+	},
+	gap3: {
+			gap: "12px"
+	},
+
+	resizeY: {
+		"resize": "vertical"
+	},
+	py2: {
+		"paddingBlock": "8px"
+	},
+	cursorPointer: {
+		"cursor": "pointer"
+	},
+	phoneGridCols1: {
+		"@media (max-width: 720px)": {
+			"gridTemplateColumns": "repeat(1,minmax(0,1fr))"
+		}
+	},
+
+	wFull: {
+		"width": "100%"
+	},
+	roundedControl: {
+		"borderRadius": "calc(12px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	border: {
+		"borderStyle": "var(--tw-border-style)",
+		"borderWidth": "1px"
+	},
+	borderLine: {
+		"borderColor": "var(--border)"
+	},
+	bgSurface: {
+		"backgroundColor": "var(--bg)"
+	},
+	textFg: {
+		"color": "var(--text)"
+	},
+	outlineNone: {
+		"--tw-outline-style": "none",
+		"outlineStyle": "none"
+	},
+	transitionColors: {
+		"transitionProperty": "color,background-color,border-color,outline-color,text-decoration-color,fill,stroke,--tw-gradient-from,--tw-gradient-via,--tw-gradient-to",
+		"transitionTimingFunction": "var(--tw-ease,var(--ease))",
+		"transitionDuration": "var(--tw-duration,var(--dur-micro))"
+	},
+	placeholderTextFaint: {
+		"::placeholder": {
+			"color": "var(--text-faint)"
+		}
+	},
+	focusBorderAccent: {
+		":focus": {
+			"borderColor": "var(--accent)"
+		}
+	},
+	disabledCursorDefault: {
+		":disabled": {
+			"cursor": "default"
+		}
+	},
+	disabledOpacity40: {
+		":disabled": {
+			"opacity": ".4"
+		}
+	},
+	minH26px: {
+		"minHeight": "26px"
+	},
+	px2: {
+		"paddingInline": "8px"
+	},
+	textXs: {
+		"fontSize": "var(--type-label)",
+		"lineHeight": "var(--tw-leading,var(--text-xs--line-height))"
+	},
+	minH8: {
+		"minHeight": "32px"
+	},
+	px25: {
+		"paddingInline": "10px"
+	},
+	textSm: {
+		"fontSize": "var(--type-label)",
+		"lineHeight": "var(--tw-leading,var(--text-sm--line-height))"
+	},
+	minH9: {
+		"minHeight": "36px"
+	},
+	px3: {
+		"paddingInline": "12px"
+	},
+	textBase: {
+		"fontSize": "var(--type-body)",
+		"lineHeight": "var(--tw-leading,var(--text-base--line-height))"
+	},
+});
 
 /**
  * Field primitive — the shared optics for single-line inputs, multi-line
@@ -30,9 +158,9 @@ type Size = "sm" | "md" | "lg";
  * Inputs take the exact step height rather than only a minimum, so their
  * single line can be centered consistently across Chromium and WebKit. */
 const sizes: Record<Size, string> = {
-	sm: "min-h-[26px] px-2 text-xs [&:where(input)]:h-[26px]",
-	md: "min-h-8 px-2.5 text-sm [&:where(input)]:h-8",
-	lg: "min-h-9 px-3 text-base [&:where(input)]:h-9",
+	sm: mergeStylexClassName("[&:where(input)]:h-[26px]", sx.minH26px, sx.px2, sx.textXs),
+	md: mergeStylexClassName("[&:where(input)]:h-8", sx.minH8, sx.px25, sx.textSm),
+	lg: mergeStylexClassName("[&:where(input)]:h-9", sx.minH9, sx.px3, sx.textBase),
 };
 
 /**
@@ -44,7 +172,7 @@ const sizes: Record<Size, string> = {
 export const fieldClass =
 	// Block padding and a one-line box center input text vertically. The element
 	// selector deliberately leaves multiline textareas and native selects alone.
-	"w-full rounded-control border border-line bg-surface text-fg outline-none transition-colors placeholder:text-faint focus:border-accent disabled:cursor-default disabled:opacity-40 [&:where(input)]:py-0 [&:where(input)]:leading-none";
+	mergeStylexClassName("[&:where(input)]:py-0 [&:where(input)]:leading-none", sx.wFull, sx.roundedControl, sx.border, sx.borderLine, sx.bgSurface, sx.textFg, sx.outlineNone, sx.transitionColors, sx.placeholderTextFaint, sx.focusBorderAccent, sx.disabledCursorDefault, sx.disabledOpacity40);
 
 export function fieldClasses(size: Size = "md", className?: string) {
 	return cn(fieldClass, sizes[size], className);
@@ -71,7 +199,7 @@ type TextareaProps = React.ComponentProps<"textarea"> & {
 /** Multi-line entry. Vertically resizable and padded like a paragraph rather
  *  than a single line, but the same well as `Input` in every other respect. */
 export function Textarea({ className, size = "md", ...props }: TextareaProps) {
-	return <textarea className={fieldClasses(size, cn("resize-y py-2", className))} {...props} />;
+	return <textarea className={fieldClasses(size, cn(mergeStylexClassName("", sx.resizeY, sx.py2), className))} {...props} />;
 }
 
 type SelectProps = Omit<React.ComponentProps<"select">, "size"> & {
@@ -84,7 +212,7 @@ type SelectProps = Omit<React.ComponentProps<"select">, "size"> & {
  *  or a native select's own keyboard behaviour (see `PaletteSelect`,
  *  `SessionSearch`). */
 export function Select({ className, size = "md", ...props }: SelectProps) {
-	return <select className={fieldClasses(size, cn("cursor-pointer", className))} {...props} />;
+	return <select className={fieldClasses(size, cn(mergeStylexClassName("", sx.cursorPointer), className))} {...props} />;
 }
 
 /**
@@ -107,8 +235,8 @@ export function Field({
 	children: React.ReactNode;
 }) {
 	return (
-		<label className={cn("flex min-w-0 flex-col gap-1.5", className)} {...props}>
-			<span className="text-label font-medium text-dim">{label}</span>
+		<label {...mergeStylexProps(cn(className), sx.flex, sx.minW0, sx.flexCol, sx.gap15)} {...props}>
+			<span {...stylex.props(sx.fontMedium, sx.textDim, typography.label)}>{label}</span>
 			{children}
 		</label>
 	);
@@ -122,6 +250,6 @@ export function FieldGrid({
 	...props
 }: React.ComponentPropsWithoutRef<"div">) {
 	return (
-		<div className={cn("grid grid-cols-2 gap-3 phone:grid-cols-1", className)} {...props} />
+		<div {...mergeStylexProps(cn(mergeStylexClassName("", sx.phoneGridCols1), className), sx.grid, sx.gridCols2, sx.gap3)} {...props} />
 	);
 }

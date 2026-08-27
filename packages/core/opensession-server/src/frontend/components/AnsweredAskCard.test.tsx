@@ -47,7 +47,7 @@ test("renders a compact receipt with the question and exact answer", () => {
 	);
 
 	expect(html).toContain('data-answered-ask=""');
-	expect(html).toContain("self-end");
+	expect(html).toContain("align-self:flex-end");
 	expect(html).toContain("Answer sent");
 	expect(html).toContain("Demo choice");
 	expect(html).toContain("Which <strong>version</strong>");
@@ -83,7 +83,8 @@ test("MessageBubble slightly mutes a sent message until the engine reads it", ()
 			owner="Kent"
 		/>,
 	);
-	expect(html).toContain("opacity-70");
+	// StyleX compiles the mute into declarations: opacity-70 is opacity 0.7.
+	expect(html).toContain("opacity:0.7");
 	expect(html).toContain('data-delivery-pending="true"');
 });
 

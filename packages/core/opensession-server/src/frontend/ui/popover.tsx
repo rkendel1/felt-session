@@ -1,11 +1,66 @@
 import * as React from "react";
 import { Popover as BasePopover } from "@base-ui/react/popover";
-import { cn } from "./cn";
+import { cn, mergeStylexProps, mergeStylexClassName } from "./cn";
 import { FLOATING_OVERLAY_LAYER } from "./popup-classes";
 import {
 	useExclusivePopup,
 	useExclusivePopupDelay,
 } from "./exclusive-popups";
+import * as stylex from "@stylexjs/stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	outlineNone: {
+			outlineStyle: "none"
+	},
+	roundedPopup: {
+			borderRadius: "calc(16px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	CornerShapeSquircle: {
+			cornerShape: "squircle"
+	},
+	bgPopupGlass: {
+			backgroundColor: "var(--popup-glass)"
+	},
+	SmoothRingColorVarPopupRing: { "--smooth-ring-color": "var(--popup-ring)" },
+	originVarTransformOrigin: {
+			transformOrigin: "var(--transform-origin)"
+	},
+	duration120ms: {
+			transitionDuration: ".12s"
+	},
+	easeOut: {
+			transitionTimingFunction: "var(--ease)"
+	},
+	size10px: {
+			width: "10px",
+			height: "10px"
+	},
+	rotate45: {
+			rotate: "45deg"
+	},
+	BorderColorVarSmoothRingColor: {
+			borderColor: "var(--smooth-ring-color)"
+	},
+
+	BackdropFilterVarPopupBlur: {
+		"WebkitBackdropFilter": "var(--popup-blur)",
+		"backdropFilter": "var(--popup-blur)"
+	},
+
+	SmoothRingColorColorMixInSrgbVarPopupRing65VarPopupSurface: {
+		"--smooth-ring-color": "var(--popup-ring)",
+		"@supports (color: color-mix(in lab, red, red))": {
+			"--smooth-ring-color": "color-mix(in srgb,var(--popup-ring) 65%,var(--popup-surface))"
+		}
+	},
+	transitionTransformOpacity: {
+		"transitionProperty": "transform,opacity",
+		"transitionTimingFunction": "var(--tw-ease,var(--ease))",
+		"transitionDuration": "var(--tw-duration,var(--dur-micro))"
+	},
+});
 
 /**
  * Popover on Base UI parts, styled with Tailwind tokens. Composable shape —
@@ -144,29 +199,14 @@ function Popup({
 				anchor={anchor}
 				collisionPadding={collisionPadding}
 				// Keep the diamond clear of the popup's rounded corners.
-				arrowPadding={14}
-				className={cn(FLOATING_OVERLAY_LAYER, "outline-none", positionerClassName)}
+				arrowPadding={14} {...mergeStylexProps(cn(FLOATING_OVERLAY_LAYER, positionerClassName), sx.outlineNone)}
 			>
 				<BasePopover.Popup
-					initialFocus={initialFocus}
-					className={cn(
-						// The ring override rides on the popup so the arrow, which
-						// continues that hairline, inherits the same value.
-						"rounded-popup [corner-shape:squircle] outline-none",
-						"bg-popup-glass [backdrop-filter:var(--popup-blur)]",
-						ring === "soft"
-							? "[--smooth-ring-color:color-mix(in_srgb,var(--popup-ring)_65%,var(--popup-surface))]"
-							: "[--smooth-ring-color:var(--popup-ring)]",
-						elevation === "lg"
+					initialFocus={initialFocus} {...mergeStylexProps(cn(mergeStylexClassName("", sx.BackdropFilterVarPopupBlur), ring === "soft" ? mergeStylexClassName("", sx.SmoothRingColorColorMixInSrgbVarPopupRing65VarPopupSurface) : "", elevation === "lg"
 							? "smooth-shadow-ring-lg"
 							: elevation === "sm"
 								? "smooth-shadow-ring-sm"
-								: "smooth-shadow-ring-md",
-						"origin-[var(--transform-origin)] transition-[transform,opacity] duration-[120ms] ease-out",
-						"data-[starting-style]:scale-[0.97] data-[starting-style]:opacity-0",
-						"data-[ending-style]:opacity-0 data-[ending-style]:transition-none",
-						className,
-					)}
+								: "smooth-shadow-ring-md", mergeStylexClassName("", sx.transitionTransformOpacity), "data-[starting-style]:scale-[0.97] data-[starting-style]:opacity-0", "data-[ending-style]:opacity-0 data-[ending-style]:transition-none", className), sx.roundedPopup, sx.CornerShapeSquircle, sx.outlineNone, sx.bgPopupGlass, !(ring === "soft") && sx.SmoothRingColorVarPopupRing, sx.originVarTransformOrigin, sx.duration120ms, sx.easeOut)}
 				>
 					{arrow && (
 						// A square rotated onto its point, half of it hanging off the
@@ -184,19 +224,7 @@ function Popup({
 						// sliver past the diagonal, so the arrow's own fill covers
 						// the popup's hairline where it would otherwise draw a line
 						// across the arrow's base.
-						<BasePopover.Arrow
-							className={cn(
-								"size-[10px] rotate-45 [border-color:var(--smooth-ring-color)]",
-								"bg-popup-glass [backdrop-filter:var(--popup-blur)]",
-								"data-[side=right]:left-[-5px] data-[side=right]:border-b data-[side=right]:border-l",
-								"data-[side=right]:[clip-path:polygon(14%_0,0_0,0_100%,100%_100%,100%_86%)]",
-								"data-[side=left]:right-[-6px] data-[side=left]:border-t data-[side=left]:border-r",
-								"data-[side=left]:[clip-path:polygon(0_0,100%_0,100%_100%,86%_100%,0_14%)]",
-								"data-[side=top]:bottom-[-6px] data-[side=top]:border-r data-[side=top]:border-b",
-								"data-[side=top]:[clip-path:polygon(100%_0,100%_100%,0_100%,0_86%,86%_0)]",
-								"data-[side=bottom]:top-[-6px] data-[side=bottom]:border-t data-[side=bottom]:border-l",
-								"data-[side=bottom]:[clip-path:polygon(0_0,100%_0,100%_14%,14%_100%,0_100%)]",
-							)}
+						<BasePopover.Arrow {...mergeStylexProps(cn(mergeStylexClassName("", sx.BackdropFilterVarPopupBlur), "data-[side=right]:left-[-5px] data-[side=right]:border-b data-[side=right]:border-l", "data-[side=right]:[clip-path:polygon(14%_0,0_0,0_100%,100%_100%,100%_86%)]", "data-[side=left]:right-[-6px] data-[side=left]:border-t data-[side=left]:border-r", "data-[side=left]:[clip-path:polygon(0_0,100%_0,100%_100%,86%_100%,0_14%)]", "data-[side=top]:bottom-[-6px] data-[side=top]:border-r data-[side=top]:border-b", "data-[side=top]:[clip-path:polygon(100%_0,100%_100%,0_100%,0_86%,86%_0)]", "data-[side=bottom]:top-[-6px] data-[side=bottom]:border-t data-[side=bottom]:border-l", "data-[side=bottom]:[clip-path:polygon(0_0,100%_0,100%_14%,14%_100%,0_100%)]"), sx.size10px, sx.rotate45, sx.BorderColorVarSmoothRingColor, sx.bgPopupGlass)}
 						/>
 					)}
 					{children}

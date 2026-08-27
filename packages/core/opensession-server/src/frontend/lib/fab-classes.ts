@@ -1,3 +1,184 @@
+
+import * as stylex from "@stylexjs/stylex";
+import { mergeStylexClassName } from "../ui/cn";
+
+const sx = stylex.create({
+	hidden: {
+		"display": "none"
+	},
+	phoneFixed: {
+		"@media (max-width: 720px)": {
+			"position": "fixed"
+		}
+	},
+	phoneRight3: {
+		"@media (max-width: 720px)": {
+			"right": "12px"
+		}
+	},
+	phoneZ500: {
+		"@media (max-width: 720px)": {
+			"zIndex": "500"
+		}
+	},
+	phoneFlex: {
+		"@media (max-width: 720px)": {
+			"display": "flex"
+		}
+	},
+	phoneSize58px: {
+		"@media (max-width: 720px)": {
+			"width": "58px",
+			"height": "58px"
+		}
+	},
+	phoneItemsCenter: {
+		"@media (max-width: 720px)": {
+			"alignItems": "center"
+		}
+	},
+	phoneJustifyCenter: {
+		"@media (max-width: 720px)": {
+			"justifyContent": "center"
+		}
+	},
+	phoneRoundedFull: {
+		"@media (max-width: 720px)": {
+			"borderRadius": "3.40282e38px"
+		}
+	},
+	phoneBorderNone: {
+		"@media (max-width: 720px)": {
+			"--tw-border-style": "none",
+			"borderStyle": "none"
+		}
+	},
+	phoneBgAccent: {
+		"@media (max-width: 720px)": {
+			"backgroundColor": "var(--accent)"
+		}
+	},
+	phoneTextOnAccent: {
+		"@media (max-width: 720px)": {
+			"color": "var(--on-accent)"
+		}
+	},
+	phoneTransitionTransform: {
+		"@media (max-width: 720px)": {
+			"transitionProperty": "transform,translate,scale,rotate",
+			"transitionTimingFunction": "var(--tw-ease,var(--ease))",
+			"transitionDuration": "var(--tw-duration,var(--dur-micro))"
+		}
+	},
+	phoneActiveScale092: {
+		"@media (max-width: 720px)": {
+			":active": {
+				"scale": ".92"
+			}
+		}
+	},
+	fixed: {
+		"position": "fixed"
+	},
+	right18px: {
+		"right": "18px"
+	},
+	bottom18px: {
+		"bottom": "18px"
+	},
+	z500: {
+		"zIndex": "500"
+	},
+	flex: {
+		"display": "flex"
+	},
+	size11: {
+		"width": "44px",
+		"height": "44px"
+	},
+	itemsCenter: {
+		"alignItems": "center"
+	},
+	justifyCenter: {
+		"justifyContent": "center"
+	},
+	roundedFull: {
+		"borderRadius": "3.40282e38px"
+	,
+		cornerShape: "round"},
+	border: {
+		"borderStyle": "var(--tw-border-style)",
+		"borderWidth": "1px"
+	},
+	borderDivider: {
+		"borderColor": "var(--divider)"
+	},
+	bgVarComposerSurface: {
+		"backgroundColor": "var(--composer-surface)"
+	},
+	textDim: {
+		"color": "var(--text-dim)"
+	},
+	hoverTranslateYPx: {
+		"@media (hover: hover)": {
+			":hover": {
+				"--tw-translate-y": "-1px",
+				"translate": "var(--tw-translate-x) var(--tw-translate-y)"
+			}
+		}
+	},
+	hoverBorderLine: {
+		"@media (hover: hover)": {
+			":hover": {
+				"borderColor": "var(--border)"
+			}
+		}
+	},
+	hoverTextFg: {
+		"@media (hover: hover)": {
+			":hover": {
+				"color": "var(--text)"
+			}
+		}
+	},
+	phoneLeftAuto: {
+		"@media (max-width: 720px)": {
+			"left": "auto"
+		}
+	},
+	phoneRightCalc12px58px12px: {
+		"@media (max-width: 720px)": {
+			"right": "82px"
+		}
+	},
+	phoneTextFg: {
+		"@media (max-width: 720px)": {
+			"color": "var(--text)"
+		}
+	},
+	phoneHoverTranslateY0: {
+		"@media (max-width: 720px)": {
+			"@media (hover: hover)": {
+				":hover": {
+					"--tw-translate-y": "0",
+					"translate": "var(--tw-translate-x) var(--tw-translate-y)"
+				}
+			}
+		}
+	},
+
+	phoneBottomCalc18pxEnvSafeAreaInsetBottom0px: {
+		"@media (max-width: 720px)": {
+			"bottom": "calc(18px + env(safe-area-inset-bottom,0px))"
+		}
+	},
+	transitionColorBorderColorTranslateScale: {
+		"transitionProperty": "color,border-color,translate,scale",
+		"transitionTimingFunction": "var(--tw-ease,var(--ease))",
+		"transitionDuration": "var(--tw-duration,var(--dur-micro))"
+	},
+});
+
 /**
  * The two floating action buttons — what used to be `mobile-fab` and
  * `desk-fab` in legacy.css.
@@ -34,11 +215,11 @@
  * is what the Desk trigger beside it now uses.
  */
 export const MOBILE_FAB =
-	"hidden phone:fixed phone:right-3 phone:bottom-[calc(18px+env(safe-area-inset-bottom,0px))] " +
-	"phone:z-500 phone:flex phone:size-[58px] phone:items-center phone:justify-center " +
-	"phone:rounded-full phone:border-none phone:bg-accent phone:text-on-accent " +
+	mergeStylexClassName("", sx.phoneBottomCalc18pxEnvSafeAreaInsetBottom0px, sx.hidden, sx.phoneFixed, sx.phoneRight3) + " " +
+	mergeStylexClassName("", sx.phoneZ500, sx.phoneFlex, sx.phoneSize58px, sx.phoneItemsCenter, sx.phoneJustifyCenter) + " " +
+	mergeStylexClassName("", sx.phoneRoundedFull, sx.phoneBorderNone, sx.phoneBgAccent, sx.phoneTextOnAccent) + " " +
 	"phone:shadow-[0_4px_14px_rgba(0,0,0,0.16),0_1px_3px_rgba(0,0,0,0.10)] " +
-	"phone:transition-transform phone:active:scale-[0.92]";
+	mergeStylexClassName("", sx.phoneTransitionTransform, sx.phoneActiveScale092);
 
 /**
  * The ⌘J Desk trigger. Desktop uses the same resting shadow and border as the
@@ -67,12 +248,12 @@ export const MOBILE_FAB =
  * layout from the right edge.
  */
 export const DESK_FAB =
-	"fixed right-[18px] bottom-[18px] z-500 flex size-11 items-center justify-center " +
-	"rounded-full border border-divider bg-[var(--composer-surface)] text-dim " +
+	mergeStylexClassName("", sx.fixed, sx.right18px, sx.bottom18px, sx.z500, sx.flex, sx.size11, sx.itemsCenter, sx.justifyCenter) + " " +
+	mergeStylexClassName("", sx.roundedFull, sx.border, sx.borderDivider, sx.bgVarComposerSurface, sx.textDim) + " " +
 	"smooth-shadow-xs " +
-	"transition-[color,border-color,translate,scale] hover:-translate-y-px hover:border-line hover:text-fg " +
-	"phone:left-auto " +
-	"phone:right-[calc(12px+58px+12px)] phone:bottom-[calc(18px+env(safe-area-inset-bottom,0px))] " +
-	"phone:size-[58px] phone:text-fg " +
+	mergeStylexClassName("", sx.transitionColorBorderColorTranslateScale, sx.hoverTranslateYPx, sx.hoverBorderLine, sx.hoverTextFg) + " " +
+	mergeStylexClassName("", sx.phoneLeftAuto) + " " +
+	mergeStylexClassName("", sx.phoneBottomCalc18pxEnvSafeAreaInsetBottom0px, sx.phoneRightCalc12px58px12px) + " " +
+	mergeStylexClassName("", sx.phoneSize58px, sx.phoneTextFg) + " " +
 	"phone:shadow-[0_2px_10px_rgba(0,0,0,0.10),0_1px_2px_rgba(0,0,0,0.06)] " +
-	"phone:hover:translate-y-0 phone:active:scale-[0.92]";
+	mergeStylexClassName("", sx.phoneHoverTranslateY0, sx.phoneActiveScale092);

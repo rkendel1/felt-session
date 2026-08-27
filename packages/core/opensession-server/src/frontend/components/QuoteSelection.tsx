@@ -16,6 +16,71 @@ import {
 import { Button } from "../ui/button";
 import { duration, ease } from "../ui/motion";
 import { IconBrowserTab, IconCursor } from "./icons";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+import { mergeStylexProps, mergeStylexClassName } from "../ui/cn";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	fixed: {
+			position: "fixed"
+	},
+	z1000: {
+			zIndex: "1000"
+	},
+	inlineFlex: {
+			display: "inline-flex"
+	},
+	minH8: {
+			minHeight: "32px"
+	},
+	itemsStretch: {
+			alignItems: "stretch"
+	},
+	overflowHidden: {
+			overflow: "hidden"
+	},
+	whitespaceNowrap: {
+			whiteSpace: "nowrap"
+	},
+	rounded999px: {
+			borderRadius: "999px"
+	,
+		cornerShape: "var(--cs)"},
+	bgPopup: {
+			backgroundColor: "var(--popup-surface)"
+	},
+	fontSemibold: {
+			fontWeight: "var(--font-weight-semibold)"
+	},
+	textFg: {
+			color: "var(--text)"
+	},
+	SmoothRingColorVarPopupRing: { "--smooth-ring-color": "var(--popup-ring)" },
+	smoothShadowRingSm: {
+			boxShadow: "0 1px 3px -1px var(--smooth-shadow-color), 0 4px 10px -4px var(--smooth-shadow-color), 0 0 0 var(--smooth-ring-width,1px) var(--smooth-ring-color)"
+	},
+	roundedNone: {
+			borderRadius: "0"
+	,
+		cornerShape: "var(--cs)"},
+	borderLLineStrong: {
+			borderLeftColor: "var(--border-strong)"
+	},
+
+	hoverTextFg: {
+		"@media (hover: hover)": {
+			":hover": {
+				"color": "var(--text)"
+			}
+		}
+	},
+	focusVisibleZ1: {
+		":focusVisible": {
+			"zIndex": "1"
+		}
+	},
+});
 
 interface Props {
 	/** The region whose text can be quoted: the transcript scroller. */
@@ -335,7 +400,7 @@ export function QuoteSelection({
 			initial={{ opacity: 0, scale: 0.96 }}
 			animate={{ opacity: 1, scale: 1 }}
 			transition={{ type: "tween", duration: duration.micro, ease }}
-			className="fixed z-1000 inline-flex min-h-8 items-stretch overflow-hidden whitespace-nowrap rounded-[999px] bg-popup text-label font-semibold text-fg [--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-sm"
+			{...stylex.props(sx.fixed, sx.z1000, sx.inlineFlex, sx.minH8, sx.itemsStretch, sx.overflowHidden, sx.whitespaceNowrap, sx.rounded999px, sx.bgPopup, sx.fontSemibold, sx.textFg, sx.SmoothRingColorVarPopupRing, sx.smoothShadowRingSm, typography.label)}
 			style={{
 				left: placement?.left ?? 0,
 				top: placement?.top ?? 0,
@@ -351,8 +416,7 @@ export function QuoteSelection({
 				variant="ghost"
 				size="md"
 				icon={<IconCursor size={20} />}
-				onClick={add}
-				className="rounded-none text-fg hover:text-fg focus-visible:z-[1]"
+				onClick={add} {...mergeStylexProps("", sx.hoverTextFg, sx.focusVisibleZ1, sx.roundedNone, sx.textFg)}
 			>
 				Add to chat
 			</Button>
@@ -360,8 +424,7 @@ export function QuoteSelection({
 				variant="ghost"
 				size="md"
 				icon={<IconBrowserTab size={20} />}
-				onClick={startNewChat}
-				className="rounded-none border-l-line-strong text-fg hover:text-fg focus-visible:z-[1]"
+				onClick={startNewChat} {...mergeStylexProps("", sx.hoverTextFg, sx.focusVisibleZ1, sx.roundedNone, sx.borderLLineStrong, sx.textFg)}
 			>
 				Start new chat
 			</Button>

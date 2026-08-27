@@ -2,8 +2,142 @@ import React, { useEffect, useState } from "react";
 import { BASE_PATH } from "../lib/base";
 import type { TranscriptEntry } from "../lib/types";
 import type { WorkflowAgentSnapshot } from "../../server/workflow-types";
-import { cn } from "../ui/cn";
 import { TranscriptBlocks } from "./TranscriptBlocks";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+import { mergeStylexProps, mergeStylexClassName } from "../ui/cn";
+import { motionStyles } from "../styles/animations.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	flex: {
+			display: "flex"
+	},
+	minH0: {
+			minHeight: "0"
+	},
+	flexCol: {
+			flexDirection: "column"
+	},
+	sticky: {
+			position: "sticky"
+	},
+	top0: {
+			top: "0"
+	},
+	z10: {
+			zIndex: "10"
+	},
+	borderB: {
+			borderBottomStyle: "solid",
+			borderBottomWidth: "1px"
+	},
+	borderDivider: {
+			borderColor: "var(--divider)"
+	},
+	bgPanel: {
+			backgroundColor: "var(--bg-panel)"
+	},
+	px2: {
+			paddingInline: "8px"
+	},
+	py2: {
+			paddingBlock: "8px"
+	},
+	wFull: {
+			width: "100%"
+	},
+	itemsCenter: {
+			alignItems: "center"
+	},
+	gap15: {
+			gap: "6px"
+	},
+	roundedControl: {
+			borderRadius: "calc(12px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	px1: {
+			paddingInline: "4px"
+	},
+	py05: {
+			paddingBlock: "2px"
+	},
+	textLeft: {
+			textAlign: "left"
+	},
+	transitionColors: {
+			transitionProperty: "color,background-color,border-color,outline-color,text-decoration-color,fill,stroke,--tw-gradient-from,--tw-gradient-via,--tw-gradient-to",
+			transitionTimingFunction: "var(--tw-ease,var(--ease))",
+			transitionDuration: "var(--tw-duration,var(--dur-micro))"
+	},
+	size3: {
+			width: "12px",
+			height: "12px"
+	},
+	shrink0: {
+			flexShrink: "0"
+	},
+	textFaint: {
+			color: "var(--text-faint)"
+	},
+	minW0: {
+			minWidth: "0"
+	},
+	flex1: {
+			flex: "1"
+	},
+	truncate: {
+			textOverflow: "ellipsis",
+			whiteSpace: "nowrap",
+			overflow: "hidden"
+	},
+	textSm: {
+			fontSize: "var(--type-label)",
+			lineHeight: "var(--tw-leading,var(--text-sm--line-height))"
+	},
+	fontMedium: {
+			fontWeight: "var(--font-weight-medium)"
+	},
+	textFg: {
+			color: "var(--text)"
+	},
+	size15: {
+			width: "6px",
+			height: "6px"
+	},
+	animatePulse: {
+			animation: "var(--animate-pulse)"
+	},
+	roundedFull: {
+			borderRadius: "calc(infinity * 1px)"
+	,
+		cornerShape: "round"},
+	bgYellow: {
+			backgroundColor: "var(--yellow)"
+	},
+	mt05: {
+			marginTop: "2px"
+	},
+	pl18px: {
+			paddingLeft: "18px"
+	},
+	py3: { paddingBlock: "12px" },
+	leadingRelaxed: { lineHeight: "var(--leading-relaxed)" },
+	textRed: { color: "var(--red)" },
+
+	hoverBgHover: {
+		"@media (hover: hover)": {
+			":hover": {
+				"backgroundColor": "var(--hover)"
+			}
+		}
+	},
+	tabularNums: {
+		"--tw-numeric-spacing": "tabular-nums",
+		"fontVariantNumeric": "var(--tw-ordinal,) var(--tw-slashed-zero,) var(--tw-numeric-figure,) var(--tw-numeric-spacing,) var(--tw-numeric-fraction,)"
+	},
+});
 
 /**
  * The workflow-agent drill-in: one workflow agent's FULL conversation — every
@@ -89,15 +223,14 @@ if (cancelled) return;
 	const entries = load.kind === "ready" ? load.entries : [];
 
 	return (
-		<div className="flex min-h-0 flex-col">
-			<div className="sticky top-0 z-10 border-b border-divider bg-panel px-2 py-2">
-				<button
-					className="flex w-full items-center gap-1.5 rounded-control px-1 py-0.5 text-left transition-colors hover:bg-hover"
+		<div {...stylex.props(sx.flex, sx.minH0, sx.flexCol)}>
+			<div {...stylex.props(sx.sticky, sx.top0, sx.z10, sx.borderB, sx.borderDivider, sx.bgPanel, sx.px2, sx.py2)}>
+				<button {...mergeStylexProps("", sx.hoverBgHover, sx.flex, sx.wFull, sx.itemsCenter, sx.gap15, sx.roundedControl, sx.px1, sx.py05, sx.textLeft, sx.transitionColors)}
 					onClick={onBack}
 				>
 					<svg
 						viewBox="0 0 12 12"
-						className="size-3 shrink-0 text-faint"
+						{...stylex.props(sx.size3, sx.shrink0, sx.textFaint)}
 						fill="none"
 						stroke="currentColor"
 						strokeWidth="2"
@@ -107,14 +240,14 @@ if (cancelled) return;
 					>
 						<path d="M7.5 2 3.5 6l4 4" />
 					</svg>
-					<span className="min-w-0 flex-1 truncate text-sm font-medium text-fg">
+					<span {...stylex.props(sx.minW0, sx.flex1, sx.truncate, sx.textSm, sx.fontMedium, sx.textFg)}>
 						{agent.label}
 					</span>
 					{agent.status === "running" && (
-						<span className="size-1.5 shrink-0 animate-pulse rounded-full bg-yellow" />
+						<span {...stylex.props(sx.size15, sx.shrink0, motionStyles.pulse, sx.roundedFull, sx.bgYellow)} />
 					)}
 				</button>
-				<div className="mt-0.5 pl-[18px] text-meta text-faint tabular-nums">
+				<div {...mergeStylexProps("", sx.tabularNums, sx.mt05, sx.pl18px, sx.textFaint, typography.meta)}>
 					{[
 						`agent ${agent.seq}`,
 						agent.status,
@@ -125,7 +258,7 @@ if (cancelled) return;
 						.join(" · ")}
 				</div>
 			</div>
-			<div className="min-w-0 px-2 py-2">
+			<div {...stylex.props(sx.minW0, sx.px2, sx.py2)}>
 				{load.kind === "loading" ? (
 					<Placeholder>Loading the agent&rsquo;s conversation…</Placeholder>
 				) : load.kind === "error" ? (
@@ -156,12 +289,7 @@ function Placeholder({
 	tone?: "error";
 }) {
 	return (
-		<div
-			className={cn(
-				"px-1 py-3 text-xs leading-relaxed",
-				tone === "error" ? "text-red" : "text-faint",
-			)}
-		>
+		<div {...stylex.props(sx.px1, sx.py3, sx.leadingRelaxed, typography.label, tone === "error" ? sx.textRed : sx.textFaint)}>
 			{children}
 		</div>
 	);

@@ -30,7 +30,7 @@ import { renderMarkdown } from "../lib/markdown";
 import { MarkdownBody } from "./MarkdownBody";
 import { loadDraft, saveDraft, clearDraft } from "../lib/drafts";
 import { useCurrentUser } from "./UserPicker";
-import { cn } from "../ui/cn";
+import { cn, mergeStylexProps, mergeStylexClassName, mergeStylexOverrideClassName } from "../ui/cn";
 import { PLAIN_WORKSPACE_ID, PRODUCT_NAME } from "../lib/brand";
 import { PlainStatusBadge } from "./PlainStatusBadge";
 import {
@@ -74,6 +74,280 @@ import {
 } from "./icons";
 import { FileChips } from "./FileChips";
 import { UserAvatar } from "./UserAvatar";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	flex: {
+			display: "flex"
+	},
+	hFull: {
+			height: "100%"
+	},
+	minH0: {
+			minHeight: "0"
+	},
+	flexCol: {
+			flexDirection: "column"
+	},
+	bgRaised: {
+			backgroundColor: "var(--bg-raised)"
+	},
+	shrink0: {
+			flexShrink: "0"
+	},
+	itemsCenter: {
+			alignItems: "center"
+	},
+	justifyBetween: {
+			justifyContent: "space-between"
+	},
+	gap2: {
+			gap: "8px"
+	},
+	borderB: {
+			borderBottomStyle: "solid",
+			borderBottomWidth: "1px"
+	},
+	borderDivider: {
+			borderColor: "var(--divider)"
+	},
+	px3: {
+			paddingInline: "12px"
+	},
+	py2: {
+			paddingBlock: "8px"
+	},
+	minW0: {
+			minWidth: "0"
+	},
+	truncate: {
+			textOverflow: "ellipsis",
+			whiteSpace: "nowrap",
+			overflow: "hidden"
+	},
+	fontSemibold: {
+			fontWeight: "var(--font-weight-semibold)"
+	},
+	textFg: {
+			color: "var(--text)"
+	},
+	mx3: {
+			marginInline: "12px"
+	},
+	mt2: {
+			marginTop: "8px"
+	},
+	roundedMd: {
+			borderRadius: "calc(7px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	flex1: {
+			flex: "1"
+	},
+	gap3: {
+			gap: "12px"
+	},
+	overflowYAuto: {
+			overflowY: "auto"
+	},
+	p3: {
+			padding: "12px"
+	},
+	mt5: {
+			marginTop: "20px"
+	},
+	textCenter: {
+			textAlign: "center"
+	},
+	textFaint: {
+			color: "var(--text-faint)"
+	},
+	mb3: {
+			marginBottom: "12px"
+	},
+	mlAuto: {
+			marginLeft: "auto"
+	},
+	px25: {
+			paddingInline: "10px"
+	},
+	py15: {
+			paddingBlock: "6px"
+	},
+	mt1: {
+			marginTop: "4px"
+	},
+	textRed: {
+			color: "var(--red)"
+	},
+	textGreen: {
+			color: "var(--green)"
+	},
+	textYellow: {
+			color: "var(--yellow)"
+	},
+	textDim: {
+			color: "var(--text-dim)"
+	},
+	flexWrap: {
+			flexWrap: "wrap"
+	},
+	m0: {
+			margin: "0"
+	},
+	block: {
+			display: "block"
+	},
+	maxH220px: {
+			maxHeight: "220px"
+	},
+	maxWFull: {
+			maxWidth: "100%"
+	},
+	border0: {
+			borderStyle: "solid",
+			borderWidth: "0"
+	},
+	bgSurface: {
+			backgroundColor: "var(--bg)"
+	},
+	objectContain: {
+			objectFit: "contain"
+	},
+	opacity60: {
+			opacity: ".6"
+	},
+	inlineFlex: {
+			display: "inline-flex"
+	},
+	gap05: {
+			gap: "2px"
+	},
+	whitespaceNowrap: {
+			whiteSpace: "nowrap"
+	},
+	textLink: {
+			color: "var(--link)"
+	},
+	noUnderline: {
+			textDecorationLine: "none"
+	},
+
+	gap1: {
+		"gap": "4px"
+	},
+	flexNowrap: {
+		"flexWrap": "nowrap"
+	},
+	hoverTextGreen: {
+		"@media (hover: hover)": {
+			":hover": {
+				"color": "var(--green)"
+			}
+		}
+	},
+	wAuto: {
+		"width": "auto"
+	},
+	px2: {
+		"paddingInline": "8px"
+	},
+	hoverTextRed: {
+		"@media (hover: hover)": {
+			":hover": {
+				"color": "var(--red)"
+			}
+		}
+	},
+	maxW160px: {
+		"maxWidth": "160px"
+	},
+	minH12: {
+		"minHeight": "48px"
+	},
+	placeholderTextFaint: {
+		"::placeholder": {
+			"color": "var(--text-faint)"
+		}
+	},
+	Ml15: {
+		"marginLeft": "-6px"
+	},
+	hoverTextYellow: {
+		"@media (hover: hover)": {
+			":hover": {
+				"color": "var(--yellow)"
+			}
+		}
+	},
+	roundedLg: {
+		"borderRadius": "calc(14px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	bgYellowSoft: {
+		"backgroundColor": "var(--yellow-soft)"
+	},
+	overflowHidden: {
+		"overflow": "hidden"
+	},
+	gap15: {
+		"gap": "6px"
+	},
+	bgActive: {
+		"backgroundColor": "var(--bg-active)"
+	},
+	hoverBgHover: {
+		"@media (hover: hover)": {
+			":hover": {
+				"backgroundColor": "var(--hover)"
+			}
+		}
+	},
+	hoverTextFg: {
+		"@media (hover: hover)": {
+			":hover": {
+				"color": "var(--text)"
+			}
+		}
+	},
+	flexRowReverse: {
+		"flexDirection": "row-reverse"
+	},
+
+	bgColorMixInSrgbVarYellowTint22Transparent: {
+		"backgroundColor": "var(--yellow-tint)",
+		"@supports (color: color-mix(in lab, red, red))": {
+			"backgroundColor": "color-mix(in srgb,var(--yellow-tint) 22%,transparent)"
+		}
+	},
+	hoverBgColorMixInSrgbVarYellowTint32Transparent: {
+		"@media (hover: hover)": {
+			":hover": {
+				"backgroundColor": "var(--yellow-tint)"
+			},
+			"@supports (color: color-mix(in lab, red, red))": {
+				":hover": {
+					"backgroundColor": "color-mix(in srgb,var(--yellow-tint) 32%,transparent)"
+				}
+			}
+		}
+	},
+
+	phoneHidden: {
+		"@media (max-width: 720px)": {
+			"display": "none"
+		}
+	},
+	hoverUnderline: {
+		"@media (hover: hover)": {
+			":hover": {
+				"textDecorationLine": "underline"
+			}
+		}
+	},
+});
 
 interface Props {
 	sessionId: string;
@@ -161,10 +435,10 @@ export function PlainThreadPanel({ sessionId, threadId, plainUrl }: Props) {
 	const status = thread?.status;
 
 	return (
-		<div className="flex h-full min-h-0 flex-col bg-raised">
-			<div className="flex shrink-0 items-center justify-between gap-2 border-b border-divider px-3 py-2">
-				<div className="flex min-w-0 items-center gap-2">
-					<span className="truncate text-label font-semibold text-fg" title={thread?.customer?.email || ""}>
+		<div {...stylex.props(sx.flex, sx.hFull, sx.minH0, sx.flexCol, sx.bgRaised)}>
+			<div {...stylex.props(sx.flex, sx.shrink0, sx.itemsCenter, sx.justifyBetween, sx.gap2, sx.borderB, sx.borderDivider, sx.px3, sx.py2)}>
+				<div {...stylex.props(sx.flex, sx.minW0, sx.itemsCenter, sx.gap2)}>
+					<span {...stylex.props(sx.truncate, sx.fontSemibold, sx.textFg, typography.label)} title={thread?.customer?.email || ""}>
 						{thread?.customer?.name || thread?.customer?.email || "Plain thread"}
 					</span>
 					{status && <PlainStatusBadge status={status} />}
@@ -174,7 +448,7 @@ export function PlainThreadPanel({ sessionId, threadId, plainUrl }: Props) {
 			{thread?.waitingSince && (
 				<PlainWaitingBanner
 					thread={thread}
-					className="shrink-0 mx-3 mt-2 rounded-md"
+					className={mergeStylexOverrideClassName("", sx.shrink0, sx.mx3, sx.mt2, sx.roundedMd)}
 				/>
 			)}
 
@@ -183,19 +457,19 @@ export function PlainThreadPanel({ sessionId, threadId, plainUrl }: Props) {
 					threadId={threadId}
 					thread={thread}
 					onChanged={load}
-					className="shrink-0 px-3 py-2 border-b border-divider"
+					className={mergeStylexOverrideClassName("", sx.shrink0, sx.px3, sx.py2, sx.borderB, sx.borderDivider)}
 				/>
 			)}
 
-			{thread?.title && <div className="shrink-0 border-b border-divider px-3 py-2 text-label font-semibold text-fg">{thread.title}</div>}
+			{thread?.title && <div {...stylex.props(sx.shrink0, sx.borderB, sx.borderDivider, sx.px3, sx.py2, sx.fontSemibold, sx.textFg, typography.label)}>{thread.title}</div>}
 
-			<div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3" ref={bodyRef}>
+			<div {...stylex.props(sx.flex, sx.minH0, sx.flex1, sx.flexCol, sx.gap3, sx.overflowYAuto, sx.p3)} ref={bodyRef}>
 				{loading && !thread ? (
-					<div className="mt-5 text-center text-label text-faint">Loading conversation…</div>
+					<div {...stylex.props(sx.mt5, sx.textCenter, sx.textFaint, typography.label)}>Loading conversation…</div>
 				) : error && !thread ? (
-					<div className="mt-5 text-center text-label text-faint">Couldn't load Plain thread: {error}</div>
+					<div {...stylex.props(sx.mt5, sx.textCenter, sx.textFaint, typography.label)}>Couldn't load Plain thread: {error}</div>
 				) : thread && thread.entries.length === 0 ? (
-					<div className="mt-5 text-center text-label text-faint">No messages in this thread yet.</div>
+					<div {...stylex.props(sx.mt5, sx.textCenter, sx.textFaint, typography.label)}>No messages in this thread yet.</div>
 				) : (
 					thread?.entries.map((e) => (
 						<PlainEntryRow
@@ -214,7 +488,7 @@ export function PlainThreadPanel({ sessionId, threadId, plainUrl }: Props) {
 					threadId={threadId}
 					customerName={thread.customer?.name || thread.customer?.email || null}
 					onSent={load}
-					className="mx-3 mb-3"
+					className={mergeStylexOverrideClassName("", sx.mx3, sx.mb3)}
 				/>
 			)}
 		</div>
@@ -241,7 +515,7 @@ const SNOOZE_OPTIONS: { label: string; seconds: number }[] = [
  *  grammar (see Archived.tsx), where this row used to lead with a "✓" glyph in
  *  a hand-measured 16px gutter. */
 function MenuTick({ on }: { on: boolean }) {
-	return <Menu.Check on={on} className="ml-auto" />;
+	return <Menu.Check on={on} className={mergeStylexOverrideClassName("", sx.mlAuto)} />;
 }
 
 /**
@@ -375,8 +649,8 @@ setBusy(false);
 	return (
 		<div
 			className={cn(
-				"flex gap-1",
-				inBar ? "min-w-0 items-center" : "flex-col",
+				mergeStylexClassName("", sx.flex, sx.gap1),
+				inBar ? mergeStylexClassName("", sx.minW0, sx.itemsCenter) : mergeStylexClassName("", sx.flexCol),
 				className,
 			)}
 		>
@@ -388,8 +662,8 @@ setBusy(false);
 			    fields, not one segmented choice. */}
 			<div
 				className={cn(
-					"flex items-center gap-1",
-					inBar ? "flex-nowrap" : "flex-wrap",
+					mergeStylexClassName("", sx.flex, sx.itemsCenter, sx.gap1),
+					inBar ? mergeStylexClassName("", sx.flexNowrap) : mergeStylexClassName("", sx.flexWrap),
 				)}
 			>
 				{status === "DONE" ? (
@@ -410,7 +684,7 @@ setBusy(false);
 							size="sm"
 							variant="default"
 							icon={<IconCheck size={20} />}
-							className="hover:text-green"
+							className={mergeStylexOverrideClassName("", sx.hoverTextGreen)}
 							disabled={busy}
 							onClick={() => setStatus("done")}
 							aria-label="Mark this thread Done in Plain"
@@ -439,7 +713,7 @@ setBusy(false);
 											variant="default"
 											icon={<IconClock size={20} />}
 											caret
-											className={cn(inBar && "w-auto px-2")}
+											className={cn(inBar && mergeStylexClassName("", sx.wAuto, sx.px2))}
 											disabled={busy}
 											aria-label="Snooze this thread"
 											title="Snooze this thread"
@@ -489,7 +763,7 @@ setBusy(false);
 									)
 								}
 							>
-								<span className="min-w-0 flex-1">{PRIORITY_LABEL[p]}</span>
+								<span {...stylex.props(sx.minW0, sx.flex1)}>{PRIORITY_LABEL[p]}</span>
 								<MenuTick on={thread.priority === p} />
 							</Menu.Item>
 						))}
@@ -512,7 +786,7 @@ setBusy(false);
 					/>
 					<Menu.Popup align="start">
 						{users === null ? (
-							<div className="px-2.5 py-1.5 text-label text-faint">
+							<div {...stylex.props(sx.px25, sx.py15, sx.textFaint, typography.label)}>
 								Loading…
 							</div>
 						) : (
@@ -526,7 +800,7 @@ setBusy(false);
 									}
 								>
 									<UserAvatar name={u.name} size={18} />
-									<span className="min-w-0 flex-1 truncate">{u.name}</span>
+									<span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>{u.name}</span>
 									<MenuTick on={thread.assignee?.id === u.id} />
 								</Menu.Item>
 							))
@@ -591,7 +865,7 @@ setBusy(false);
 											)
 										}
 									>
-										<span className="min-w-0 flex-1">{lt.name}</span>
+										<span {...stylex.props(sx.minW0, sx.flex1)}>{lt.name}</span>
 										<MenuTick on={!!existing} />
 									</Menu.CheckboxItem>
 								);
@@ -650,7 +924,7 @@ setBusy(false);
 							size="sm"
 							variant="default"
 							icon={<IconForbid size={20} />}
-							className={cn(!isSpam && "hover:text-red")}
+							className={cn(!isSpam && mergeStylexClassName("", sx.hoverTextRed))}
 							disabled={busy}
 							onClick={toggleSpam}
 							title={spamTitle}
@@ -663,8 +937,8 @@ setBusy(false);
 			{error && (
 				<span
 					className={cn(
-						"text-red text-label truncate",
-						inBar && "max-w-[160px] shrink-0",
+						mergeStylexClassName("", sx.textRed, typography.label, sx.truncate),
+						inBar && mergeStylexClassName("", sx.maxW160px, sx.shrink0),
 					)}
 					title={error}
 				>
@@ -760,7 +1034,7 @@ setSending(false);
 	return (
 		<div
 			className={cn(
-				"composer shrink-0",
+				mergeStylexClassName("composer", sx.shrink0),
 				composerBox,
 				composerBoxExpanded,
 				className,
@@ -779,7 +1053,7 @@ setSending(false);
 				rows={1}
 				{...noAutofill}
 				className={cn(
-					"composer-textarea min-h-12 text-fg placeholder:text-faint",
+					mergeStylexClassName("composer-textarea", sx.minH12, sx.textFg, sx.placeholderTextFaint),
 					composerTextarea,
 					composerTextareaPadding,
 				)}
@@ -799,7 +1073,7 @@ setSending(false);
 				}}
 			/>
 			{error && (
-				<div className="mt-1 truncate text-label text-red" title={error}>
+				<div {...stylex.props(sx.mt1, sx.truncate, sx.textRed, typography.label)} title={error}>
 					{error}
 				</div>
 			)}
@@ -807,7 +1081,7 @@ setSending(false);
 				<Tooltip label="Add attachments">
 					<button
 						type="button"
-						className={cn(paletteIconBtn, "-ml-1.5")}
+						className={cn(paletteIconBtn, mergeStylexClassName("", sx.Ml15))}
 						onClick={() => fileInputRef.current?.click()}
 						disabled={sending}
 						aria-label="Add attachments"
@@ -853,9 +1127,9 @@ setSending(false);
 						aria-pressed={kind === "note"}
 						className={cn(
 							palettePill,
-							"shrink-0",
+							mergeStylexClassName("", sx.shrink0),
 							kind === "note" &&
-								"bg-[color-mix(in_srgb,var(--yellow-tint)_22%,transparent)] text-yellow hover:bg-[color-mix(in_srgb,var(--yellow-tint)_32%,transparent)] hover:text-yellow",
+								mergeStylexClassName("", sx.bgColorMixInSrgbVarYellowTint22Transparent, sx.hoverBgColorMixInSrgbVarYellowTint32Transparent, sx.textYellow, sx.hoverTextYellow),
 						)}
 						onClick={() => setKind((current) => (current === "note" ? "reply" : "note"))}
 						disabled={sending}
@@ -864,19 +1138,19 @@ setSending(false);
 						Internal note
 					</button>
 				</Tooltip>
-				<span className="min-w-0 truncate text-meta text-faint phone:hidden">
+				<span {...mergeStylexProps("", sx.phoneHidden, sx.minW0, sx.truncate, sx.textFaint, typography.meta)}>
 					{kind === "note"
 						? `Posted as ${currentUser} (via ${PRODUCT_NAME})`
 						: `Via Plain, signed “${currentUser.split(/\s+/)[0]}”`}
 				</span>
 				{sent && (
-					<span className="shrink-0 text-meta font-semibold text-green">
+					<span {...stylex.props(sx.shrink0, sx.fontSemibold, sx.textGreen, typography.meta)}>
 						Sent ✓
 					</span>
 				)}
 				<button
 					type="button"
-					className={cn("ml-auto", composerSend, composerSendDefault)}
+					className={cn(mergeStylexClassName("", sx.mlAuto), composerSend, composerSendDefault)}
 					onClick={handleSend}
 					disabled={sending || (!text.trim() && attachments.length === 0)}
 					title="Send (⌘↵)"
@@ -919,24 +1193,24 @@ export function PlainWaitingBanner({
 	return (
 		<div
 			className={cn(
-				"flex items-center gap-2 rounded-lg bg-yellow-soft px-3 py-1.5 text-supporting text-fg",
+				mergeStylexClassName("", sx.flex, sx.itemsCenter, sx.gap2, sx.roundedLg, sx.bgYellowSoft, sx.px3, sx.py15, typography.supporting, sx.textFg),
 				className,
 			)}
 		>
-			<IconClock size={16} className="shrink-0 text-yellow" />
-			<span className="min-w-0 truncate">
+			<IconClock size={16} className={mergeStylexOverrideClassName("", sx.shrink0, sx.textYellow)} />
+			<span {...stylex.props(sx.minW0, sx.truncate)}>
 				{thread.awaitingFirstResponse ? (
 					<>
-						<strong className="font-semibold">{who}</strong> is waiting
+						<strong {...stylex.props(sx.fontSemibold)}>{who}</strong> is waiting
 						for a first response
 					</>
 				) : (
 					<>
-						<strong className="font-semibold">{who}</strong> is waiting
+						<strong {...stylex.props(sx.fontSemibold)}>{who}</strong> is waiting
 						for a reply
 					</>
 				)}
-				<span className="text-dim"> · {waited}</span>
+				<span {...stylex.props(sx.textDim)}> · {waited}</span>
 			</span>
 		</div>
 	);
@@ -962,7 +1236,7 @@ function PlainAttachments({
 }) {
 	const [failed, setFailed] = useState<Record<string, boolean>>({});
 	return (
-		<div className="flex flex-wrap gap-2 mt-2">
+		<div {...stylex.props(sx.flex, sx.flexWrap, sx.gap2, sx.mt2)}>
 			{attachments.map((a) => {
 				const href = `${API_BASE}/plain/attachments/${encodeURIComponent(a.id)}`;
 				const isImage = a.mimeType.startsWith("image/") && !failed[a.id];
@@ -974,10 +1248,10 @@ function PlainAttachments({
 						rel="noreferrer"
 						title={`${a.fileName}${a.sizeBytes ? ` · ${fileSize(a.sizeBytes)}` : ""}`}
 						className={cn(
-							"block overflow-hidden rounded-lg no-underline",
+							mergeStylexClassName("", sx.block, sx.overflowHidden, sx.roundedLg, sx.noUnderline),
 							isImage
-								? "md-image-link bg-surface"
-								: "inline-flex items-center gap-1.5 bg-active px-2.5 py-1.5 text-label text-dim hover:bg-hover hover:text-fg",
+								? mergeStylexClassName("md-image-link", sx.bgSurface)
+								: mergeStylexClassName("", sx.inlineFlex, sx.itemsCenter, sx.gap15, sx.bgActive, sx.px25, sx.py15, typography.label, sx.textDim, sx.hoverBgHover, sx.hoverTextFg),
 						)}
 					>
 						{isImage ? (
@@ -987,19 +1261,14 @@ function PlainAttachments({
 								loading="lazy"
 								onError={() =>
 									setFailed((f) => ({ ...f, [a.id]: true }))
-								}
-								/* md-image is what opens the lightbox. Its own block
-								   treatment is for a full-width transcript image, so the
-								   thumbnail keeps its cap and drops the border and margin
-								   the wrapper already provides. */
-								className="md-image m-0 block max-h-[220px] max-w-full border-0 bg-surface object-contain"
+								} {...mergeStylexProps("md-image", sx.m0, sx.block, sx.maxH220px, sx.maxWFull, sx.border0, sx.bgSurface, sx.objectContain)}
 							/>
 						) : (
 							<>
-								<IconPaperclip size={16} className="shrink-0 opacity-60" />
-								<span className="truncate">{a.fileName}</span>
+								<IconPaperclip size={16} className={mergeStylexOverrideClassName("", sx.shrink0, sx.opacity60)} />
+								<span {...stylex.props(sx.truncate)}>{a.fileName}</span>
 								{a.sizeBytes ? (
-									<span className="shrink-0 text-faint">
+									<span {...stylex.props(sx.shrink0, sx.textFaint)}>
 										{fileSize(a.sizeBytes)}
 									</span>
 								) : null}
@@ -1100,7 +1369,7 @@ export function PlainEntryRow({
 				<div className={plainEntryHead}>
 					<span className={plainEntryName}>{author.name}</span>
 					<span
-						className="text-meta font-semibold text-yellow"
+						{...stylex.props(sx.fontSemibold, sx.textYellow, typography.meta)}
 						title="Only the team sees this note"
 					>
 						Note
@@ -1115,8 +1384,7 @@ export function PlainEntryRow({
 					)}
 					<span className={plainEntryMeta}>{timeOf(entry.timestamp)}</span>
 					{author.isAgent && threadId && (
-						<a
-							className="ml-auto inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap text-meta font-semibold text-link no-underline hover:underline"
+						<a {...mergeStylexProps("", sx.hoverUnderline, sx.mlAuto, sx.inlineFlex, sx.shrink0, sx.itemsCenter, sx.gap05, sx.whitespaceNowrap, sx.fontSemibold, sx.textLink, sx.noUnderline, typography.meta)}
 							href={`${BASE_PATH}/plain-triage/${encodeURIComponent(threadId)}`}
 							target="_blank"
 							rel="noreferrer"
@@ -1143,7 +1411,7 @@ export function PlainEntryRow({
 			    bubble holds nothing but the words — the transcript's grammar for a
 			    speaker label, and the only way the customer's side can lose its
 			    plate without losing who wrote it. */}
-			<div className={cn(plainEntryHead, ours && "flex-row-reverse")}>
+			<div className={cn(plainEntryHead, ours && mergeStylexClassName("", sx.flexRowReverse))}>
 				<span className={plainEntryName}>{entry.actorName}</span>
 				<span className={plainEntryMeta}>
 					{entry.kind} · {timeOf(entry.timestamp)}
@@ -1151,7 +1419,7 @@ export function PlainEntryRow({
 			</div>
 			<div className={ours ? plainEntryOut : plainEntryIn}>
 				{subject && (
-					<div className="text-body font-semibold text-fg">{subject}</div>
+					<div {...stylex.props(sx.fontSemibold, sx.textFg, typography.body)}>{subject}</div>
 				)}
 				{entry.text && <PlainEntryText text={entry.text} />}
 				{entry.attachments?.length ? (

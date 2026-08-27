@@ -5,6 +5,128 @@ import { TranscriptBlocks } from "./TranscriptBlocks";
 import { EmptyState, InlineAlert, LoadingState } from "../ui/state";
 import { PANEL_BODY } from "../lib/session-panel-classes";
 import { Badge } from "../ui/badge";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+import { mergeStylexProps, mergeStylexClassName, mergeStylexOverrideClassName } from "../ui/cn";
+
+const pulse = stylex.keyframes({
+  "0%, 100%": { opacity: 1 },
+  "50%": { opacity: 0.5 },
+});
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	flex: {
+			display: "flex"
+	},
+	minH0: {
+			minHeight: "0"
+	},
+	flex1: {
+			flex: "1"
+	},
+	flexCol: {
+			flexDirection: "column"
+	},
+	borderB: {
+			borderBottomStyle: "solid",
+			borderBottomWidth: "1px"
+	},
+	borderDivider: {
+			borderColor: "var(--divider)"
+	},
+	bgRaised: {
+			backgroundColor: "var(--bg-raised)"
+	},
+	px25: {
+			paddingInline: "10px"
+	},
+	pt2: {
+			paddingTop: "8px"
+	},
+	pb25: {
+			paddingBottom: "10px"
+	},
+	itemsCenter: {
+			alignItems: "center"
+	},
+	gap2: {
+			gap: "8px"
+	},
+	overflowHidden: {
+			overflow: "hidden"
+	},
+	textEllipsis: {
+			textOverflow: "ellipsis"
+	},
+	whitespaceNowrap: {
+			whiteSpace: "nowrap"
+	},
+	fontSemibold: {
+			fontWeight: "var(--font-weight-semibold)"
+	},
+	textFg: {
+			color: "var(--text)"
+	},
+	shrink0: {
+			flexShrink: "0"
+	},
+	roundedSm: {
+			borderRadius: "calc(4px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	bgSurface: {
+			backgroundColor: "var(--bg)"
+	},
+	px15: {
+			paddingInline: "6px"
+	},
+	py05: {
+			paddingBlock: "2px"
+	},
+	textDim: {
+			color: "var(--text-dim)"
+	},
+	mt2: {
+			marginTop: "8px"
+	},
+	maxWFull: {
+			maxWidth: "100%"
+	},
+	borderNone: {
+			borderStyle: "none"
+	},
+	bgTransparent: {
+			backgroundColor: "transparent"
+	},
+	p0: {
+			padding: "0"
+	},
+	mt15: {
+			marginTop: "6px"
+	},
+	leading14: {
+			lineHeight: "1.4"
+	},
+	m4: {
+			margin: "16px"
+	},
+	minW0: {
+			minWidth: "0"
+	},
+	liveDot: { width: "7px", height: "7px", flexShrink: 0, borderRadius: "calc(infinity * 1px)", backgroundColor: "var(--green)", animationName: pulse, animationDuration: "1.6s", animationTimingFunction: "ease-in-out", animationIterationCount: "infinite", "@media (prefers-reduced-motion: reduce)": { animationDuration: "1.6s !important", animationIterationCount: "infinite !important" },
+		cornerShape: "var(--cs)",},
+	px35: { paddingInline: "14px" },
+	py3: { paddingBlock: "12px" },
+
+	hoverTextFg: {
+		"@media (hover: hover)": {
+			":hover": {
+				"color": "var(--text)"
+			}
+		}
+	},
+});
 
 export interface SubagentRef {
   agentId: string;
@@ -38,10 +160,6 @@ interface Props {
  * animation with !important and hands specific "still working" signals back,
  * and a name in that list stops matching the moment a migration renames the
  * element. */
-const LIVE_DOT =
-  "size-[7px] shrink-0 rounded-full bg-green animate-[pulse_1.6s_ease-in-out_infinite] " +
-  "motion-reduce:[animation-duration:1.6s]! motion-reduce:[animation-iteration-count:infinite]!";
-
 export function SubagentPane({
   sessionId,
   stack,
@@ -116,21 +234,21 @@ if (cancelled) return;
     : null;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="border-b border-divider bg-raised px-2.5 pt-2 pb-2.5">
-        <div className="flex items-center gap-2">
+    <div {...stylex.props(sx.flex, sx.minH0, sx.flex1, sx.flexCol)}>
+      <div {...stylex.props(sx.borderB, sx.borderDivider, sx.bgRaised, sx.px25, sx.pt2, sx.pb25)}>
+        <div {...stylex.props(sx.flex, sx.itemsCenter, sx.gap2)}>
           <Badge tone="accent">
             sub-agent
           </Badge>
           <span
-            className="overflow-hidden text-ellipsis whitespace-nowrap text-label font-semibold text-fg"
+            {...stylex.props(sx.overflowHidden, sx.textEllipsis, sx.whitespaceNowrap, sx.fontSemibold, sx.textFg, typography.label)}
             title={meta?.description || current.label}
           >
             {title}
           </span>
           {modelLabel && (
             <span
-              className="shrink-0 rounded-sm bg-surface px-1.5 py-0.5 text-meta text-dim"
+              {...stylex.props(sx.shrink0, sx.roundedSm, sx.bgSurface, sx.px15, sx.py05, sx.textDim, typography.meta)}
               title={meta?.model}
             >
               {modelLabel}
@@ -138,28 +256,27 @@ if (cancelled) return;
           )}
           {/* No close button: the tab's × owns that, like Review and Assets. */}
           {data?.sessionRunning && <span
-              className={LIVE_DOT}
+              {...stylex.props(sx.liveDot)}
               title="Session running"
             />}
         </div>
         {stack.length > 1 && (
-          <button
-            className="mt-2 max-w-full overflow-hidden border-none bg-transparent p-0 text-ellipsis whitespace-nowrap text-supporting text-dim hover:text-fg"
+          <button {...mergeStylexProps("", sx.hoverTextFg, sx.mt2, sx.maxWFull, sx.overflowHidden, sx.borderNone, sx.bgTransparent, sx.p0, sx.textEllipsis, sx.whitespaceNowrap, sx.textDim, typography.supporting)}
             onClick={onBack}
           >
             ← {stack[stack.length - 2].label}
           </button>
         )}
-        {meta?.description && <div className="mt-1.5 text-supporting leading-[1.4] text-dim">{meta.description}</div>}
+        {meta?.description && <div {...stylex.props(sx.mt15, sx.leading14, sx.textDim, typography.supporting)}>{meta.description}</div>}
       </div>
 
-      <div className={`${PANEL_BODY} px-3.5 py-3`} ref={bodyRef} onScroll={onScroll}>
+      <div {...mergeStylexProps(PANEL_BODY, sx.px35, sx.py3)} ref={bodyRef} onScroll={onScroll}>
         {loading ? (
           <LoadingState>Loading sub-agent…</LoadingState>
         ) : error ? (
-          <InlineAlert className="m-4">{error}</InlineAlert>
+          <InlineAlert className={mergeStylexOverrideClassName("", sx.m4)}>{error}</InlineAlert>
         ) : data && data.entries.length > 0 ? (
-          <div className="min-w-0">
+          <div {...stylex.props(sx.minW0)}>
             <TranscriptBlocks
               entries={data.entries}
               live={data.sessionRunning}

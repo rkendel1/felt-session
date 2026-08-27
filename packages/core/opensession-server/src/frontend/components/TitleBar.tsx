@@ -3,6 +3,71 @@ import { IconChevronLeft, IconChevronRight, IconSearch } from "./icons";
 import { Tooltip } from "../ui/tooltip";
 import { useShortcutKeys } from "../hooks/useShortcutBindings";
 import { matchesShortcut } from "../lib/shortcuts";
+import * as stylex from "@stylexjs/stylex";
+import { mergeStylexProps, mergeStylexClassName } from "../ui/cn";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	inlineFlex: {
+			display: "inline-flex"
+	},
+	size30px: {
+			width: "30px",
+			height: "30px"
+	},
+	cursorPointer: {
+			cursor: "pointer"
+	},
+	itemsCenter: {
+			alignItems: "center"
+	},
+	justifyCenter: {
+			justifyContent: "center"
+	},
+	roundedMd: {
+			borderRadius: "calc(7px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	borderNone: {
+			borderStyle: "none"
+	},
+	bgTransparent: {
+			backgroundColor: "transparent"
+	},
+	p0: {
+			padding: "0"
+	},
+	textDim: {
+			color: "var(--text-dim)"
+	},
+	AppRegionNoDrag: {
+			appRegion: "no-drag"
+	},
+	phoneHidden: {
+		display: {
+			default: null,
+			"@media (max-width: 720px)": "none",
+		},
+	},
+
+	hoverBgHover: {
+		"@media (hover: hover)": {
+			":hover": {
+				"backgroundColor": "var(--hover)"
+			}
+		}
+	},
+	hoverTextFg: {
+		"@media (hover: hover)": {
+			":hover": {
+				"color": "var(--text)"
+			}
+		}
+	},
+	WebkitAppRegionNoDrag: {
+		"WebkitAppRegion": "no-drag"
+	},
+});
 
 /**
  * Back/forward cluster for Window Controls Overlay mode.
@@ -53,10 +118,11 @@ export function TitleBar({
 	}, [pane]);
 
 	return (
-		<div className={`${pane ? "wco-nav wco-nav-pane" : "wco-nav"} phone:hidden`}>
+		<div
+			{...mergeStylexProps(pane ? "wco-nav wco-nav-pane" : "wco-nav", sx.phoneHidden)}
+		>
 			<Tooltip label="Back" side="bottom" shortcut={backKeys ?? undefined}>
-				<button
-					className="inline-flex size-[30px] cursor-pointer items-center justify-center rounded-md border-none bg-transparent p-0 text-dim hover:bg-hover hover:text-fg [-webkit-app-region:no-drag] [app-region:no-drag]"
+				<button {...mergeStylexProps("", sx.hoverBgHover, sx.hoverTextFg, sx.WebkitAppRegionNoDrag, sx.inlineFlex, sx.size30px, sx.cursorPointer, sx.itemsCenter, sx.justifyCenter, sx.roundedMd, sx.borderNone, sx.bgTransparent, sx.p0, sx.textDim, sx.AppRegionNoDrag)}
 					onClick={() => history.back()}
 					aria-label="Back"
 				>
@@ -64,8 +130,7 @@ export function TitleBar({
 				</button>
 			</Tooltip>
 			<Tooltip label="Forward" side="bottom" shortcut={forwardKeys ?? undefined}>
-				<button
-					className="inline-flex size-[30px] cursor-pointer items-center justify-center rounded-md border-none bg-transparent p-0 text-dim hover:bg-hover hover:text-fg [-webkit-app-region:no-drag] [app-region:no-drag]"
+				<button {...mergeStylexProps("", sx.hoverBgHover, sx.hoverTextFg, sx.WebkitAppRegionNoDrag, sx.inlineFlex, sx.size30px, sx.cursorPointer, sx.itemsCenter, sx.justifyCenter, sx.roundedMd, sx.borderNone, sx.bgTransparent, sx.p0, sx.textDim, sx.AppRegionNoDrag)}
 					onClick={() => history.forward()}
 					aria-label="Forward"
 				>
@@ -74,8 +139,7 @@ export function TitleBar({
 			</Tooltip>
 			{onSearch && (
 				<Tooltip label="Command menu" side="bottom" shortcut={commandMenuKeys ?? undefined}>
-					<button
-						className="inline-flex size-[30px] cursor-pointer items-center justify-center rounded-md border-none bg-transparent p-0 text-dim hover:bg-hover hover:text-fg [-webkit-app-region:no-drag] [app-region:no-drag]"
+					<button {...mergeStylexProps("", sx.hoverBgHover, sx.hoverTextFg, sx.WebkitAppRegionNoDrag, sx.inlineFlex, sx.size30px, sx.cursorPointer, sx.itemsCenter, sx.justifyCenter, sx.roundedMd, sx.borderNone, sx.bgTransparent, sx.p0, sx.textDim, sx.AppRegionNoDrag)}
 						onClick={onSearch}
 						aria-label="Open command menu"
 					>

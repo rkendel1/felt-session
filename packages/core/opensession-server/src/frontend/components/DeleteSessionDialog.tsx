@@ -1,3 +1,4 @@
+import { utilityClassName } from "../ui/cn";
 import { Button } from "../ui/button";
 import { Modal } from "../ui/modal";
 
@@ -25,7 +26,7 @@ export function DeleteSessionDialog({
 			}}
 			disablePointerDismissal={deleting}
 		>
-			<Modal.Content role="alertdialog" widthClassName="max-w-[25rem]">
+			<Modal.Content role="alertdialog" widthClassName={utilityClassName("max-w-[25rem]")}>
 				<Modal.Header
 					title="Delete session"
 					description={
@@ -39,7 +40,7 @@ export function DeleteSessionDialog({
 						type="button"
 						size="lg"
 						variant={hasWorktree ? "warning" : "danger-strong"}
-						className="phone:min-h-11 phone:flex-1"
+						className={utilityClassName("phone:min-h-11 phone:flex-1")}
 						disabled={deleting}
 						onClick={() => onDelete(false)}
 					>
@@ -50,7 +51,7 @@ export function DeleteSessionDialog({
 							type="button"
 							size="lg"
 							variant="danger-strong"
-							className="phone:min-h-11 phone:flex-1"
+							className={utilityClassName("phone:min-h-11 phone:flex-1")}
 							disabled={deleting}
 							onClick={() => onDelete(true)}
 						>

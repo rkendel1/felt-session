@@ -25,7 +25,7 @@ import { makeAskHandler, restorePendingAsks } from "./src/server/asks";
 import { activeAutomationPreparationCount, automationResumeMcpForSession, ensureConfiguredAutomations, getWebhookRoutes, resumePendingAutomationRuns, setEventSessionCallback, settleResumedAutomationRun, startScheduler } from "./src/server/automations";
 import { startUsagePoller } from "./src/server/claude-accounts";
 import { startCodexUsagePoller } from "./src/server/codex-accounts";
-import { FRONTEND_SRC, IS_DEV, SPA_HEADERS, ensureFrontendBuilt, frontend, isPrebuiltFrontend, scheduleFrontendRebuild, sharedCheckoutEditors, spaEntry } from "./src/server/frontend-build";
+import { FRONTEND_SRC, SPA_HEADERS, ensureFrontendBuilt, frontend, isPrebuiltFrontend, scheduleFrontendRebuild, sharedCheckoutEditors, spaEntry } from "./src/server/frontend-build";
 import { configuredIntegration } from "./src/server/config";
 import { initHumanAsks } from "./src/server/human-asks";
 import { interactiveMcpServers } from "./src/server/interactive-mcp";
@@ -1141,9 +1141,9 @@ if (!g.__opensessionBooted) {
 	// (we're on 6.17) — fine here.
 	// A prebuilt bundle (compiled binary's embedded assets, or a release
 	// tarball's .frontend-dist) has no src/frontend tree to watch.
-	if (!IS_DEV && frontend && isPrebuiltFrontend()) {
+	if (isPrebuiltFrontend()) {
 		console.log("[frontend] Prebuilt bundle: source watch and SIGUSR2 rebuilds are off");
-	} else if (!IS_DEV && frontend) {
+	} else {
 		try {
 			const watcher = watch(FRONTEND_SRC, { recursive: true }, (_evt, file) => {
 				if (file && /\.(tsx?|css|html)$/.test(file.toString())) {

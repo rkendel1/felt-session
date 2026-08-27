@@ -1,3 +1,4 @@
+import { utilityClassName } from "../ui/cn";
 import React, { useState } from "react";
 import { useOrganizationName } from "../hooks/useOrganizationIcon";
 import { APP_LOGO_STATUS } from "../lib/app-header-classes";
@@ -23,6 +24,218 @@ import {
 	IconServer,
 } from "./icons";
 import { OrganizationAppIcon } from "./OrganizationAppIcon";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+import { mergeStylexProps, mergeStylexClassName, mergeStylexOverrideClassName } from "../ui/cn";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	focusRing: {
+			":focus-visible": {
+					outline: "2px solid var(--accent-ink)",
+					outlineOffset: "2px"
+			}
+	},
+	relative: {
+			position: "relative"
+	},
+	flex: {
+			display: "flex"
+	},
+	size11: {
+			width: "44px",
+			height: "44px"
+	},
+	shrink0: {
+			flexShrink: "0"
+	},
+	itemsCenter: {
+			alignItems: "center"
+	},
+	justifyCenter: {
+			justifyContent: "center"
+	},
+	roundedControl: {
+			borderRadius: "calc(12px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	bgTransparent: {
+			backgroundColor: "transparent"
+	},
+	p0: {
+			padding: "0"
+	},
+	textFg: {
+			color: "var(--text)"
+	},
+	inlineFlex: {
+			display: "inline-flex"
+	},
+	size10: {
+			width: "40px",
+			height: "40px"
+	},
+	objectCover: {
+			objectFit: "cover"
+	},
+	size22px: {
+			width: "22px",
+			height: "22px"
+	},
+	size5: {
+			width: "20px",
+			height: "20px"
+	},
+	roundedSm: {
+			borderRadius: "calc(4px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	minW0: {
+			minWidth: "0"
+	},
+	flex1: {
+			flex: "1"
+	},
+	truncate: {
+			textOverflow: "ellipsis",
+			whiteSpace: "nowrap",
+			overflow: "hidden"
+	},
+	textFaint: {
+			color: "var(--text-faint)"
+	},
+	w290px: {
+			width: "290px"
+	},
+	maxWCalc100vw16px: {
+			maxWidth: "calc(100vw - 16px)"
+	},
+	gap3: {
+			gap: "12px"
+	},
+	px2: {
+			paddingInline: "8px"
+	},
+	py2: {
+			paddingBlock: "8px"
+	},
+	size9: {
+			width: "36px",
+			height: "36px"
+	},
+	roundedMd: {
+			borderRadius: "calc(7px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	block: {
+			display: "block"
+	},
+	fontSemibold: {
+			fontWeight: "var(--font-weight-semibold)"
+	},
+	textAccent: {
+			color: "var(--accent-ink)"
+	},
+	roundedFull: {
+			borderRadius: "calc(infinity * 1px)"
+	,
+		cornerShape: "round"},
+	bgAccent: {
+			backgroundColor: "var(--accent)"
+	},
+	px15: {
+			paddingInline: "6px"
+	},
+	textOnAccent: {
+			color: "var(--on-accent)"
+	},
+	textDim: {
+			color: "var(--text-dim)"
+	},
+	flexCol: {
+			flexDirection: "column"
+	},
+	bgPanel: {
+			backgroundColor: "var(--bg-panel)"
+	},
+	px3: {
+			paddingInline: "12px"
+	},
+
+	wFull: {
+		"width": "100%"
+	},
+	roundedRow: {
+		"borderRadius": "calc(12px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	pxCalcVarSidebarIconLeftVarSidebarNavX: {
+		"paddingInline": "calc(var(--sidebar-icon-left) - var(--sidebar-nav-x))"
+	},
+	pyVarSidebarToolPad: {
+		"paddingBlock": "var(--sidebar-tool-pad)"
+	},
+	textLeft: {
+		"textAlign": "left"
+	},
+	fontMedium: {
+		"--tw-font-weight": "var(--font-weight-medium)",
+		"fontWeight": "var(--font-weight-medium)"
+	},
+	hoverBgHover: {
+		"@media (hover: hover)": {
+			":hover": {
+				"backgroundColor": "var(--hover)"
+			}
+		}
+	},
+	activeScale096: {
+		":active": {
+			"scale": ".96"
+		}
+	},
+	phonePy13px: {
+		"@media (max-width: 720px)": {
+			"paddingBlock": "13px"
+		}
+	},
+	desktopTextItemTitle: {
+		"@media (min-width: 721px)": {
+			"fontSize": "var(--type-item-title)"
+		}
+	},
+	motionReduceTransformNone: {
+		"@media (prefers-reduced-motion: reduce)": {
+			"transform": "none"
+		}
+	},
+
+	transitionBackgroundColorScale: {
+		"transitionProperty": "background-color,scale",
+		"transitionTimingFunction": "var(--tw-ease,var(--ease))",
+		"transitionDuration": "var(--tw-duration,var(--dur-micro))"
+	},
+
+	activeBgHover: {
+		":active": {
+			"backgroundColor": "var(--hover)"
+		}
+	},
+	transitionColorRotate: {
+		"transitionProperty": "color,rotate",
+		"transitionTimingFunction": "var(--tw-ease,var(--ease))",
+		"transitionDuration": "var(--tw-duration,var(--dur-micro))"
+	},
+	phoneMinH11: {
+		"@media (max-width: 720px)": {
+			"minHeight": "44px"
+		}
+	},
+	tabularNums: {
+		"--tw-numeric-spacing": "tabular-nums",
+		"fontVariantNumeric": "var(--tw-ordinal,) var(--tw-slashed-zero,) var(--tw-numeric-figure,) var(--tw-numeric-spacing,) var(--tw-numeric-fraction,)"
+	},
+});
 
 type OrganizationAccount = {
 	id: string;
@@ -100,7 +313,7 @@ export function OrganizationSwitcher({
 	}
 
 	const subtitle = `${status}${memberCount === null ? "" : ` · ${memberCount} ${memberCount === 1 ? "member" : "members"}`}`;
-	const itemClass = "phone:min-h-11";
+	const itemClass = mergeStylexClassName("", sx.phoneMinH11);
 	const organizationUrl = `${window.location.origin}${BASE_PATH}/`;
 
 	function openAddOrganization() {
@@ -145,12 +358,11 @@ toast("Couldn’t copy the organization link", { variant: "error" });
 		<>
 		<Menu.Root onOpenChange={(open) => open && loadMenu()}>
 			{variant === "topbar" ? (
-				<Menu.Trigger
-					className="focus-ring relative flex size-11 shrink-0 items-center justify-center rounded-control bg-transparent p-0 text-fg transition-[background-color,scale] active:scale-[0.96] active:bg-hover motion-reduce:transform-none"
+				<Menu.Trigger {...mergeStylexProps("", sx.transitionBackgroundColorScale, sx.activeScale096, sx.activeBgHover, sx.motionReduceTransformNone, sx.focusRing, sx.relative, sx.flex, sx.size11, sx.shrink0, sx.itemsCenter, sx.justifyCenter, sx.roundedControl, sx.bgTransparent, sx.p0, sx.textFg)}
 					aria-label={`Open organization menu, current: ${name}`}
 				>
-					<span className="relative inline-flex size-10 items-center justify-center">
-						<OrganizationAppIcon className="size-10 rounded-control object-cover" />
+					<span {...stylex.props(sx.relative, sx.inlineFlex, sx.size10, sx.itemsCenter, sx.justifyCenter)}>
+						<OrganizationAppIcon className={mergeStylexOverrideClassName("", sx.size10, sx.roundedControl, sx.objectCover)} />
 						<span
 							className={APP_LOGO_STATUS}
 							style={{ background: connected ? "var(--green)" : "var(--red)" }}
@@ -160,21 +372,20 @@ toast("Couldn’t copy the organization link", { variant: "error" });
 				</Menu.Trigger>
 			) : (
 				<Menu.Trigger
-					className={`group flex w-full items-center ${SIDEBAR_RAIL_GAP} rounded-row bg-transparent px-[calc(var(--sidebar-icon-left)-var(--sidebar-nav-x))] py-[var(--sidebar-tool-pad)] text-left text-body font-medium text-fg transition-[background-color,scale] hover:bg-hover active:scale-[0.96] phone:py-[13px] desktop:text-item-title motion-reduce:transform-none`}
+					className={[mergeStylexClassName("group", sx.flex, sx.wFull, sx.itemsCenter), SIDEBAR_RAIL_GAP, mergeStylexClassName("", sx.transitionBackgroundColorScale, sx.roundedRow, sx.bgTransparent, sx.pxCalcVarSidebarIconLeftVarSidebarNavX, sx.pyVarSidebarToolPad, sx.textLeft, typography.body, sx.fontMedium, sx.textFg, sx.hoverBgHover, sx.activeScale096, sx.phonePy13px, sx.desktopTextItemTitle, sx.motionReduceTransformNone)].filter(Boolean).join(" ")}
 					aria-label={`Open organization menu, current: ${name}`}
 				>
-					<span className="relative inline-flex size-[22px] shrink-0 items-center justify-center">
-						<OrganizationAppIcon className="size-5 rounded-sm object-cover" />
+					<span {...stylex.props(sx.relative, sx.inlineFlex, sx.size22px, sx.shrink0, sx.itemsCenter, sx.justifyCenter)}>
+						<OrganizationAppIcon className={mergeStylexOverrideClassName("", sx.size5, sx.roundedSm, sx.objectCover)} />
 						<span
 							className={APP_LOGO_STATUS}
 							style={{ background: connected ? "var(--green)" : "var(--red)" }}
 							title={status}
 						/>
 					</span>
-					<span className="min-w-0 flex-1 truncate">{name}</span>
+					<span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>{name}</span>
 					<IconChevronDown
-						size={16}
-						className="shrink-0 text-faint transition-[color,rotate] group-hover:text-dim group-data-[popup-open]:rotate-180"
+						size={16} {...mergeStylexProps("group-hover:text-dim group-data-[popup-open]:rotate-180", sx.transitionColorRotate, sx.shrink0, sx.textFaint)}
 						aria-hidden="true"
 					/>
 				</Menu.Trigger>
@@ -184,44 +395,44 @@ toast("Couldn’t copy the organization link", { variant: "error" });
 				side="bottom"
 				align="start"
 				sideOffset={5}
-				className="w-[290px] max-w-[calc(100vw-16px)]"
+				className={mergeStylexOverrideClassName("", sx.w290px, sx.maxWCalc100vw16px)}
 			>
-				<div className="flex items-center gap-3 px-2 py-2">
-					<span className="relative inline-flex size-9 shrink-0 items-center justify-center">
-						<OrganizationAppIcon className="size-9 rounded-md object-cover" />
+				<div {...stylex.props(sx.flex, sx.itemsCenter, sx.gap3, sx.px2, sx.py2)}>
+					<span {...stylex.props(sx.relative, sx.inlineFlex, sx.size9, sx.shrink0, sx.itemsCenter, sx.justifyCenter)}>
+						<OrganizationAppIcon className={mergeStylexOverrideClassName("", sx.size9, sx.roundedMd, sx.objectCover)} />
 						<span
 							className={APP_LOGO_STATUS}
 							style={{ background: connected ? "var(--green)" : "var(--red)" }}
 							aria-hidden="true"
 						/>
 					</span>
-					<span className="min-w-0">
-						<span className="block truncate text-body font-semibold text-fg">{name}</span>
-						<span className="block truncate text-supporting text-faint">{subtitle}</span>
+					<span {...stylex.props(sx.minW0)}>
+						<span {...stylex.props(sx.block, sx.truncate, sx.fontSemibold, sx.textFg, typography.body)}>{name}</span>
+						<span {...stylex.props(sx.block, sx.truncate, sx.textFaint, typography.supporting)}>{subtitle}</span>
 					</span>
 				</div>
 				<Menu.Separator />
 				<Menu.Item className={itemClass} onClick={() => onOpenSettings()}>
 					<IconGear size={19} className={MENU_ICON} />
-					<span className="min-w-0 flex-1 truncate">Settings</span>
+					<span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>Settings</span>
 				</Menu.Item>
 				<Menu.Item className={itemClass} onClick={() => onOpenSettings("members")}>
 					<IconPeople size={19} className={MENU_ICON} />
-					<span className="min-w-0 flex-1 truncate">Members</span>
+					<span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>Members</span>
 					{memberCount !== null && (
-						<span className="text-label tabular-nums text-faint">{memberCount}</span>
+						<span {...mergeStylexProps("", sx.tabularNums, sx.textFaint, typography.label)}>{memberCount}</span>
 					)}
 				</Menu.Item>
 				<Menu.Item className={itemClass} onClick={() => setDownloadOpen(true)}>
 					<IconArrowDown size={19} className={MENU_ICON} />
-					<span className="min-w-0 flex-1 truncate">Download apps</span>
+					<span className={utilityClassName("min-w-0 flex-1 truncate")}>Download apps</span>
 				</Menu.Item>
 				<Menu.Item
-					className={`${itemClass} text-accent`}
+					className={[itemClass, mergeStylexClassName("", sx.textAccent)].filter(Boolean).join(" ")}
 					onClick={() => setInviteOpen(true)}
 				>
-					<IconPlus size={19} className="text-accent" />
-					<span className="min-w-0 flex-1 truncate">Invite member</span>
+					<IconPlus size={19} className={mergeStylexOverrideClassName("", sx.textAccent)} />
+					<span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>Invite member</span>
 				</Menu.Item>
 				<Menu.Separator />
 				<Menu.Group>
@@ -239,42 +450,42 @@ toast("Couldn’t copy the organization link", { variant: "error" });
 										if (!active) bridge?.switch?.(account.id);
 									}}
 								>
-									<span className="flex size-[22px] shrink-0 items-center justify-center">
+									<span {...stylex.props(sx.flex, sx.size22px, sx.shrink0, sx.itemsCenter, sx.justifyCenter)}>
 										{active ? (
-											<OrganizationAppIcon className="size-[22px] rounded-sm object-cover" />
+											<OrganizationAppIcon className={mergeStylexOverrideClassName("", sx.size22px, sx.roundedSm, sx.objectCover)} />
 										) : (
 											<IconTile name={account.label} size={22} />
 										)}
 									</span>
-									<span className="min-w-0 flex-1 truncate">
+									<span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>
 										{active ? name : account.label}
 									</span>
 									{account.unread > 0 && (
-										<span className="rounded-full bg-accent px-1.5 text-meta font-semibold tabular-nums text-on-accent">
+										<span {...mergeStylexProps("", sx.tabularNums, sx.roundedFull, sx.bgAccent, sx.px15, sx.fontSemibold, sx.textOnAccent, typography.meta)}>
 											{account.unread}
 										</span>
 									)}
 									{account.shortcut !== null && (
 										<Menu.Shortcut>⌘⇧{account.shortcut}</Menu.Shortcut>
 									)}
-									<Menu.Check on={active} className="text-dim" />
+									<Menu.Check on={active} className={mergeStylexOverrideClassName("", sx.textDim)} />
 								</Menu.RadioItem>
 							);
 						})}
 					</Menu.RadioGroup>
 					{bridge?.inlineAdd && bridge.add && (
 						<Menu.Item
-							className={`${itemClass} text-accent`}
+							className={[itemClass, mergeStylexClassName("", sx.textAccent)].filter(Boolean).join(" ")}
 							onClick={openAddOrganization}
 						>
-							<IconPlus size={19} className="text-accent" />
-							<span className="min-w-0 flex-1 truncate">Add organization</span>
+							<IconPlus size={19} className={mergeStylexOverrideClassName("", sx.textAccent)} />
+							<span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>Add organization</span>
 						</Menu.Item>
 					)}
 					{bridge?.manage && accounts.length > 1 && (
 						<Menu.Item className={itemClass} onClick={() => bridge.manage?.()}>
 							<IconServer size={19} className={MENU_ICON} />
-							<span className="min-w-0 flex-1 truncate">
+							<span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>
 								Manage organizations
 							</span>
 						</Menu.Item>
@@ -295,7 +506,7 @@ toast("Couldn’t copy the organization link", { variant: "error" });
 					description="Connect another Open Session server."
 				/>
 				<form
-					className="flex flex-col gap-3"
+					{...stylex.props(sx.flex, sx.flexCol, sx.gap3)}
 					onSubmit={(event) => {
 						event.preventDefault();
 						void addOrganization(true);
@@ -372,7 +583,7 @@ toast("Couldn’t copy the organization link", { variant: "error" });
 					title="Member added"
 					description={`@${invitedLogin || "member"} can now sign in to ${name} with GitHub.`}
 				/>
-				<div className="truncate rounded-control bg-panel px-3 py-2 text-control-label text-dim">
+				<div {...stylex.props(sx.truncate, sx.roundedControl, sx.bgPanel, sx.px3, sx.py2, sx.textDim, typography.controlLabel)}>
 					{organizationUrl}
 				</div>
 				<Modal.Footer>

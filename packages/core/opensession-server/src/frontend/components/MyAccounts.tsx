@@ -30,6 +30,30 @@ import { useCurrentUser } from "./UserPicker";
 import { GithubAccounts } from "./Connections";
 import { KeychainSection } from "./settings/KeychainPanel";
 import { ProfileSection } from "./settings/ProfileSection";
+import * as stylex from "@stylexjs/stylex";
+import { mergeStylexProps, mergeStylexClassName, mergeStylexOverrideClassName } from "../ui/cn";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	gap3: {
+			gap: "12px"
+	},
+	flex: {
+			display: "flex"
+	},
+	itemsCenter: {
+			alignItems: "center"
+	},
+	gap2: {
+			gap: "8px"
+	},
+	textFaint: {
+			color: "var(--text-faint)"
+	},
+	textRed: {
+			color: "var(--red)"
+	},
+});
 
 /**
  * Settings → Personal → Account: everything about you on this instance.
@@ -143,7 +167,7 @@ setError(e.message);
 						const mine = s.users.some(isMe);
 						const slack = s.name.toLowerCase() === "slack";
 						return (
-							<SettingRow key={s.name} className="gap-3">
+							<SettingRow key={s.name} className={mergeStylexOverrideClassName("", sx.gap3)}>
 								<IconTile name={s.name} size={30} />
 								<SettingRowText>
 									<SettingRowTitle>{displayName(s.name)}</SettingRowTitle>
@@ -162,7 +186,7 @@ setError(e.message);
 												: "Using the workspace key"}
 									</SettingRowDescription>
 								</SettingRowText>
-								<SettingRowControl className="flex items-center gap-2">
+								<SettingRowControl className={mergeStylexOverrideClassName("", sx.flex, sx.itemsCenter, sx.gap2)}>
 									{mine ? (
 										// A connected row states that it is connected and keeps its
 										// actions in the ⋯ menu. Left as buttons, "Disconnect" sat
@@ -179,12 +203,11 @@ setError(e.message);
 												</Menu.Trigger>
 												<Menu.Popup align="end" sideOffset={4}>
 													<Menu.Item onClick={() => connect(s.name)}>
-														<IconPlug size={16} className="text-faint" />
+														<IconPlug size={16} className={mergeStylexOverrideClassName("", sx.textFaint)} />
 														Reconnect
 													</Menu.Item>
 													<Menu.Item
-														onClick={() => disconnect(s.name)}
-														className="text-red data-[highlighted]:bg-red-soft"
+														onClick={() => disconnect(s.name)} {...mergeStylexProps("data-[highlighted]:bg-red-soft", sx.textRed)}
 													>
 														<IconTrash size={16} />
 														Disconnect

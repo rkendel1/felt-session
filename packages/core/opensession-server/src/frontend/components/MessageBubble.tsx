@@ -43,7 +43,260 @@ import {
 	msgSystemToned,
 	msgTime,
 } from "../lib/msg-classes";
-import { cn } from "../ui/cn";
+import { cn, mergeStylexProps, mergeStylexClassName, mergeStylexOverrideClassName } from "../ui/cn";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	mt1: {
+			marginTop: "4px"
+	},
+	minH0: {
+			minHeight: "0"
+	},
+	justifyStart: {
+			justifyContent: "flex-start"
+	},
+	whitespaceNormal: {
+			whiteSpace: "normal"
+	},
+	roundedMd: {
+			borderRadius: "calc(7px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	border0: {
+			borderStyle: "solid",
+			borderWidth: "0"
+	},
+	px2: {
+			paddingInline: "8px"
+	},
+	py1: {
+			paddingBlock: "4px"
+	},
+	textLeft: {
+			textAlign: "left"
+	},
+	fontSans: {
+			fontFamily: "var(--sans)"
+	},
+	fontMedium: {
+			fontWeight: "var(--font-weight-medium)"
+	},
+	leadingNormal: {
+			lineHeight: "var(--leading-normal)"
+	},
+	fontSemibold: {
+			fontWeight: "var(--font-weight-semibold)"
+	},
+	notItalic: {
+			fontStyle: "normal"
+	},
+	cursorPointer: {
+			cursor: "pointer"
+	},
+	FontFamilyInherit: {
+			fontFamily: "inherit"
+	},
+	textInherit: {
+			color: "inherit"
+	},
+	textDim: {
+			color: "var(--text-dim)"
+	},
+	mxAuto: {
+			marginInline: "auto"
+	},
+	mt2: {
+			marginTop: "8px"
+	},
+	wFull: {
+			width: "100%"
+	},
+	maxW560px: {
+			maxWidth: "560px"
+	},
+	roundedLg: {
+			borderRadius: "calc(14px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	bgPanel: {
+			backgroundColor: "var(--bg-panel)"
+	},
+	px4: {
+			paddingInline: "16px"
+	},
+	py3: {
+			paddingBlock: "12px"
+	},
+	mt25: {
+			marginTop: "10px"
+	},
+	block: {
+			display: "block"
+	},
+	textXs: {
+			fontSize: "var(--type-label)",
+			lineHeight: "var(--tw-leading,var(--text-xs--line-height))"
+	},
+	noUnderline: {
+			textDecorationLine: "none"
+	},
+	selfCenter: {
+			alignSelf: "center"
+	},
+	mr15: {
+			marginRight: "6px"
+	},
+	inlineBlock: {
+			display: "inline-block"
+	},
+	align013em: {
+			verticalAlign: "-.13em"
+	},
+	mt05: {
+			marginTop: "2px"
+	},
+	flexNone: {
+			flex: "none"
+	},
+	inlineFlex: {
+			display: "inline-flex"
+	},
+	flex: {
+			display: "flex"
+	},
+	size7: {
+			width: "28px",
+			height: "28px"
+	},
+	itemsCenter: {
+			alignItems: "center"
+	},
+	justifyCenter: {
+			justifyContent: "center"
+	},
+	roundedSm: {
+			borderRadius: "calc(4px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	bgTransparent: {
+			backgroundColor: "transparent"
+	},
+	p0: {
+			padding: "0"
+	},
+	textFaint: {
+			color: "var(--text-faint)"
+	},
+	absolute: {
+			position: "absolute"
+	},
+	topCalc1002px: {
+			top: "calc(100% + 2px)"
+	},
+	right0: {
+			right: "0"
+	},
+	gap1: {
+			gap: "4px"
+	},
+	hidden: {
+			display: "none"
+	},
+	leadingNone: {
+			lineHeight: "1"
+	},
+	whitespaceNowrap: {
+			whiteSpace: "nowrap"
+	},
+	relative: {
+			position: "relative"
+	},
+	minW0: {
+			minWidth: "0"
+	},
+	flexCol: { flexDirection: "column" },
+	my1: { marginBlock: "4px" },
+	maxH70vh: { maxHeight: "70vh" },
+	overflowAuto: { overflow: "auto" },
+	whitespacePreWrap: { whiteSpace: "pre-wrap" },
+	breakWords: { overflowWrap: "break-word" },
+	bgSurface: { backgroundColor: "var(--bg)" },
+	p3: { padding: "12px" },
+	leadingRelaxed: { lineHeight: "var(--leading-relaxed)" },
+	italic: { fontStyle: "italic" },
+	justifyEnd: { justifyContent: "flex-end" },
+	hoverBorderAccent: { ":hover": { "@media (hover: hover)": { borderColor: "var(--accent)" } } },
+	mb875: { marginBottom: "35px" },
+	/** A turn still on its way out is dimmed, and settles rather than snaps. */
+	deliveryPending: {
+		opacity: 0.7,
+		transitionProperty: "opacity",
+		transitionDuration: "200ms",
+		"@media (prefers-reduced-motion: reduce)": {
+			transitionProperty: "none",
+		},
+	},
+	hoverMb875: { "@media (hover: hover)": { marginBottom: "35px" } },
+	textFg: { color: "var(--text)" },
+
+	hoverBgHover40: {
+		"@media (hover: hover)": {
+			":hover": {
+				"backgroundColor": "var(--hover)"
+			},
+			"@supports (color: color-mix(in lab, red, red))": {
+				":hover": {
+					"backgroundColor": "color-mix(in oklab, var(--hover) 40%, transparent)"
+				}
+			}
+		}
+	},
+	hoverTextFg: {
+		"@media (hover: hover)": {
+			":hover": {
+				"color": "var(--text)"
+			}
+		}
+	},
+	selectNone: {
+		"WebkitUserSelect": "none",
+		"userSelect": "none"
+	},
+	hoverBgHover: {
+		"@media (hover: hover)": {
+			":hover": {
+				"backgroundColor": "var(--hover)"
+			}
+		}
+	},
+	hoverTextDim: {
+		"@media (hover: hover)": {
+			":hover": {
+				"color": "var(--text-dim)"
+			}
+		}
+	},
+	MediaHoverHoverOpacity0: {
+		"@media (hover: hover)": {
+			"opacity": "0"
+		}
+	},
+	MediaHoverHoverTransitionOpacity: {
+		"@media (hover: hover)": {
+			"transitionProperty": "opacity",
+			"transitionTimingFunction": "var(--tw-ease,var(--ease))",
+			"transitionDuration": "var(--tw-duration,var(--dur-micro))"
+		}
+	},
+	MediaHoverHoverBlock: {
+		"@media (hover: hover)": {
+			"display": "block"
+		}
+	},
+});
 
 // Only this much of a message is markdown-parsed eagerly. marked is
 // superlinear on input size (~25ms at 10KB, ~400ms at 80KB, seconds past
@@ -131,9 +384,7 @@ setFetching(false);
 				// `font-sans` is load-bearing — the app ships no Tailwind Preflight,
 				// so the UA's `pre { font-family: monospace }` applies otherwise.
 				<pre
-					className={
-						"my-1 max-h-[70vh] overflow-auto whitespace-pre-wrap break-words rounded-md bg-surface p-3 font-sans text-label leading-relaxed text-fg"
-					}
+					{...stylex.props(sx.my1, sx.maxH70vh, sx.overflowAuto, sx.whitespacePreWrap, sx.breakWords, sx.roundedMd, sx.bgSurface, sx.p3, sx.fontSans, typography.label, sx.leadingRelaxed, sx.textFg)}
 				>
 					{shown}
 				</pre>
@@ -142,8 +393,7 @@ setFetching(false);
 				<Button
 					variant="ghost"
 					size="sm"
-					onClick={showAll ? () => setShowAll(false) : expand}
-					className="mt-1 min-h-0 justify-start whitespace-normal rounded-md border-0 px-2 py-1 text-left font-sans text-label font-medium leading-normal hover:bg-hover/40"
+					onClick={showAll ? () => setShowAll(false) : expand} {...mergeStylexProps("", sx.hoverBgHover40, sx.mt1, sx.minH0, sx.justifyStart, sx.whitespaceNormal, sx.roundedMd, sx.border0, sx.px2, sx.py1, sx.textLeft, sx.fontSans, sx.fontMedium, sx.leadingNormal, typography.label)}
 				>
 					{fetching
 						? "Loading…"
@@ -188,8 +438,8 @@ function NoticeRow({
 	if (notice.body === "inline") {
 		return (
 			<div className={msgSystemRow} data-eid={entry.id}>
-				<span className={cn(msgSystemInline, "text-left italic")}>
-					<span className="font-semibold not-italic">{notice.title}: </span>
+				<span className={`${stylex.props(sx.textLeft, sx.italic).className} ${msgSystemInline}`} style={stylex.props(sx.textLeft, sx.italic).style}>
+					<span {...stylex.props(sx.fontSemibold, sx.notItalic)}>{notice.title}: </span>
 					{entry.content}
 				</span>
 			</div>
@@ -216,10 +466,10 @@ function NoticeRow({
 						type="button"
 						aria-expanded={open}
 						onClick={() => setOpen((v) => !v)}
-						className="cursor-pointer [font-family:inherit] text-inherit"
+						{...stylex.props(sx.cursorPointer, sx.FontFamilyInherit, sx.textInherit)}
 					>
 						{notice.title} ·{" "}
-						<span className="font-medium text-dim">
+						<span {...stylex.props(sx.fontMedium, sx.textDim)}>
 							{open ? "hide" : "show"}
 						</span>
 					</button>
@@ -228,7 +478,7 @@ function NoticeRow({
 				)}
 			</span>
 			{collapsible && open && (
-				<div className="mx-auto mt-2 w-full max-w-[560px] rounded-lg bg-panel px-4 py-3 text-left">
+				<div {...stylex.props(sx.mxAuto, sx.mt2, sx.wFull, sx.maxW560px, sx.roundedLg, sx.bgPanel, sx.px4, sx.py3, sx.textLeft)}>
 					<ClampedBody
 						className={cn(msgBody, "markdown")}
 						content={entry.content}
@@ -239,8 +489,7 @@ function NoticeRow({
 						// The delegated click handler on the transcript navigates on
 						// data-session-id, so this opens in place; the href is there
 						// for cmd-click and copy-link.
-						<a
-							className="mt-2.5 block text-xs text-dim no-underline hover:text-fg"
+						<a {...mergeStylexProps("", sx.hoverTextFg, sx.mt25, sx.block, sx.textXs, sx.textDim, sx.noUnderline)}
 							data-session-id={notice.link.sessionId}
 							href={`${BASE_PATH}/session/${notice.link.sessionId}`}
 						>
@@ -259,7 +508,7 @@ function NoticeRow({
 						setContinued(true);
 						onContinue();
 					}}
-					className="mt-2 self-center"
+					className={mergeStylexOverrideClassName("", sx.mt2, sx.selfCenter)}
 				>
 					{continued ? "Continuing…" : "Continue"}
 				</Button>
@@ -284,7 +533,7 @@ function NoticeIcon({ icon }: { icon?: NoticeIconName }) {
 	if (!path) return null;
 	return (
 		<svg
-			className="mr-1.5 inline-block align-[-0.13em]"
+			{...stylex.props(sx.mr15, sx.inlineBlock, sx.align013em)}
 			width="12"
 			height="12"
 			viewBox="0 0 24 24"
@@ -324,7 +573,7 @@ function NoticeGlyph() {
 		// Optical: line-height 1.45 on 11px text leaves the cap ~2px below the
 		// box top, so mt-0.5 sets the glyph down on the first line.
 		<svg
-			className="mt-0.5 flex-none"
+			{...stylex.props(sx.mt05, sx.flexNone)}
 			width="12"
 			height="12"
 			viewBox="0 0 24 24"
@@ -357,7 +606,7 @@ function MsgTime({ ts }: { ts?: string }) {
 /** A label already says the teammate's name, so the picture is decorative. */
 function TeammateAvatar({ name }: { name: string }) {
 	return (
-		<span className="inline-flex" aria-hidden="true">
+		<span {...stylex.props(sx.inlineFlex)} aria-hidden="true">
 			<UserAvatar name={name} size={16} />
 		</span>
 	);
@@ -379,8 +628,7 @@ function EditAgainButton({ onClick }: { onClick: () => void }) {
 			<button
 				type="button"
 				onClick={onClick}
-				aria-label="Edit and send again"
-				className="flex size-7 flex-none cursor-pointer items-center justify-center rounded-sm border-0 bg-transparent p-0 text-faint select-none hover:bg-hover hover:text-dim [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:transition-opacity [@media(hover:hover)]:group-hover/bubble:opacity-100 [@media(hover:hover)]:group-focus-within/bubble:opacity-100"
+				aria-label="Edit and send again" {...mergeStylexProps("[@media(hover:hover)]:group-hover/bubble:opacity-100 [@media(hover:hover)]:group-focus-within/bubble:opacity-100", sx.selectNone, sx.hoverBgHover, sx.hoverTextDim, sx.MediaHoverHoverOpacity0, sx.MediaHoverHoverTransitionOpacity, sx.flex, sx.size7, sx.flexNone, sx.cursorPointer, sx.itemsCenter, sx.justifyCenter, sx.roundedSm, sx.border0, sx.bgTransparent, sx.p0, sx.textFaint)}
 			>
 				<IconPencil size={16} />
 			</button>
@@ -403,10 +651,10 @@ function BubbleMeta({ ts, onEdit }: { ts?: string; onEdit?: () => void }) {
 	const label = ts ? fullTime(ts) : "";
 	if (!onEdit && !label) return null;
 	return (
-		<div className="absolute top-[calc(100%+2px)] right-0 flex items-center gap-1">
+		<div {...stylex.props(sx.absolute, sx.topCalc1002px, sx.right0, sx.flex, sx.itemsCenter, sx.gap1)}>
 			{onEdit && <EditAgainButton onClick={onEdit} />}
 			{label && (
-				<span className="hidden text-meta leading-none font-medium whitespace-nowrap text-faint select-none selection:bg-[rgba(0,0,0,0.01)] [@media(hover:hover)]:block [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:transition-opacity [@media(hover:hover)]:group-hover/bubble:opacity-100 [@media(hover:hover)]:group-focus-within/bubble:opacity-100">
+				<span {...mergeStylexProps("selection:bg-[rgba(0,0,0,0.01)] [@media(hover:hover)]:group-hover/bubble:opacity-100 [@media(hover:hover)]:group-focus-within/bubble:opacity-100", sx.selectNone, sx.MediaHoverHoverBlock, sx.MediaHoverHoverOpacity0, sx.MediaHoverHoverTransitionOpacity, sx.hidden, sx.leadingNone, sx.fontMedium, sx.whitespaceNowrap, sx.textFaint, typography.meta)}>
 					{label}
 				</span>
 			)}
@@ -454,7 +702,7 @@ export function EntryImages({
 }) {
 	if (!images || images.length === 0) return null;
 	return (
-		<div className={cn(msgMedia, right && "justify-end")}>
+		<div className={`${stylex.props(right && sx.justifyEnd).className} ${msgMedia}`} style={stylex.props(right && sx.justifyEnd).style}>
 			{images.map((raw, i) => {
 				const src = resolveEntryImageSrc(raw, sessionId);
 				return (
@@ -492,7 +740,7 @@ export function EntryVideos({
 	const asset = useOpenAsset();
 	if (!videos || videos.length === 0) return null;
 	return (
-		<div className={cn(msgMedia, right && "justify-end")}>
+		<div className={`${stylex.props(right && sx.justifyEnd).className} ${msgMedia}`} style={stylex.props(right && sx.justifyEnd).style}>
 			{videos.map((src, i) => {
 				const assetPath = assetPathForMediaSrc(src, assetPaths);
 				const opensAsset = Boolean(assetPath) && asset.available;
@@ -539,15 +787,12 @@ function EntryFiles({
 }) {
 	if (!files || files.length === 0) return null;
 	return (
-		<div className={cn(msgMedia, right && "justify-end")}>
+		<div className={`${stylex.props(right && sx.justifyEnd).className} ${msgMedia}`} style={stylex.props(right && sx.justifyEnd).style}>
 			{files.map((f, i) => (
 				<a
 					key={i}
-					className={cn(
-						fileChipCard,
-						fileChipCardPadding,
-						"no-underline hover:border-accent",
-					)}
+					className={`${stylex.props(sx.noUnderline, sx.hoverBorderAccent).className} ${fileChipCard} ${fileChipCardPadding}`}
+					style={stylex.props(sx.noUnderline, sx.hoverBorderAccent).style}
 					href={`/media?path=${encodeURIComponent(f.path)}`}
 					download={f.name}
 					title={f.name}
@@ -609,9 +854,9 @@ export const MessageBubble = function MessageBubble({
 				className={cn(
 					msgRow,
 					msgOwnTurn,
-					pendingDelivery &&
-						"opacity-70 transition-opacity duration-200 motion-reduce:transition-none",
+					stylex.props(pendingDelivery && sx.deliveryPending).className,
 				)}
+				style={stylex.props(pendingDelivery && sx.deliveryPending).style}
 				data-delivery-pending={pendingDelivery || undefined}
 				data-eid={e.id}
 			>
@@ -657,20 +902,23 @@ export const MessageBubble = function MessageBubble({
 		// Your own settled messages skip the label entirely — the right-aligned
 		// bubble already says "you". Turns sent by someone else keep the
 		// attribution label.
+		const ownTurnProps = stylex.props(
+			!fromOther && (onEdit ? sx.mb875 : sx.hoverMb875),
+			pendingDelivery && sx.deliveryPending,
+		);
 		return (
 			<div
+				// Your own turns hang their quiet actions below the bubble. The edit
+				// button is always visible to touch pointers, while a row with only a
+				// timestamp needs the clearance on hover devices. That clearance and
+				// the in-flight mute compose in one props call so neither is lost.
 				className={cn(
+					ownTurnProps.className,
 					msgRow,
 					"msg-user",
 					msgOwnTurn,
-					// Your own turns hang their quiet actions below the bubble. The
-					// edit button is always visible to touch pointers, while a row
-					// with only a timestamp needs the clearance on hover devices.
-					!fromOther &&
-						(onEdit ? "mb-8.75" : "[@media(hover:hover)]:mb-8.75"),
-					pendingDelivery &&
-						"opacity-70 transition-opacity duration-200 motion-reduce:transition-none",
 				)}
+				style={ownTurnProps.style}
 				data-delivery-pending={pendingDelivery || undefined}
 				data-eid={e.id}
 			>
@@ -682,7 +930,7 @@ export const MessageBubble = function MessageBubble({
 					</div>
 				)}
 				{/* One stack anchors the quiet actions below both the bubble and attachments. */}
-				<div className="group/bubble relative flex min-w-0 flex-col">
+				<div {...mergeStylexProps("group/bubble", sx.relative, sx.flex, sx.minW0, sx.flexCol)}>
 					{!fromOther && (
 						<BubbleMeta
 							ts={e.timestamp}
@@ -710,7 +958,7 @@ export const MessageBubble = function MessageBubble({
 	return (
 		<div className={msgRow} data-eid={e.id}>
 			<ClampedBody
-				className={cn(msgBody, "markdown text-fg")}
+				className={`${stylex.props(sx.textFg).className} ${msgBody} markdown`}
 				content={displayContent}
 				entry={e}
 				sessionId={sessionId}

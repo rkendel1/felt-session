@@ -2,10 +2,174 @@ import React from "react";
 import type { UnifiedSession } from "../lib/types";
 import { PRODUCT_NAME } from "../lib/brand";
 import { usePeople, type Person } from "../lib/people";
-import { cn } from "../ui/cn";
+import { cn, mergeStylexProps, mergeStylexClassName, mergeStylexOverrideClassName } from "../ui/cn";
 import { Menu } from "../ui/menu";
 import { IconChevronDown } from "./icons";
 import { UserAvatar } from "./UserAvatar";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	absolute: {
+			position: "absolute"
+	},
+	bottom0: {
+			bottom: "0"
+	},
+	right0: {
+			right: "0"
+	},
+	roundedFull: {
+			borderRadius: "calc(infinity * 1px)"
+	,
+		cornerShape: "round"},
+	relative: {
+			position: "relative"
+	},
+	flex: {
+			display: "flex"
+	},
+	truncate: {
+			textOverflow: "ellipsis",
+			whiteSpace: "nowrap",
+			overflow: "hidden"
+	},
+	shrink0: {
+			flexShrink: "0"
+	},
+	opacity55: {
+			opacity: ".55"
+	},
+	minW210px: {
+			minWidth: "210px"
+	},
+	gap9px: {
+			gap: "9px"
+	},
+	roundedSm: {
+			borderRadius: "calc(4px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	px2: {
+			paddingInline: "8px"
+	},
+	py15: {
+			paddingBlock: "6px"
+	},
+	minW0: {
+			minWidth: "0"
+	},
+	flex1: {
+			flex: "1"
+	},
+	size22px: {
+			width: "22px",
+			height: "22px"
+	},
+	block: {
+		display: "block",
+	},
+	sizeFull: {
+		width: "100%",
+		height: "100%",
+	},
+	bgGreen: {
+		backgroundColor: "var(--green)",
+	},
+	borderGreen: {
+		borderColor: "var(--green)",
+		borderStyle: "solid",
+		borderWidth: "1px",
+	},
+	away: {
+		opacity: 0.45,
+		filter: "grayscale(100%)",
+	},
+	itemsCenter: {
+		alignItems: "center",
+	},
+	ml15: {
+		marginLeft: "6px",
+	},
+	fontSemibold: {
+		fontWeight: "var(--font-weight-semibold)",
+	},
+	tabularNums: {
+		fontVariantNumeric: "tabular-nums",
+	},
+
+	border0: {
+		"borderStyle": "var(--tw-border-style)",
+		"borderWidth": "0"
+	},
+	bgTransparent: {
+		"backgroundColor": "transparent"
+	},
+	textDim: {
+		"color": "var(--text-dim)"
+	},
+	gap0: {
+		"gap": "0"
+	},
+	rounded999px: {
+		"borderRadius": "999px"
+	,
+		cornerShape: "var(--cs)"},
+	py05: {
+		"paddingBlock": "2px"
+	},
+	pr1: {
+		"paddingRight": "4px"
+	},
+	pl05: {
+		"paddingLeft": "2px"
+	},
+	hoverTeamFaceRingVarRowChipHover: {
+		"@media (hover: hover)": {
+			":hover": {
+				"--team-face-ring": "var(--row-chip-hover)"
+			}
+		}
+	},
+	hoverBgVarTeamFaceRing: {
+		"@media (hover: hover)": {
+			":hover": {
+				"backgroundColor": "var(--team-face-ring)"
+			}
+		}
+	},
+	hoverTextFg: {
+		"@media (hover: hover)": {
+			":hover": {
+				"color": "var(--text)"
+			}
+		}
+	},
+	gap25: {
+		"gap": "10px"
+	},
+	roundedControl: {
+		"borderRadius": "calc(12px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	p1: {
+		"padding": "4px"
+	},
+	hoverBgHover: {
+		"@media (hover: hover)": {
+			":hover": {
+				"backgroundColor": "var(--hover)"
+			}
+		}
+	},
+
+	max860pxHidden: {
+		"@media not all and (min-width: 860px)": {
+			"display": "none"
+		}
+	},
+});
 
 /**
  * The team, as a face row. One derivation (`useTeamPresence`) feeds every
@@ -152,24 +316,22 @@ export function StatusDot({
 	if (state === "away") return null;
 	return (
 		<span
-			className="absolute bottom-0 right-0 rounded-full"
+			{...stylex.props(sx.absolute, sx.bottom0, sx.right0, sx.roundedFull)}
 			style={{ width: size, height: size, boxShadow: `0 0 0 1.5px ${ring}` }}
 			aria-hidden="true"
 		>
 			<span
-				className={cn(
-					"block size-full rounded-full",
-					state === "working" ? "bg-green" : "border border-green",
+				{...stylex.props(
+					sx.block,
+					sx.sizeFull,
+					sx.roundedFull,
+					state === "working" ? sx.bgGreen : sx.borderGreen,
 				)}
 				style={state === "working" ? undefined : { background: ring }}
 			/>
 		</span>
 	);
 }
-
-/** The "+N" tail of a capped pile, in both its readings (plain count, menu). */
-const OVERFLOW_COUNT =
-	"ml-1.5 flex items-center text-meta font-semibold tabular-nums";
 
 /** A face. `status` adds the dim/dot presence reading; the accessible name
  *  says the same thing in words, so the colour isn't carrying it alone. */
@@ -193,11 +355,11 @@ function Face({
 		// `flex`, not `inline-flex`: an inline box sits on its parent's baseline
 		// and carries the descender space below it, which makes the face ride
 		// high against anything centred beside it (the pile's "+N").
-		<span className="relative flex">
+		<span {...stylex.props(sx.relative, sx.flex)}>
 			<UserAvatar
 				name={member.person.name}
 				size={size}
-				className={cn(status && state === "away" && "opacity-45 grayscale")}
+				className={mergeStylexOverrideClassName("", status && state === "away" && sx.away)}
 				style={{
 					// The ring paints the row's own colour just outside the picture,
 					// so the face in front cuts a clean gap into the one behind it
@@ -257,7 +419,7 @@ export function TeamFacepile({
 	const selectedIndex = selectedKey ? shown.findIndex((m) => m.key === selectedKey) : -1;
 	const selectedTuck = Math.max(2, Math.round(size * 0.08));
 	return (
-		<div className={cn("flex items-center", className)}>
+		<div {...mergeStylexProps(className, sx.flex, sx.itemsCenter)}>
 			{shown.map((m, i) => {
 				const selected = !!selectedKey && m.key === selectedKey;
 				const label = status
@@ -274,7 +436,7 @@ export function TeamFacepile({
 					zIndex: selected ? shown.length + 1 : shown.length - i,
 				};
 				return (
-					<span key={m.key} className="relative" style={style} title={label}>
+					<span key={m.key} {...stylex.props(sx.relative)} style={style} title={label}>
 						<Face
 							member={m}
 							size={size}
@@ -291,7 +453,14 @@ export function TeamFacepile({
 				// doesn't need to be reachable — the menu this pile opens lists
 				// everyone, capped or not.
 				<span
-					className={OVERFLOW_COUNT}
+					{...stylex.props(
+						sx.ml15,
+						sx.flex,
+						sx.itemsCenter,
+						typography.meta,
+						sx.fontSemibold,
+						sx.tabularNums,
+					)}
 					style={{ height: size }}
 					title={rest.map((m) => m.person.fullName).join(", ")}
 				>
@@ -353,10 +522,10 @@ export function TeamLensMenu({
 		<Menu.Root>
 			<Menu.Trigger
 				className={cn(
-					"flex min-w-0 items-center border-0 bg-transparent text-control-label text-dim",
+					mergeStylexClassName("", sx.flex, sx.minW0, sx.itemsCenter, sx.border0, sx.bgTransparent, typography.controlLabel, sx.textDim),
 					compact
-						? "gap-0 rounded-[999px] py-0.5 pr-1 pl-0.5 hover:[--team-face-ring:var(--row-chip-hover)] hover:bg-[var(--team-face-ring)] hover:text-fg data-[popup-open]:[--team-face-ring:var(--row-chip-hover)] data-[popup-open]:bg-[var(--team-face-ring)] data-[popup-open]:text-fg"
-						: "gap-2.5 rounded-control p-1 hover:bg-hover hover:text-fg data-[popup-open]:bg-hover data-[popup-open]:text-fg",
+						? mergeStylexClassName("data-[popup-open]:[--team-face-ring:var(--row-chip-hover)] data-[popup-open]:bg-[var(--team-face-ring)] data-[popup-open]:text-fg", sx.gap0, sx.rounded999px, sx.py05, sx.pr1, sx.pl05, sx.hoverTeamFaceRingVarRowChipHover, sx.hoverBgVarTeamFaceRing, sx.hoverTextFg)
+						: mergeStylexClassName("data-[popup-open]:bg-hover data-[popup-open]:text-fg", sx.gap25, sx.roundedControl, sx.p1, sx.hoverBgHover, sx.hoverTextFg),
 					className,
 				)}
 				aria-label={`Whose work this shows: ${label}`}
@@ -375,15 +544,15 @@ export function TeamLensMenu({
 				/>
 				{!compact && (
 					<>
-						<span className="truncate max-[860px]:hidden">{label}</span>
+						<span {...mergeStylexProps("", sx.max860pxHidden, sx.truncate)}>{label}</span>
 						{/* The Button primitive's `caret` step (ui/button.tsx): this
 						    trigger is a facepile, so it can't be a Button, but the
 						    affordance has to read the same as every other menu. */}
-						<IconChevronDown className="shrink-0 opacity-55" size={16} />
+						<IconChevronDown className={mergeStylexOverrideClassName("", sx.shrink0, sx.opacity55)} size={16} />
 					</>
 				)}
 			</Menu.Trigger>
-			<Menu.Popup side={side} align={align} className="min-w-[210px]">
+			<Menu.Popup side={side} align={align} className={mergeStylexOverrideClassName("", sx.minW210px)}>
 				{/* Says what the menu changes: these are lanes and rows to read, not
 				    people to open. The label has to sit inside a Group — Base UI
 				    wires it to the group it names. */}
@@ -395,10 +564,10 @@ export function TeamLensMenu({
 							key={m.key}
 							value={m.key}
 							closeOnClick
-							className="gap-[9px] rounded-sm px-2 py-1.5"
+							className={mergeStylexOverrideClassName("", sx.gap9px, sx.roundedSm, sx.px2, sx.py15)}
 						>
 							<Face member={m} size={22} status ring="var(--bg-panel)" />
-							<span className="min-w-0 flex-1 truncate">
+							<span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>
 								{m.isYou ? `${m.person.fullName} (you)` : m.person.fullName}
 							</span>
 							<Menu.Check on={m.key === value} />
@@ -408,13 +577,13 @@ export function TeamLensMenu({
 					<Menu.RadioItem
 						value="everyone"
 						closeOnClick
-						className="gap-[9px] rounded-sm px-2 py-1.5"
+						className={mergeStylexOverrideClassName("", sx.gap9px, sx.roundedSm, sx.px2, sx.py15)}
 					>
 						{/* Sized to the faces above so every label shares one edge. */}
-						<span className="size-[22px] shrink-0" />
+						<span {...stylex.props(sx.size22px, sx.shrink0)} />
 						{/* Not a person: it drops the filter entirely. Named for what
 						    you get, in the same words the sidebar header uses for it. */}
-						<span className="min-w-0 flex-1 truncate">All workspaces</span>
+						<span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>All workspaces</span>
 						<Menu.Check on={value === "everyone"} />
 						</Menu.RadioItem>
 					</Menu.RadioGroup>

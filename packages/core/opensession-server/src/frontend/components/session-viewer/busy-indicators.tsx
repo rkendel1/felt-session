@@ -5,8 +5,110 @@ import { TranscriptSkeleton } from "../../ui/state";
 import { PageLoader } from "../../ui/page-loader";
 import { Spinner } from "../../ui/spinner";
 import { PulseDot } from "../../ui/status";
-import { cn } from "../../ui/cn";
 import { msgRow } from "../../lib/msg-classes";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../../styles/typography.stylex";
+import { mergeStylexProps, mergeStylexClassName, mergeStylexOverrideClassName } from "../../ui/cn";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	flex: {
+			display: "flex"
+	},
+	minHFull: {
+			minHeight: "100%"
+	},
+	wFull: {
+			width: "100%"
+	},
+	itemsCenter: {
+			alignItems: "center"
+	},
+	justifyCenter: {
+			justifyContent: "center"
+	},
+	px6: {
+			paddingInline: "24px"
+	},
+	flexCol: {
+			flexDirection: "column"
+	},
+	textCenter: {
+			textAlign: "center"
+	},
+	mb3: {
+			marginBottom: "12px"
+	},
+	textFaint: {
+			color: "var(--text-faint)"
+	},
+	fontSemibold: {
+			fontWeight: "var(--font-weight-semibold)"
+	},
+	textFg: {
+			color: "var(--text)"
+	},
+	mt15: {
+			marginTop: "6px"
+	},
+	fontMedium: {
+			fontWeight: "var(--font-weight-medium)"
+	},
+	relative: {
+			position: "relative"
+	},
+	hFull: {
+			height: "100%"
+	},
+	minH240px: {
+			minHeight: "240px"
+	},
+	gap1: {
+			gap: "4px"
+	},
+	mb2: {
+			marginBottom: "8px"
+	},
+	textDim: {
+			color: "var(--text-dim)"
+	},
+	maxW340px: {
+			maxWidth: "340px"
+	},
+	leadingRelaxed: {
+			lineHeight: "var(--leading-relaxed)"
+	},
+	fontNormal: {
+			fontWeight: "var(--font-weight-normal)"
+	},
+	opacity70: {
+			opacity: ".7"
+	},
+	Ml2: {
+			marginLeft: "-8px"
+	},
+	grid: {
+			display: "grid"
+	},
+	size5: {
+			width: "20px",
+			height: "20px"
+	},
+	shrink0: {
+			flexShrink: "0"
+	},
+	placeItemsCenter: { placeItems: "center" },
+	mt05: { marginTop: "2px" },
+	flexRow: { flexDirection: "row" },
+	px1: { paddingInline: "4px" },
+	py125: { paddingBlock: "5px" },
+	gap2: { gap: "8px" },
+
+	tabularNums: {
+		"--tw-numeric-spacing": "tabular-nums",
+		"fontVariantNumeric": "var(--tw-ordinal,) var(--tw-slashed-zero,) var(--tw-numeric-figure,) var(--tw-numeric-spacing,) var(--tw-numeric-fraction,)"
+	},
+});
 
 /** The chat canvas while a new session's worktree is being prepared. The
  * opening message stays visible in the composer queue until it can move into
@@ -20,14 +122,14 @@ export function WorkspaceSetup() {
 			animate={{ opacity: 1 }}
 			exit={{ opacity: 0, y: -12 }}
 			transition={{ type: "tween", duration: duration.base, ease }}
-			className="flex min-h-full w-full items-center justify-center px-6"
+			{...stylex.props(sx.flex, sx.minHFull, sx.wFull, sx.itemsCenter, sx.justifyCenter, sx.px6)}
 		>
-			<div className="flex flex-col items-center text-center">
-				<Spinner size="md" className="mb-3 text-faint" />
-				<div className="text-item-title font-semibold text-fg">
+			<div {...stylex.props(sx.flex, sx.flexCol, sx.itemsCenter, sx.textCenter)}>
+				<Spinner size="md" className={mergeStylexOverrideClassName("", sx.mb3, sx.textFaint)} />
+				<div {...stylex.props(sx.fontSemibold, sx.textFg, typography.itemTitle)}>
 					Setting up workspace
 				</div>
-				<div className="mt-1.5 text-label font-medium text-faint">
+				<div {...stylex.props(sx.mt15, sx.fontMedium, sx.textFaint, typography.label)}>
 					Your message will send when it’s ready.
 				</div>
 			</div>
@@ -39,12 +141,12 @@ export function WorkspaceSetup() {
 // review side).
 export function WorkspaceWaiting({ detail }: { detail: string }) {
 	return (
-		<div className="relative flex h-full min-h-[240px] flex-col items-center justify-center gap-1 px-6 text-center">
-			<PageLoader className="mb-2 text-dim" />
-			<div className="text-item-title font-semibold text-fg">
+		<div {...stylex.props(sx.relative, sx.flex, sx.hFull, sx.minH240px, sx.flexCol, sx.itemsCenter, sx.justifyCenter, sx.gap1, sx.px6, sx.textCenter)}>
+			<PageLoader className={mergeStylexOverrideClassName("", sx.mb2, sx.textDim)} />
+			<div {...stylex.props(sx.fontSemibold, sx.textFg, typography.itemTitle)}>
 				Creating your workspace
 			</div>
-			<div className="max-w-[340px] text-label font-medium leading-relaxed text-dim">
+			<div {...stylex.props(sx.maxW340px, sx.fontMedium, sx.leadingRelaxed, sx.textDim, typography.label)}>
 				{detail}
 			</div>
 		</div>
@@ -60,7 +162,7 @@ export function ConversationLoading() {
 		const t = setTimeout(() => setVisible(true), 180);
 		return () => clearTimeout(t);
 	}, []);
-	if (!visible) return <div className="min-h-full" />;
+	if (!visible) return <div {...stylex.props(sx.minHFull)} />;
 	// The fade sits on the wrapper, not on the skeleton: Motion writes inline
 	// opacity, which the ghosts' own breathing animation would overwrite.
 	return (
@@ -89,7 +191,7 @@ function BusyElapsed({ since }: { since: number }) {
 		label = `${Math.floor(s / 60)}m, ${(s % 60).toFixed(1)}s`;
 	else label = `${Math.floor(s / 3600)}h, ${Math.floor((s % 3600) / 60)}m`;
 	// Tabular figures so a 10Hz counter doesn't jitter its own width.
-	return <span className="text-meta text-faint tabular-nums">{label}</span>;
+	return <span {...mergeStylexProps("", sx.tabularNums, sx.textFaint, typography.meta)}>{label}</span>;
 }
 
 // How long a steer may wait before the chip starts showing how long it has
@@ -125,7 +227,7 @@ export function SteerWaiting({ since }: { since?: number }) {
 	const s = Math.floor(waited / 1000);
 	const label =
 		s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, "0")}s`;
-	return <span className="font-normal tabular-nums opacity-70">{label}</span>;
+	return <span {...mergeStylexProps("", sx.tabularNums, sx.fontNormal, sx.opacity70)}>{label}</span>;
 }
 
 // How long a stop may sit there before the label stops sounding confident.
@@ -150,7 +252,7 @@ function BusyStopping({ since }: { since: number }) {
 		return () => clearTimeout(t);
 	}, [since]);
 	return (
-		<span className="text-meta text-faint">
+		<span {...stylex.props(sx.textFaint, typography.meta)}>
 			{slow ? "Still stopping…" : "Stopping…"}
 		</span>
 	);
@@ -165,10 +267,7 @@ export function BusyInline({
 }) {
 	return (
 		<div
-			className={cn(
-				msgRow,
-				"mt-0.5 flex-row items-center gap-2 px-1 py-1.25 text-dim",
-			)}
+			{...mergeStylexProps(`${stylex.props(sx.mt05, sx.flexRow, sx.itemsCenter, sx.gap2, sx.px1, sx.py125, sx.textDim).className} ${msgRow}`, sx.mt05, sx.flexRow, sx.itemsCenter, sx.gap2, sx.px1, sx.py125, sx.textDim)}
 		>
 			{/* The 8px pull hangs off the DOT, not off the row: msgRow centres
 			    itself in the reading column with `mx-auto`, and a `-ml-2` on the
@@ -177,7 +276,7 @@ export function BusyInline({
 			    row against the scroller's left gutter. Here it lands the dot's
 			    centre on the work fold's chevron, which hangs out by the same
 			    8px from a box that stays centred. */}
-			<span className="-ml-2 grid size-5 shrink-0 place-items-center">
+			<span {...stylex.props(sx.Ml2, sx.grid, sx.size5, sx.shrink0, sx.placeItemsCenter)}>
 				<PulseDot size={7} />
 			</span>
 			{stoppingSince != null ? (

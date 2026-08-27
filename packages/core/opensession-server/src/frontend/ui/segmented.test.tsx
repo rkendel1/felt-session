@@ -12,6 +12,8 @@ describe("Segmented", () => {
 		);
 
 		expect(html.match(/<button[^>]+>/g)).toHaveLength(2);
-		expect(html.match(/<button[^>]+class="[^"]*justify-center[^"]*text-center[^"]*"/g)).toHaveLength(2);
+		// StyleX compiles the centring utilities into declarations, so assert the
+		// rendered semantics rather than the Tailwind class spellings.
+		expect(html.match(/<button[^>]+justify-content:center[^>]*text-align:center/g)).toHaveLength(2);
 	});
 });

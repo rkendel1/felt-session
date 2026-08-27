@@ -44,7 +44,7 @@ describe("WalkthroughCard", () => {
 		expect(html).not.toContain('class="overflow-hidden"');
 	});
 
-	test("folds the inline session walkthrough", () => {
+	test("folds the inline session walkthrough", async () => {
 		const html = renderToStaticMarkup(
 			<WalkthroughCard walkthrough={walkthrough} variant="session" />,
 		);
@@ -55,8 +55,9 @@ describe("WalkthroughCard", () => {
 		// media it explains, so the fold is what hides the rest, not the point.
 		expect(html).toContain(">After</span>");
 		expect(html).toContain("The clearer controls");
-		expect(html).toContain("line-clamp-3");
-		expect(html).toContain("max-w-[var(--session-col)]");
+		expect(html).toContain("-webkit-line-clamp:3");
+		const source = await Bun.file(new URL("./WalkthroughCard.tsx", import.meta.url)).text();
+		expect(source).toContain('"maxWidth": "var(--session-col)"');
 		expect(html).not.toContain("transition-[max-width]");
 		expect(html).not.toContain("max-w-[min(1120px,100%)]");
 	});

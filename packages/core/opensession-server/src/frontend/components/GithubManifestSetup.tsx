@@ -1,3 +1,5 @@
+import { mergeStylexOverrideClassName, mergeStylexProps } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import { useEffect, useState, type ReactNode } from "react";
 import { useReducedMotion } from "motion/react";
 import { BASE_PATH } from "../lib/base";
@@ -28,6 +30,111 @@ import {
 	type ChipTone,
 	type SetupGithub,
 } from "./setup-shared";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	flex: {
+			display: "flex"
+	},
+	itemsStart: {
+			alignItems: "flex-start"
+	},
+	itemsCenter: {
+			alignItems: "center"
+	},
+	justifyCenter: {
+			justifyContent: "center"
+	},
+	pb5: {
+			paddingBottom: "calc(4px * 5)"
+	},
+	w8: {
+			width: "calc(4px * 8)"
+	},
+	borderTDashed: {
+			borderTopWidth: "1px",
+			borderTopStyle: "dashed",
+			borderTopColor: "var(--border-strong)"
+	},
+	size12: {
+			width: "calc(4px * 12)",
+			height: "calc(4px * 12)"
+	},
+	size1: {
+			width: "4px",
+			height: "4px"
+	},
+	bgLineStrong: {
+			backgroundColor: "var(--border-strong)"
+	},
+	gap5: {
+			gap: "calc(4px * 5)"
+	},
+	textTooltipFg: {
+			color: "var(--tooltip-fg)"
+	},
+	borderTooltipRing: {
+			borderStyle: "solid",
+			borderWidth: "1px",
+			borderColor: "var(--tooltip-ring)"
+	},
+	shrink0: {
+			flexShrink: "0"
+	},
+	justifyBetween: {
+			justifyContent: "space-between"
+	},
+	gap4: {
+			gap: "calc(4px * 4)"
+	},
+	minW0: {
+			minWidth: "0"
+	},
+	mt6: {
+			marginTop: "calc(4px * 6)"
+	},
+	fontSemibold: {
+			fontWeight: "var(--font-weight-semibold)"
+	},
+	textFg: {
+			color: "var(--text)"
+	},
+	pt1: {
+			paddingTop: "4px"
+	},
+	flexCol: {
+			flexDirection: "column"
+	},
+	gap2: {
+			gap: "calc(4px * 2)"
+	},
+	wFull: {
+			width: "100%"
+	},
+	flex1: {
+			flex: "1"
+	},
+	textCenter: {
+			textAlign: "center"
+	},
+	gap1: {
+			gap: "4px"
+	},
+	fontMedium: {
+			fontWeight: "var(--font-weight-medium)"
+	},
+	textDim: {
+			color: "var(--text-dim)"
+	},
+	fontMono: {
+			fontFamily: "var(--mono)"
+	},
+	textFaint: {
+			color: "var(--text-faint)"
+	},
+});
 
 function GithubSetupStep({
 	label,
@@ -49,12 +156,12 @@ function GithubSetupStep({
 	const actionDisabled = disabled || (!href && !onClick);
 
 	return (
-		<div className="group relative min-h-11">
+		<div className={utilityClassName("group relative min-h-11")}>
 			<Button
 				size="lg"
 				className={cn(
-					"absolute inset-0 min-h-11 w-full",
-					complete && "disabled:opacity-100",
+					utilityClassName("absolute inset-0 min-h-11 w-full"),
+					complete && utilityClassName("disabled:opacity-100"),
 				)}
 				disabled={actionDisabled}
 				onClick={onClick}
@@ -62,36 +169,36 @@ function GithubSetupStep({
 					? { render: <a href={href} target="_blank" rel="noreferrer" /> }
 					: {})}
 			>
-				<span className="sr-only">{label}</span>
+				<span className={utilityClassName("sr-only")}>{label}</span>
 			</Button>
-			<div className="pointer-events-none relative z-10 flex min-h-11 items-center px-3.5 text-base font-medium text-dim">
+			<div className={utilityClassName("pointer-events-none relative z-10 flex min-h-11 items-center px-3.5 text-base font-medium text-dim")}>
 				<span
 					aria-hidden="true"
 					className={cn(
-						"flex items-center gap-2 transition-colors duration-[var(--dur-micro)] group-hover:text-fg",
-						actionDisabled && !complete && "opacity-40 group-hover:text-dim",
+						utilityClassName("flex items-center gap-2 transition-colors duration-[var(--dur-micro)] group-hover:text-fg"),
+						actionDisabled && !complete && utilityClassName("opacity-40 group-hover:text-dim"),
 					)}
 				>
 					<IconCheckCircleFilled
 						size={20}
-						className={complete ? "text-green" : "text-faint"}
+						className={complete ? utilityClassName("text-green") : utilityClassName("text-faint")}
 					/>
-					<span className="[text-box:trim-both_cap_alphabetic]">{label}</span>
+					<span className={utilityClassName("[text-box:trim-both_cap_alphabetic]")}>{label}</span>
 				</span>
 				<Tooltip
 					side="top"
 					align="center"
 					offset={6}
 					multiline
-					popupClassName="max-w-[424px]! p-2!"
+					popupClassName={utilityClassName("max-w-[424px]! p-2!")}
 					label={
-						<span className="block w-[400px] max-w-[calc(100vw-32px)] whitespace-normal">
+						<span className={utilityClassName("block w-[400px] max-w-[calc(100vw-32px)] whitespace-normal")}>
 							<img
 								src={guide}
 								alt=""
-								className="block h-auto w-full rounded-md border border-[var(--tooltip-ring)]"
+								{...mergeStylexProps(utilityClassName("block h-auto w-full rounded-md"), sx.borderTooltipRing)}
 							/>
-							<span className="block px-1 pt-2 pb-1 text-left text-supporting leading-snug font-normal text-tooltip-fg/75">
+							<span className={utilityClassName("block px-1 pt-2 pb-1 text-left text-supporting leading-snug font-normal text-tooltip-fg/75")}>
 								{caption}
 							</span>
 						</span>
@@ -100,7 +207,7 @@ function GithubSetupStep({
 					<button
 						type="button"
 						aria-label={`Show help for ${label.toLowerCase()}`}
-						className="focus-ring pointer-events-auto ml-auto flex size-6 items-center justify-center rounded-control text-faint transition-colors duration-[var(--dur-micro)] hover:text-fg phone:size-8"
+						className={utilityClassName("focus-ring pointer-events-auto ml-auto flex size-6 items-center justify-center rounded-control text-faint transition-colors duration-[var(--dur-micro)] hover:text-fg phone:size-8")}
 					>
 						<IconQuestionCircle size={18} />
 					</button>
@@ -213,60 +320,55 @@ export function GithubManifestSetup({
 		<>
 			{connectionStatus ? (
 				<>
-					<div className="flex items-center justify-center gap-2 pb-5">
+					<div {...stylex.props(sx.flex, sx.itemsCenter, sx.justifyCenter, sx.gap2, sx.pb5)}>
 						<IconTile name="github" size={48} />
-						<span aria-hidden="true" className="flex gap-1">
-							<span className="size-1 bg-line-strong" />
-							<span className="size-1 bg-line-strong" />
-							<span className="size-1 bg-line-strong" />
-							<span className="size-1 bg-line-strong" />
+						<span aria-hidden="true" {...stylex.props(sx.flex, sx.gap1)}>
+							<span {...stylex.props(sx.size1, sx.bgLineStrong)} />
+							<span {...stylex.props(sx.size1, sx.bgLineStrong)} />
+							<span {...stylex.props(sx.size1, sx.bgLineStrong)} />
+							<span {...stylex.props(sx.size1, sx.bgLineStrong)} />
 						</span>
 						<img
 							src={`${BASE_PATH}/mac-app-icon.png`}
 							alt=""
-							className="size-12 shrink-0"
+							{...stylex.props(sx.size12, sx.shrink0)}
 						/>
 					</div>
-					<div className="flex items-center justify-between gap-4">
-						<div className="min-w-0 text-dialog-title font-semibold text-fg">
+					<div className={utilityClassName("flex items-center justify-between gap-4")}>
+						<div className={utilityClassName("min-w-0 text-dialog-title font-semibold text-fg")}>
 							Install Open Session for GitHub
 						</div>
 						<StateChip tone={connectionStatus.tone} label={connectionStatus.label} />
 					</div>
 				</>
 			) : (
-				<div className="text-dialog-title font-semibold text-fg">
+				<div className={utilityClassName("text-dialog-title font-semibold text-fg")}>
 					Install Open Session for GitHub
 				</div>
 			)}
-			<div
-				className={cn(
-					"flex flex-col",
-					formOwner === "organization" ? "gap-5" : "gap-2",
-				)}
-			>
+			<div {...stylex.props(sx.flex, sx.flexCol, formOwner === "organization" ? sx.gap5 : sx.gap2)}>
 				<Segmented
 					label="GitHub App owner"
 					value={owner}
 					onValueChange={(value) => setOwner(value as GithubAppOwnerType)}
-					className="w-full"
+					className={mergeStylexOverrideClassName("", sx.wFull)}
 				>
 					<SegmentedOption
 						value="personal"
-						className="flex-1 text-center phone:min-h-11 [&>span:last-child]:justify-center"
+						className={mergeStylexOverrideClassName("phone:min-h-11 [&>span:last-child]:justify-center", sx.flex1, sx.textCenter)}
 					>
 						Personal account
 					</SegmentedOption>
 					<SegmentedOption
 						value="organization"
-						className="flex-1 text-center phone:min-h-11 [&>span:last-child]:justify-center"
+						className={mergeStylexOverrideClassName("phone:min-h-11 [&>span:last-child]:justify-center", sx.flex1, sx.textCenter)}
 					>
 						Organization
 					</SegmentedOption>
 				</Segmented>
 				{formOwner === "organization" && (
-					<label className="flex flex-col gap-1">
-						<span className="text-label font-medium text-dim">Organization ID</span>
+					<label {...stylex.props(sx.flex, sx.flexCol, sx.gap1)}>
+						<span {...stylex.props(sx.fontMedium, sx.textDim, typography.label)}>Organization ID</span>
 						<Input
 							value={formInstallationOwner}
 							onChange={(event) =>
@@ -276,7 +378,7 @@ export function GithubManifestSetup({
 								}))
 							}
 							placeholder="my-organization"
-							className="phone:min-h-11 phone:text-input-phone"
+							className={mergeStylexOverrideClassName("phone:min-h-11 phone:text-input-phone", sx.fontMono)}
 							disabled={starting}
 							autoCapitalize="none"
 							autoComplete="off"
@@ -285,7 +387,7 @@ export function GithubManifestSetup({
 					</label>
 				)}
 			</div>
-			<div className="flex flex-col gap-2">
+			<div {...stylex.props(sx.flex, sx.flexCol, sx.gap2)}>
 				<GithubSetupStep
 					label="Create GitHub app"
 					guide={githubCreateAppGuide}
@@ -302,7 +404,7 @@ export function GithubManifestSetup({
 					caption={
 						<>
 							Leave OAuth during installation off, then turn on Enable Device Flow.
-							Click “<strong className="font-semibold text-tooltip-fg">Save changes</strong>”
+							Click “<strong {...stylex.props(sx.fontSemibold, sx.textTooltipFg)}>Save changes</strong>”
 							to finish.
 						</>
 					}
@@ -316,7 +418,7 @@ export function GithubManifestSetup({
 				/>
 			</div>
 			{result === "created" && (
-				<SettingsHint className="m-0">
+				<SettingsHint className={utilityClassName("m-0")}>
 					GitHub App created. Enable Device Flow before you install it.
 				</SettingsHint>
 			)}

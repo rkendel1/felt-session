@@ -4,10 +4,170 @@ import { AGENT_NAME } from "../lib/brand";
 import { renderMarkdown } from "../lib/markdown";
 import type { AskQuestion } from "../lib/types";
 import { Button } from "../ui/button";
-import { cn } from "../ui/cn";
 import { IconCheck, IconReturn } from "./icons";
 import { useMarkdownRepo } from "./MarkdownBody";
 import { ASK_CARD_SHELL, ASK_CHOICE_ROW } from "../lib/ask-card-classes";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+import { mergeStylexProps, mergeStylexClassName, mergeStylexOverrideClassName } from "../ui/cn";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	flex: {
+			display: "flex"
+	},
+	flexWrap: {
+			flexWrap: "wrap"
+	},
+	itemsCenter: {
+			alignItems: "center"
+	},
+	gapX2: {
+			columnGap: "8px"
+	},
+	gapY05: {
+			rowGap: "2px"
+	},
+	h15: {
+			height: "6px"
+	},
+	w15: {
+			width: "6px"
+	},
+	shrink0: {
+			flexShrink: "0"
+	},
+	roundedFull: {
+			borderRadius: "calc(infinity * 1px)"
+	,
+		cornerShape: "round"},
+	bgGreen: {
+			backgroundColor: "var(--green)"
+	},
+	fontSemibold: {
+			fontWeight: "var(--font-weight-semibold)"
+	},
+	textDim: {
+			color: "var(--text-dim)"
+	},
+	textFaint: {
+			color: "var(--text-faint)"
+	},
+	m0: {
+			margin: "0"
+	},
+	minW0: {
+			minWidth: "0"
+	},
+	flexCol: {
+			flexDirection: "column"
+	},
+	gap3: {
+			gap: "12px"
+	},
+	border0: {
+			borderStyle: "solid",
+			borderWidth: "0"
+	},
+	p0: {
+			padding: "0"
+	},
+	itemsBaseline: {
+			alignItems: "baseline"
+	},
+	leading6: {
+			lineHeight: "24px"
+	},
+	textFg: {
+			color: "var(--text)"
+	},
+	OverflowWrapAnywhere: {
+			overflowWrap: "anywhere"
+	},
+	gap15: {
+			gap: "6px"
+	},
+	srOnly: {
+			clipPath: "inset(50%)",
+			whiteSpace: "nowrap",
+			borderWidth: "0",
+			width: "1px",
+			height: "1px",
+			margin: "-1px",
+			padding: "0",
+			position: "absolute",
+			overflow: "hidden"
+	},
+	Mr2: {
+			marginRight: "-8px"
+	},
+	w35: {
+			width: "14px"
+	},
+	leading5: {
+			lineHeight: "20px"
+	},
+	flex1: {
+			flex: "1"
+	},
+	block: {
+			display: "block"
+	},
+	mt05: {
+			marginTop: "2px"
+	},
+	leading145: {
+			lineHeight: "1.45"
+	},
+	textRed: {
+			color: "var(--red)"
+	},
+	justifyEnd: {
+			justifyContent: "flex-end"
+	},
+	gap2: {
+			gap: "8px"
+	},
+	mrAuto: {
+			marginRight: "auto"
+	},
+	pl1: { paddingLeft: "4px" },
+	mtPx: { marginTop: "1px" },
+	h5: { height: "20px" },
+	w5: { width: "20px" },
+	justifyCenter: { justifyContent: "center" },
+	border: { borderStyle: "solid", borderWidth: "1px" },
+	transitionColors: { transitionProperty: "background-color, border-color, color" },
+	roundedCheckbox: { borderRadius: "calc(6px * var(--rf))" ,
+		cornerShape: "var(--cs)"},
+	borderTransparent: { borderColor: "transparent" },
+	bgFg: { backgroundColor: "var(--text)" },
+	textBg: { color: "var(--bg)" },
+	borderLineStrong: { borderColor: "var(--border-strong)" },
+	textTransparent: { color: "transparent" },
+	h11: { height: "44px" },
+	wFull: { width: "100%" },
+	roundedControl: { borderRadius: "calc(12px * var(--rf))" ,
+		cornerShape: "var(--cs)"},
+	bgControl: { backgroundColor: "var(--control-surface)" },
+	px3: { paddingInline: "12px" },
+	outlineNone: { outlineStyle: "none" },
+	placeholderFaint: { "::placeholder": { color: "var(--text-faint)" } },
+	disabledOpacity60: { ":disabled": { opacity: 0.6 } },
+	mt15: { marginTop: "6px" },
+	desktopControlText: { "@media (min-width: 721px)": { fontSize: "var(--type-label)" } },
+	h15Dot: { height: "6px", width: "6px" },
+	transitionBackground: { transitionProperty: "background-color" },
+	bgFg30: { backgroundColor: "color-mix(in srgb, var(--text) 30%, transparent)" },
+
+	shadow0003pxVarGreenSoft: {
+		"--tw-shadow": "0 0 0 3px var(--tw-shadow-color,var(--green-soft))",
+		"boxShadow": "var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow)"
+	},
+	CornerShapeVarCs: {
+		"cornerShape": "var(--cs)"
+	},
+});
 
 interface Props {
 	questions: AskQuestion[];
@@ -178,12 +338,11 @@ export function AskCard({ questions, onAnswer }: Props) {
 			onSubmit={handleSubmit}
 			className={ASK_CARD_SHELL}
 		>
-			<div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+			<div {...stylex.props(sx.flex, sx.flexWrap, sx.itemsCenter, sx.gapX2, sx.gapY05)}>
 				<span
-					aria-hidden="true"
-					className="h-1.5 w-1.5 shrink-0 rounded-full bg-green shadow-[0_0_0_3px_var(--green-soft)]"
+					aria-hidden="true" {...mergeStylexProps("", sx.shadow0003pxVarGreenSoft, sx.h15, sx.w15, sx.shrink0, sx.roundedFull, sx.bgGreen)}
 				/>
-				<span className="text-label font-semibold text-dim">
+				<span {...stylex.props(sx.fontSemibold, sx.textDim, typography.label)}>
 					{AGENT_NAME} needs input
 				</span>
 				{/* One question's header rides this row instead of claiming a line of
@@ -194,10 +353,10 @@ export function AskCard({ questions, onAnswer }: Props) {
 				    says which of them you are looking at. */}
 				{lone?.header && (
 					<>
-						<span aria-hidden="true" className="text-label text-faint">
+						<span aria-hidden="true" {...stylex.props(sx.textFaint, typography.label)}>
 							·
 						</span>
-						<span className="text-label font-semibold text-faint">{lone.header}</span>
+						<span {...stylex.props(sx.fontSemibold, sx.textFaint, typography.label)}>{lone.header}</span>
 					</>
 				)}
 			</div>
@@ -208,19 +367,16 @@ export function AskCard({ questions, onAnswer }: Props) {
 					name={itemName(i)}
 					required
 					multiple={q.multiSelect}
-					aria-labelledby={titleId(i)}
-					// Zero the UA fieldset (no Preflight), and win back `hidden`
-					// against the `flex` on the same element.
-					className="m-0 flex min-w-0 flex-col gap-3 border-0 p-0 [&[hidden]]:hidden"
+					aria-labelledby={titleId(i)} {...mergeStylexProps("[&[hidden]]:hidden", sx.m0, sx.flex, sx.minW0, sx.flexCol, sx.gap3, sx.border0, sx.p0)}
 				>
 					{((q.header && !lone) || q.multiSelect) && (
-						<div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+						<div {...stylex.props(sx.flex, sx.flexWrap, sx.itemsBaseline, sx.gapX2, sx.gapY05)}>
 							{q.header && !lone && (
-								<span className="text-label font-semibold text-faint">{q.header}</span>
+								<span {...stylex.props(sx.fontSemibold, sx.textFaint, typography.label)}>{q.header}</span>
 							)}
 							{q.multiSelect && (
 								<Questionnaire.Description
-									className="text-meta text-faint"
+									className={mergeStylexOverrideClassName("", sx.textFaint, typography.meta)}
 									render={<span />}
 								>
 									Select all that apply
@@ -237,15 +393,14 @@ export function AskCard({ questions, onAnswer }: Props) {
 					<Questionnaire.Title
 						id={titleId(i)}
 						render={
-							<div
-								className="markdown text-body leading-6 text-fg [overflow-wrap:anywhere]"
+							<div {...mergeStylexProps("markdown", sx.leading6, sx.textFg, sx.OverflowWrapAnywhere, typography.body)}
 								dangerouslySetInnerHTML={{
 									__html: renderMarkdown(q.question, { repo }),
 								}}
 							/>
 						}
 					/>
-					<Questionnaire.Choices className="flex flex-col gap-1.5">
+					<Questionnaire.Choices className={mergeStylexOverrideClassName("", sx.flex, sx.flexCol, sx.gap15)}>
 						{q.options?.map((opt) => {
 							const active = (picks[itemName(i)] ?? []).includes(opt.label);
 							return (
@@ -264,7 +419,7 @@ export function AskCard({ questions, onAnswer }: Props) {
 									// hover wash on its neighbours.
 									className={ASK_CHOICE_ROW}
 								>
-									<Questionnaire.ChoiceInput className="sr-only" />
+									<Questionnaire.ChoiceInput className={mergeStylexOverrideClassName("", sx.srOnly)} />
 									{/* The letter leads the row, the way a lettered list does. It is
 									    how the options are named (in the transcript above, in Slack,
 									    and out loud), so it belongs where a marker goes rather than
@@ -278,28 +433,20 @@ export function AskCard({ questions, onAnswer }: Props) {
 									    letters share an edge with each other and with the text in
 									    the free-text row below. Pulling only its trailing margin
 									    keeps the answer close without tightening the indicator. */}
-									<Questionnaire.ChoiceShortcut className="-mr-2 w-3.5 shrink-0 text-label leading-5 text-faint" />
-									<Questionnaire.ChoiceLabel className="min-w-0 flex-1">
-										<span className="block text-control-label font-semibold leading-5 text-fg">
+									<Questionnaire.ChoiceShortcut className={mergeStylexOverrideClassName("", sx.Mr2, sx.w35, sx.shrink0, sx.leading5, sx.textFaint, typography.label)} />
+									<Questionnaire.ChoiceLabel className={mergeStylexOverrideClassName("", sx.minW0, sx.flex1)}>
+										<span {...stylex.props(sx.block, sx.fontSemibold, sx.leading5, sx.textFg, typography.controlLabel)}>
 											{opt.label}
 										</span>
 										{opt.description && (
-											<span className="mt-0.5 block text-supporting leading-[1.45] text-dim">
+											<span {...stylex.props(sx.mt05, sx.block, sx.leading145, sx.textDim, typography.supporting)}>
 												{opt.description}
 											</span>
 										)}
 									</Questionnaire.ChoiceLabel>
 									<span
 										aria-hidden="true"
-										className={cn(
-											"mt-px flex h-5 w-5 shrink-0 items-center justify-center border transition-[background-color,border-color,color]",
-											q.multiSelect
-												? "rounded-[calc(6px*var(--rf))] [corner-shape:var(--cs)]"
-												: "rounded-full",
-											active
-												? "border-transparent bg-fg text-bg"
-												: "border-line-strong text-transparent",
-										)}
+										{...mergeStylexProps(q.multiSelect ? mergeStylexClassName("", sx.CornerShapeVarCs) : undefined, sx.mtPx, sx.flex, sx.h5, sx.w5, sx.shrink0, sx.itemsCenter, sx.justifyCenter, sx.border, sx.transitionColors, q.multiSelect ? sx.roundedCheckbox : sx.roundedFull, active ? sx.borderTransparent : sx.borderLineStrong, active ? sx.bgFg : sx.textTransparent, active && sx.textBg)}
 									>
 										<IconCheck size={20} />
 									</span>
@@ -308,19 +455,7 @@ export function AskCard({ questions, onAnswer }: Props) {
 						})}
 						<Questionnaire.Input
 							aria-label={q.options?.length ? "Custom answer" : "Answer"}
-							/* border-0 is load-bearing, not tidying: this app deliberately
-							   doesn't ship Tailwind's Preflight (see styles/tailwind.css), so
-							   an <input> with no border utility keeps the UA's 2px inset
-							   border — the dark outline this field used to wear. Any borderless
-							   input here has to zero it explicitly.
-
-							   No ring on focus either — same call the composer makes: it read
-							   as an error state on a field you're simply typing in, and the
-							   caret is affordance enough. */
-							className={cn(
-								"h-11 w-full rounded-[calc(12px*var(--rf))] border-0 bg-control px-3 text-base text-fg outline-none placeholder:text-faint disabled:opacity-60 sm:text-control-label [corner-shape:var(--cs)]",
-								q.options?.length && "mt-1.5",
-							)}
+							{...mergeStylexProps("", sx.CornerShapeVarCs, sx.h11, sx.wFull, sx.roundedControl, sx.border0, sx.bgControl, sx.px3, typography.inputPhone, sx.desktopControlText, sx.textFg, sx.outlineNone, sx.placeholderFaint, sx.disabledOpacity60, Boolean(q.options?.length) && sx.mt15)}
 							placeholder={
 								q.options?.length ? "Or type your own answer…" : "Type your answer…"
 							}
@@ -328,7 +463,7 @@ export function AskCard({ questions, onAnswer }: Props) {
 							onChange={(e) => write(i, q, e.target.value)}
 						/>
 					</Questionnaire.Choices>
-					<Questionnaire.Error className="text-meta text-red" />
+					<Questionnaire.Error className={mergeStylexOverrideClassName("", sx.textRed, typography.meta)} />
 				</Questionnaire.Item>
 			))}
 
@@ -337,7 +472,7 @@ export function AskCard({ questions, onAnswer }: Props) {
 			    `[hidden]` rule — so each one has to win it back the same way the
 			    item does. Without this, every single-question ask (almost all of
 			    them) wears a dead Previous and Next. */}
-			<div className="flex items-center justify-end gap-2">
+			<div {...stylex.props(sx.flex, sx.itemsCenter, sx.justifyEnd, sx.gap2)}>
 				{/* Where you are in a stepped ask, as page dots on the action bar:
 				    beside the button you press to move, rather than up on the status
 				    row where it read as one more label in the header. `mr-auto` parks
@@ -353,23 +488,14 @@ export function AskCard({ questions, onAnswer }: Props) {
 				{questions.length > 1 && (
 					<Questionnaire.Progress
 						render={(props, state) => (
-							<div {...props} className="mr-auto flex items-center gap-1.5 pl-1">
+							<div {...props} {...stylex.props(sx.mrAuto, sx.flex, sx.itemsCenter, sx.gap15, sx.pl1)}>
 								{Array.from({ length: state.total }, (_, i) => (
 									<span
 										key={i}
 										aria-hidden="true"
-										className={cn(
-											"h-1.5 w-1.5 rounded-full transition-[background-color]",
-											// Two states, the way page dots work: here, and not
-											// here. Marking answered ones a third way would put
-											// three greys in a 6px dot, which nobody can read.
-											//
-											// 30% rather than the 20% a resting dot would take:
-											// the dots exist to say HOW MANY questions there are,
-											// so an unreachable inactive dot leaves you looking at
-											// one dot and none the wiser. Measured on the card's
-											// own surface, 20% resolved to #c9c9c9 on #f6f6f6.
-											i + 1 === state.current ? "bg-fg" : "bg-fg/30",
+										{...stylex.props(
+											sx.h15Dot, sx.roundedFull, sx.transitionBackground,
+											i + 1 === state.current ? sx.bgFg : sx.bgFg30,
 										)}
 									/>
 								))}

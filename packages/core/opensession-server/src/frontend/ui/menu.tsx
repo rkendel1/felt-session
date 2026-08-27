@@ -2,7 +2,7 @@ import * as React from "react";
 import { Menu as BaseMenu } from "@base-ui/react/menu";
 import { ContextMenu as BaseContextMenu } from "@base-ui/react/context-menu";
 import { IconCheck } from "../components/icons";
-import { cn } from "./cn";
+import { cn, mergeStylexClassName, mergeStylexProps } from "./cn";
 import {
 	FLOATING_OVERLAY_LAYER,
 	POPUP_HOOK,
@@ -10,6 +10,63 @@ import {
 	popupScrollClasses,
 	popupSurfaceClasses,
 } from "./popup-classes";
+import { type as typography } from "../styles/typography.stylex";
+import * as stylex from "@stylexjs/stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	focusRing: {
+			":focus-visible": {
+					outline: "2px solid var(--accent-ink)",
+					outlineOffset: "2px"
+			}
+	},
+	outlineNone: {
+			outlineStyle: "none"
+	},
+	shrink0: {
+			flexShrink: "0"
+	},
+	pl4: {
+			paddingLeft: "16px"
+	},
+	textFaint: {
+			color: "var(--text-faint)"
+	},
+	textDim: {
+		color: "var(--text-dim)"
+	},
+	textAccent: {
+			color: "var(--accent-ink)"
+	},
+	invisible: {
+			visibility: "hidden"
+	},
+	Mx15: {
+			marginInline: "-6px"
+	},
+	my15: {
+			marginBlock: "6px"
+	},
+	hPx: {
+			height: "1px"
+	},
+	bgLine: {
+			backgroundColor: "var(--border)"
+	},
+	px2: {
+			paddingInline: "8px"
+	},
+	pb1: {
+			paddingBottom: "4px"
+	},
+	fontSemibold: {
+			fontWeight: "var(--font-weight-semibold)"
+	},
+	tracking001em: {
+			letterSpacing: "-.01em"
+	},
+});
 
 /**
  * Menu on Base UI parts, styled with Tailwind tokens. Composable shape —
@@ -28,7 +85,7 @@ function Trigger({
 }: Omit<React.ComponentProps<typeof BaseMenu.Trigger>, "className"> & {
 	className?: string;
 }) {
-	return <BaseMenu.Trigger {...props} className={cn("focus-ring", className)} />;
+	return <BaseMenu.Trigger {...props} {...mergeStylexProps(cn(className), sx.focusRing)} />;
 }
 
 // The popup chrome, the scroller inside it, and the row live in
@@ -73,8 +130,7 @@ function Popup({
 				sideOffset={sideOffset}
 				alignOffset={alignOffset}
 				anchor={anchor}
-				collisionPadding={8}
-				className={cn(FLOATING_OVERLAY_LAYER, "outline-none", positionerClassName)}
+				collisionPadding={8} {...mergeStylexProps(cn(FLOATING_OVERLAY_LAYER, positionerClassName), sx.outlineNone)}
 			>
 				<BaseMenu.Popup
 					className={cn(POPUP_HOOK, popupSurfaceClasses, className)}
@@ -103,8 +159,7 @@ function ContextPopup({
 	return (
 		<BaseContextMenu.Portal>
 			<BaseContextMenu.Positioner
-				collisionPadding={8}
-				className={cn(FLOATING_OVERLAY_LAYER, "outline-none")}
+				collisionPadding={8} {...mergeStylexProps(cn(FLOATING_OVERLAY_LAYER), sx.outlineNone)}
 			>
 				<BaseContextMenu.Popup
 					className={cn(POPUP_HOOK, popupSurfaceClasses, className)}
@@ -169,7 +224,7 @@ function CheckboxItem({
  * for a glyph that carries state in its colour (a running preview's green, a
  * pinned row's yellow).
  */
-export const MENU_ICON = "text-dim";
+export const MENU_ICON = mergeStylexClassName("", sx.textDim);
 
 /** Right-aligned keyboard-shortcut hint on a menu row ("⌘ W"). Place it after
  * the row's `grow` label so it pins to the trailing edge. Exported on its own
@@ -184,7 +239,7 @@ export function MenuShortcut({
 	children: React.ReactNode;
 }) {
 	return (
-		<span className={cn("shrink-0 pl-4 text-label text-faint", className)}>
+		<span {...mergeStylexProps(cn(className), sx.shrink0, sx.pl4, typography.label, sx.textFaint)}>
 			{children}
 		</span>
 	);
@@ -215,24 +270,19 @@ export function MenuCheck({
 	return (
 		<IconCheck
 			size={size}
-			aria-hidden
-			className={cn("shrink-0 text-accent", !on && "invisible", className)}
+			aria-hidden {...mergeStylexProps(cn(className), sx.shrink0, sx.textAccent, !on && sx.invisible)}
 		/>
 	);
 }
 
 function Separator({ className }: { className?: string }) {
-	return <BaseMenu.Separator className={cn("-mx-1.5 my-1.5 h-px bg-line", className)} />;
+	return <BaseMenu.Separator {...mergeStylexProps(cn(className), sx.Mx15, sx.my15, sx.hPx, sx.bgLine)} />;
 }
 
 function GroupLabel({ className, ...props }: { className?: string; children?: React.ReactNode }) {
 	return (
 		<BaseMenu.GroupLabel
-			{...props}
-			className={cn(
-				"px-2 pb-1 text-meta font-semibold tracking-[-0.01em] text-faint",
-				className,
-			)}
+			{...props} {...mergeStylexProps(cn(className), sx.px2, sx.pb1, typography.meta, sx.fontSemibold, sx.tracking001em, sx.textFaint)}
 		/>
 	);
 }

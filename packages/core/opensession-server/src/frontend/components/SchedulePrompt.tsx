@@ -15,7 +15,393 @@ import {
   composerMenuWidth,
 } from "../lib/composer-classes";
 import { Button } from "../ui/button";
-import { cn } from "../ui/cn";
+import { cn, mergeStylexProps, mergeStylexClassName, mergeStylexOverrideClassName } from "../ui/cn";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	pointerEventsNone: {
+			pointerEvents: "none"
+	},
+	absolute: {
+			position: "absolute"
+	},
+	Top5px: {
+			top: "-5px"
+	},
+	Right5px: {
+			right: "-5px"
+	},
+	h15px: {
+			height: "15px"
+	},
+	minW15px: {
+			minWidth: "15px"
+	},
+	roundedFull: {
+			borderRadius: "calc(infinity * 1px)"
+	,
+		cornerShape: "round"},
+	bgYellow: {
+			backgroundColor: "var(--yellow)"
+	},
+	px3px: {
+			paddingInline: "3px"
+	},
+	textCenter: {
+			textAlign: "center"
+	},
+	text10px: {
+			fontSize: "10px"
+	},
+	leading15px: {
+			lineHeight: "15px"
+	},
+	fontBold: {
+			fontWeight: "var(--font-weight-bold)"
+	},
+	textWhite: {
+			color: "var(--color-white)"
+	},
+	mb05: {
+			marginBottom: "2px"
+	},
+	flex: {
+			display: "flex"
+	},
+	flexCol: {
+			flexDirection: "column"
+	},
+	gapPx: {
+			gap: "1px"
+	},
+	borderB: {
+			borderBottomStyle: "solid",
+			borderBottomWidth: "1px"
+	},
+	borderLine: {
+			borderColor: "var(--border)"
+	},
+	pb1: {
+			paddingBottom: "4px"
+	},
+	minW0: {
+			minWidth: "0"
+	},
+	itemsBaseline: {
+			alignItems: "baseline"
+	},
+	gap2: {
+			gap: "8px"
+	},
+	px9px: {
+			paddingInline: "9px"
+	},
+	py5px: {
+			paddingBlock: "5px"
+	},
+	shrink0: {
+			flexShrink: "0"
+	},
+	fontSemibold: {
+			fontWeight: "var(--font-weight-semibold)"
+	},
+	textYellow: {
+			color: "var(--yellow)"
+	},
+	truncate: {
+			textOverflow: "ellipsis",
+			whiteSpace: "nowrap",
+			overflow: "hidden"
+	},
+	textDim: {
+			color: "var(--text-dim)"
+	},
+	mlAuto: {
+			marginLeft: "auto"
+	},
+	textFaint: {
+			color: "var(--text-faint)"
+	},
+	pt15: {
+			paddingTop: "6px"
+	},
+	fontMedium: {
+			fontWeight: "var(--font-weight-medium)"
+	},
+	mx15: {
+			marginInline: "6px"
+	},
+	my1: {
+			marginBlock: "4px"
+	},
+	hPx: {
+			height: "1px"
+	},
+	bgLine: {
+			backgroundColor: "var(--border)"
+	},
+	pt1: {
+			paddingTop: "4px"
+	},
+	pb05: {
+			paddingBottom: "2px"
+	},
+	textRed: {
+			color: "var(--red)"
+	},
+	fixed: {
+			position: "fixed"
+	},
+	inset0: {
+			inset: "0"
+	},
+	z300: {
+			zIndex: "300"
+	},
+	itemsCenter: {
+			alignItems: "center"
+	},
+	justifyCenter: {
+			justifyContent: "center"
+	},
+	bgBlack40: {
+			backgroundColor: "color-mix(in srgb, var(--color-black) 40%, transparent)"
+	},
+	p5: {
+			padding: "20px"
+	},
+	w420px: {
+			width: "420px"
+	},
+	maxW92vw: {
+			maxWidth: "92vw"
+	},
+	roundedXl: {
+			borderRadius: "calc(18px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	border: {
+			borderStyle: "solid",
+			borderWidth: "1px"
+	},
+	borderLineStrong: {
+			borderColor: "var(--border-strong)"
+	},
+	bgRaised: {
+			backgroundColor: "var(--bg-raised)"
+	},
+	smoothShadowLg: {
+			boxShadow: "0 4px 12px -4px var(--smooth-shadow-color), 0 18px 48px -14px var(--smooth-shadow-color)"
+	},
+	itemsStart: {
+			alignItems: "flex-start"
+	},
+	justifyBetween: {
+			justifyContent: "space-between"
+	},
+	gap3: {
+			gap: "12px"
+	},
+	textFg: {
+			color: "var(--text)"
+	},
+	mt3px: {
+			marginTop: "3px"
+	},
+	Mt05: {
+			marginTop: "-2px"
+	},
+	Mr1: {
+			marginRight: "-4px"
+	},
+	mt4: {
+			marginTop: "16px"
+	},
+	mt5: {
+			marginTop: "20px"
+	},
+	justifyEnd: {
+			justifyContent: "flex-end"
+	},
+
+	relative: {
+		"position": "relative"
+	},
+	block: {
+		"display": "block"
+	},
+	wFull: {
+		"width": "100%"
+	},
+	inlineFlex: {
+		"display": "inline-flex"
+	},
+	itemsStretch: {
+		"alignItems": "stretch"
+	},
+	justifyStart: {
+		"justifyContent": "flex-start"
+	},
+	disabledCursorDefault: {
+		":disabled": {
+			"cursor": "default"
+		}
+	},
+	disabledOpacity45: {
+		":disabled": {
+			"opacity": ".45"
+		}
+	},
+	disabledHoverBgTransparent: {
+		"@media (hover: hover)": {
+			":disabled": {
+				":hover": {
+					"backgroundColor": "transparent"
+				}
+			}
+		}
+	},
+	transitionTransform: {
+		"transitionProperty": "transform,translate,scale,rotate",
+		"transitionTimingFunction": "var(--tw-ease,var(--ease))",
+		"transitionDuration": "var(--tw-duration,var(--dur-micro))"
+	},
+	rotate180: {
+		"rotate": "180deg"
+	},
+	flex1: {
+		"flex": "1"
+	},
+	flexNone: {
+		"flex": "none"
+	},
+	basis130px: {
+		"flexBasis": "130px"
+	},
+
+	w30px: {
+		"width": "30px"
+	},
+	roundedRLg: {
+		"borderTopRightRadius": "calc(14px * var(--rf))",
+		"borderBottomRightRadius": "calc(14px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	bgAccent: {
+		"backgroundColor": "var(--accent)"
+	},
+	textOnAccent: {
+		"color": "var(--on-accent)"
+	},
+	transitionBackgroundColor: {
+		"transitionProperty": "background-color",
+		"transitionTimingFunction": "var(--tw-ease,var(--ease))",
+		"transitionDuration": "var(--tw-duration,var(--dur-micro))"
+	},
+	beforeAbsolute: {
+		"::before": {
+			"content": "var(--tw-content)",
+			"position": "absolute"
+		}
+	},
+	beforeTop12: {
+		"::before": {
+			"content": "var(--tw-content)",
+			"top": "50%"
+		}
+	},
+	beforeLeft0: {
+		"::before": {
+			"content": "var(--tw-content)",
+			"left": "0"
+		}
+	},
+	beforeH4: {
+		"::before": {
+			"content": "var(--tw-content)",
+			"height": "16px"
+		}
+	},
+	beforeWPx: {
+		"::before": {
+			"content": "var(--tw-content)",
+			"width": "1px"
+		}
+	},
+	beforeTranslateY12: {
+		"::before": {
+			"content": "var(--tw-content)",
+			"--tw-translate-y": "calc(calc(1 / 2 * 100%) * -1)",
+			"translate": "var(--tw-translate-x) var(--tw-translate-y)"
+		}
+	},
+	beforeBgWhite45: {
+		"::before": {
+			"content": "var(--tw-content)",
+			"backgroundColor": "color-mix(in srgb, var(--color-white) 45%, transparent)"
+		},
+		"@supports (color: color-mix(in lab, red, red))": {
+			"::before": {
+				"backgroundColor": "color-mix(in oklab, var(--color-white) 45%, transparent)"
+			}
+		}
+	},
+	beforeContent: {
+		"::before": {
+			"--tw-content": "\"\"",
+			"content": "var(--tw-content)"
+		}
+	},
+	enabledHoverBgAccentHover: {
+		"@media (hover: hover)": {
+			":enabled": {
+				":hover": {
+					"backgroundColor": "var(--accent-hover)"
+				}
+			}
+		}
+	},
+	disabledOpacity35: {
+		":disabled": {
+			"opacity": ".35"
+		}
+	},
+	shadow0002pxVarBg: {
+		"--tw-shadow": "0 0 0 2px var(--tw-shadow-color,var(--bg))",
+		"boxShadow": "var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow)"
+	},
+	hoverTextRed: {
+		"@media (hover: hover)": {
+			":hover": {
+				"color": "var(--red)"
+			}
+		}
+	},
+	roundedControl: {
+		"borderRadius": "calc(12px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	bgTransparent: {
+		"backgroundColor": "transparent"
+	},
+	px3: {
+		"paddingInline": "12px"
+	},
+	py9px: {
+		"paddingBlock": "9px"
+	},
+	outlineNone: {
+		"--tw-outline-style": "none",
+		"outlineStyle": "none"
+	},
+	focusBorderLineStrong: {
+		":focus": {
+			"borderColor": "var(--border-strong)"
+		}
+	},
+});
 
 /** "in 45m" / "in 3h" / "in 2d" for a future instant (short form). */
 function inTime(iso: string): string {
@@ -30,15 +416,15 @@ function inTime(iso: string): string {
  *  a thin inset divider (short of the top/bottom edges, Slack-style) rather
  *  than a full-height seam. */
 const caretButton =
-	"relative inline-flex w-[30px] items-center justify-center rounded-r-lg bg-accent text-on-accent transition-[background-color] before:absolute before:top-1/2 before:left-0 before:h-4 before:w-px before:-translate-y-1/2 before:bg-white/45 before:content-[''] enabled:hover:bg-accent-hover disabled:cursor-default disabled:opacity-35";
+	mergeStylexClassName("", sx.relative, sx.inlineFlex, sx.w30px, sx.itemsCenter, sx.justifyCenter, sx.roundedRLg, sx.bgAccent, sx.textOnAccent, sx.transitionBackgroundColor, sx.beforeAbsolute, sx.beforeTop12, sx.beforeLeft0, sx.beforeH4, sx.beforeWPx, sx.beforeTranslateY12, sx.beforeBgWhite45, sx.beforeContent, sx.enabledHoverBgAccentHover, sx.disabledCursorDefault, sx.disabledOpacity35);
 
 /** Date / time field in the custom-time dialog. `bg-transparent` is deliberate:
- *  the stylesheet asked for `var(--bg-surface)`, a token that has never been
+ *  the stylesheet asked for `var(--bg)`, a token that has never been
  *  defined, so the declaration was invalid at computed-value time and the fill
  *  fell back to `transparent` — these fields have always shown the dialog's own
  *  surface. Without it they would pick up the UA's opaque field colour. */
 const scheduleField =
-	"min-w-0 rounded-control border border-line bg-transparent px-3 py-[9px] text-item-title font-medium text-fg outline-none focus:border-line-strong";
+	mergeStylexClassName("", sx.minW0, sx.roundedControl, sx.border, sx.borderLine, sx.bgTransparent, sx.px3, sx.py9px, typography.itemTitle, sx.fontMedium, sx.textFg, sx.outlineNone, sx.focusBorderLineStrong);
 
 const pad = (n: number) => String(n).padStart(2, "0");
 const fmtTime = (d: Date) =>
@@ -203,8 +589,8 @@ setError(e.message);
       // Positioned: the send-later menu below hangs off it.
       className={
         variant === "menu-item"
-          ? "relative block w-full"
-          : "relative inline-flex items-stretch"
+          ? mergeStylexClassName("", sx.relative, sx.block, sx.wFull)
+          : mergeStylexClassName("", sx.relative, sx.inlineFlex, sx.itemsStretch)
       }
     >
       <button
@@ -216,7 +602,7 @@ setError(e.message);
               // is what suppresses the row's own hover wash while disabled.
               cn(
                 composerMenuItem,
-                "relative justify-start disabled:cursor-default disabled:opacity-45 disabled:hover:bg-transparent",
+                mergeStylexClassName("", sx.relative, sx.justifyStart, sx.disabledCursorDefault, sx.disabledOpacity45, sx.disabledHoverBgTransparent),
               )
             : caretButton
         }
@@ -237,11 +623,11 @@ setError(e.message);
         ) : (
           <IconChevronDown
             size={20}
-            className={cn("transition-transform", open && "rotate-180")}
+            className={cn(mergeStylexClassName("", sx.transitionTransform), open && mergeStylexClassName("", sx.rotate180))}
           />
         )}
         {pending.length > 0 && (
-          <span className="pointer-events-none absolute -top-[5px] -right-[5px] h-[15px] min-w-[15px] rounded-full bg-yellow px-[3px] text-center text-[10px] leading-[15px] font-bold text-white shadow-[0_0_0_2px_var(--bg)]">
+          <span {...mergeStylexProps("", sx.shadow0002pxVarBg, sx.pointerEventsNone, sx.absolute, sx.Top5px, sx.Right5px, sx.h15px, sx.minW15px, sx.roundedFull, sx.bgYellow, sx.px3px, sx.textCenter, sx.text10px, sx.leading15px, sx.fontBold, sx.textWhite)}>
             {pending.length}
           </span>
         )}
@@ -258,24 +644,23 @@ setError(e.message);
         >
           {/* Pending scheduled messages, listed above the picks with a cancel. */}
           {pending.length > 0 && (
-            <div className="mb-0.5 flex flex-col gap-px border-b border-line pb-1">
+            <div {...stylex.props(sx.mb05, sx.flex, sx.flexCol, sx.gapPx, sx.borderB, sx.borderLine, sx.pb1)}>
               {pending.map((p) => (
                 <div
                   key={p.id}
-                  className="flex min-w-0 items-baseline gap-2 px-[9px] py-[5px] text-meta"
+                  {...stylex.props(sx.flex, sx.minW0, sx.itemsBaseline, sx.gap2, sx.px9px, sx.py5px, typography.meta)}
                 >
                   <span
-                    className="shrink-0 font-semibold text-yellow"
+                    {...stylex.props(sx.shrink0, sx.fontSemibold, sx.textYellow)}
                     title={new Date(p.at).toLocaleString()}
                   >
                     {inTime(p.at)}
                   </span>
-                  <span className="truncate text-dim" title={p.prompt}>
+                  <span {...stylex.props(sx.truncate, sx.textDim)} title={p.prompt}>
                     {p.prompt}
                   </span>
                   <button
-                    type="button"
-                    className="ml-auto shrink-0 text-meta text-faint hover:text-red"
+                    type="button" {...mergeStylexProps("", sx.hoverTextRed, sx.mlAuto, sx.shrink0, sx.textFaint, typography.meta)}
                     title="Cancel this scheduled message"
                     onClick={async () => {
                       await (async () => {
@@ -293,7 +678,7 @@ await deleteScheduledPromptApi(p.id);
             </div>
           )}
 
-          <div className="px-[9px] pt-1.5 pb-1 text-meta font-medium text-faint">
+          <div {...stylex.props(sx.px9px, sx.pt15, sx.pb1, sx.fontMedium, sx.textFaint, typography.meta)}>
             Schedule message
           </div>
           {quickOptions().map((o) => (
@@ -303,25 +688,25 @@ await deleteScheduledPromptApi(p.id);
               role="menuitem"
               // text-label: the picks read a step larger than the "+" menu's
               // rows, which is what .composer-schedule-menu used to say.
-              className={cn(composerMenuItem, "text-label")}
+              className={cn(composerMenuItem, mergeStylexClassName("", typography.label))}
               onClick={() => schedule(o.at)}
               disabled={saving || !hasText}
             >
               {o.label}
             </button>
           ))}
-          <div className="mx-1.5 my-1 h-px bg-line" />
+          <div {...stylex.props(sx.mx15, sx.my1, sx.hPx, sx.bgLine)} />
           <button
             type="button"
             role="menuitem"
-            className={cn(composerMenuItem, "text-label")}
+            className={cn(composerMenuItem, mergeStylexClassName("", typography.label))}
             onClick={openCustom}
             disabled={!hasText}
           >
             Custom time
           </button>
           {error && !customOpen && (
-            <div className="px-[9px] pt-1 pb-0.5 text-meta text-red">{error}</div>
+            <div {...stylex.props(sx.px9px, sx.pt1, sx.pb05, sx.textRed, typography.meta)}>{error}</div>
           )}
         </div>
       )}
@@ -329,48 +714,47 @@ await deleteScheduledPromptApi(p.id);
       {customOpen && (
         // The class name stays: SessionViewer and Sidebar look for an open
         // overlay by this selector before taking a global key.
-        <div
-          className="composer-schedule-modal-backdrop fixed inset-0 z-[300] flex items-center justify-center bg-black/40 p-5"
+        <div {...mergeStylexProps("composer-schedule-modal-backdrop", sx.fixed, sx.inset0, sx.z300, sx.flex, sx.itemsCenter, sx.justifyCenter, sx.bgBlack40, sx.p5)}
           onMouseDown={(e) => {
             if (e.target === e.currentTarget) setCustomOpen(false);
           }}
         >
-          <div className="w-[420px] max-w-[92vw] rounded-xl border border-line-strong bg-raised p-5 smooth-shadow-lg">
-            <div className="flex items-start justify-between gap-3">
+          <div {...stylex.props(sx.w420px, sx.maxW92vw, sx.roundedXl, sx.border, sx.borderLineStrong, sx.bgRaised, sx.p5, sx.smoothShadowLg)}>
+            <div {...stylex.props(sx.flex, sx.itemsStart, sx.justifyBetween, sx.gap3)}>
               <div>
-                <div className="text-dialog-title font-semibold text-fg">
+                <div {...stylex.props(sx.fontSemibold, sx.textFg, typography.dialogTitle)}>
                   Schedule message
                 </div>
-                <div className="mt-[3px] text-meta text-dim">Time zone: {tz}</div>
+                <div {...stylex.props(sx.mt3px, sx.textDim, typography.meta)}>Time zone: {tz}</div>
               </div>
               <Button
                 variant="ghost"
                 size="sm"
-                className="-mt-0.5 -mr-1"
+                className={mergeStylexOverrideClassName("", sx.Mt05, sx.Mr1)}
                 onClick={() => setCustomOpen(false)}
                 aria-label="Close"
                 icon={<IconX size={20} />}
               />
             </div>
-            <div className="mt-4 flex gap-2">
+            <div {...stylex.props(sx.mt4, sx.flex, sx.gap2)}>
               <input
                 type="date"
                 value={date}
                 min={toDateInput(new Date())}
                 onChange={(e) => setDate(e.target.value)}
-                className={cn(scheduleField, "flex-1")}
+                className={cn(scheduleField, mergeStylexClassName("", sx.flex1))}
               />
               <input
                 type="time"
                 value={time}
                 onChange={(e) => setTime(e.target.value)}
-                className={cn(scheduleField, "flex-none basis-[130px]")}
+                className={cn(scheduleField, mergeStylexClassName("", sx.flexNone, sx.basis130px))}
               />
             </div>
             {error && (
-              <div className="px-[9px] pt-1 pb-0.5 text-meta text-red">{error}</div>
+              <div {...stylex.props(sx.px9px, sx.pt1, sx.pb05, sx.textRed, typography.meta)}>{error}</div>
             )}
-            <div className="mt-5 flex justify-end gap-2">
+            <div {...stylex.props(sx.mt5, sx.flex, sx.justifyEnd, sx.gap2)}>
               <Button variant="soft" size="lg" onClick={() => setCustomOpen(false)}>
                 Cancel
               </Button>

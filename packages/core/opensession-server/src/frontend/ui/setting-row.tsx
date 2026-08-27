@@ -5,9 +5,59 @@ import {
 	SETTING_ROW_PRESSABLE,
 } from "../lib/setting-row-classes";
 import { IconChevronDown } from "../components/icons";
-import { cn } from "./cn";
+import { cn, mergeStylexClassName, mergeStylexOverrideClassName } from "./cn";
 import { Menu } from "./menu";
 import { Switch } from "./switch";
+import * as stylex from "@stylexjs/stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	shrink0: {
+			flexShrink: "0"
+	},
+	textDim: {
+			color: "var(--text-dim)"
+	},
+	mlAuto: {
+			marginLeft: "auto"
+	},
+	flex: {
+			display: "flex"
+	},
+	minW0: {
+			minWidth: "0"
+	},
+	itemsCenter: {
+			alignItems: "center"
+	},
+	gap2: {
+			gap: "8px"
+	},
+	justifyBetween: {
+			justifyContent: "space-between"
+	},
+	gap3: {
+			gap: "12px"
+	},
+	truncate: {
+			textOverflow: "ellipsis",
+			whiteSpace: "nowrap",
+			overflow: "hidden"
+	},
+	textFg: {
+			color: "var(--text)"
+	},
+	Mr05: {
+			marginRight: "-2px"
+	},
+	textFaint: {
+			color: "var(--text-faint)"
+	},
+
+	cursorDefault: {
+		"cursor": "default"
+	},
+});
 
 /** The rows a settings popover is made of. The rule they follow, and why they
  *  wear a menu row rather than a field, is in `lib/setting-row-classes`. */
@@ -30,8 +80,8 @@ export function SettingRow({
 }) {
 	return (
 		<div className={cn(SETTING_ROW, className)}>
-			<span className="shrink-0 text-dim">{label}</span>
-			<span className="ml-auto flex min-w-0 items-center gap-2">{children}</span>
+			<span {...stylex.props(sx.shrink0, sx.textDim)}>{label}</span>
+			<span {...stylex.props(sx.mlAuto, sx.flex, sx.minW0, sx.itemsCenter, sx.gap2)}>{children}</span>
 		</div>
 	);
 }
@@ -53,16 +103,16 @@ export function SwitchRow({
 		<label
 			className={cn(
 				SETTING_ROW,
-				disabled ? "cursor-default" : SETTING_ROW_PRESSABLE,
+				disabled ? mergeStylexClassName("", sx.cursorDefault) : SETTING_ROW_PRESSABLE,
 			)}
 		>
 			{/* A setting that cannot apply yet dims its name too: a live label
 			    over a faded switch reads as a switch that failed to draw. */}
-			<span className={cn("shrink-0", disabled ? "text-faint" : "text-dim")}>
+			<span {...stylex.props(sx.shrink0, disabled && sx.textFaint, !(disabled) && sx.textDim)}>
 				{label}
 			</span>
 			<Switch
-				className="ml-auto"
+				className={mergeStylexOverrideClassName("", sx.mlAuto)}
 				size="sm"
 				checked={checked}
 				disabled={disabled}
@@ -98,11 +148,11 @@ export function ValueOptions({
 					key={option.value}
 					value={option.value}
 					closeOnClick
-					className="justify-between gap-3"
+					className={mergeStylexOverrideClassName("", sx.justifyBetween, sx.gap3)}
 				>
-					<span className="flex min-w-0 items-center gap-2">
+					<span {...stylex.props(sx.flex, sx.minW0, sx.itemsCenter, sx.gap2)}>
 						{glyphs && <span className={SETTING_GLYPH}>{option.icon}</span>}
-						<span className="min-w-0 truncate">{option.label}</span>
+						<span {...stylex.props(sx.minW0, sx.truncate)}>{option.label}</span>
 					</span>
 					<Menu.Check on={option.value === value} />
 				</Menu.RadioItem>
@@ -140,14 +190,14 @@ export function ValueRow({
 			<Menu.Trigger
 				className={cn(SETTING_ROW, SETTING_ROW_PRESSABLE, className)}
 			>
-				<span className="shrink-0 text-dim">{label}</span>
-				<span className="ml-auto flex min-w-0 items-center gap-2 text-fg">
+				<span {...stylex.props(sx.shrink0, sx.textDim)}>{label}</span>
+				<span {...stylex.props(sx.mlAuto, sx.flex, sx.minW0, sx.itemsCenter, sx.gap2, sx.textFg)}>
 					{current?.icon && (
 						<span className={SETTING_GLYPH}>{current.icon}</span>
 					)}
-					<span className="truncate">{current?.label ?? value}</span>
+					<span {...stylex.props(sx.truncate)}>{current?.label ?? value}</span>
 					{trailing}
-					<IconChevronDown size={16} className="-mr-0.5 shrink-0 text-faint" />
+					<IconChevronDown size={16} className={mergeStylexOverrideClassName("", sx.Mr05, sx.shrink0, sx.textFaint)} />
 				</span>
 			</Menu.Trigger>
 			<Menu.Popup align="end" sideOffset={6}>

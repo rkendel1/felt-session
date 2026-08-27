@@ -1,3 +1,5 @@
+import { mergeStylexProps, mergeStylexOverrideClassName } from "./ui/cn";
+import { utilityClassName } from "./ui/cn";
 import { BASE_PATH, stripBasePath } from "./lib/base";
 import { DEFAULT_REPO_ID, PRODUCT_NAME } from "./lib/brand";
 import {
@@ -303,6 +305,105 @@ import type { UnifiedSession } from "./lib/types";
 import "./styles/base.css";
 import "./styles/legacy.css";
 import { EmptyState, LoadingState } from "./ui/state";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "./styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	gap5: {
+			gap: "calc(4px * 5)"
+	},
+	fontSemibold: {
+			fontWeight: "var(--font-weight-semibold)"
+	},
+	tracking001em: {
+			letterSpacing: "-0.01em"
+	},
+	textFg: {
+			color: "var(--text)"
+	},
+	leadingRelaxed: {
+			lineHeight: "var(--leading-relaxed)"
+	},
+	textDim: {
+			color: "var(--text-dim)"
+	},
+	mt3: {
+			marginTop: "calc(4px * 3)"
+	},
+	justifyEnd: {
+			justifyContent: "flex-end"
+	},
+	gap3: {
+			gap: "calc(4px * 3)"
+	},
+	ml5: {
+			marginLeft: "calc(4px * 5)"
+	},
+	fontMedium: {
+			fontWeight: "var(--font-weight-medium)"
+	},
+	opacity70: {
+			opacity: "70%"
+	},
+	flex: {
+			display: "flex"
+	},
+	h100dvh: {
+			height: "100dvh"
+	},
+	itemsCenter: {
+			alignItems: "center"
+	},
+	justifyCenter: {
+			justifyContent: "center"
+	},
+	bgBg: {
+			backgroundColor: "var(--bg)"
+	},
+	flexCol: {
+			flexDirection: "column"
+	},
+	gap4: {
+			gap: "calc(4px * 4)"
+	},
+	px6: {
+			paddingInline: "calc(4px * 6)"
+	},
+	textCenter: {
+			textAlign: "center"
+	},
+	shrink0: {
+			flexShrink: "0"
+	},
+	textFaint: {
+			color: "var(--text-faint)"
+	},
+	gap2: {
+			gap: "calc(4px * 2)"
+	},
+	flex1: {
+			flex: "1"
+	},
+	minH0: {
+			minHeight: "0"
+	},
+	overflowYAuto: {
+			overflowY: "auto"
+	},
+	px5: {
+			paddingInline: "calc(4px * 5)"
+	},
+	py8: {
+			paddingBlock: "calc(4px * 8)"
+	},
+	wFull: {
+			width: "100%"
+	},
+	maxW680px: {
+			maxWidth: "680px"
+	},
+});
 
 function deferred<T extends React.ComponentType<any>>(
 	load: () => Promise<{ default: T }>,
@@ -5067,16 +5168,16 @@ console.error("Rename workspace failed:", error);
 				}}
 				disablePointerDismissal
 			>
-				<Modal.Content widthClassName="max-w-[34rem]" className="gap-5">
-					<Modal.Title className="m-0 text-dialog-title font-semibold tracking-[-0.01em] text-fg">
+				<Modal.Content widthClassName={utilityClassName("max-w-[34rem]")} className={mergeStylexOverrideClassName("", sx.gap5)}>
+					<Modal.Title className={mergeStylexOverrideClassName("m-0", sx.fontSemibold, sx.tracking001em, sx.textFg, typography.dialogTitle)} >
 						Close running session{runningCloseConfirmation?.runningCount === 1 ? "" : "s"}?
 					</Modal.Title>
-					<Modal.Description className="m-0 text-body leading-relaxed text-dim">
+					<Modal.Description className={mergeStylexOverrideClassName("m-0", sx.leadingRelaxed, sx.textDim, typography.body)} >
 						{runningCloseConfirmation?.runningCount === 1
 							? "This session is currently running. Closing it will cancel its current run."
 							: `These ${runningCloseConfirmation?.runningCount ?? 0} sessions are currently running. Closing them will cancel their current runs.`}
 					</Modal.Description>
-					<Modal.Footer className="mt-3 justify-end gap-3">
+					<Modal.Footer className={mergeStylexOverrideClassName("", sx.mt3, sx.justifyEnd, sx.gap3)}>
 						<Modal.Close render={<Button size="lg">Cancel</Button>} />
 						<Button
 							variant="danger-strong"
@@ -5088,18 +5189,18 @@ console.error("Rename workspace failed:", error);
 							}}
 						>
 							<span>Close anyway</span>
-							<span className="ml-5 text-label font-medium opacity-70">⌘↵</span>
+							<span {...stylex.props(sx.ml5, sx.fontMedium, sx.opacity70, typography.label)}>⌘↵</span>
 						</Button>
 					</Modal.Footer>
 				</Modal.Content>
 			</Modal.Root>
 			<div className="app">
 				{!forceFirstMile && onboarding.state === "loading" ? (
-					<div className="flex h-[100dvh] items-center justify-center bg-bg">
+					<div {...stylex.props(sx.flex, sx.h100dvh, sx.itemsCenter, sx.justifyCenter, sx.bgBg)}>
 						<LoadingState>Preparing Open Session…</LoadingState>
 					</div>
 				) : !forceFirstMile && onboarding.state === "failed" ? (
-					<div className="flex h-[100dvh] flex-col items-center justify-center gap-4 bg-bg px-6 text-center">
+					<div {...stylex.props(sx.flex, sx.h100dvh, sx.flexCol, sx.itemsCenter, sx.justifyCenter, sx.gap4, sx.bgBg, sx.px6, sx.textCenter)}>
 						<LoadingState>Couldn&rsquo;t check onboarding.</LoadingState>
 						<Button onClick={() => void onboarding.refetch()}>Try again</Button>
 					</div>
@@ -5127,7 +5228,7 @@ console.error("Rename workspace failed:", error);
 						route.view === "archived" && ARCHIVED_SEARCH_HEADER,
 					)}
 				>
-					<TopBarLeading className="shrink-0">
+					<TopBarLeading className={mergeStylexOverrideClassName("", sx.shrink0)}>
 						{mobileDetail ? (
 							<TopBarBack
 								floating
@@ -5213,7 +5314,7 @@ console.error("Rename workspace failed:", error);
 									{currentSession && sessionWasAgentStarted(currentSession) && (
 										<IconRobot
 											size={16}
-											className="shrink-0 text-faint"
+											className={mergeStylexOverrideClassName("", sx.shrink0, sx.textFaint)}
 											aria-label="Started by an agent"
 										/>
 									)}
@@ -5311,7 +5412,7 @@ console.error("Rename workspace failed:", error);
 					<div
 						ref={sidebarColRef}
 						className={cn(
-							"sidebar-container flex min-h-0 shrink-0 flex-col bg-sidebar [--sidebar-icon-left:16px]",
+							utilityClassName("sidebar-container flex min-h-0 shrink-0 flex-col bg-sidebar [--sidebar-icon-left:16px]"),
 							// Desktop and the exposed workspace gutter share one chrome
 							// material, so opaque sticky headers scroll over the exact same
 							// surface instead of revealing a gradient seam. No
@@ -5324,11 +5425,11 @@ console.error("Rename workspace failed:", error);
 							// stack — full bleed under the pushed detail pane — rather than
 							// a fixed-width column.
 							isPhone
-								? "absolute inset-0 z-[1] w-full"
-								: "relative w-[var(--sidebar-w,280px)]",
+								? utilityClassName("absolute inset-0 z-[1] w-full")
+								: utilityClassName("relative w-[var(--sidebar-w,280px)]"),
 							// Collapsed hides the whole left column; on phones the page
 							// stack owns the sidebar and the class is inert.
-							sidebarCollapsed && "desktop:hidden",
+							sidebarCollapsed && utilityClassName("desktop:hidden"),
 						)}
 						style={
 							{ "--sidebar-w": `${sidebarWidth}px` } as React.CSSProperties
@@ -5349,7 +5450,7 @@ console.error("Rename workspace failed:", error);
 						    --sidebar-icon-left column. */}
 						<div
 							className={cn(
-								"sidebar-brand wco-chrome h-[var(--desktop-header-h)] min-w-0 shrink-0 items-center justify-start gap-2 py-0 pr-3 pl-[calc(var(--sidebar-icon-left)-8px)]",
+								utilityClassName("sidebar-brand wco-chrome h-[var(--desktop-header-h)] min-w-0 shrink-0 items-center justify-start gap-2 py-0 pr-3 pl-[calc(var(--sidebar-icon-left)-8px)]"),
 								// No scroll hairline: the tools sit fixed below this row and
 								// only the workspace list scrolls, so nothing passes under it.
 								// The brand row (and its account menu) is a desktop
@@ -5357,10 +5458,10 @@ console.error("Rename workspace failed:", error);
 								// instead. Gated in JS rather than at `phone:` because
 								// Tailwind's max-* is `width < 720`, one pixel short of the
 								// `max-width: 720px` the rest of the app means by "phone".
-								isPhone ? "hidden" : "flex",
+								isPhone ? utilityClassName("hidden") : utilityClassName("flex"),
 							)}
 						>
-							<div className="sidebar-brand-actions flex shrink-0 items-center gap-2">
+							<div {...mergeStylexProps("sidebar-brand-actions", sx.flex, sx.shrink0, sx.itemsCenter, sx.gap2)} >
 								<Tooltip
 									label="Hide sidebar"
 									side="bottom"
@@ -5372,7 +5473,7 @@ console.error("Rename workspace failed:", error);
 									<button
 										className={cn(
 											SIDEBAR_CHROME_BTN,
-											"inline-flex px-[5px] py-[3px]",
+											utilityClassName("inline-flex px-[5px] py-[3px]"),
 										)}
 										onClick={toggleSidebarCollapsed}
 										aria-label="Hide sidebar"
@@ -5613,8 +5714,8 @@ console.error("Rename failed:", e);
 						    edge while the list scrolls. */}
 						<div
 							className={cn(
-								"absolute top-0 right-[-3px] z-30 h-full w-[7px] cursor-col-resize after:absolute after:top-0 after:right-[3px] after:h-full after:w-[2px] after:bg-transparent after:transition-[background] after:content-[''] hover:after:bg-line-strong [body.resizing-sidebar_&]:after:bg-faint",
-								isPhone && "hidden",
+								utilityClassName("absolute top-0 right-[-3px] z-30 h-full w-[7px] cursor-col-resize after:absolute after:top-0 after:right-[3px] after:h-full after:w-[2px] after:bg-transparent after:transition-[background] after:content-[''] hover:after:bg-line-strong [body.resizing-sidebar_&]:after:bg-faint"),
+								isPhone && utilityClassName("hidden"),
 							)}
 							onMouseDown={startSidebarResize}
 							aria-hidden="true"
@@ -5643,8 +5744,8 @@ console.error("Rename failed:", e);
 							<button
 								className={cn(
 									SIDEBAR_CHROME_BTN,
-									"sidebar-reopen absolute top-[calc((var(--desktop-header-h)-35px)/2)] left-2 z-20 hidden size-[34px] p-0",
-									sidebarCollapsed && "desktop:inline-flex",
+									utilityClassName("sidebar-reopen absolute top-[calc((var(--desktop-header-h)-35px)/2)] left-2 z-20 hidden size-[34px] p-0"),
+									sidebarCollapsed && utilityClassName("desktop:inline-flex"),
 								)}
 								onClick={toggleSidebarCollapsed}
 								aria-label="Show sidebar"
@@ -5681,7 +5782,7 @@ console.error("Rename failed:", e);
 									<TopBarActions
 										className={cn(
 											DETAIL_TOPBAR_ACTIONS,
-											route.view === "prs" && "ml-4 flex-1 pl-0",
+											route.view === "prs" && utilityClassName("ml-4 flex-1 pl-0"),
 										)}
 										ref={setTopbarActionsEl}
 									/>
@@ -5950,7 +6051,7 @@ console.error("Archive failed:", e);
 									)
 								)
 							) : (
-								<div className="flex flex-1 items-center justify-center">
+								<div {...stylex.props(sx.flex, sx.flex1, sx.itemsCenter, sx.justifyCenter)}>
 									{(() => {
 										const isLoading = loading || route.id === pendingSessionId;
 										if (sessionsError && !isLoading) {
@@ -5996,7 +6097,7 @@ console.error("Archive failed:", e);
 								Check the connection to this server.
 							</EmptyState>
 						) : productEmpty && githubConnectionState === "loading" ? (
-							<LoadingState className="min-h-0 flex-1">Checking GitHub…</LoadingState>
+							<LoadingState className={mergeStylexOverrideClassName("", sx.minH0, sx.flex1)}>Checking GitHub…</LoadingState>
 						) : productEmpty ? (
 							/* With nothing to open, the page IS the new-session card: the
 							   same palette rendered in place, so the empty state is
@@ -6008,8 +6109,8 @@ console.error("Archive failed:", e);
 							   sidebar +): one instance at a time, and since both persist
 							   the same "new-session" draft, whatever was typed here is
 							   already in the one that opens. */
-							<div className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto px-5 py-8">
-								<div className="flex w-full max-w-[680px] flex-col">
+							<div {...stylex.props(sx.flex, sx.minH0, sx.flex1, sx.flexCol, sx.itemsCenter, sx.justifyCenter, sx.overflowYAuto, sx.px5, sx.py8)}>
+								<div {...stylex.props(sx.flex, sx.wFull, sx.maxW680px, sx.flexCol)}>
 									{!palette.open && (
 										<NewSession
 											inline

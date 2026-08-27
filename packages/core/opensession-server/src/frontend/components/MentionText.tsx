@@ -2,6 +2,38 @@ import React from "react";
 import { parseMentions } from "../lib/mention-text";
 import { usePeople } from "../lib/people";
 import { githubLoginFor } from "./UserAvatar";
+import * as stylex from "@stylexjs/stylex";
+import { mergeStylexProps, mergeStylexClassName } from "../ui/cn";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	textAccent: {
+			color: "var(--accent-ink)"
+	},
+	underline: {
+			textDecorationLine: "underline"
+	},
+	underlineOffset2: {
+			textUnderlineOffset: "2px"
+	},
+
+	decorationAccent40: {
+		"WebkitTextDecorationColor": "var(--accent)",
+		"textDecorationColor": "var(--accent)",
+		"@supports (color: color-mix(in lab, red, red))": {
+			"WebkitTextDecorationColor": "color-mix(in oklab, var(--accent) 40%, transparent)",
+			"textDecorationColor": "color-mix(in oklab, var(--accent) 40%, transparent)"
+		}
+	},
+	hoverDecorationAccent: {
+		"@media (hover: hover)": {
+			":hover": {
+				"WebkitTextDecorationColor": "var(--accent)",
+				"textDecorationColor": "var(--accent)"
+			}
+		}
+	},
+});
 
 /**
  * Plain human text with @-mentions rendered as the person they name. Team
@@ -28,8 +60,7 @@ export function MentionText({ text }: { text: string }) {
 							key={i}
 							href={token.text}
 							target="_blank"
-							rel="noreferrer"
-							className="text-accent underline decoration-accent/40 underline-offset-2 hover:decoration-accent"
+							rel="noreferrer" {...mergeStylexProps("", sx.decorationAccent40, sx.hoverDecorationAccent, sx.textAccent, sx.underline, sx.underlineOffset2)}
 						>
 							{token.text}
 						</a>

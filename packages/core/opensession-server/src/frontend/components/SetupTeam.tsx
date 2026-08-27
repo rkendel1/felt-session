@@ -1,3 +1,4 @@
+import { utilityClassName } from "../ui/cn";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { BASE_PATH } from "../lib/base";
 import { githubLoginFromInput } from "../lib/github-login";
@@ -32,6 +33,35 @@ import {
 } from "./icons";
 import { setupRequest, type TeamMember } from "./setup-shared";
 import { UserAvatar } from "./UserAvatar";
+import * as stylex from "@stylexjs/stylex";
+import { mergeStylexProps, mergeStylexClassName, mergeStylexOverrideClassName } from "../ui/cn";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	truncate: {
+			textOverflow: "ellipsis",
+			whiteSpace: "nowrap",
+			overflow: "hidden"
+	},
+	textRed: {
+			color: "var(--red)"
+	},
+	flex: {
+			display: "flex"
+	},
+	flexCol: {
+			flexDirection: "column"
+	},
+	gap3: {
+			gap: "12px"
+	},
+	fontMono: {
+			fontFamily: "var(--mono)"
+	},
+	mt0: {
+		marginTop: 0,
+	},
+});
 import { useAuthStatus } from "./UserPicker";
 
 // Settings → Setup → Team: the manageable roster. The identity table drives
@@ -124,13 +154,13 @@ await load();
 	return (
 		<>
 			<SettingsGroupLabel
-				className={title ? undefined : "mt-0"}
+				className={mergeStylexOverrideClassName("", !title && sx.mt0)}
 				actions={
 					githubAuth ? (
 						<Button
 							size="sm"
 							variant="default"
-							className="phone:min-h-11"
+							className={utilityClassName("phone:min-h-11")}
 							icon={inviteCopied ? <IconCheck size={16} /> : <IconLink size={16} />}
 							onClick={copyInviteLink}
 						>
@@ -140,7 +170,7 @@ await load();
 						<Button
 							size="sm"
 							variant="default"
-							className={onboarding ? "phone:min-h-11" : undefined}
+							className={onboarding ? utilityClassName("phone:min-h-11") : undefined}
 							icon={<IconPlus size={16} />}
 							onClick={() => {
 								setEditing(null);
@@ -245,7 +275,7 @@ function MemberRow({
 			<SettingRowText>
 				<SettingRowTitle>{member.name}</SettingRowTitle>
 				{!compact && details.length > 0 && (
-					<SettingRowDescription className="truncate">
+					<SettingRowDescription className={mergeStylexOverrideClassName("", sx.truncate)}>
 						{details.join(" · ")}
 					</SettingRowDescription>
 				)}
@@ -298,8 +328,7 @@ toast(e.message, { variant: "error" });
 						<IconPencil size={16} className={MENU_ICON} />
 						Edit member
 					</Menu.Item>
-					<Menu.Item
-						className="text-red data-[highlighted]:bg-red-soft data-[highlighted]:text-red"
+					<Menu.Item {...mergeStylexProps("data-[highlighted]:bg-red-soft data-[highlighted]:text-red", sx.textRed)}
 						onClick={() => setConfirmOpen(true)}
 					>
 						<IconTrash size={16} />
@@ -406,7 +435,7 @@ setSaving(false);
 							: "They can sign in with this GitHub account."
 					}
 				/>
-				<form className="flex flex-col gap-3" onSubmit={submit}>
+				<form {...stylex.props(sx.flex, sx.flexCol, sx.gap3)} onSubmit={submit}>
 					<Field label="GitHub username or profile link">
 						<Input
 							ref={githubRef}
@@ -423,18 +452,18 @@ setSaving(false);
 					<Button
 						variant="primary"
 						type="submit"
-						className="w-full phone:min-h-11"
+						className={utilityClassName("w-full phone:min-h-11")}
 						disabled={!github.trim() || saving}
 					>
 						{saving ? "Adding…" : actionLabel}
 					</Button>
 					{inviteUrl && (
 						<>
-							<div className="text-center text-supporting text-faint">Or</div>
+							<div className={utilityClassName("text-center text-supporting text-faint")}>Or</div>
 							<Button
 								variant="primary"
 								type="button"
-								className="w-full phone:min-h-11"
+								className={utilityClassName("w-full phone:min-h-11")}
 								icon={
 									<CopyCheck
 										copied={inviteCopy.copied}
@@ -559,7 +588,7 @@ setError(e.message);
 					title={member ? `Edit ${member.name}` : addLabel}
 					description="Commits, sessions, and access grants resolve through this person."
 				/>
-				<form className="flex flex-col gap-3" onSubmit={submit}>
+				<form {...stylex.props(sx.flex, sx.flexCol, sx.gap3)} onSubmit={submit}>
 					<Field label="Full name">
 						<Input
 							ref={nameRef}
@@ -593,7 +622,7 @@ setError(e.message);
 						</Field>
 						<Field label="Slack member id">
 							<Input
-								className="font-mono"
+								className={mergeStylexOverrideClassName("", sx.fontMono)}
 								value={slackId}
 								onChange={(e) => setSlackId(e.target.value)}
 								placeholder="U01ABCDEF"

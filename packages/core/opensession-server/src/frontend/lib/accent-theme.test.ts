@@ -120,7 +120,7 @@ describe("accent theme", () => {
 		const panel = await Bun.file(
 			new URL("../components/settings/AppearancePanel.tsx", import.meta.url),
 		).text();
-		expect(panel).toContain("flex w-fit max-w-full flex-wrap gap-y-1");
+		expect(panel).toContain("sx.flex, sx.wFit, sx.maxWFull, sx.flexWrap, sx.gapY1");
 		expect(panel).toContain("<Tooltip label={option.label}>");
 		expect(panel).not.toContain("title={option.label}");
 	});

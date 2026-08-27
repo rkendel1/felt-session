@@ -1,7 +1,7 @@
 import { BASE_PATH } from "../lib/base";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "../ui/button";
-import { cn } from "../ui/cn";
+import { cn, mergeStylexProps, mergeStylexClassName } from "../ui/cn";
 import {
 	composerBox,
 	composerBoxExpanded,
@@ -13,6 +13,253 @@ import {
 } from "../lib/composer-classes";
 import { noAutofill } from "../lib/composer-autofill";
 import { IconArrowUp } from "./icons";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	inlineBlock: {
+			display: "inline-block"
+	},
+	h18px: {
+			height: "18px"
+	},
+	w18px: {
+			width: "18px"
+	},
+	alignTextBottom: {
+			verticalAlign: "text-bottom"
+	},
+	roundedSm: {
+			borderRadius: "calc(4px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	bgAccentSoft: {
+			backgroundColor: "var(--accent-soft)"
+	},
+	px1: {
+			paddingInline: "4px"
+	},
+	fontMedium: {
+			fontWeight: "var(--font-weight-medium)"
+	},
+	textAccent: {
+			color: "var(--accent-ink)"
+	},
+	textLink: {
+			color: "var(--link)"
+	},
+	underline: {
+			textDecorationLine: "underline"
+	},
+	underlineOffset2: {
+			textUnderlineOffset: "2px"
+	},
+	whitespacePreWrap: {
+			whiteSpace: "pre-wrap"
+	},
+	breakWords: {
+			overflowWrap: "break-word"
+	},
+	leadingSnug: {
+			lineHeight: "var(--leading-snug)"
+	},
+	textFg: {
+			color: "var(--text)"
+	},
+	mt1: {
+			marginTop: "4px"
+	},
+	flex: {
+			display: "flex"
+	},
+	flexWrap: {
+			flexWrap: "wrap"
+	},
+	gap1: {
+			gap: "4px"
+	},
+	inlineFlex: {
+			display: "inline-flex"
+	},
+	itemsCenter: {
+			alignItems: "center"
+	},
+	roundedFull: {
+			borderRadius: "calc(infinity * 1px)"
+	,
+		cornerShape: "round"},
+	border: {
+			borderStyle: "solid",
+			borderWidth: "1px"
+	},
+	borderLine: {
+			borderColor: "var(--border)"
+	},
+	bgPanel: {
+			backgroundColor: "var(--bg-panel)"
+	},
+	px15: {
+			paddingInline: "6px"
+	},
+	py05: {
+			paddingBlock: "2px"
+	},
+	leadingNone: {
+			lineHeight: "1"
+	},
+	textDim: {
+			color: "var(--text-dim)"
+	},
+	h14px: {
+			height: "14px"
+	},
+	w14px: {
+			width: "14px"
+	},
+	mt05: {
+			marginTop: "2px"
+	},
+	h7: {
+			height: "28px"
+	},
+	w7: {
+			width: "28px"
+	},
+	flexShrink0: {
+			flexShrink: "0"
+	},
+	roundedMd: {
+			borderRadius: "calc(7px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	justifyCenter: {
+			justifyContent: "center"
+	},
+	bgActive: {
+			backgroundColor: "var(--bg-active)"
+	},
+	textXs: {
+			fontSize: "var(--type-label)",
+			lineHeight: "var(--tw-leading,var(--text-xs--line-height))"
+	},
+	fontSemibold: {
+			fontWeight: "var(--font-weight-semibold)"
+	},
+	minW0: {
+			minWidth: "0"
+	},
+	flex1: {
+			flex: "1"
+	},
+	itemsBaseline: {
+			alignItems: "baseline"
+	},
+	gap2: {
+			gap: "8px"
+	},
+	textFaint: {
+			color: "var(--text-faint)"
+	},
+	borderL2: {
+			borderLeftStyle: "solid",
+			borderLeftWidth: "2px"
+	},
+	pl3: {
+			paddingLeft: "12px"
+	},
+	py1: {
+			paddingBlock: "4px"
+	},
+	minH0: {
+			minHeight: "0"
+	},
+	overflowYAuto: {
+			overflowY: "auto"
+	},
+	mxAuto: {
+			marginInline: "auto"
+	},
+	wFull: {
+			width: "100%"
+	},
+	maxW760px: {
+			maxWidth: "760px"
+	},
+	px5: {
+			paddingInline: "20px"
+	},
+	py4: {
+			paddingBlock: "16px"
+	},
+	mb3: {
+			marginBottom: "12px"
+	},
+	py8: {
+			paddingBlock: "32px"
+	},
+	textCenter: {
+			textAlign: "center"
+	},
+	textSm: {
+			fontSize: "var(--type-label)",
+			lineHeight: "var(--tw-leading,var(--text-sm--line-height))"
+	},
+	py2: {
+			paddingBlock: "8px"
+	},
+	textRed: {
+			color: "var(--red)"
+	},
+	maxWCalcVarSessionCol40px: {
+			maxWidth: "calc(var(--session-col) + 40px)"
+	},
+	shrink0: {
+			flexShrink: "0"
+	},
+	pt1: {
+			paddingTop: "4px"
+	},
+	pb4: {
+			paddingBottom: "16px"
+	},
+	grow: {
+			flexGrow: "1"
+	},
+	basis0: {
+			flexBasis: "0"
+	},
+	mt2: { marginTop: "8px" },
+	mb0: { marginBottom: "0" },
+	gap25: { gap: "10px" },
+	hFull: { height: "100%" },
+	flexCol: { flexDirection: "column" },
+	opacity60: { opacity: 0.6 },
+	textFgPlaceholderFaint: { color: "var(--text)", "::placeholder": { color: "var(--text-faint)" } },
+
+	decorationLine: {
+		"WebkitTextDecorationColor": "var(--border)",
+		"textDecorationColor": "var(--border)"
+	},
+	hoverDecorationCurrent: {
+		"@media (hover: hover)": {
+			":hover": {
+				"textDecorationColor": "currentColor"
+			}
+		}
+	},
+	selectText: {
+		"WebkitUserSelect": "text",
+		"userSelect": "text"
+	},
+	hoverUnderline: {
+		"@media (hover: hover)": {
+			":hover": {
+				"textDecorationLine": "underline"
+			}
+		}
+	},
+});
 
 interface MessageReaction {
 	name: string;
@@ -53,14 +300,14 @@ function MessageText({ text }: { text: string }) {
 					src={m[2]}
 					alt={m[1]}
 					title={m[1]}
-					className="inline-block h-[18px] w-[18px] align-text-bottom"
+					{...stylex.props(sx.inlineBlock, sx.h18px, sx.w18px, sx.alignTextBottom)}
 				/>,
 			);
 		} else if (m[5] !== undefined) {
 			parts.push(
 				<span
 					key={key++}
-					className="rounded-sm bg-accent-soft px-1 font-medium text-accent"
+					{...stylex.props(sx.roundedSm, sx.bgAccentSoft, sx.px1, sx.fontMedium, sx.textAccent)}
 				>
 					{m[5]}
 				</span>,
@@ -73,8 +320,7 @@ function MessageText({ text }: { text: string }) {
 					key={key++}
 					href={href}
 					target="_blank"
-					rel="noreferrer"
-					className="text-link underline decoration-line underline-offset-2 hover:decoration-current"
+					rel="noreferrer" {...mergeStylexProps("", sx.decorationLine, sx.hoverDecorationCurrent, sx.textLink, sx.underline, sx.underlineOffset2)}
 				>
 					{label}
 				</a>,
@@ -84,7 +330,7 @@ function MessageText({ text }: { text: string }) {
 	}
 	if (last < text.length) parts.push(text.slice(last));
 	return (
-		<div className="select-text whitespace-pre-wrap break-words text-body leading-snug text-fg">
+		<div {...mergeStylexProps("", sx.selectText, sx.whitespacePreWrap, sx.breakWords, sx.leadingSnug, sx.textFg, typography.body)}>
 			{parts}
 		</div>
 	);
@@ -93,19 +339,19 @@ function MessageText({ text }: { text: string }) {
 function ReactionPills({ reactions }: { reactions?: MessageReaction[] }) {
 	if (!reactions?.length) return null;
 	return (
-		<div className="mt-1 flex flex-wrap gap-1">
+		<div {...stylex.props(sx.mt1, sx.flex, sx.flexWrap, sx.gap1)}>
 			{reactions.map((r) => (
 				<span
 					key={r.name}
 					title={`:${r.name}:`}
-					className="inline-flex items-center gap-1 rounded-full border border-line bg-panel px-1.5 py-0.5 text-meta leading-none text-dim"
+					{...stylex.props(sx.inlineFlex, sx.itemsCenter, sx.gap1, sx.roundedFull, sx.border, sx.borderLine, sx.bgPanel, sx.px15, sx.py05, sx.leadingNone, sx.textDim, typography.meta)}
 				>
 					{r.url ? (
-						<img src={r.url} alt={r.name} className="h-[14px] w-[14px]" />
+						<img src={r.url} alt={r.name} {...stylex.props(sx.h14px, sx.w14px)} />
 					) : (
-						<span className="text-label">{r.emoji || `:${r.name}:`}</span>
+						<span {...stylex.props(typography.label)}>{r.emoji || `:${r.name}:`}</span>
 					)}
-					<span className="font-medium">{r.count}</span>
+					<span {...stylex.props(sx.fontMedium)}>{r.count}</span>
 				</span>
 			))}
 		</div>
@@ -154,30 +400,29 @@ setLoadingReplies(false);
 	};
 
 	return (
-		<div className={`mb-3 flex gap-2.5 ${depth ? "mt-2 mb-0" : ""}`}>
+		<div {...stylex.props(sx.mb3, sx.flex, sx.gap25, depth > 0 && sx.mt2, depth > 0 && sx.mb0)}>
 			{m.avatarUrl ? (
 				<img
 					src={m.avatarUrl}
 					alt=""
-					className="mt-0.5 h-7 w-7 flex-shrink-0 rounded-md"
+					{...stylex.props(sx.mt05, sx.h7, sx.w7, sx.flexShrink0, sx.roundedMd)}
 				/>
 			) : (
-				<span className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md bg-active text-xs font-semibold text-dim">
+				<span {...stylex.props(sx.mt05, sx.flex, sx.h7, sx.w7, sx.flexShrink0, sx.itemsCenter, sx.justifyCenter, sx.roundedMd, sx.bgActive, sx.textXs, sx.fontSemibold, sx.textDim)}>
 					{m.userName.charAt(0).toUpperCase()}
 				</span>
 			)}
-			<div className="min-w-0 flex-1">
-				<div className="flex items-baseline gap-2">
-					<span className="select-text text-item-title font-semibold text-fg">
+			<div {...stylex.props(sx.minW0, sx.flex1)}>
+				<div {...stylex.props(sx.flex, sx.itemsBaseline, sx.gap2)}>
+					<span {...mergeStylexProps("", sx.selectText, sx.fontSemibold, sx.textFg, typography.itemTitle)}>
 						{m.userName}
 					</span>
-					<span className="text-meta text-faint">{timeOf(m.ts)}</span>
+					<span {...stylex.props(sx.textFaint, typography.meta)}>{timeOf(m.ts)}</span>
 				</div>
 				<MessageText text={m.text} />
 				<ReactionPills reactions={m.reactions} />
 				{depth === 0 && (m.replyCount || 0) > 0 && (
-					<button
-						className="mt-1 text-meta font-medium text-link hover:underline"
+					<button {...mergeStylexProps("", sx.hoverUnderline, sx.mt1, sx.fontMedium, sx.textLink, typography.meta)}
 						onClick={toggleThread}
 					>
 						{expanded
@@ -186,9 +431,9 @@ setLoadingReplies(false);
 					</button>
 				)}
 				{expanded && (
-					<div className="mt-1 border-l-2 border-line pl-3">
+					<div {...stylex.props(sx.mt1, sx.borderL2, sx.borderLine, sx.pl3)}>
 						{loadingReplies ? (
-							<div className="py-1 text-xs text-faint">Loading thread…</div>
+							<div {...stylex.props(sx.py1, sx.textXs, sx.textFaint)}>Loading thread…</div>
 						) : (
 							(replies || []).map((r) => (
 								<MessageRow
@@ -346,19 +591,19 @@ setSending(false);
 	}
 
 	return (
-		<div className={`flex h-full min-h-0 flex-col ${className || ""}`}>
+		<div {...mergeStylexProps(className, sx.flex, sx.hFull, sx.minH0, sx.flexCol)}>
 			<div
 				ref={scrollRef}
-				className="min-h-0 flex-1 overflow-y-auto"
+				{...stylex.props(sx.minH0, sx.flex1, sx.overflowYAuto)}
 				onScroll={(e) => {
 					const el = e.currentTarget;
 					stickBottomRef.current =
 						el.scrollHeight - el.scrollTop - el.clientHeight < 80;
 				}}
 			>
-				<div className="mx-auto w-full max-w-[760px] px-5 py-4">
+				<div {...stylex.props(sx.mxAuto, sx.wFull, sx.maxW760px, sx.px5, sx.py4)}>
 					{hasMore && (
-						<div className="mb-3 flex justify-center">
+						<div {...stylex.props(sx.mb3, sx.flex, sx.justifyCenter)}>
 							<Button
 								size="sm"
 								onClick={loadOlder}
@@ -369,11 +614,11 @@ setSending(false);
 						</div>
 					)}
 					{loading ? (
-						<div className="py-8 text-center text-sm text-faint">
+						<div {...stylex.props(sx.py8, sx.textCenter, sx.textSm, sx.textFaint)}>
 							Loading channel…
 						</div>
 					) : messages.length === 0 ? (
-						<div className="py-8 text-center text-sm text-faint">
+						<div {...stylex.props(sx.py8, sx.textCenter, sx.textSm, sx.textFaint)}>
 							No recent messages.
 						</div>
 					) : (
@@ -384,33 +629,29 @@ setSending(false);
 				</div>
 			</div>
 			{error && (
-				<div className="mx-auto w-full max-w-[760px] px-5 py-2 text-xs text-red">
+				<div {...stylex.props(sx.mxAuto, sx.wFull, sx.maxW760px, sx.px5, sx.py2, sx.textXs, sx.textRed)}>
 					{error}
 				</div>
 			)}
 			{/* Same visual family as the sessions Composer (lib/composer-classes) —
 			    rounded card, borderless textarea, circular accent send — sized down
 			    for a chat channel. */}
-			<div className="mx-auto w-full max-w-[calc(var(--session-col)+40px)] shrink-0 px-5 pt-1 pb-4">
+			<div {...stylex.props(sx.mxAuto, sx.wFull, sx.maxWCalcVarSessionCol40px, sx.shrink0, sx.px5, sx.pt1, sx.pb4)}>
 				{/* `composer` stays as a hook: base.css and legacy.css key phone
 				    keyboard/shadow behaviour off the class name. */}
 				<div
-					className={cn(
+					{...mergeStylexProps(cn(
 						"composer",
 						composerBox,
 						composerBoxExpanded,
-						!asUser && "opacity-60",
-					)}
+					), !asUser && sx.opacity60)}
 				>
 					<textarea
-						// `composer-textarea` stays as a class NAME hook (the sidebar
-						// swipe guard and SessionViewer's global keys look for it).
-						className={cn(
+						{...mergeStylexProps(cn(
 							"composer-textarea",
 							composerTextarea,
 							composerTextareaPadding,
-							"text-fg placeholder:text-faint",
-						)}
+						), sx.textFgPlaceholderFaint)}
 						style={{ minHeight: 48 }}
 						placeholder={
 							asUser
@@ -430,7 +671,7 @@ setSending(false);
 						{...noAutofill}
 					/>
 					<div className={composerToolbar}>
-						<div className="shrink-0 grow basis-0" />
+						<div {...stylex.props(sx.shrink0, sx.grow, sx.basis0)} />
 						<button
 							className={cn(composerSend, composerSendDefault)}
 							onClick={send}

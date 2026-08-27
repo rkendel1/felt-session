@@ -287,6 +287,9 @@
 	   button and .pr-bar-btn-solid already paint ink-on-paper, each with its own
 	   comment explaining that the red accent shouted. */
 	--accent: var(--text);
+	/* Readable accent ink defaults to the fill when no named accent has been
+	   chosen yet; html[data-accent] supplies hue-specific light/dark ink. */
+	--accent-ink: var(--accent);
 	/* What sits ON an --accent fill: its inverse. Was a hardcoded #fff at every
 	   call site, which is white-on-white the moment the accent becomes ink. */
 	--on-accent: var(--bg);
@@ -373,6 +376,50 @@
 	--chip-ask-fg: #e3b341;
 	--mono: "SF Mono", ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
 	--sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
+	/* StyleX owns the small stock-theme substrate that converted declarations
+	   still reference. These values used to arrive incidentally from
+	   tailwindcss/theme.css; keeping them here makes the component sheet
+	   independent of Tailwind without changing a computed value. */
+	--font-sans: var(--sans);
+	--font-weight-normal: 400;
+	--font-weight-medium: 500;
+	--font-weight-semibold: 600;
+	--font-weight-bold: 700;
+	--leading-tight: 1.25;
+	--leading-snug: 1.375;
+	--leading-normal: 1.5;
+	--leading-relaxed: 1.625;
+	--text-xs--line-height: calc(1 / 0.75);
+	--text-sm--line-height: calc(1.25 / 0.875);
+	--text-base--line-height: calc(1.5 / 1);
+	--text-4xl: 2.25rem;
+	--text-4xl--line-height: calc(2.5 / 2.25);
+	--tracking-wide: 0.025em;
+	--tracking-wider: 0.05em;
+	--container-xs: 20rem;
+	--container-sm: 24rem;
+	--container-md: 28rem;
+	--aspect-video: 16 / 9;
+	--blur-xl: 24px;
+	--color-white: #fff;
+	--color-black: #000;
+	--neutral-mid: #808080;
+	--radius-control: calc(12px * var(--rf));
+	--radius-row: calc(12px * var(--rf));
+	--radius-popup: calc(16px * var(--rf));
+	--radius-xs: calc(2px * var(--rf));
+	--radius-sm: calc(4px * var(--rf));
+	--radius-md: calc(7px * var(--rf));
+	--radius-lg: calc(14px * var(--rf));
+	--radius-xl: calc(18px * var(--rf));
+	--radius-2xl: calc(22px * var(--rf));
+	--radius-avatar: calc(32% * var(--rp));
+	--animate-spin: spin 1s linear infinite;
+	--animate-pulse: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+	--smooth-shadow-color: black;
+	--tw-gradient-from-position: 0%;
+	--tw-gradient-via-position: 50%;
+	--tw-gradient-to-position: 100%;
 	/* The web keeps desktop's compact metrics, while a phone promotes every role
 	   one rung. These are real custom properties, rather than values written
 	   directly into Tailwind's @theme block, so the same utility can follow the
@@ -1991,7 +2038,7 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	margin: 8px 0;
 	border: 1px solid var(--border);
 	border-radius: calc(7px * var(--rf)); corner-shape: var(--cs);
-	background: var(--bg-surface);
+	background: var(--bg);
 	overflow: hidden;
 }
 .markdown .md-details > summary {
@@ -2872,6 +2919,13 @@ html[data-theme="light"] span.commit-ref:hover {
    rule left in legacy.css to carry them, and that file is being emptied.
    Grep for BOTH spellings before assuming one of these is unused: the
    underscores in an arbitrary value hide the name from a naive search. */
+
+@keyframes spin {
+	to { transform: rotate(360deg); }
+}
+@keyframes pulse {
+	50% { opacity: 0.5; }
+}
 
 @keyframes composer-agents-pulse {
 	0%, 100% { opacity: 1; }

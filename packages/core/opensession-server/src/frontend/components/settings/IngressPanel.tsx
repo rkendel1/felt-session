@@ -1,3 +1,5 @@
+import { mergeStylexProps, mergeStylexOverrideClassName } from "../../ui/cn";
+import { utilityClassName } from "../../ui/cn";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import {
 	configurePublicIngressCloudflare,
@@ -50,6 +52,312 @@ import { toast } from "../../ui/toast";
 import { BrandMark } from "../BrandTile";
 import { IconCopy, IconGlobe, IconServer, IconX } from "../icons";
 import { SetupRestart } from "../SetupRestart";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	flex: {
+			display: "flex"
+	},
+	minW0: {
+			minWidth: "0"
+	},
+	itemsCenter: {
+			alignItems: "center"
+	},
+	gap1: {
+			gap: "4px"
+	},
+	roundedControl: {
+			borderRadius: "calc(12px * var(--rf))",
+
+		cornerShape: "var(--cs)",},
+	bgSurface: {
+			backgroundColor: "var(--bg)"
+	},
+	py1: {
+			paddingBlock: "4px"
+	},
+	pr1: {
+			paddingRight: "4px"
+	},
+	pl3: {
+			paddingLeft: "calc(4px * 3)"
+	},
+	flex1: {
+			flex: "1"
+	},
+	overflowXAuto: {
+			overflowX: "auto"
+	},
+	whitespacePreWrap: {
+			whiteSpace: "pre-wrap"
+	},
+	fontMono: {
+			fontFamily: "var(--mono)"
+	},
+	textFg: {
+			color: "var(--text)"
+	},
+	shrink0: {
+			flexShrink: "0"
+	},
+	relative: {
+			position: "relative"
+	},
+	overflowHidden: {
+			overflow: "hidden"
+	},
+	roundedXl: {
+			borderRadius: "calc(18px * var(--rf))",
+
+		cornerShape: "var(--cs)",},
+	border: {
+			borderStyle: "solid",
+			borderWidth: "1px"
+	},
+	borderCodeWellLine: {
+			borderColor: "var(--code-well-line)"
+	},
+	bgCodeWell: {
+			backgroundColor: "var(--code-well)"
+	},
+	py25: {
+			paddingBlock: "calc(4px * 2.5)"
+	},
+	pr14: {
+			paddingRight: "calc(4px * 14)"
+	},
+	pl35: {
+			paddingLeft: "calc(4px * 3.5)"
+	},
+	textCodeWellInk: {
+			color: "var(--code-well-ink)"
+	},
+	absolute: {
+			position: "absolute"
+	},
+	top1: {
+			top: "4px"
+	},
+	right1: {
+			right: "4px"
+	},
+	OverflowWrapAnywhere: {
+			overflowWrap: "anywhere"
+	},
+	grid: {
+			display: "grid"
+	},
+	listNone: {
+			listStyleType: "none"
+	},
+	gap3: {
+			gap: "calc(4px * 3)"
+	},
+	p0: {
+			padding: "0"
+	},
+	textDim: {
+			color: "var(--text-dim)"
+	},
+	gap25: {
+			gap: "calc(4px * 2.5)"
+	},
+	size6: {
+			width: "calc(4px * 6)",
+			height: "calc(4px * 6)"
+	},
+	justifyCenter: {
+			justifyContent: "center"
+	},
+	roundedFull: {
+			borderRadius: "calc(infinity * 1px)",
+
+		cornerShape: "round",},
+	fontSemibold: {
+			fontWeight: "var(--font-weight-semibold)"
+	},
+	pt05: {
+			paddingTop: "calc(4px * 0.5)"
+	},
+	fontMedium: {
+			fontWeight: "var(--font-weight-medium)"
+	},
+	mt1: {
+			marginTop: "4px"
+	},
+	gap2: {
+			gap: "calc(4px * 2)"
+	},
+	leadingRelaxed: {
+			lineHeight: "var(--leading-relaxed)"
+	},
+	mb5: {
+			marginBottom: "calc(4px * 5)"
+	},
+	gridCols2: {
+			gridTemplateColumns: "repeat(2, minmax(0, 1fr))"
+	},
+	flexWrap: {
+			flexWrap: "wrap"
+	},
+	justifyBetween: {
+			justifyContent: "space-between"
+	},
+	gapX3: {
+			columnGap: "calc(4px * 3)"
+	},
+	mt15: {
+			marginTop: "calc(4px * 1.5)"
+	},
+	block: {
+			display: "block"
+	},
+	breakAll: {
+			wordBreak: "break-all"
+	},
+	mb0: {
+			marginBottom: "0"
+	},
+	minH11: {
+			minHeight: "calc(4px * 11)"
+	},
+	cursorPointer: {
+			cursor: "pointer"
+	},
+	px4: {
+			paddingInline: "calc(4px * 4)"
+	},
+	py3: {
+			paddingBlock: "calc(4px * 3)"
+	},
+	borderT: {
+			borderTopStyle: "solid",
+			borderTopWidth: "1px"
+	},
+	borderLine: {
+			borderColor: "var(--border)"
+	},
+	wFit: {
+			width: "fit-content"
+	},
+	textLink: {
+			color: "var(--link)"
+	},
+	fontNormal: {
+			fontWeight: "var(--font-weight-normal)"
+	},
+	textFaint: {
+			color: "var(--text-faint)"
+	},
+	roundedLg: {
+			borderRadius: "calc(14px * var(--rf))",
+
+		cornerShape: "var(--cs)",},
+	p3: {
+			padding: "calc(4px * 3)"
+	},
+	mt3: {
+			marginTop: "calc(4px * 3)"
+	},
+	gap4: {
+			gap: "calc(4px * 4)"
+	},
+	mt2: {
+			marginTop: "calc(4px * 2)"
+	},
+	px1: {
+			paddingInline: "4px"
+	},
+	mt05: {
+			marginTop: "calc(4px * 0.5)"
+	},
+	contentStart: {
+			alignContent: "flex-start"
+	},
+	gap35: {
+			gap: "calc(4px * 3.5)"
+	},
+	underline: {
+			textDecorationLine: "underline"
+	},
+	underlineOffset2: {
+			textUnderlineOffset: "2px"
+	},
+	pt35: {
+			paddingTop: "calc(4px * 3.5)"
+	},
+	/** A step with its own controls splits into prose + controls on desktop. */
+	firstPt0: {
+		":first-child": {
+			"paddingTop": "0"
+		}
+	},
+	lastPb0: {
+		":last-child": {
+			"paddingBottom": "0"
+		}
+	},
+	py4: {
+			paddingBlock: "16px"
+	},
+	/** The connection-method header lays its prose beside the control on a
+	 *  desktop width, and stacks them on a phone. */
+	desktopRow: {
+		"@media (min-width: 721px)": {
+			"flexDirection": "row",
+			"alignItems": "center",
+			"justifyContent": "space-between"
+		}
+	},
+	phoneFlex1: {
+		"@media (max-width: 720px)": {
+			"flex": "1"
+		}
+	},
+	phoneJustifyCenter: {
+		"@media (max-width: 720px)": {
+			"justifyContent": "center"
+		}
+	},
+	flexCol: {
+			flexDirection: "column"
+	},
+	gap15: {
+			gap: "6px"
+	},
+	bgFg: {
+			backgroundColor: "var(--text)"
+	},
+	textBg: {
+			color: "var(--bg)"
+	},
+	w52: {
+			width: "208px"
+	},
+	/** On a desktop these panels sit on the panel surface; a phone keeps the
+	 *  raised one so the cards stay legible against the page. */
+	desktopBgPanel: {
+		"@media (min-width: 721px)": {
+			"backgroundColor": "var(--bg-panel)"
+		}
+	},
+	desktopStepColumns: {
+		"@media (min-width: 721px)": {
+			"display": "grid",
+			"gridTemplateColumns": "minmax(0,0.8fr) minmax(20rem,1.2fr)",
+			"alignItems": "flex-start",
+			"gap": "24px"
+		}
+	},
+	desktopMt0: {
+		"@media (min-width: 721px)": {
+			"marginTop": "0"
+		}
+	},
+});
 
 const EMPTY_DRAFTS: Record<IngressExposure, string> = {
 	cloudflare: "",
@@ -59,8 +367,8 @@ const EMPTY_DRAFTS: Record<IngressExposure, string> = {
 function CodeBlock({ children }: { children: string }) {
 	const { copied, copy } = useCopy();
 	return (
-		<div className="flex min-w-0 items-center gap-1 rounded-control bg-surface py-1 pr-1 pl-3">
-			<code className="min-w-0 flex-1 select-all overflow-x-auto whitespace-pre-wrap font-mono text-meta text-fg">
+		<div {...stylex.props(sx.flex, sx.minW0, sx.itemsCenter, sx.gap1, sx.roundedControl, sx.bgSurface, sx.py1, sx.pr1, sx.pl3)}>
+			<code {...mergeStylexProps("select-all", sx.minW0, sx.flex1, sx.overflowXAuto, sx.whitespacePreWrap, sx.fontMono, sx.textFg, typography.meta)} >
 				{children}
 			</code>
 			<Button
@@ -68,7 +376,7 @@ function CodeBlock({ children }: { children: string }) {
 				size="sm"
 				aria-label={copied ? "Copied" : "Copy command"}
 				icon={<CopyCheck copied={copied} size={15} idle={<IconCopy size={15} />} />}
-				className="shrink-0 phone:size-10 phone:justify-center phone:p-0"
+				className={mergeStylexOverrideClassName("phone:size-10 phone:justify-center phone:p-0", sx.shrink0)}
 				onClick={() => copy(children, { toast: "Copied" })}
 			/>
 		</div>
@@ -80,22 +388,22 @@ function CodeBlock({ children }: { children: string }) {
 function ConfigCodeBlock({ code }: { code: string }) {
 	const { copied, copy } = useCopy();
 	return (
-		<div className="relative overflow-hidden rounded-xl border border-code-well-line bg-code-well py-2.5 pr-14 pl-3.5 text-code-well-ink">
+		<div {...stylex.props(sx.relative, sx.overflowHidden, sx.roundedXl, sx.border, sx.borderCodeWellLine, sx.bgCodeWell, sx.py25, sx.pr14, sx.pl35, sx.textCodeWellInk)}>
 			<Button
 				variant="ghost"
 				size="sm"
 				aria-label={copied ? "Copied" : "Copy configuration"}
 				icon={<CopyCheck copied={copied} size={15} idle={<IconCopy size={15} />} />}
-				className="absolute top-1 right-1 shrink-0 phone:size-10 phone:justify-center phone:p-0"
+				className={mergeStylexOverrideClassName("phone:size-10 phone:justify-center phone:p-0", sx.absolute, sx.top1, sx.right1, sx.shrink0)}
 				onClick={() => copy(code, { toast: "Copied" })}
 			/>
-			<pre className="m-0 overflow-x-auto font-mono text-meta whitespace-pre-wrap [overflow-wrap:anywhere]">{code}</pre>
+			<pre {...mergeStylexProps("m-0", sx.overflowXAuto, sx.fontMono, sx.whitespacePreWrap, sx.OverflowWrapAnywhere, typography.meta)} >{code}</pre>
 		</div>
 	);
 }
 
 function SetupSteps({ children }: { children: React.ReactNode }) {
-	return <ol className="m-0 grid list-none divide-y divide-line p-0 text-supporting text-dim">{children}</ol>;
+	return <ol {...mergeStylexProps(utilityClassName("m-0 list-none divide-y divide-line"), sx.grid, sx.p0, sx.textDim, typography.supporting)}>{children}</ol>;
 }
 
 function SetupStep({
@@ -110,16 +418,16 @@ function SetupStep({
 	controls?: React.ReactNode;
 }) {
 	return (
-		<li className="grid grid-cols-[24px_minmax(0,1fr)] gap-2.5 py-4 first:pt-0 last:pb-0">
-			<span className="flex size-6 items-center justify-center rounded-full bg-fg text-meta font-semibold text-bg">
+		<li {...mergeStylexProps("grid-cols-[24px_minmax(0,1fr)]", sx.grid, sx.gap25, sx.py4, sx.firstPt0, sx.lastPb0)}>
+			<span {...stylex.props(sx.flex, sx.size6, sx.itemsCenter, sx.justifyCenter, sx.roundedFull, sx.bgFg, sx.fontSemibold, sx.textBg, typography.meta)}>
 				{number}
 			</span>
-			<div className={cn("min-w-0 pt-0.5", controls && "desktop:grid desktop:grid-cols-[minmax(0,1fr)_18rem] desktop:items-start desktop:gap-6")}>
-				<div className="min-w-0">
-					<div className="font-medium text-fg">{title}</div>
-					{children && <div className="mt-1 grid gap-2 leading-relaxed">{children}</div>}
+			<div {...stylex.props(sx.minW0, sx.pt05, Boolean(controls) && sx.desktopStepColumns)}>
+				<div {...stylex.props(sx.minW0)}>
+					<div {...stylex.props(sx.fontMedium, sx.textFg)}>{title}</div>
+					{children && <div {...stylex.props(sx.mt1, sx.grid, sx.gap2, sx.leadingRelaxed)}>{children}</div>}
 				</div>
-				{controls && <div className="mt-3 grid min-w-0 gap-3 desktop:mt-0">{controls}</div>}
+				{controls && <div {...stylex.props(sx.mt3, sx.grid, sx.minW0, sx.gap3, sx.desktopMt0)}>{controls}</div>}
 			</div>
 		</li>
 	);
@@ -187,11 +495,11 @@ function PrivateAppSetup({
 	return (
 		<>
 			{!onboarding && savedDomain && (
-				<SettingCard className="bg-raised desktop:bg-panel">
+				<SettingCard className={cn(utilityClassName("bg-raised"), mergeStylexOverrideClassName("", sx.desktopBgPanel))}>
 					<SettingRow>
 						<SettingRowText>
 							<SettingRowTitle>Current address</SettingRowTitle>
-							<div className="selectable mt-1 break-all font-mono text-supporting text-dim">{settings.app.publicBaseUrl}</div>
+							<div {...mergeStylexProps("selectable", sx.mt1, sx.breakAll, sx.fontMono, sx.textDim, typography.supporting)} >{settings.app.publicBaseUrl}</div>
 						</SettingRowText>
 					</SettingRow>
 					{settings.app.domain.certificateExpiresAt && (
@@ -207,73 +515,77 @@ function PrivateAppSetup({
 					)}
 				</SettingCard>
 			)}
-			<SettingsForm className={cn("bg-raised desktop:bg-panel", onboarding ? "mt-0" : "mt-3")}>
+			<SettingsForm className={cn(
+				utilityClassName("bg-raised"),
+				mergeStylexOverrideClassName("", sx.desktopBgPanel),
+				onboarding ? utilityClassName("mt-0") : utilityClassName("mt-3"),
+			)}>
 				{status === "ready" && !settings.app.domain.credentialConfigured && (
-					<SettingsHint className="m-0">This address is already working. Its certificate is managed outside Open Session.</SettingsHint>
+					<SettingsHint className={utilityClassName("m-0")}>This address is already working. Its certificate is managed outside Open Session.</SettingsHint>
 				)}
 				<SetupSteps>
 					<SetupStep
 						number={1}
 						title="Choose the app domain"
 						controls={
-							<SettingsField className="mb-0">
+							<SettingsField className={mergeStylexOverrideClassName("", sx.mb0)}>
 								Domain
 								<Input value={domain} placeholder="os.example.com" disabled={busy} autoCapitalize="none" spellCheck={false} onChange={(event) => onDomainChange(event.target.value)} />
 							</SettingsField>
 						}
 					>
-						<p className="m-0">Keep it different from the public callback domain.</p>
+						<p className={utilityClassName("m-0")}>Keep it different from the public callback domain.</p>
 					</SetupStep>
 					<SetupStep
 						number={2}
 						title="Authorize the DNS provider"
 						controls={
 							<>
-								<div className="flex min-w-0 flex-col gap-1.5">
-									<div className="text-label font-medium text-dim">DNS provider</div>
+								<div {...stylex.props(sx.flex, sx.minW0, sx.flexCol, sx.gap15)}>
+									<div {...mergeStylexProps("", sx.fontMedium, sx.textDim, typography.label)}>DNS provider</div>
 									<Segmented
 										label="Private domain DNS provider"
 										value={provider}
 										onValueChange={(value) => onProviderChange(value as "cloudflare" | "vercel")}
-										className="w-full"
+										className={utilityClassName("w-full")}
 									>
-										<SegmentedOption value="cloudflare" disabled={busy} className="flex-1 justify-center phone:min-h-11">
-											<BrandMark name="cloudflare" size={16} className="shrink-0" />
+										<SegmentedOption value="cloudflare" disabled={busy} className={utilityClassName("flex-1 justify-center phone:min-h-11")}>
+											<BrandMark name="cloudflare" size={16} className={utilityClassName("shrink-0")} />
 											Cloudflare
 										</SegmentedOption>
-										<SegmentedOption value="vercel" disabled={busy} className="flex-1 justify-center phone:min-h-11">
-											<BrandMark name="vercel" size={15} className="shrink-0" />
+										<SegmentedOption value="vercel" disabled={busy} className={utilityClassName("flex-1 justify-center phone:min-h-11")}>
+											<BrandMark name="vercel" size={15} className={utilityClassName("shrink-0")} />
 											Vercel
 										</SegmentedOption>
 									</Segmented>
 								</div>
-								<SettingsField className="mb-0">
+								<SettingsField className={mergeStylexOverrideClassName("", sx.mb0)}>
 									Certificate email
 									<Input type="email" value={email} placeholder={managedCredential && settings.app.domain.certificateEmailConfigured ? "Leave blank to keep the saved email" : "you@example.com"} disabled={busy} autoCapitalize="none" spellCheck={false} onChange={(event) => onEmailChange(event.target.value)} />
 								</SettingsField>
-								<SettingsField className="mb-0">
+								<SettingsField className={mergeStylexOverrideClassName("", sx.mb0)}>
 									{provider === "cloudflare" ? "Cloudflare" : "Vercel"} API token
 									<Input type="password" value={apiToken} placeholder={managedCredential ? "Leave blank to keep the saved token" : "Paste the scoped token"} disabled={busy} autoComplete="off" onChange={(event) => onTokenChange(event.target.value)} />
 								</SettingsField>
 								{provider === "vercel" && (
-									<SettingsField className="mb-0">
-										Team ID <span className="font-normal text-faint">Optional</span>
+									<SettingsField className={mergeStylexOverrideClassName("", sx.mb0)}>
+										Team ID <span {...stylex.props(sx.fontNormal, sx.textFaint)}>Optional</span>
 										<Input value={teamId} placeholder="team_…" disabled={busy} autoCapitalize="none" spellCheck={false} onChange={(event) => onTeamIdChange(event.target.value)} />
 									</SettingsField>
 								)}
 							</>
 						}
 					>
-						<p className="m-0">
+						<p className={utilityClassName("m-0")}>
 							{provider === "cloudflare"
-								? <>Create a token with <strong className="font-medium text-fg">Zone:DNS Edit</strong> and <strong className="font-medium text-fg">Zone:Zone Read</strong> for this zone.</>
+								? <>Create a token with <strong {...stylex.props(sx.fontMedium, sx.textFg)}>Zone:DNS Edit</strong> and <strong {...stylex.props(sx.fontMedium, sx.textFg)}>Zone:Zone Read</strong> for this zone.</>
 								: <>Create a Vercel token with access to the team that owns this domain.</>}
 							{" "}Open Session protects it with server file permissions and never returns it to the browser.
 						</p>
-						<a className="w-fit text-link hover:underline" href={provider === "cloudflare" ? "https://dash.cloudflare.com/profile/api-tokens" : "https://vercel.com/account/settings/tokens"} target="_blank" rel="noreferrer">Create {provider === "cloudflare" ? "Cloudflare" : "Vercel"} token</a>
+						<a className={utilityClassName("w-fit text-link hover:underline")} href={provider === "cloudflare" ? "https://dash.cloudflare.com/profile/api-tokens" : "https://vercel.com/account/settings/tokens"} target="_blank" rel="noreferrer">Create {provider === "cloudflare" ? "Cloudflare" : "Vercel"} token</a>
 					</SetupStep>
 					<SetupStep number={3} title="Set up and verify">
-						<p className="m-0">Open Session creates the DNS-only A record, requests a Let’s Encrypt certificate with DNS-01, configures Caddy, and checks the private address. It checks renewal daily.</p>
+						<p className={utilityClassName("m-0")}>Open Session creates the DNS-only A record, requests a Let’s Encrypt certificate with DNS-01, configures Caddy, and checks the private address. It checks renewal daily.</p>
 						{(!settings.custom.caddyInstalled || !settings.app.domain.legoInstalled) && (
 							<>
 								<InlineAlert>Install Caddy and the certificate helper first, then reload this page.</InlineAlert>
@@ -286,48 +598,48 @@ function PrivateAppSetup({
 						{status === "unreachable" && ingressHostname(domain) === ingressHostname(savedDomain) && (
 							<InlineAlert>DNS points to this server, but the HTTPS app is not reachable. Verify Caddy and the certificate, then try again.</InlineAlert>
 						)}
-				<SettingsFormActions className="absolute inset-x-0 bottom-0 z-10 m-0 border-t border-line bg-raised px-5 py-4 phone:flex-col-reverse phone:bg-surface phone:px-4">
-					<Button variant="soft" disabled={busy || !savedDomain || !settings.canManage} className="phone:min-h-11 phone:w-full phone:justify-center" onClick={onVerify}>
+				<SettingsFormActions className={utilityClassName("absolute inset-x-0 bottom-0 z-10 m-0 border-t border-line bg-raised px-5 py-4 phone:flex-col-reverse phone:bg-surface phone:px-4")}>
+					<Button variant="soft" disabled={busy || !savedDomain || !settings.canManage} className={utilityClassName("phone:min-h-11 phone:w-full phone:justify-center")} onClick={onVerify}>
 						{action === "verify" ? "Checking…" : "Verify address"}
 					</Button>
-					<Button variant="primary" disabled={busy || managedInputMissing || !dnsRecord || !settings.custom.caddyInstalled || !settings.app.domain.legoInstalled || !settings.canManage} className="phone:min-h-11 phone:w-full phone:justify-center" onClick={onSetup}>
+					<Button variant="primary" disabled={busy || managedInputMissing || !dnsRecord || !settings.custom.caddyInstalled || !settings.app.domain.legoInstalled || !settings.canManage} className={utilityClassName("phone:min-h-11 phone:w-full phone:justify-center")} onClick={onSetup}>
 						{action === "setup" ? "Setting up…" : managedCredential ? "Update setup" : "Set up private domain"}
 					</Button>
 				</SettingsFormActions>
-				<details className="rounded-lg bg-surface p-3 text-meta text-dim">
-					<summary className="cursor-pointer font-medium text-fg">Use an externally managed certificate</summary>
-					<div className="mt-3 grid gap-4">
+				<details {...stylex.props(sx.roundedLg, sx.bgSurface, sx.p3, sx.textDim, typography.meta)}>
+					<summary {...stylex.props(sx.cursorPointer, sx.fontMedium, sx.textFg)}>Use an externally managed certificate</summary>
+					<div {...stylex.props(sx.mt3, sx.grid, sx.gap4)}>
 						<SetupSteps>
 							<SetupStep number={1} title="Choose the app domain">
-								<SettingsField className="mb-0">
+								<SettingsField className={mergeStylexOverrideClassName("", sx.mb0)}>
 									Domain
 									<Input value={domain} placeholder="os.example.com" disabled={busy} autoCapitalize="none" spellCheck={false} onChange={(event) => onDomainChange(event.target.value)} />
 								</SettingsField>
 							</SetupStep>
 							<SetupStep number={2} title="Point DNS to Tailscale">
-								<p className="m-0">Add this DNS-only record at your provider. Only devices on your tailnet can connect.</p>
+								<p className={utilityClassName("m-0")}>Add this DNS-only record at your provider. Only devices on your tailnet can connect.</p>
 								{dnsRecord ? <CodeBlock>{dnsRecord}</CodeBlock> : <InlineAlert>Connect this server to Tailscale first, then reload this page.</InlineAlert>}
 							</SetupStep>
 							<SetupStep number={3} title="Install existing TLS files">
-								<p className="m-0">Only use this path when your infrastructure already issues and renews the certificate.</p>
+								<p className={utilityClassName("m-0")}>Only use this path when your infrastructure already issues and renews the certificate.</p>
 								<CodeBlock>{`/etc/opensession/tls/${ingressHostname(domain, "os.example.com")}.crt`}</CodeBlock>
 								<CodeBlock>{`/etc/opensession/tls/${ingressHostname(domain, "os.example.com")}.key`}</CodeBlock>
 							</SetupStep>
 							<SetupStep number={4} title="Configure Caddy">
-								<p className="m-0">Bind Caddy only to the Tailscale address and forward the app to loopback.</p>
+								<p className={utilityClassName("m-0")}>Bind Caddy only to the Tailscale address and forward the app to loopback.</p>
 							</SetupStep>
 						</SetupSteps>
-						<details className="text-meta text-dim">
-							<summary className="cursor-pointer font-medium text-fg">Generated Caddy configuration</summary>
-							<div className="mt-2"><ConfigCodeBlock code={privateAppCaddyConfig(settings, domain)} /></div>
+						<details {...stylex.props(sx.textDim, typography.meta)}>
+							<summary {...stylex.props(sx.cursorPointer, sx.fontMedium, sx.textFg)}>Generated Caddy configuration</summary>
+							<div {...stylex.props(sx.mt2)}><ConfigCodeBlock code={privateAppCaddyConfig(settings, domain)} /></div>
 						</details>
-						<div className="grid gap-2">
-							<div className="text-label font-medium text-dim">Apply Caddy</div>
+						<div {...stylex.props(sx.grid, sx.gap2)}>
+							<div {...stylex.props(sx.fontMedium, sx.textDim, typography.label)}>Apply Caddy</div>
 							<CodeBlock>sudo caddy validate --config /etc/caddy/Caddyfile</CodeBlock>
 							<CodeBlock>sudo systemctl reload caddy</CodeBlock>
 						</div>
 						<SettingsFormActions>
-							<Button variant="primary" disabled={busy || !dirty || !domain.trim() || !dnsRecord || !settings.custom.caddyInstalled || !settings.canManage} className="phone:min-h-11 phone:w-full phone:justify-center" onClick={onSaveManual}>
+							<Button variant="primary" disabled={busy || !dirty || !domain.trim() || !dnsRecord || !settings.custom.caddyInstalled || !settings.canManage} className={utilityClassName("phone:min-h-11 phone:w-full phone:justify-center")} onClick={onSaveManual}>
 								{action === "save" ? "Saving…" : "Save app domain"}
 							</Button>
 						</SettingsFormActions>
@@ -535,7 +847,7 @@ export function IngressPanel({
 		: pendingStatus;
 
 	return (
-		<SettingsPanel className={onboarding ? "mx-auto max-w-[1120px]" : "relative"}>
+		<SettingsPanel className={onboarding ? utilityClassName("mx-auto max-w-[1120px]") : utilityClassName("relative")}>
 			{!onboarding && !embedded && (
 				<SettingsHeader
 					title="Domains and callbacks"
@@ -552,25 +864,25 @@ export function IngressPanel({
 						<SettingRow>
 							<SettingRowText>
 								<SettingRowTitle>Domain</SettingRowTitle>
-								<SettingRowDescription className="selectable break-all font-mono">
+								<SettingRowDescription className={mergeStylexOverrideClassName("selectable", sx.breakAll, sx.fontMono)}>
 									{domainUrl || "No domain configured"}
 								</SettingRowDescription>
 							</SettingRowText>
-							<SettingRowControl className="flex items-center gap-2">
+							<SettingRowControl className={mergeStylexOverrideClassName("", sx.flex, sx.itemsCenter, sx.gap2)}>
 								<StatusChip {...domainStatus} />
-								<Button size="sm" className="phone:min-h-11" disabled={!settings} onClick={() => setSurface("domain")}>Configure</Button>
+								<Button size="sm" className={utilityClassName("phone:min-h-11")} disabled={!settings} onClick={() => setSurface("domain")}>Configure</Button>
 							</SettingRowControl>
 						</SettingRow>
 						<SettingRow>
 							<SettingRowText>
 								<SettingRowTitle>Public callback</SettingRowTitle>
-								<SettingRowDescription className="selectable break-all font-mono">
+								<SettingRowDescription className={mergeStylexOverrideClassName("selectable", sx.breakAll, sx.fontMono)}>
 									{callbackUrl || "No public callback configured"}
 								</SettingRowDescription>
 							</SettingRowText>
-							<SettingRowControl className="flex items-center gap-2">
+							<SettingRowControl className={mergeStylexOverrideClassName("", sx.flex, sx.itemsCenter, sx.gap2)}>
 								<StatusChip {...callbackStatus} />
-								<Button size="sm" className="phone:min-h-11" disabled={!settings} onClick={() => setSurface("callbacks")}>Configure</Button>
+								<Button size="sm" className={utilityClassName("phone:min-h-11")} disabled={!settings} onClick={() => setSurface("callbacks")}>Configure</Button>
 							</SettingRowControl>
 						</SettingRow>
 					</SettingCard>
@@ -585,20 +897,20 @@ export function IngressPanel({
 					>
 						{(dismiss) => (
 							<>
-								<header className="flex shrink-0 items-start gap-3 border-b border-line px-5 py-4 phone:px-4">
-									<div className="min-w-0 flex-1">
-										<h2 className="m-0 text-dialog-title font-semibold text-fg">
+								<header className={utilityClassName("flex shrink-0 items-start gap-3 border-b border-line px-5 py-4 phone:px-4")}>
+									<div className={utilityClassName("min-w-0 flex-1")}>
+										<h2 className={utilityClassName("m-0 text-dialog-title font-semibold text-fg")}>
 											{surface === "domain" ? "Configure domain" : "Configure public callback"}
 										</h2>
-										<p className="m-0 mt-1 text-supporting leading-relaxed text-dim">
+										<p className={utilityClassName("m-0 mt-1 text-supporting leading-relaxed text-dim")}>
 											{surface === "domain"
 												? "Give your team a memorable private address."
 												: "Connect the public endpoint used by webhooks and remote services."}
 										</p>
 									</div>
-									<Button variant="ghost" aria-label="Close" icon={<IconX size={20} />} className="size-10 shrink-0 justify-center p-0 phone:size-11" onClick={dismiss} />
+									<Button variant="ghost" aria-label="Close" icon={<IconX size={20} />} className={utilityClassName("size-10 shrink-0 justify-center p-0 phone:size-11")} onClick={dismiss} />
 								</header>
-								<div className={cn("min-h-0 flex-1 overflow-y-auto overscroll-contain p-5 phone:p-4", surface === "domain" && "pb-24 phone:pb-32")}>
+								<div className={cn(utilityClassName("min-h-0 flex-1 overflow-y-auto overscroll-contain p-5 phone:p-4"), surface === "domain" && utilityClassName("pb-24 phone:pb-32"))}>
 									{error && <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>}
 									{surface === "domain" ? (
 										<PrivateAppSetup
@@ -627,59 +939,59 @@ export function IngressPanel({
 								onSaveManual={() => void runPrivateApp("save", () => savePrivateAppDomain(appDomain), "Private app domain saved")}
 							/>
 					) : (
-					<div className="grid items-start gap-4">
-						<SettingsForm className="m-0 min-w-0 gap-4 bg-raised p-6 desktop:flex-row desktop:bg-panel desktop:items-center desktop:justify-between phone:p-4">
-							<div className="px-1 text-item-title font-semibold text-fg">Connection method</div>
+					<div {...stylex.props(sx.grid, sx.contentStart, sx.gap4)}>
+						<SettingsForm className={cn(utilityClassName("m-0 min-w-0 gap-4 bg-raised p-6 phone:p-4"), mergeStylexOverrideClassName("", sx.desktopRow, sx.desktopBgPanel))}>
+							<div {...mergeStylexProps("text-item-title", sx.px1, sx.fontSemibold, sx.textFg)}>Connection method</div>
 							<Segmented
 								label="Public callback method"
 								value={method}
 								onValueChange={(next) => setMethod(next as IngressExposure)}
-								className="flex w-52 shrink-0 phone:w-full"
+								className={cn(utilityClassName("shrink-0 phone:w-full"), mergeStylexOverrideClassName("", sx.flex, sx.w52))}
 							>
-								<SegmentedOption value="custom" disabled={!!busy || !settings.canManage} className="flex flex-1 justify-center"><IconServer size={14} /> Caddy</SegmentedOption>
-								<SegmentedOption value="cloudflare" disabled={!!busy || !settings.canManage} className="flex flex-1 justify-center"><IconGlobe size={14} /> Cloudflare</SegmentedOption>
+								<SegmentedOption value="custom" disabled={!!busy || !settings.canManage} className={mergeStylexOverrideClassName("", sx.flex, sx.flex1, sx.justifyCenter)}><IconServer size={14} /> Caddy</SegmentedOption>
+								<SegmentedOption value="cloudflare" disabled={!!busy || !settings.canManage} className={mergeStylexOverrideClassName("", sx.flex, sx.flex1, sx.justifyCenter)}><IconGlobe size={14} /> Cloudflare</SegmentedOption>
 							</Segmented>
 						</SettingsForm>
 
-						<SettingsForm className="m-0 min-w-0 gap-4 bg-raised p-6 desktop:bg-panel phone:p-4">
-							<div className="flex items-center justify-between gap-4">
-								<div className="min-w-0 text-item-title font-semibold text-fg">{method === "custom" ? "Caddy" : "Cloudflare"}</div>
-								<div className="shrink-0">
+						<SettingsForm className={cn(utilityClassName("m-0 min-w-0 gap-4 bg-raised p-6 phone:p-4"), mergeStylexOverrideClassName("", sx.desktopBgPanel))}>
+							<div {...stylex.props(sx.flex, sx.itemsCenter, sx.justifyBetween, sx.gap4)}>
+								<div {...mergeStylexProps("text-item-title", sx.minW0, sx.fontSemibold, sx.textFg)}>{method === "custom" ? "Caddy" : "Cloudflare"}</div>
+								<div {...stylex.props(sx.shrink0)}>
 									<StatusChip label={busy === "apply" ? "Setting up" : ingressHealthLabel(selectedHealth)} dot={busy === "apply" ? "var(--yellow)" : ingressHealthDot(selectedHealth)} />
 								</div>
 							</div>
-							<div className="grid min-w-0 content-start gap-3.5">
+							<div {...stylex.props(sx.grid, sx.minW0, sx.contentStart, sx.gap35)}>
 							{method === "cloudflare" && (
 								<>
 									{!settings.cloudflare.installed && (
 										<InlineAlert>
 											Install cloudflared first, then reload this page.
-											<div className="mt-2"><CodeBlock>{"curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh | bash -s -- --cloudflare --no-onboard"}</CodeBlock></div>
+											<div {...stylex.props(sx.mt2)}><CodeBlock>{"curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh | bash -s -- --cloudflare --no-onboard"}</CodeBlock></div>
 										</InlineAlert>
 									)}
 									<SetupSteps>
 										<SetupStep number={1} title="Create a remotely managed tunnel">
-											<p className="m-0">In Cloudflare Zero Trust, open <strong className="font-medium text-fg">Networks → Connectors → Cloudflare Tunnels</strong> and create a Cloudflared tunnel.</p>
-											<a className="w-fit text-link hover:underline" href="https://one.dash.cloudflare.com/" target="_blank" rel="noreferrer">Open Cloudflare Zero Trust</a>
-											<p className="m-0">Use the dashboard rather than <code>cloudflared tunnel create</code>. Connector tokens require a remotely managed tunnel.</p>
+											<p className={utilityClassName("m-0")}>In Cloudflare Zero Trust, open <strong {...stylex.props(sx.fontMedium, sx.textFg)}>Networks → Connectors → Cloudflare Tunnels</strong> and create a Cloudflared tunnel.</p>
+											<a {...mergeStylexProps("hover:underline", sx.wFit, sx.textLink)}  href="https://one.dash.cloudflare.com/" target="_blank" rel="noreferrer">Open Cloudflare Zero Trust</a>
+											<p className={utilityClassName("m-0")}>Use the dashboard rather than <code>cloudflared tunnel create</code>. Connector tokens require a remotely managed tunnel.</p>
 										</SetupStep>
 										<SetupStep number={2} title="Add the callback route">
-											<SettingsField className="mb-0">
+											<SettingsField className={mergeStylexOverrideClassName("", sx.mb0)}>
 												Public URL
 												<Input key={method} type="url" value={url} placeholder="https://ingress.example.com" disabled={!!busy} readOnly={!!privateDomain} onChange={(event) => setDrafts((current) => ({ ...current, cloudflare: event.target.value }))} />
 											</SettingsField>
-											{privateDomain && <p className="m-0">Open Session uses a separate <strong className="font-medium text-fg">ingress</strong> hostname alongside the private app address.</p>}
-											<p className="m-0">Under <strong className="font-medium text-fg">Published application routes</strong>, add <strong className="font-medium text-fg">{ingressHostname(url)}</strong> and point its HTTP service to:</p>
+											{privateDomain && <p className={utilityClassName("m-0")}>Open Session uses a separate <strong {...stylex.props(sx.fontMedium, sx.textFg)}>ingress</strong> hostname alongside the private app address.</p>}
+											<p className={utilityClassName("m-0")}>Under <strong {...stylex.props(sx.fontMedium, sx.textFg)}>Published application routes</strong>, add <strong {...stylex.props(sx.fontMedium, sx.textFg)}>{ingressHostname(url)}</strong> and point its HTTP service to:</p>
 											<CodeBlock>{settings.cloudflare.connectorTarget}</CodeBlock>
-											<p className="m-0">Cloudflare creates the DNS route. Never point this public hostname at the private app port.</p>
+											<p className={utilityClassName("m-0")}>Cloudflare creates the DNS route. Never point this public hostname at the private app port.</p>
 										</SetupStep>
 										<SetupStep number={3} title="Connect this server">
-											<p className="m-0">Copy the tunnel ID and connector token from that same tunnel. Open Session protects the token on this server and starts cloudflared for you.</p>
-											<SettingsField className="mb-0">
+											<p className={utilityClassName("m-0")}>Copy the tunnel ID and connector token from that same tunnel. Open Session protects the token on this server and starts cloudflared for you.</p>
+											<SettingsField className={mergeStylexOverrideClassName("", sx.mb0)}>
 												Tunnel ID
-												<Input value={tunnelId} placeholder="00000000-0000-0000-0000-000000000000" disabled={!!busy} className="font-mono" onChange={(event) => setTunnelId(event.target.value)} />
+												<Input value={tunnelId} placeholder="00000000-0000-0000-0000-000000000000" disabled={!!busy} className={mergeStylexOverrideClassName("", sx.fontMono)} onChange={(event) => setTunnelId(event.target.value)} />
 											</SettingsField>
-											<SettingsField className="mb-0">
+											<SettingsField className={mergeStylexOverrideClassName("", sx.mb0)}>
 												Tunnel token
 												<Input
 													type="password"
@@ -703,23 +1015,23 @@ export function IngressPanel({
 											number={1}
 											title="Choose a separate public domain"
 											controls={
-												<SettingsField className="mb-0">
+												<SettingsField className={mergeStylexOverrideClassName("", sx.mb0)}>
 													Domain
 													<Input key={method} value={url} placeholder="ingress.example.com" disabled={!!busy} autoCapitalize="none" spellCheck={false} onChange={(event) => { customDraftTouched.current = true; setDrafts((current) => ({ ...current, custom: event.target.value })); }} />
 												</SettingsField>
 											}
 										>
-											<p className="m-0">Do not use the private app hostname. HTTPS is added automatically.</p>
+											<p className={utilityClassName("m-0")}>Do not use the private app hostname. HTTPS is added automatically.</p>
 										</SetupStep>
 										<SetupStep number={2} title="Open ports 80 and 443">
-											<p className="m-0">Allow inbound TCP traffic from the public internet to ports 80 and 443 in the server firewall and your cloud security group. Caddy uses port 80 for certificate validation and serves HTTPS on port 443.</p>
+											<p className={utilityClassName("m-0")}>Allow inbound TCP traffic from the public internet to ports 80 and 443 in the server firewall and your cloud security group. Caddy uses port 80 for certificate validation and serves HTTPS on port 443.</p>
 										</SetupStep>
 										<SetupStep
 											number={3}
 											title="Add DNS records at your provider"
 											controls={
 												<>
-													<SettingsField className="mb-0">
+													<SettingsField className={mergeStylexOverrideClassName("", sx.mb0)}>
 														Public IPv4 or IPv6 address
 														<Input value={publicAddress} placeholder="203.0.113.10" disabled={!!busy} autoCapitalize="none" spellCheck={false} onChange={(event) => { setPublicAddress(event.target.value); setError(null); }} />
 													</SettingsField>
@@ -729,17 +1041,17 @@ export function IngressPanel({
 												</>
 											}
 										>
-											<p className="m-0">Point the domain to this server’s public IP address, not its private or Tailscale address.</p>
+											<p className={utilityClassName("m-0")}>Point the domain to this server’s public IP address, not its private or Tailscale address.</p>
 										</SetupStep>
 										<SetupStep number={4} title="Configure Caddy">
-											<p className="m-0">Open Session adds this dedicated site to /etc/caddy/Caddyfile, binds it to the public-facing network interface, and reloads Caddy. If DNS is still propagating, the status stays at Waiting for DNS and checks again automatically.</p>
+											<p className={utilityClassName("m-0")}>Open Session adds this dedicated site to /etc/caddy/Caddyfile, binds it to the public-facing network interface, and reloads Caddy. If DNS is still propagating, the status stays at Waiting for DNS and checks again automatically.</p>
 											{!settings.custom.caddyInstalled && <CodeBlock>{"curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh | bash -s -- --caddy --no-onboard"}</CodeBlock>}
 										</SetupStep>
 									</SetupSteps>
-									<details className="text-meta text-dim">
-										<summary className="cursor-pointer font-medium text-fg">Caddy route preview</summary>
-										<div className="mt-2"><ConfigCodeBlock code={customCaddyConfig(url)} /></div>
-										<p className="mt-2 mb-0">Automatic setup also adds the detected local interface bind.</p>
+									<details {...stylex.props(sx.textDim, typography.meta)}>
+										<summary {...stylex.props(sx.cursorPointer, sx.fontMedium, sx.textFg)}>Caddy route preview</summary>
+										<div {...stylex.props(sx.mt2)}><ConfigCodeBlock code={customCaddyConfig(url)} /></div>
+										<p {...stylex.props(sx.mt2, sx.mb0)}>Automatic setup also adds the detected local interface bind.</p>
 									</details>
 								</>
 							)}
@@ -756,17 +1068,17 @@ export function IngressPanel({
 								</InlineAlert>
 							)}
 
-							<SettingsFormActions className="phone:flex-col-reverse">
-								<Button variant="soft" disabled={!!busy || !settings.canManage || settings.exposure !== method || !settings.publicBaseUrl} className="phone:min-h-11 phone:w-full phone:justify-center" onClick={() => void run("test", testPublicIngress, (next) => next.health === "ready" ? "Public callbacks are reachable" : "Public callbacks are not ready yet") }>
+							<SettingsFormActions className={utilityClassName("phone:flex-col-reverse")}>
+								<Button variant="soft" disabled={!!busy || !settings.canManage || settings.exposure !== method || !settings.publicBaseUrl} className={utilityClassName("phone:min-h-11 phone:w-full phone:justify-center")} onClick={() => void run("test", testPublicIngress, (next) => next.health === "ready" ? "Public callbacks are reachable" : "Public callbacks are not ready yet") }>
 									{busy === "test" ? "Checking…" : settings.health === "waiting_dns" ? "Check again" : "Test connection"}
 								</Button>
-								<Button variant="primary" disabled={!!busy || !settings.canManage || !!missingTool || invalidInput} className="phone:min-h-11 phone:w-full phone:justify-center" onClick={() => void applyMethod()}>
+								<Button variant="primary" disabled={!!busy || !settings.canManage || !!missingTool || invalidInput} className={utilityClassName("phone:min-h-11 phone:w-full phone:justify-center")} onClick={() => void applyMethod()}>
 									{busy === "apply" ? "Setting up…" : method === "custom" ? settings.exposure === "custom" ? "Update Caddy" : "Configure Caddy" : "Start tunnel"}
 								</Button>
 							</SettingsFormActions>
-							<div className="border-t border-line pt-3.5">
-								<div className="text-item-title font-medium text-fg">Private by default</div>
-								<p className="mt-1 mb-0 text-supporting leading-relaxed text-dim">
+							<div {...stylex.props(sx.borderT, sx.borderLine, sx.pt35)}>
+								<div {...stylex.props(sx.fontMedium, sx.textFg, typography.itemTitle)}>Private by default</div>
+								<p {...stylex.props(sx.mt1, sx.mb0, sx.leadingRelaxed, sx.textDim, typography.supporting)}>
 									Unknown methods and paths return 404. This endpoint never serves sessions, APIs, or the app UI.
 								</p>
 							</div>

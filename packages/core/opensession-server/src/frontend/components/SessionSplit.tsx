@@ -1,6 +1,35 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useWebSocket } from "../hooks/useWebSocket";
 import { clampSplitRatio } from "../lib/split-tabs";
+import * as stylex from "@stylexjs/stylex";
+import { mergeStylexProps } from "../ui/cn";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	grid: {
+			display: "grid"
+	},
+	minH0: {
+			minHeight: "0"
+	},
+	minW0: {
+			minWidth: "0"
+	},
+	flex1: {
+			flex: "1"
+	},
+	overflowHidden: { overflow: "hidden" },
+	relative: { position: "relative" },
+	flex: { display: "flex" },
+	flexCol: { flexDirection: "column" },
+	z5: { zIndex: 5 },
+	cursorColResize: { cursor: "col-resize" },
+	touchNone: { touchAction: "none" },
+	bgLine: { backgroundColor: "var(--border)" },
+	transitionBackground: { transitionProperty: "background-color" },
+	dividerHover: { ":hover": { "@media (hover: hover)": { backgroundColor: "var(--accent)" } } },
+	dividerAfter: { "::after": { content: '""', position: "absolute", insetBlock: 0, left: "-4px", right: "-4px" } },
+});
 
 type Socket = ReturnType<typeof useWebSocket>;
 export type SplitSide = "left" | "right";
@@ -16,9 +45,7 @@ const splitColumns = (ratio: number) =>
  * chrome and legacy.css both key structural `:has()` rules off it), so the bar
  * still sizes to its content here while everything after it takes the rest.
  */
-const COLUMN =
-	"relative flex min-h-0 min-w-0 flex-col overflow-hidden " +
-	"[&>.session-tabs]:shrink-0 [&>:not(.session-tabs)]:min-h-0 [&>:not(.session-tabs)]:flex-1";
+const COLUMN_RESIDUAL = "[&>.session-tabs]:shrink-0 [&>:not(.session-tabs)]:min-h-0 [&>:not(.session-tabs)]:flex-1";
 
 /**
  * The divider IS the seam — one hairline on the same token as every other
@@ -26,10 +53,7 @@ const COLUMN =
  * ::after spilling 4px over both panes, so it takes no layout width of its
  * own. It lights up while hovered and stays lit for the whole drag.
  */
-const DIVIDER =
-	"relative z-[5] cursor-col-resize touch-none bg-line transition-[background-color] " +
-	"after:absolute after:inset-y-0 after:-left-1 after:-right-1 after:content-[''] " +
-	"hover:bg-accent [body.resizing-tab-split_&]:bg-accent";
+const DIVIDER_RESIDUAL = "[body.resizing-tab-split_&]:bg-accent";
 
 interface Props {
 	/** Which column holds the focused tab — it owns the shared header chrome. */
@@ -115,7 +139,7 @@ export function SessionSplit({
 
 	const column = (side: SplitSide, socket: Socket) => (
 		<div
-			className={COLUMN}
+			{...mergeStylexProps(`${stylex.props(sx.relative, sx.flex, sx.minH0, sx.minW0, sx.flexCol, sx.overflowHidden).className} ${COLUMN_RESIDUAL}`, sx.relative, sx.flex, sx.minH0, sx.minW0, sx.flexCol, sx.overflowHidden)}
 			onPointerDownCapture={() => {
 				if (focusedSide !== side) onFocusSide(side);
 			}}
@@ -127,12 +151,12 @@ export function SessionSplit({
 	return (
 		<div
 			ref={rootRef}
-			className="grid min-h-0 min-w-0 flex-1 overflow-hidden"
+			{...stylex.props(sx.grid, sx.minH0, sx.minW0, sx.flex1, sx.overflowHidden)}
 			style={{ gridTemplateColumns: splitColumns(draftRatio) }}
 		>
 			{column("left", leftSocket)}
 			<div
-				className={DIVIDER}
+				{...mergeStylexProps(`${stylex.props(sx.relative, sx.z5, sx.cursorColResize, sx.touchNone, sx.bgLine, sx.transitionBackground, sx.dividerAfter, sx.dividerHover).className} ${DIVIDER_RESIDUAL}`, sx.relative, sx.z5, sx.cursorColResize, sx.touchNone, sx.bgLine, sx.transitionBackground, sx.dividerAfter, sx.dividerHover)}
 				role="separator"
 				aria-orientation="vertical"
 				aria-label="Resize split tabs"

@@ -18,6 +18,101 @@ import type { NewSessionPrefill } from "../lib/new-session-link";
 import { Button } from "../ui/button";
 import { AssetActions, AssetPreview } from "./AssetView";
 import { resolvedAssetPath } from "../lib/asset-preview";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+import { mergeStylexClassName, mergeStylexOverrideClassName } from "../ui/cn";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	block: {
+			display: "block"
+	},
+	hFull: {
+			height: "100%"
+	},
+	ColorSchemeDark: {
+			colorScheme: "dark"
+	},
+	flex: {
+			display: "flex"
+	},
+	minH240px: {
+			minHeight: "240px"
+	},
+	flexCol: {
+			flexDirection: "column"
+	},
+	itemsCenter: {
+			alignItems: "center"
+	},
+	justifyCenter: {
+			justifyContent: "center"
+	},
+	gap1: {
+			gap: "4px"
+	},
+	px6: {
+			paddingInline: "24px"
+	},
+	textCenter: {
+			textAlign: "center"
+	},
+	textDim: {
+			color: "var(--text-dim)"
+	},
+	maxW360px: {
+			maxWidth: "360px"
+	},
+	textFaint: {
+			color: "var(--text-faint)"
+	},
+	minH0: {
+			minHeight: "0"
+	},
+	maxH38: {
+			maxHeight: "38%"
+	},
+	minH88px: {
+			minHeight: "88px"
+	},
+	overflowHidden: {
+			overflow: "hidden"
+	},
+	borderB: {
+			borderBottomStyle: "solid",
+			borderBottomWidth: "1px"
+	},
+	borderLine: {
+			borderColor: "var(--border)"
+	},
+	justifyBetween: {
+			justifyContent: "space-between"
+	},
+	px3: {
+			paddingInline: "12px"
+	},
+	pt2: {
+			paddingTop: "8px"
+	},
+	pb1: {
+			paddingBottom: "4px"
+	},
+	fontSemibold: {
+			fontWeight: "var(--font-weight-semibold)"
+	},
+	flex1: {
+			flex: "1"
+	},
+	overflowYAuto: {
+			overflowY: "auto"
+	},
+	px1: {
+			paddingInline: "4px"
+	},
+	pb15: {
+			paddingBottom: "6px"
+	},
+});
 
 /** Lives in SessionViewer (not the panel) so the tab button can show/hide on
  * the file count without the panel being mounted. */
@@ -76,7 +171,7 @@ function AssetsTree({
 	});
 	// Same forced dark color-scheme as the docs tree (Notes.tsx) — the tree's
 	// own shadow styles use light-dark() and would otherwise follow the OS.
-	return <FileTree model={model} className="block h-full [color-scheme:dark]" />;
+	return <FileTree model={model} className={mergeStylexOverrideClassName("", sx.block, sx.hFull, sx.ColorSchemeDark)} />;
 }
 
 export function AssetsPanel({
@@ -108,9 +203,9 @@ export function AssetsPanel({
 
 	if (!files.length) {
 		return (
-			<div className="flex h-full min-h-[240px] flex-col items-center justify-center gap-1 px-6 text-center">
-				<div className="text-label text-dim">No assets yet</div>
-				<div className="max-w-[360px] text-label text-faint">
+			<div {...stylex.props(sx.flex, sx.hFull, sx.minH240px, sx.flexCol, sx.itemsCenter, sx.justifyCenter, sx.gap1, sx.px6, sx.textCenter)}>
+				<div {...stylex.props(sx.textDim, typography.label)}>No assets yet</div>
+				<div {...stylex.props(sx.maxW360px, sx.textFaint, typography.label)}>
 					Ask the agent to save a visualization, report, or demo page here.
 					It writes files with opensession-assets' write_asset and they
 					preview live in this tab.
@@ -120,23 +215,23 @@ export function AssetsPanel({
 	}
 
 	return (
-		<div className="flex h-full min-h-0 flex-col">
-			<div className="flex max-h-[38%] min-h-[88px] flex-col overflow-hidden border-b border-line">
-				<div className="flex items-center justify-between px-3 pt-2 pb-1">
-					<span className="text-label font-semibold text-faint">
+		<div {...stylex.props(sx.flex, sx.hFull, sx.minH0, sx.flexCol)}>
+			<div {...stylex.props(sx.flex, sx.maxH38, sx.minH88px, sx.flexCol, sx.overflowHidden, sx.borderB, sx.borderLine)}>
+				<div {...stylex.props(sx.flex, sx.itemsCenter, sx.justifyBetween, sx.px3, sx.pt2, sx.pb1)}>
+					<span {...stylex.props(sx.fontSemibold, sx.textFaint, typography.label)}>
 						Files · {files.length}
 					</span>
 					<Button
 						variant="ghost"
 						size="sm"
-						className="text-faint"
+						className={mergeStylexOverrideClassName("", sx.textFaint)}
 						onClick={refresh}
 						title="Refresh the file list"
 					>
 						Refresh
 					</Button>
 				</div>
-				<div className="min-h-0 flex-1 overflow-y-auto px-1 pb-1.5">
+				<div {...stylex.props(sx.minH0, sx.flex1, sx.overflowYAuto, sx.px1, sx.pb15)}>
 					<AssetsTree
 						key={paths.join("\n")}
 						paths={paths}

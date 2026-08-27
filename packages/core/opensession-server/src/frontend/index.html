@@ -74,16 +74,6 @@
       add("apple-touch-icon", prefix + "/apple-touch-icon.png?v=5");
       add("manifest", prefix + "/manifest.webmanifest");
 
-      // Tailwind utilities. The production builder appends its own hashed
-      // tailwind-<hash>.css just before the head close tag — AFTER this script runs,
-      // so the check waits for the parsed document. No such link means Bun's
-      // HMR dev server is serving this page (OPENSESSION_DEV=1), and Bun can't
-      // compile Tailwind: pull the sheet the server compiles for dev instead.
-      // Without it a dev/demo instance renders with no utilities at all.
-      document.addEventListener("DOMContentLoaded", function () {
-        if (!document.querySelector('link[rel="stylesheet"][href*="tailwind-"]'))
-          add("stylesheet", prefix + "/tailwind.css");
-      });
 
       // The desktop workspace shell follows the host OS's window language.
       // Mobile stays edge-to-edge, but setting this before first paint avoids a

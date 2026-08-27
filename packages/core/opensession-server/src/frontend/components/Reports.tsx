@@ -29,6 +29,170 @@ import {
 	REPORTS_ROW_NAME,
 	REPORTS_ROW_TIME,
 } from "../lib/reports-classes";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+import { mergeStylexProps, mergeStylexClassName, mergeStylexOverrideClassName } from "../ui/cn";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	flex: {
+			display: "flex"
+	},
+	minH0: {
+			minHeight: "0"
+	},
+	flex1: {
+			flex: "1"
+	},
+	itemsCenter: {
+			alignItems: "center"
+	},
+	justifyCenter: {
+			justifyContent: "center"
+	},
+	flexCol: {
+			flexDirection: "column"
+	},
+	p8: {
+			padding: "32px"
+	},
+	mt2: {
+			marginTop: "8px"
+	},
+	maxW420px: {
+			maxWidth: "420px"
+	},
+	size7px: {
+			width: "7px",
+			height: "7px"
+	},
+	roundedFull: {
+			borderRadius: "calc(infinity * 1px)"
+	,
+		cornerShape: "round"},
+	minW0: {
+			minWidth: "0"
+	},
+	srOnly: {
+			clipPath: "inset(50%)",
+			whiteSpace: "nowrap",
+			borderWidth: "0",
+			width: "1px",
+			height: "1px",
+			margin: "-1px",
+			padding: "0",
+			position: "absolute",
+			overflow: "hidden"
+	},
+	mt05: {
+			marginTop: "2px"
+	},
+	shrink0: {
+			flexShrink: "0"
+	},
+	textFaint: {
+			color: "var(--text-faint)"
+	},
+	bgBg: {
+			backgroundColor: "var(--bg)"
+	},
+	block: {
+			display: "block"
+	},
+	px3: {
+			paddingInline: "12px"
+	},
+	pb3: {
+			paddingBottom: "12px"
+	},
+	pt2: {
+			paddingTop: "8px"
+	},
+	Ml1: {
+			marginLeft: "-4px"
+	},
+	gap05: {
+			gap: "2px"
+	},
+	roundedControl: {
+			borderRadius: "calc(12px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	border0: {
+			borderStyle: "solid",
+			borderWidth: "0"
+	},
+	bgTransparent: {
+			backgroundColor: "transparent"
+	},
+	py15: {
+			paddingBlock: "6px"
+	},
+	pl1: {
+			paddingLeft: "4px"
+	},
+	pr25: {
+			paddingRight: "10px"
+	},
+	textSm: {
+			fontSize: "var(--type-label)",
+			lineHeight: "var(--tw-leading,var(--text-sm--line-height))"
+	},
+	fontMedium: {
+			fontWeight: "var(--font-weight-medium)"
+	},
+	textAccent: {
+			color: "var(--accent-ink)"
+	},
+	cursorPointer: {
+			cursor: "pointer"
+	},
+	m0: {
+			margin: "0"
+	},
+	mt1: {
+			marginTop: "4px"
+	},
+	px1: {
+			paddingInline: "4px"
+	},
+	leadingSnug: {
+			lineHeight: "var(--leading-snug)"
+	},
+	textDim: {
+			color: "var(--text-dim)"
+	},
+	mt25: {
+			marginTop: "10px"
+	},
+	gap2: {
+			gap: "8px"
+	},
+	hVarDesktopHeaderH: {
+			height: "var(--desktop-header-h)"
+	},
+	gap4: {
+			gap: "16px"
+	},
+	borderB: {
+			borderBottomStyle: "solid",
+			borderBottomWidth: "1px"
+	},
+	borderDivider: {
+			borderColor: "var(--divider)"
+	},
+	px5: {
+			paddingInline: "20px"
+	},
+	truncate: {
+			textOverflow: "ellipsis",
+			whiteSpace: "nowrap",
+			overflow: "hidden"
+	},
+	maxW190px: {
+			maxWidth: "190px"
+	},
+});
 
 interface Props {
 	selectedAutomationId?: string;
@@ -154,20 +318,20 @@ setError(e?.message || "Failed to load reports");
 
 	if (groups === null)
 		return (
-			<div className="flex min-h-0 flex-1 items-center justify-center">
+			<div {...stylex.props(sx.flex, sx.minH0, sx.flex1, sx.itemsCenter, sx.justifyCenter)}>
 				<LoadingState>Loading reports…</LoadingState>
 			</div>
 		);
 
 	if (!groups.length)
 		return (
-			<div className="flex min-h-0 flex-1 flex-col items-center justify-center p-8">
+			<div {...stylex.props(sx.flex, sx.minH0, sx.flex1, sx.flexCol, sx.itemsCenter, sx.justifyCenter, sx.p8)}>
 				<EmptyState icon={<IconFile size={22} />} title="No reports yet">
 					Recurring automation reports collect here, with the latest result and
 					the full history in one place.
 				</EmptyState>
 				{error && (
-					<InlineAlert className="mt-2 max-w-[420px]">{error}</InlineAlert>
+					<InlineAlert className={mergeStylexOverrideClassName("", sx.mt2, sx.maxW420px)}>{error}</InlineAlert>
 				)}
 			</div>
 		);
@@ -178,7 +342,7 @@ setError(e?.message || "Failed to load reports");
 	const showDetail = !isPhone || !!selectedAutomationId;
 
 	return (
-		<div className="flex min-h-0 flex-1">
+		<div {...stylex.props(sx.flex, sx.minH0, sx.flex1)}>
 			{showList && (
 				<aside className={REPORTS_COLUMN}>
 					{/* The bar sits above the scroller, not in it, so it holds its
@@ -210,13 +374,13 @@ setError(e?.message || "Failed to load reports");
 								>
 									<span className={SIDEBAR_RAIL}>
 										<span
-											className="size-[7px] rounded-full"
+											{...stylex.props(sx.size7px, sx.roundedFull)}
 											style={{
 												backgroundColor: reportUrgencyDot(group.latest.urgency),
 											}}
 										/>
 									</span>
-									<span className="min-w-0 flex-1">
+									<span {...stylex.props(sx.minW0, sx.flex1)}>
 										<span className={REPORTS_ROW_HEAD}>
 											<span className={REPORTS_ROW_NAME}>
 												{group.automationName}
@@ -225,7 +389,7 @@ setError(e?.message || "Failed to load reports");
 											    colour is nothing to a screen reader. Named here
 											    rather than in the rail so the row reads "Cassandra,
 											    low urgency" instead of leading with it. */}
-											{urgency && <span className="sr-only">{urgency}</span>}
+											{urgency && <span {...stylex.props(sx.srOnly)}>{urgency}</span>}
 											<span
 												className={REPORTS_ROW_TIME}
 												title={new Date(group.latest.createdAt).toLocaleString()}
@@ -240,7 +404,7 @@ setError(e?.message || "Failed to load reports");
 									{isPhone && (
 										<IconChevronRight
 											size={16}
-											className="mt-0.5 shrink-0 text-faint"
+											className={mergeStylexOverrideClassName("", sx.mt05, sx.shrink0, sx.textFaint)}
 										/>
 									)}
 								</button>
@@ -251,15 +415,15 @@ setError(e?.message || "Failed to load reports");
 			)}
 
 			{showDetail && (
-				<section className="flex min-w-0 flex-1 flex-col bg-bg">
+				<section {...stylex.props(sx.flex, sx.minW0, sx.flex1, sx.flexCol, sx.bgBg)}>
 					{isPhone ? (
 						<TopBar
 							as="header"
-							className="block shrink-0 px-3 pb-3 pt-2"
+							className={mergeStylexOverrideClassName("", sx.block, sx.shrink0, sx.px3, sx.pb3, sx.pt2)}
 						>
 							<button
 								type="button"
-								className="-ml-1 flex items-center gap-0.5 rounded-control border-0 bg-transparent py-1.5 pl-1 pr-2.5 text-sm font-medium text-accent cursor-pointer"
+								{...stylex.props(sx.Ml1, sx.flex, sx.itemsCenter, sx.gap05, sx.roundedControl, sx.border0, sx.bgTransparent, sx.py15, sx.pl1, sx.pr25, sx.textSm, sx.fontMedium, sx.textAccent, sx.cursorPointer)}
 								onClick={onBack}
 							>
 								<IconChevronLeft size={18} />
@@ -270,11 +434,11 @@ setError(e?.message || "Failed to load reports");
 									{/* Same argument as the desktop header below: the name,
 									    and nothing the row in the list or the picker under
 									    it already says. */}
-									<h2 className="m-0 mt-1 px-1 text-item-title font-medium leading-snug text-dim">{selected.title}</h2>
-									<div className="mt-2.5 flex items-center gap-2 px-1">
+									<h2 {...stylex.props(sx.m0, sx.mt1, sx.px1, sx.fontMedium, sx.leadingSnug, sx.textDim, typography.itemTitle)}>{selected.title}</h2>
+									<div {...stylex.props(sx.mt25, sx.flex, sx.itemsCenter, sx.gap2, sx.px1)}>
 										<OptionSelect
 											label="Report history"
-											className="min-w-0 flex-1"
+											className={mergeStylexOverrideClassName("", sx.minW0, sx.flex1)}
 											value={selected.id}
 											options={historyOptions}
 											onChange={(id) => onSelect(selected.automationId, id)}
@@ -283,14 +447,14 @@ setError(e?.message || "Failed to load reports");
 											<Button
 												size="md"
 												variant="primary"
-												className="shrink-0"
+												className={mergeStylexOverrideClassName("", sx.shrink0)}
 												onClick={() => setFanOutId(selected.id)}
 											>
 												Fix each
 											</Button>
 										)}
-										{selected.sessionId && <Button size="md" className="shrink-0" onClick={() => onOpenSession(selected.sessionId!)}>Open run</Button>}
-										<Button size="md" className="shrink-0" icon={<CopyCheck copied={copied} size={20} idle={<IconLink size={20} />} />} aria-label="Share report" onClick={shareSelected} />
+										{selected.sessionId && <Button size="md" className={mergeStylexOverrideClassName("", sx.shrink0)} onClick={() => onOpenSession(selected.sessionId!)}>Open run</Button>}
+										<Button size="md" className={mergeStylexOverrideClassName("", sx.shrink0)} icon={<CopyCheck copied={copied} size={20} idle={<IconLink size={20} />} />} aria-label="Share report" onClick={shareSelected} />
 									</div>
 								</>
 							)}
@@ -298,8 +462,7 @@ setError(e?.message || "Failed to load reports");
 					) : (
 						selected && (
 							<TopBar
-								as="header"
-								className="wco-chrome h-[var(--desktop-header-h)] shrink-0 gap-4 border-b border-divider px-5"
+								as="header" {...mergeStylexProps("wco-chrome", sx.hVarDesktopHeaderH, sx.shrink0, sx.gap4, sx.borderB, sx.borderDivider, sx.px5)}
 							>
 								{/* The name, and nothing else. Quiet on purpose: the report
 								    below opens with these same words as its own first
@@ -319,16 +482,16 @@ setError(e?.message || "Failed to load reports");
 								    column's header takes and the chat header beside it, so
 								    the two seams meet across the window instead of stepping
 								    down by the height of a line this no longer draws. */}
-								<h2 className="m-0 min-w-0 flex-1 truncate text-item-title font-medium text-dim">{selected.title}</h2>
+								<h2 {...stylex.props(sx.m0, sx.minW0, sx.flex1, sx.truncate, sx.fontMedium, sx.textDim, typography.itemTitle)}>{selected.title}</h2>
 								{/* The report's own proposal, so it sits with the actions
 								    rather than inside the document: a report is read in a
 								    sandboxed frame that cannot start anything itself. */}
-								<TopBarActions className="gap-4">
+								<TopBarActions className={mergeStylexOverrideClassName("", sx.gap4)}>
 								{!!selected.tasks?.length && (
 									<Button
 										size="md"
 										variant="primary"
-										className="shrink-0"
+										className={mergeStylexOverrideClassName("", sx.shrink0)}
 										onClick={() => setFanOutId(selected.id)}
 									>
 										Fix each
@@ -339,11 +502,11 @@ setError(e?.message || "Failed to load reports");
 								    the buttons kept `size="sm"`'s 26px padding inside a 30px
 								    square, and the icon-only one fought the primitive's own
 								    square. One size for the row, from the scale. */}
-								<Button size="md" className="shrink-0" icon={<CopyCheck copied={copied} size={20} idle={<IconLink size={20} />} />} aria-label="Share report" title="Share report" onClick={shareSelected} />
-								{selected.sessionId && <Button size="md" className="shrink-0" onClick={() => onOpenSession(selected.sessionId!)}>Open run</Button>}
+								<Button size="md" className={mergeStylexOverrideClassName("", sx.shrink0)} icon={<CopyCheck copied={copied} size={20} idle={<IconLink size={20} />} />} aria-label="Share report" title="Share report" onClick={shareSelected} />
+								{selected.sessionId && <Button size="md" className={mergeStylexOverrideClassName("", sx.shrink0)} onClick={() => onOpenSession(selected.sessionId!)}>Open run</Button>}
 								<OptionSelect
 									label="Report history"
-									className="max-w-[190px] shrink-0"
+									className={mergeStylexOverrideClassName("", sx.maxW190px, sx.shrink0)}
 									value={selected.id}
 									options={historyOptions}
 									onChange={(id) => onSelect(selected.automationId, id)}

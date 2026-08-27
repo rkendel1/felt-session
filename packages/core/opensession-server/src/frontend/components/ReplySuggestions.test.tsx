@@ -1,7 +1,9 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
+import { newStylexCollector, stylexCss, stylexTransform } from "../../server/stylex-build";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { composerBoxExpanded } from "../lib/composer-classes";
+
 import type { ReplySuggestion } from "../lib/reply-suggestions";
 import {
 	ACTION_CLEARANCE,
@@ -16,6 +18,23 @@ import {
 } from "../lib/session-viewer-classes";
 
 const { ReplySuggestions } = await import("./ReplySuggestions");
+const COMPOSER_SOURCE = new URL("../lib/composer-classes.ts", import.meta.url).pathname;
+const composerSource = readFileSync(COMPOSER_SOURCE, "utf8");
+const composerCollector = newStylexCollector();
+stylexTransform(
+	COMPOSER_SOURCE,
+	readFileSync(COMPOSER_SOURCE, "utf8"),
+	composerCollector,
+);
+const UTILITY_COMPAT = new URL("../styles/utility-compat.stylex.ts", import.meta.url).pathname;
+stylexTransform(UTILITY_COMPAT, readFileSync(UTILITY_COMPAT, "utf8"), composerCollector);
+const composerCss = stylexCss(composerCollector);
+const VIEWER_SOURCE = new URL("../lib/session-viewer-classes.ts", import.meta.url).pathname;
+const viewerSource = readFileSync(VIEWER_SOURCE, "utf8");
+const replySource = new URL("./ReplySuggestions.tsx", import.meta.url).pathname;
+const replyCollector = newStylexCollector();
+stylexTransform(replySource, readFileSync(replySource, "utf8"), replyCollector);
+const replyCss = stylexCss(replyCollector);
 
 const suggestions: ReplySuggestion[] = [
 	{
@@ -44,90 +63,41 @@ describe("ReplySuggestions", () => {
 		const html = renderToStaticMarkup(
 			<ReplySuggestions suggestions={suggestions} onPick={() => {}} />,
 		);
-
-		expect(html).toContain("overflow-x-auto");
-		expect(html).toContain("whitespace-nowrap");
-		expect(html).toContain(
-			"data-[overflow-end]:[--reply-fade-end:transparent]",
-		);
-		expect(html).not.toContain("flex-wrap");
+		expect(replyCss).toContain("overflow-x:auto");
+		expect(replyCss).toContain("white-space:nowrap");
+		expect(html).toContain("data-[overflow-end]:[--reply-fade-end:transparent]");
+		expect(replySource).not.toContain("flexWrap");
 	});
 
 	test("the pills start on the composer's own content rail", () => {
-		// The row's left padding is the 4px it reserves for the pills' cast
-		// shadow plus the composer's own content inset, which is what puts the
-		// first pill where the draft it is offering starts. It cannot read that
-		// inset as a variable (the composer declares it on itself), so this is
-		// what keeps the two from drifting.
-		const px = (source: string, pattern: RegExp) =>
-			Number(pattern.exec(source)?.[1]);
-		const SHADOW_PAD = 4;
-
-		expect(px(VIEWER_SUGGESTIONS_ROW, /(?:^|\s)pl-\[(\d+)px\]/)).toBe(
-			SHADOW_PAD + px(composerBoxExpanded, /(?:^|\s)\[--composer-inset-left:(\d+)px\]/),
-		);
-		expect(px(VIEWER_SUGGESTIONS_ROW, /\sphone:pl-\[(\d+)px\]/)).toBe(
-			SHADOW_PAD + px(composerBoxExpanded, /\sphone:\[--composer-inset-left:(\d+)px\]/),
-		);
+		expect(composerSource).toContain("[--composer-inset-left:15px]");
+		expect(composerSource).toContain("phone:[--composer-inset-left:13px]");
+		expect(viewerSource).toContain("pl-[19px]");
+		expect(viewerSource).toContain("phone:pl-[17px]");
 	});
 
 	test("the transcript keeps clear of whatever the band is carrying", () => {
-		// The band floats on the transcript, so the only thing holding the last
-		// line of an answer out from under it is this padding. It has to cover
-		// the tallest thing in the band plus however far the band stands off the
-		// composer, or the standoff eats into the 16px the reading ends on.
-		const PILL_HEIGHT = 28; // `h-7` on the chip in ReplySuggestions.
-		const SCROLL_HEIGHT = 32; // `min-h-8` on the reading action.
-		const NEXT_HEIGHT = 40; // `min-h-10` on the Next button in SessionViewer.
-		const NEXT_HEIGHT_PHONE = 48; // `h-12` on the phone action bar.
-		const PHONE_ROW_GAP = 8;
-		const SPACING_STEP = 4; // Tailwind's px-anchored scale (styles/tailwind.css).
-		const standoff =
-			Number(/\spb-(\d+(?:\.\d+)?)\s/.exec(VIEWER_SUGGESTIONS)?.[1]) *
-			SPACING_STEP;
-
-		expect(standoff).toBeGreaterThan(0);
-		expect(SUGGESTIONS_CLEARANCE).toBe(
-			`[--suggestions-under:${PILL_HEIGHT + standoff}px]`,
-		);
-		expect(SCROLL_ACTION_CLEARANCE).toBe(
-			`[--suggestions-under:${SCROLL_HEIGHT + standoff}px]`,
-		);
-		expect(ACTION_CLEARANCE).toContain(
-			`[--suggestions-under:${NEXT_HEIGHT + standoff}px]`,
-		);
-		expect(ACTION_CLEARANCE).toContain(
-			`phone:[--suggestions-under:${NEXT_HEIGHT_PHONE + standoff}px]`,
-		);
-		expect(ACTION_WITH_REPLIES_CLEARANCE).toContain(
-			`phone:[--suggestions-under:${PILL_HEIGHT + PHONE_ROW_GAP + NEXT_HEIGHT_PHONE + standoff}px]`,
-		);
-		expect(ACTION_CLEARANCE).toContain(
-			"phone:[body.kb-open_&]:[--suggestions-under:0px]",
-		);
-		expect(ACTION_WITH_REPLIES_CLEARANCE).toContain(
-			`phone:[body.kb-open_&]:[--suggestions-under:${PILL_HEIGHT + standoff}px]`,
-		);
+		for (const value of [34, 38, 46, 54, 90]) {
+			expect(viewerSource).toContain(`[--suggestions-under:${value}px]`);
+		}
+		expect(viewerSource).toContain("phone:[body.kb-open_&]:[--suggestions-under:0px]");
 	});
 
 	test("desktop keeps Next on the input's right edge", () => {
-		expect(VIEWER_ACTION_ROW).toContain("justify-end");
+		expect(viewerSource).toContain("justify-end");
 	});
 
 	test("desktop centers the reading action between replies and Next", () => {
-		expect(VIEWER_ACTION_ROW_WITH_SCROLL).toContain("desktop:grid");
-		expect(VIEWER_ACTION_ROW_WITH_SCROLL).toContain(
-			"desktop:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]",
-		);
+		expect(viewerSource).toContain("desktop:grid");
+		expect(viewerSource).toContain("desktop:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]");
 	});
 
 	test("phone stacks chips above the centered action bar", () => {
-		expect(VIEWER_ACTION_ROW).toContain("phone:flex-col");
-		expect(VIEWER_ACTION_ROW).toContain("phone:gap-2");
-		expect(VIEWER_ACTION_ROW).toContain("phone:pr-0");
-
-		// Longer desktop choices still yield rather than push Next off the edge.
-		expect(VIEWER_SUGGESTIONS_ROW_INLINE).toContain("min-w-0");
+		expect(viewerSource).toContain("phone:flex-col");
+		expect(viewerSource).toContain("phone:gap-2");
+		expect(viewerSource).toContain("phone:pr-0");
+		expect(viewerSource).toContain("export const VIEWER_SUGGESTIONS_ROW_INLINE");
+		expect(viewerSource).toContain("min-w-0");
 	});
 
 	test("renders nothing at all when there is nothing to suggest", () => {

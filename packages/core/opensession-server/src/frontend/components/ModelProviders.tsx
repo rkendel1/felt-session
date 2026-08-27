@@ -23,6 +23,67 @@ import {
 import { Menu } from "../ui/menu";
 import { IconTile } from "./BrandTile";
 import { IconDotsHorizontal, IconPlus, IconTrash } from "./icons";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+import { mergeStylexProps, mergeStylexClassName, mergeStylexOverrideClassName } from "../ui/cn";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	itemsStart: {
+			alignItems: "flex-start"
+	},
+	gapX3: {
+			columnGap: "12px"
+	},
+	truncate: {
+			textOverflow: "ellipsis",
+			whiteSpace: "nowrap",
+			overflow: "hidden"
+	},
+	mt15: {
+			marginTop: "6px"
+	},
+	flex: {
+			display: "flex"
+	},
+	flexWrap: {
+			flexWrap: "wrap"
+	},
+	gap1: {
+			gap: "4px"
+	},
+	roundedSm: {
+			borderRadius: "calc(4px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	bgActive: {
+			backgroundColor: "var(--bg-active)"
+	},
+	px15: {
+			paddingInline: "6px"
+	},
+	pyPx: {
+			paddingBlock: "1px"
+	},
+	textDim: {
+			color: "var(--text-dim)"
+	},
+	mt1: {
+			marginTop: "4px"
+	},
+	textFaint: {
+			color: "var(--text-faint)"
+	},
+	textRed: {
+			color: "var(--red)"
+	},
+	Mt2: {
+			marginTop: "-8px"
+	},
+	mb3: {
+			marginBottom: "12px"
+	},
+});
 
 // Settings → Model providers: third-party Pi providers (xai, openrouter,
 // groq, …) — API key + optional baseURL, stored server-side (0600, returned
@@ -131,20 +192,20 @@ toast(e.message, { variant: "error" });
 					</EmptyState>
 				) : (
 					providers.map((p) => (
-						<SettingRow key={p.id} className="items-start gap-x-3">
+						<SettingRow key={p.id} className={mergeStylexOverrideClassName("", sx.itemsStart, sx.gapX3)}>
 							<IconTile name={p.id} size={28} />
 							<SettingRowText>
 								<SettingRowTitle>{p.id}</SettingRowTitle>
-								<SettingRowDescription className="truncate">
+								<SettingRowDescription className={mergeStylexOverrideClassName("", sx.truncate)}>
 									{p.apiKeyMasked || "no API key stored"}
 									{p.baseURL && ` · ${p.baseURL}`}
 								</SettingRowDescription>
 								{p.models.length > 0 ? (
-									<div className="mt-1.5 flex flex-wrap gap-1">
+									<div {...stylex.props(sx.mt15, sx.flex, sx.flexWrap, sx.gap1)}>
 										{p.models.map((m) => (
 											<span
 												key={m}
-												className="rounded-sm bg-active px-1.5 py-px text-meta text-dim"
+												{...stylex.props(sx.roundedSm, sx.bgActive, sx.px15, sx.pyPx, sx.textDim, typography.meta)}
 												title={m}
 											>
 												{m.split("/").slice(2).join("/")}
@@ -152,7 +213,7 @@ toast(e.message, { variant: "error" });
 										))}
 									</div>
 								) : (
-									<div className="mt-1 text-supporting text-faint">
+									<div {...stylex.props(sx.mt1, sx.textFaint, typography.supporting)}>
 										No picker models, so its models are type-in only
 										(pi/{p.id}/&lt;model&gt;).
 									</div>
@@ -168,8 +229,7 @@ toast(e.message, { variant: "error" });
 									</Menu.Trigger>
 									<Menu.Popup align="end" sideOffset={4}>
 										<Menu.Item
-											onClick={() => handleRemove(p)}
-											className="text-red data-[highlighted]:bg-red-soft"
+											onClick={() => handleRemove(p)} {...mergeStylexProps("data-[highlighted]:bg-red-soft", sx.textRed)}
 										>
 											<IconTrash size={16} />
 											Remove provider
@@ -245,7 +305,7 @@ setError(e.message);
 	return (
 		<SettingsForm>
 			<SettingsFormTitle>Add provider</SettingsFormTitle>
-			<SettingRowDescription className="-mt-2 mb-3">
+			<SettingRowDescription className={mergeStylexOverrideClassName("", sx.Mt2, sx.mb3)}>
 				The provider id must match pi's slug for it (xai, openrouter,
 				groq, …). Models are registered in the picker as{" "}
 				<code>pi/&lt;provider&gt;/&lt;model&gt;</code>. List the

@@ -1,5 +1,56 @@
 import React, { useEffect, useState } from "react";
-import { cn } from "../ui/cn";
+import { cn, mergeStylexProps, mergeStylexClassName } from "../ui/cn";
+import * as stylex from "@stylexjs/stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	absolute: {
+			position: "absolute"
+	},
+	inset0: {
+			inset: "0"
+	},
+	sizeFull: {
+			width: "100%",
+			height: "100%"
+	},
+	roundedInherit: {
+			borderRadius: "inherit"
+	,
+		cornerShape: "var(--cs)"},
+	CornerShapeInherit: {
+			cornerShape: "inherit"
+	},
+	objectCover: {
+			objectFit: "cover"
+	},
+	relative: { position: "relative" },
+	inlineFlex: { display: "inline-flex" },
+	shrink0: { flexShrink: "0" },
+	itemsCenter: { alignItems: "center" },
+	justifyCenter: { justifyContent: "center" },
+	roundedAvatar: { borderRadius: "var(--radius-avatar)" ,
+		cornerShape: "var(--cs)"},
+	bgActive: { backgroundColor: "var(--bg-active)" },
+	fontBold: { fontWeight: "var(--font-weight-bold)" },
+	textDim: { color: "var(--text-dim)" },
+	selectNone: { userSelect: "none" },
+
+	AvatarEdge0000Transparent: {
+		"--avatar-edge": "0 0 0 0 transparent"
+	},
+	shadowVarAvatarEdge: {
+		"--tw-shadow": "var(--avatar-edge)",
+		"boxShadow": "var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow)"
+	},
+
+	AvatarEdgeInset0001pxColorMixInSrgbVarText14Transparent: {
+		"--avatar-edge": "inset 0 0 0 1px var(--text)",
+		"@supports (color: color-mix(in lab, red, red))": {
+			"--avatar-edge": "inset 0 0 0 1px color-mix(in srgb,var(--text) 14%,transparent)"
+		}
+	},
+});
 
 /**
  * GitHub logins for the team, keyed by lowercased first name — the shape of
@@ -89,18 +140,13 @@ export function UserAvatar({
 	const picture = !!src && !failed;
 	return (
 		<span
-			className={cn(
-				// The hairline separates a photo from the surface behind it. The
-				// initial fallback is already its own flat tile, so it takes no
-				// edge — the variable stays defined (transparent) because callers
-				// compose it into a larger box-shadow (TeamPresence's pile ring).
+			{...mergeStylexProps(cn(
 				picture && edge
-					? "[--avatar-edge:inset_0_0_0_1px_color-mix(in_srgb,var(--text)_14%,transparent)]"
-					: "[--avatar-edge:0_0_0_0_transparent]",
-				"relative inline-flex shrink-0 items-center justify-center",
-				"rounded-avatar bg-active font-bold text-dim shadow-[var(--avatar-edge)] select-none",
+					? mergeStylexClassName("", sx.AvatarEdgeInset0001pxColorMixInSrgbVarText14Transparent)
+					: mergeStylexClassName("", sx.AvatarEdge0000Transparent),
+				mergeStylexClassName("", sx.shadowVarAvatarEdge),
 				className,
-			)}
+			), sx.relative, sx.inlineFlex, sx.shrink0, sx.itemsCenter, sx.justifyCenter, sx.roundedAvatar, sx.bgActive, sx.fontBold, sx.textDim, sx.selectNone)}
 			style={{
 				width: size,
 				height: size,
@@ -115,14 +161,7 @@ export function UserAvatar({
 			{picture ? (
 				<img
 					src={src}
-					alt={name}
-					// `corner-shape` is not inherited, and base.css squircles
-					// anything carrying a `rounded-*` class — so a photo inside a
-					// frame a caller made round (`rounded-full`, which opts out)
-					// took the radius but kept the squircle, and only the frame's
-					// clip hid it. Inheriting the shape as well as the radius is
-					// what makes the picture the frame's shape, always.
-					className="absolute inset-0 size-full rounded-[inherit] [corner-shape:inherit] object-cover shadow-[var(--avatar-edge)]"
+					alt={name} {...mergeStylexProps("", sx.shadowVarAvatarEdge, sx.absolute, sx.inset0, sx.sizeFull, sx.roundedInherit, sx.CornerShapeInherit, sx.objectCover)}
 					loading="lazy"
 					draggable={false}
 					onError={() => setFailed(true)}

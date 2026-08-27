@@ -7,6 +7,15 @@ import {
 	useSessionOverviewResource,
 	useWorkspaceOverviewResource,
 } from "../hooks/useApiResources";
+import * as stylex from "@stylexjs/stylex";
+import { mergeStylexClassName } from "../ui/cn";
+
+const sx = stylex.create({
+	mergedDot: { backgroundColor: "var(--purple)" },
+	closedDot: { backgroundColor: "var(--red)" },
+	mainDot: { backgroundColor: "var(--green)" },
+	idleDot: { backgroundColor: "var(--text-faint)" },
+});
 
 // The single prominent status line + its dot/tone. Ordering mirrors how a person
 // triages: a blocked question first, then live activity, then PR/lifecycle.
@@ -39,16 +48,16 @@ export function hoverState(s: UnifiedSession): {
 			dotClass: SIDEBAR_STATUS_DOT.running,
 		};
 	if (s.prState === "MERGED")
-		return { label: "Merged", tone: "purple", dotClass: "bg-purple" };
+		return { label: "Merged", tone: "purple", dotClass: mergeStylexClassName("", sx.mergedDot) };
 	if (s.prState === "CLOSED")
-		return { label: "PR closed", tone: "dim", dotClass: "bg-red" };
+		return { label: "PR closed", tone: "dim", dotClass: mergeStylexClassName("", sx.closedDot) };
 	if (s.prState === "OPEN")
 		return {
 			label: s.prIsDraft ? "Draft PR · in review" : "In review",
 			tone: "green",
-			dotClass: "bg-green",
+			dotClass: mergeStylexClassName("", sx.mainDot),
 		};
-	return { label: "Idle", tone: "dim", dotClass: "bg-faint" };
+	return { label: "Idle", tone: "dim", dotClass: mergeStylexClassName("", sx.idleDot) };
 }
 
 export function prTone(s: UnifiedSession): string {

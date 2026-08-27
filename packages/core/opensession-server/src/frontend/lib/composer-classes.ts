@@ -1,3 +1,4 @@
+import { utilityClassName } from "../ui/cn";
 /**
  * Shared Tailwind class maps for the composer family (the `composer-*` block
  * that used to live in styles/legacy.css).
@@ -23,14 +24,14 @@
    .palette-icon-btn`, whose ::before wash is styled from the stylesheet). The
    declarations below are what that rule used to paint. */
 export const composerBox =
-	"relative border border-[color:color-mix(in_srgb,var(--composer-border)_35%,transparent)] bg-[var(--composer-surface)] shadow-[var(--composer-shadow)] transition-[border-color,box-shadow] " +
-	"desktop:border-transparent desktop:[--smooth-ring-color:var(--composer-border)] desktop:smooth-shadow-ring-soft";
+	utilityClassName("relative border border-[color:color-mix(in_srgb,var(--composer-border)_35%,transparent)] bg-[var(--composer-surface)] shadow-[var(--composer-shadow)] transition-[border-color,box-shadow] ") +
+	utilityClassName("desktop:border-transparent desktop:[--smooth-ring-color:var(--composer-border)] desktop:smooth-shadow-ring-soft");
 
 /** Resting/expanded box. `--composer-inset-left` is read by the "+" menu to
  *  line its left edge up with the composer's outer edge rather than the
  *  button's, so it travels with the padding it describes. */
 export const composerBoxExpanded =
-	"rounded-[var(--composer-radius)] px-3.5 pt-3.5 pb-2.5 [--composer-inset-left:15px] phone:px-3 phone:pt-2.5 phone:pb-[9px] phone:[--composer-inset-left:13px]";
+	utilityClassName("rounded-[var(--composer-radius)] px-3.5 pt-3.5 pb-2.5 [--composer-inset-left:15px] phone:px-3 phone:pt-2.5 phone:pb-[9px] phone:[--composer-inset-left:13px]");
 
 /** Phone resting pill: one row, even 4px inset, held well clear of the screen
  *  edges. The inset is wider than the expanded box's on purpose: at rest the
@@ -52,7 +53,7 @@ export const composerBoxExpanded =
  *  way; only the corner curve differs. Installed phone PWAs override that
  *  curve to `round` in base.css, while keeping this same capsule geometry. */
 export const composerBoxMinimized =
-	"mx-3.5 flex items-center gap-1 rounded-[999px] p-1 [--composer-inset-left:5px]";
+	utilityClassName("mx-3.5 flex items-center gap-1 rounded-[999px] p-1 [--composer-inset-left:5px]");
 
 /* ── The draft field ──────────────────────────────────────────────
    `.composer-textarea` stays on the markup as a hook too: it is read as a
@@ -66,7 +67,7 @@ export const composerBoxMinimized =
 /** The draft field and the code/mention mirror behind it both take this, which
  *  is what keeps them glyph-identical. */
 export const composerTextarea =
-	"block max-h-[320px] min-h-0 w-full resize-none border-none bg-transparent text-body leading-[1.55] outline-none phone:max-h-[240px] phone:text-input-phone";
+	utilityClassName("block max-h-[320px] min-h-0 w-full resize-none border-none bg-transparent text-body leading-[1.55] outline-none phone:max-h-[240px] phone:text-input-phone");
 /** The only room a mention pill can take is the space character beside it: its
  *  wash is painted rather than laid out, and 3.7px of natural space has to
  *  cover both the pill's own padding and the gap to the next word. Widening
@@ -84,10 +85,10 @@ export const composerTextarea =
  *  a full sentence, where widening every space is more distracting than the
  *  extra pixel of air buys the pill. */
 export const composerMentionSpacing = "[word-spacing:3.5px]";
-export const composerTextareaPadding = "px-0 pt-0.5 pb-1";
+export const composerTextareaPadding = utilityClassName("px-0 pt-0.5 pb-1");
 /** In the resting pill the field is one row inside a 4px-inset box, so it
  *  carries the horizontal breathing room and no vertical padding at all. */
-export const composerTextareaPaddingMinimized = "px-1 py-0";
+export const composerTextareaPaddingMinimized = utilityClassName("px-1 py-0");
 
 /* ── The toolbar row ──────────────────────────────────────────────
    The row under the draft: "+", the mode marker, a spacer, the model pill,
@@ -101,7 +102,7 @@ export const composerTextareaPaddingMinimized = "px-1 py-0";
    utility and a child's own `shrink` are the same specificity, so the pill's
    opt-back-in would have depended on the compiled sheet's order. */
 export const composerToolbar =
-	"relative mt-2.5 flex items-center gap-2 phone:mt-1.5 phone:gap-1.5";
+	utilityClassName("relative mt-2.5 flex items-center gap-2 phone:mt-1.5 phone:gap-1.5");
 /** The seam a scrolling draft earns.
  *
  *  Past the field's cap the draft scrolls inside the composer, and the last
@@ -133,27 +134,27 @@ export const composerToolbar =
  *  lands the line a frame late, which during momentum scroll reads as a
  *  flicker. */
 export const composerToolbarScrollDivider =
-	"before:pointer-events-none before:absolute before:-inset-x-3.5 before:-top-2.5 " +
-	"before:h-px before:bg-divider before:opacity-0 before:transition-opacity " +
-	"before:content-[''] data-[scroll-under]:before:opacity-100 " +
-	"phone:before:-inset-x-3 phone:before:-top-1.5";
+	utilityClassName("before:pointer-events-none before:absolute before:-inset-x-3.5 before:-top-2.5 ") +
+	utilityClassName("before:h-px before:bg-divider before:opacity-0 before:transition-opacity ") +
+	utilityClassName("before:content-[''] data-[scroll-under]:before:opacity-100 ") +
+	utilityClassName("phone:before:-inset-x-3 phone:before:-top-1.5");
 /** Resting phone pill: `display: contents` lifts the toolbar's buttons into
  *  the composer's own flex row, so the textarea can sit between the "+" and
  *  the mic/send and `order` can sequence them. Combine through `cn()` —
  *  tailwind-merge is what drops the `flex` above. */
-export const composerToolbarMinimized = "contents";
+export const composerToolbarMinimized = utilityClassName("contents");
 /** The one flexible item in the row, and the wrapper it has to be granted to:
  *  the model pill sits inside a Motion layout box, and pinning the shrink on
  *  the pill itself left the WRAPPER rigid — the row stayed wider than the
  *  composer and pushed the send button off its right edge on phones. Phones
  *  also pull it to the front of the row, next to the "+". */
 export const composerToolbarSelect =
-	"inline-flex min-w-0 shrink phone:order-[-1]";
+	utilityClassName("inline-flex min-w-0 shrink phone:order-[-1]");
 /** The pill's toolbar-only metrics: it may shrink to a 34px stub here (the
  *  new-session footer lets it go to 0 instead), and phones tighten its
  *  padding and cap it so the whole row fits without clipping the send. */
 export const composerToolbarPill =
-	"shrink min-w-[34px] phone:max-w-[136px] phone:px-[9px]";
+	utilityClassName("shrink min-w-[34px] phone:max-w-[136px] phone:px-[9px]");
 
 /* ── Toolbar popover menus ─────────────────────────────────────────
    The popup surface for the "+" add menu and the send-later menu, and the
@@ -167,29 +168,29 @@ export const composerToolbarPill =
  *  written: that already supplies `cursor: pointer`, `background: none`,
  *  `border: none` and zero padding. */
 export const composerMenuItem =
-	"flex w-full items-center gap-[9px] rounded-control px-[9px] py-[7px] text-left text-control-label text-fg hover:bg-hover";
+	utilityClassName("flex w-full items-center gap-[9px] rounded-control px-[9px] py-[7px] text-left text-control-label text-fg hover:bg-hover");
 /** The row's leading glyph. A fixed 20px column so the labels line up however
  *  wide the icons draw. */
 export const composerMenuIcon =
-	"inline-flex w-5 items-center justify-center text-label text-dim";
+	utilityClassName("inline-flex w-5 items-center justify-center text-label text-dim");
 /** The surface those rows sit on. Edge and cast come from the same ring the
  *  Base UI menus use (ui/menu.tsx) rather than a `border-line-strong` hairline:
  *  that line is drawn for a control resting IN the page, and on a floating
  *  popup it read a step darker than every other menu on screen. */
 export const composerMenuPopup =
-	"absolute bottom-[calc(100%+6px)] z-40 rounded-lg bg-popup-glass [backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] p-1 smooth-shadow-ring-md";
+	utilityClassName("absolute bottom-[calc(100%+6px)] z-40 rounded-lg bg-popup-glass [backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] p-1 smooth-shadow-ring-md");
 /** The menu's own floor width. Kept out of the surface above because a second
  *  `min-w-*` on the same element would not compose — the send-later menu is
  *  wider (it lists pending messages), and whichever Tailwind emitted last would
  *  win rather than the one written last. */
-export const composerMenuWidth = "min-w-[172px]";
+export const composerMenuWidth = utilityClassName("min-w-[172px]");
 /** Default anchoring: the menu hangs off the right edge of its trigger. */
-export const composerMenuAnchorRight = "right-0";
+export const composerMenuAnchorRight = utilityClassName("right-0");
 /** The "+" sits at the LEFT of the toolbar, so its menu grows rightward from
  *  the composer's outer left edge (not the button's — the toolbar lives inside
  *  the composer's padding, which left the menu inset and off-axis). */
 export const composerMenuAnchorLeft =
-	"left-[calc(-1*var(--composer-inset-left,17px))]";
+	utilityClassName("left-[calc(-1*var(--composer-inset-left,17px))]");
 
 /* ── The send disc ────────────────────────────────────────────────
    The one filled control in the toolbar and the one place a circle is right:
@@ -200,11 +201,11 @@ export const composerMenuAnchorLeft =
    40px phone size is what the last of the three (!) competing phone blocks in
    legacy.css resolved to. */
 export const composerSend =
-	"inline-flex size-8 shrink-0 items-center justify-center rounded-full leading-none transition-[background-color,border-color,color,filter,scale] enabled:active:scale-[0.96] disabled:cursor-default disabled:opacity-35 phone:size-10";
+	utilityClassName("inline-flex size-8 shrink-0 items-center justify-center rounded-full leading-none transition-[background-color,border-color,color,filter,scale] enabled:active:scale-[0.96] disabled:cursor-default disabled:opacity-35 phone:size-10");
 /** Ordinary send: the accent plate. Hover takes `--accent-hover` rather than
  *  brightening — brightening a wash read as a disabled state. */
 export const composerSendDefault =
-	"bg-accent text-on-accent enabled:hover:bg-accent-hover";
+	utilityClassName("bg-accent text-on-accent enabled:hover:bg-accent-hover");
 /** Busy + queue keeps the send plate and changes the glyph. The old 2px ring
  *  read like a selected toggle, then hovered to dark-on-dark because its ink
  *  did not invert with the fill. */
@@ -214,34 +215,34 @@ export const composerSendQueue = composerSendDefault;
 export const composerSendSteer = composerSendDefault;
 /** Stop: the only full-strength red plate. */
 export const composerSendStop =
-	"bg-red text-white enabled:hover:brightness-[1.12]";
+	utilityClassName("bg-red text-white enabled:hover:brightness-[1.12]");
 /** Inside the 50px resting pill a 40px disc is a blob against the hairline
  *  glyphs beside it. Keep the target, shrink the fill: padding plus
  *  background-clip paints a 32px disc without moving the hit area. */
-export const composerSendMinimizedFill = "phone:bg-clip-content phone:p-1";
+export const composerSendMinimizedFill = utilityClassName("phone:bg-clip-content phone:p-1");
 
 /* ── File attachment chips ────────────────────────────────────────
    Shared by the composer's staged attachments (removable) and a user turn's
    download chips in the transcript (a link). The right padding is deliberately
    not part of the card: the composer needs room for its × button. */
-export const fileChipRow = "mb-2 flex flex-wrap gap-2";
+export const fileChipRow = utilityClassName("mb-2 flex flex-wrap gap-2");
 export const fileChipCard =
-	"relative inline-flex max-w-[240px] items-center gap-[9px] rounded-lg border border-line-strong bg-[var(--bg-hover)] py-1.5 pl-1.5";
+	utilityClassName("relative inline-flex max-w-[240px] items-center gap-[9px] rounded-lg border border-line-strong bg-[var(--bg-hover)] py-1.5 pl-1.5");
 /** Composer: leaves room for the absolutely-placed remove button. */
-export const fileChipCardPaddingRemovable = "pr-[26px]";
+export const fileChipCardPaddingRemovable = utilityClassName("pr-[26px]");
 /** Transcript: nothing to remove there, and `.msg-file-card` asked for 10px —
  *  but that rule sat ABOVE `.composer-file-card`'s padding shorthand in the
  *  stylesheet at equal specificity, so it never applied. This keeps what the
  *  chip has always rendered; closing it up is a design change, not a migration. */
-export const fileChipCardPadding = "pr-[26px]";
+export const fileChipCardPadding = utilityClassName("pr-[26px]");
 export const fileChipThumb =
-	"inline-flex size-[34px] shrink-0 items-center justify-center rounded-control bg-[color-mix(in_srgb,var(--accent)_16%,transparent)] text-[10px] font-bold tracking-[0.02em] text-accent";
-export const fileChipMeta = "flex min-w-0 flex-col gap-px";
+	utilityClassName("inline-flex size-[34px] shrink-0 items-center justify-center rounded-control bg-[color-mix(in_srgb,var(--accent)_16%,transparent)] text-[10px] font-bold tracking-[0.02em] text-accent");
+export const fileChipMeta = utilityClassName("flex min-w-0 flex-col gap-px");
 /** The chip's title. 13px (text-label) rather than the stylesheet's off-scale
  *  12px — it is interface copy, and the card's height comes from the 34px
  *  badge, so nothing reflows. */
-export const fileChipName = "truncate text-label text-fg";
-export const fileChipSub = "text-meta text-faint";
+export const fileChipName = utilityClassName("truncate text-label text-fg");
+export const fileChipSub = utilityClassName("text-meta text-faint");
 
 /* ── Flap edges ───────────────────────────────────────────────────
    Shared by both flaps that tuck under the composer (the queue flap below and
@@ -253,7 +254,7 @@ export const fileChipSub = "text-meta text-faint";
  *  strength made the panel behind it about three times darker than the input
  *  in front. Use the same mix everywhere so the two layers keep one edge. */
 export const composerFlapBorder =
-	"pwa-composer-edge border-[color:color-mix(in_srgb,var(--composer-border)_35%,transparent)]";
+	utilityClassName("pwa-composer-edge border-[color:color-mix(in_srgb,var(--composer-border)_35%,transparent)]");
 
 /* ── The queue flap ───────────────────────────────────────────────
    The flap that folds out from behind the composer: a dimmer panel flush with
@@ -268,11 +269,11 @@ export const composerFlapBorder =
    to be `border-bottom-style: none`, not a zero-width solid, because the
    composer's own hairline continues it. `border-b-0` leaves the style behind. */
 export const composerQueue =
-	"relative -mb-3.5 flex flex-col gap-2 rounded-t-[var(--composer-radius)] border-x border-t " +
+	utilityClassName("relative -mb-3.5 flex flex-col gap-2 rounded-t-[var(--composer-radius)] border-x border-t ") +
 	composerFlapBorder +
-	" bg-[color-mix(in_srgb,var(--bg-panel)_80%,var(--composer-surface))] px-3.5 pt-2.5 pb-[26px]";
-export const composerQueueTitle = "text-meta font-semibold text-faint";
-export const composerQueueList = "flex flex-col gap-2";
+	utilityClassName(" bg-[color-mix(in_srgb,var(--bg-panel)_80%,var(--composer-surface))] px-3.5 pt-2.5 pb-[26px]");
+export const composerQueueTitle = utilityClassName("text-meta font-semibold text-faint");
+export const composerQueueList = utilityClassName("flex flex-col gap-2");
 /** One queued/steered row. The floor is one line of body text, so a row whose
  *  point is a single message does not inherit the 40px action cluster's
  *  height. Centered rather than top-aligned: the body is a single truncated
@@ -281,17 +282,17 @@ export const composerQueueList = "flex flex-col gap-2";
  *  and the actions. Nothing here ever wraps, so there is no first-line to
  *  align to. */
 export const composerQueueItem =
-	"relative flex min-h-[calc(13px*1.45)] items-center gap-2";
+	utilityClassName("relative flex min-h-[calc(13px*1.45)] items-center gap-2");
 /** The hairline between rows. The stylesheet drew it with
  *  `.composer-queue-item + .composer-queue-item`, which a utility cannot
  *  spell against itself — so each list applies it from its own index. The
  *  three groups (steered, queued, sending) are separated by non-row elements,
  *  so "not first in ITS group" is exactly what the sibling selector matched. */
-export const composerQueueItemSeparated = "border-t border-line pt-2";
+export const composerQueueItemSeparated = utilityClassName("border-t border-line pt-2");
 /** Drag-to-reorder: the whole row is the grab surface. The action buttons
  *  still take clicks — a drag only starts once the pointer actually moves. */
 export const composerQueueItemDraggable =
-	"cursor-grab touch-none active:cursor-grabbing";
+	utilityClassName("cursor-grab touch-none active:cursor-grabbing");
 /** In flow at the row's trailing edge, so each row reserves exactly the width
  *  its own actions need — it used to be absolutely positioned over a fixed
  *  128px of padding, which clipped the rows carrying a pill into the text.
@@ -299,14 +300,14 @@ export const composerQueueItemDraggable =
  *  painted after it, hence `order-1`. The negative block margins keep the 36px
  *  cluster from setting the height of a one-line row. */
 export const composerQueueActions =
-	"order-1 z-[1] -mt-[11px] -mb-2.5 inline-flex shrink-0 items-center gap-0.5";
+	utilityClassName("order-1 z-[1] -mt-[11px] -mb-2.5 inline-flex shrink-0 items-center gap-0.5");
 /** A compact 36px action with the same `rounded-control` corner and inset
  *  hover wash as the composer's toolbar buttons. It remains a separate
  *  constant because the wash sits 3px in rather than 4px, there is no
  *  transparent border holding layout, and disabled actions fade further. */
 export const composerQueueAction =
-	"relative inline-flex size-9 items-center justify-center rounded-control text-dim disabled:cursor-default disabled:opacity-35 enabled:hover:text-fg " +
-	"before:absolute before:inset-[3px] before:z-0 before:rounded-[calc(9px*var(--rf))] before:[corner-shape:var(--cs)] before:transition-[background] before:content-[''] enabled:hover:before:bg-hover " +
+	utilityClassName("relative inline-flex size-9 items-center justify-center rounded-control text-dim disabled:cursor-default disabled:opacity-35 enabled:hover:text-fg ") +
+	utilityClassName("before:absolute before:inset-[3px] before:z-0 before:rounded-[calc(9px*var(--rf))] before:[corner-shape:var(--cs)] before:transition-[background] before:content-[''] enabled:hover:before:bg-hover ") +
 	"[&>*]:relative [&>*]:z-[1]";
 /** Destructive action: the wash goes red rather than neutral. */
 export const composerQueueActionDanger =
@@ -319,11 +320,11 @@ export const composerQueueActionSteer = "text-accent enabled:hover:text-accent";
  *  round (the stylesheet spelled a bare 999px with no `corner-shape`), so
  *  `rounded-full` rather than `rounded-[999px]`. */
 export const composerQueuePill =
-	"inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-transparent bg-accent-soft px-[13px] text-label font-semibold text-accent";
+	utilityClassName("inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-transparent bg-accent-soft px-[13px] text-label font-semibold text-accent");
 /** Optimistic busy send: a transient readout, not a badge or control. Keeping
  *  it borderless prevents the in-flight state from reading as a pill button. */
 export const composerQueueSendingStatus =
-	"inline-flex h-8 shrink-0 items-center px-2 text-label font-medium text-faint";
+	utilityClassName("inline-flex h-8 shrink-0 items-center px-2 text-label font-medium text-faint");
 /** The label carries its own motion instead of standing next to a spinner: a
  *  highlight crosses the word, which reads as "not settled yet" without adding
  *  a second moving thing to a row that already sits in a list. The letters are
@@ -332,33 +333,33 @@ export const composerQueueSendingStatus =
  *  from the resting `--text-faint` in both themes. Settled states ("Queued")
  *  do not take it. */
 export const composerQueueSendingShimmer =
-	"bg-clip-text text-transparent [-webkit-background-clip:text] " +
+	utilityClassName("bg-clip-text text-transparent [-webkit-background-clip:text] ") +
 	"[background-image:linear-gradient(100deg,var(--text-faint)_38%,var(--text-dim)_50%,var(--text-faint)_62%)] " +
 	"[background-size:200%_100%] [background-repeat:no-repeat] " +
-	"animate-[text-shimmer_1.8s_linear_infinite]";
-export const composerQueueContent = "flex min-w-0 flex-1 items-center gap-2";
+	utilityClassName("animate-[text-shimmer_1.8s_linear_infinite]");
+export const composerQueueContent = utilityClassName("flex min-w-0 flex-1 items-center gap-2");
 /** The thumbnail keeps its size — shrunk to the 19px line box it stops being a
  *  recognizable preview, and the `+N` badge below is nearly as tall as the
  *  image it counts. The row centers on it instead. */
-export const composerQueueImage = "relative h-[34px] w-[46px] flex-none";
+export const composerQueueImage = utilityClassName("relative h-[34px] w-[46px] flex-none");
 export const composerQueueImageThumb =
-	"block size-full rounded-[calc(8px*var(--rf))] border border-line object-cover";
+	utilityClassName("block size-full rounded-[calc(8px*var(--rf))] border border-line object-cover");
 export const composerQueueImageCount =
-	"absolute -right-1 -bottom-1 h-[18px] min-w-[18px] rounded-full border border-line bg-raised px-1 text-center text-[10px] font-bold leading-4 text-dim";
+	utilityClassName("absolute -right-1 -bottom-1 h-[18px] min-w-[18px] rounded-full border border-line bg-raised px-1 text-center text-[10px] font-bold leading-4 text-dim");
 /** The message itself, one line with an ellipsis. It is genuine user content,
  *  so `.selectable` opts it back in from the app chrome's global selection
  *  block and restores the touch copy callout. Size and leading stay in one
  *  string with leading last: tailwind-merge files `leading` as a conflict of
  *  `font-size`, so a later `text-*` would drop an earlier `leading-*`. */
 export const composerQueueBody =
-	"selectable min-w-0 flex-1 cursor-text truncate text-label leading-[1.45]";
+	utilityClassName("selectable min-w-0 flex-1 cursor-text truncate text-label leading-[1.45]");
 /** Whose message it is. `github` outranks `human` — both were equally specific
  *  in the stylesheet and github came last. */
 export const composerQueueBodyTone = {
-	default: "text-fg",
-	human: "text-[color-mix(in_srgb,var(--text)_88%,#1f9e8a)]",
-	github: "text-dim",
-	sending: "text-dim",
+	default: utilityClassName("text-fg"),
+	human: utilityClassName("text-[color-mix(in_srgb,var(--text)_88%,#1f9e8a)]"),
+	github: utilityClassName("text-dim"),
+	sending: utilityClassName("text-dim"),
 } as const;
 /** The "from" label ahead of the body — a teammate's name, or "GitHub". */
-export const composerQueueFrom = "mr-1.5 font-semibold text-faint";
+export const composerQueueFrom = utilityClassName("mr-1.5 font-semibold text-faint");

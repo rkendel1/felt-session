@@ -1,6 +1,15 @@
+import { mergeStylexProps } from "../../ui/cn";
 import { BASE_PATH } from "../../lib/base";
 import { SettingsHeader, SettingsPanel } from "../../ui/settings";
 import { TeamSection } from "../SetupTeam";
+import * as stylex from "@stylexjs/stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	textLink: {
+			color: "var(--link)"
+	},
+});
 
 // Workspace → Members: the identity table, on a page of its own. Commit
 // attribution, `allowedUsers` scoping and GitHub sign-in all resolve through
@@ -16,7 +25,7 @@ export function MembersPanel() {
 						Members identify who sessions act as. Configure who can sign in under{" "}
 						<a
 							href={`${BASE_PATH}/settings/authentication`}
-							className="text-link hover:underline"
+							{...mergeStylexProps("hover:underline", sx.textLink)}
 						>
 							Authentication
 						</a>

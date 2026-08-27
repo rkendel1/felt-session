@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent, type RefObject } from "react";
 import { bootstrapRunner, createRunnerPairing, fetchRunnerBootstrapTargets, fetchRunners, revokeRunner, updateRunner, type RunnerBootstrapTarget, type RunnerInfo } from "../../lib/api/runners";
 import { Button } from "../../ui/button";
-import { cn } from "../../ui/cn";
 import { Field, Input } from "../../ui/input";
 import { Modal } from "../../ui/modal";
 import { OptionSelect } from "../../ui/select";
@@ -10,13 +9,185 @@ import { toast } from "../../ui/toast";
 import { SettingCard, SettingCardSkeleton, SettingsGroupLabel, SettingsHeader, SettingsHint, SettingsPanel } from "../../ui/settings";
 import { markTileClass, markTileGradient, markTileInk, markTileShadow } from "../../lib/mark-tile";
 import { IconServer } from "../icons";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../../styles/typography.stylex";
+import { mergeStylexProps, mergeStylexClassName, mergeStylexOverrideClassName } from "../../ui/cn";
 
-const stateStyle: Record<RunnerInfo["state"], string> = {
-	online: "bg-green-soft text-green",
-	busy: "bg-yellow-soft text-yellow",
-	offline: "bg-hover text-dim",
-	maintenance: "bg-hover text-dim",
-};
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	mx4: {
+			marginInline: "16px"
+	},
+	mb4: {
+			marginBottom: "16px"
+	},
+	roundedLg: {
+			borderRadius: "calc(14px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	bgRaised: {
+			backgroundColor: "var(--bg-raised)"
+	},
+	p4: {
+			padding: "16px"
+	},
+	fontSemibold: {
+			fontWeight: "var(--font-weight-semibold)"
+	},
+	textFg: {
+			color: "var(--text)"
+	},
+	mb3: {
+			marginBottom: "12px"
+	},
+	mt1: {
+			marginTop: "4px"
+	},
+	leadingRelaxed: {
+			lineHeight: "var(--leading-relaxed)"
+	},
+	textDim: {
+			color: "var(--text-dim)"
+	},
+	grid: {
+			display: "grid"
+	},
+	gap2: {
+			gap: "8px"
+	},
+	mt3: {
+			marginTop: "12px"
+	},
+	flex: {
+			display: "flex"
+	},
+	mb0: {
+			marginBottom: "0"
+	},
+	flexWrap: {
+			flexWrap: "wrap"
+	},
+	itemsCenter: {
+			alignItems: "center"
+	},
+	minW0: {
+			minWidth: "0"
+	},
+	flex1: {
+			flex: "1"
+	},
+	fontMono: {
+			fontFamily: "var(--mono)"
+	},
+	textXs: {
+			fontSize: "var(--type-label)",
+			lineHeight: "var(--tw-leading,var(--text-xs--line-height))"
+	},
+	mt2: {
+			marginTop: "8px"
+	},
+	textFaint: {
+			color: "var(--text-faint)"
+	},
+	px5: {
+			paddingInline: "20px"
+	},
+	py5: {
+			paddingBlock: "20px"
+	},
+	fontMedium: {
+			fontWeight: "var(--font-weight-medium)"
+	},
+	gap3: {
+			gap: "12px"
+	},
+	gapX4: {
+			columnGap: "16px"
+	},
+	py4: {
+			paddingBlock: "16px"
+	},
+	colStart1: {
+			gridColumnStart: "1"
+	},
+	rowStart1: {
+			gridRowStart: "1"
+	},
+	itemsStart: {
+			alignItems: "flex-start"
+	},
+	gap05: {
+			gap: "2px"
+	},
+	colStart2: {
+			gridColumnStart: "2"
+	},
+	justifyEnd: {
+			justifyContent: "flex-end"
+	},
+	selfStart: {
+			alignSelf: "flex-start"
+	},
+	flexCol: {
+			flexDirection: "column"
+	},
+	gap5: {
+			gap: "20px"
+	},
+	minH9: {
+			minHeight: "36px"
+	},
+	justifyBetween: {
+			justifyContent: "space-between"
+	},
+	gap4: {
+			gap: "16px"
+	},
+	stateChip: {
+		borderRadius: "calc(infinity * 1px)",
+		paddingInline: "8px",
+		paddingBlock: "2px",
+		fontWeight: "var(--font-weight-medium)",
+		textTransform: "capitalize",
+
+		cornerShape: "var(--cs)",},
+	capitalize: {
+		textTransform: "capitalize",
+	},
+	stateOnline: {
+		backgroundColor: "var(--green-soft)",
+		color: "var(--green)",
+	},
+	stateBusy: {
+		backgroundColor: "var(--yellow-soft)",
+		color: "var(--yellow)",
+	},
+	stateOffline: {
+		backgroundColor: "var(--hover)",
+		color: "var(--text-dim)",
+	},
+
+	smGridCols3: {
+		"@media (min-width: 40rem)": {
+			"gridTemplateColumns": "repeat(3,minmax(0,1fr))"
+		}
+	},
+	gridColsMinmax01fr575rem: {
+		"gridTemplateColumns": "minmax(0,1fr) 5.75rem"
+	},
+	desktopGridColsMinmax01fr13rem: {
+		"@media (min-width: 721px)": {
+			"gridTemplateColumns": "minmax(0,1fr) 13rem"
+		}
+	},
+});
+
+const stateStyle = {
+	online: sx.stateOnline,
+	busy: sx.stateBusy,
+	offline: sx.stateOffline,
+	maintenance: sx.stateOffline,
+} as const;
 
 function resourceSummary(runner: RunnerInfo): string {
 	const values = [
@@ -124,19 +295,19 @@ setBusyId(null);
 			description="Computers your workspace explicitly trusts for work that needs their hardware or platform. They are not isolated Sandboxes."
 			actions={admin ? <Button variant="primary" size="sm" onClick={() => setConnectChoice("choices")}>Add Runner</Button> : undefined}
 		/>
-		{connectChoice === "choices" && <div className="mx-4 mb-4 rounded-lg bg-raised p-4">
-			<div className="text-item-title font-semibold text-fg">Connect a Runner</div>
-			<p className="mb-3 mt-1 text-supporting leading-relaxed text-dim">Choose the machine path first. Runners are trusted computers, not isolated Sandboxes.</p>
-			<div className="grid gap-2 sm:grid-cols-3">
+		{connectChoice === "choices" && <div {...stylex.props(sx.mx4, sx.mb4, sx.roundedLg, sx.bgRaised, sx.p4)}>
+			<div {...stylex.props(sx.fontSemibold, sx.textFg, typography.itemTitle)}>Connect a Runner</div>
+			<p {...stylex.props(sx.mb3, sx.mt1, sx.leadingRelaxed, sx.textDim, typography.supporting)}>Choose the machine path first. Runners are trusted computers, not isolated Sandboxes.</p>
+			<div {...mergeStylexProps("", sx.smGridCols3, sx.grid, sx.gap2)}>
 				<Button size="sm" onClick={() => void pair()}>Connect on this machine</Button>
 				<Button size="sm" variant="soft" onClick={() => void chooseBootstrap("ssh")}>Migrate SSH machine</Button>
 				<Button size="sm" variant="soft" onClick={() => void chooseBootstrap("kubernetes")}>Connect Kubernetes GPU</Button>
 			</div>
-			<Button className="mt-3" size="sm" variant="ghost" onClick={() => setConnectChoice(null)}>Cancel</Button>
+			<Button className={mergeStylexOverrideClassName("", sx.mt3)} size="sm" variant="ghost" onClick={() => setConnectChoice(null)}>Cancel</Button>
 		</div>}
-		{(connectChoice === "ssh" || connectChoice === "kubernetes") && <div className="mx-4 mb-4 rounded-lg bg-raised p-4">
-			<div className="text-item-title font-semibold text-fg">{connectChoice === "ssh" ? "Migrate an SSH machine" : "Connect a Kubernetes GPU Runner"}</div>
-			<p className="mb-3 mt-1 text-supporting leading-relaxed text-dim">Select a preconfigured operator target. The migration installs and starts only the Runner service, then the machine connects outbound.</p>
+		{(connectChoice === "ssh" || connectChoice === "kubernetes") && <div {...stylex.props(sx.mx4, sx.mb4, sx.roundedLg, sx.bgRaised, sx.p4)}>
+			<div {...stylex.props(sx.fontSemibold, sx.textFg, typography.itemTitle)}>{connectChoice === "ssh" ? "Migrate an SSH machine" : "Connect a Kubernetes GPU Runner"}</div>
+			<p {...stylex.props(sx.mb3, sx.mt1, sx.leadingRelaxed, sx.textDim, typography.supporting)}>Select a preconfigured operator target. The migration installs and starts only the Runner service, then the machine connects outbound.</p>
 			{bootstrapTargets[connectChoice].length ? <>
 				<OptionSelect
 					label="Operator target"
@@ -147,32 +318,32 @@ setBusyId(null);
 					}))}
 					onChange={setBootstrapTargetId}
 				/>
-				<div className="mt-3 flex gap-2"><Button size="sm" onClick={() => void startBootstrap()}>Connect</Button><Button size="sm" variant="ghost" onClick={() => setConnectChoice("choices")}>Back</Button></div>
-			</> : <><p className="mb-0 text-supporting text-dim">No configured {connectChoice === "ssh" ? "SSH" : "Kubernetes"} targets are available.</p><Button className="mt-3" size="sm" variant="ghost" onClick={() => setConnectChoice("choices")}>Back</Button></>}
+				<div {...stylex.props(sx.mt3, sx.flex, sx.gap2)}><Button size="sm" onClick={() => void startBootstrap()}>Connect</Button><Button size="sm" variant="ghost" onClick={() => setConnectChoice("choices")}>Back</Button></div>
+			</> : <><p {...stylex.props(sx.mb0, sx.textDim, typography.supporting)}>No configured {connectChoice === "ssh" ? "SSH" : "Kubernetes"} targets are available.</p><Button className={mergeStylexOverrideClassName("", sx.mt3)} size="sm" variant="ghost" onClick={() => setConnectChoice("choices")}>Back</Button></>}
 		</div>}
 
-		{pairing && <div className="mx-4 mb-4 rounded-lg bg-raised p-4">
-			<div className="text-item-title font-semibold text-fg">Connect on this machine</div>
-			<p className="mb-3 mt-1 text-supporting leading-relaxed text-dim">Run this once on the computer. It detects capabilities and opens a reconnecting Runner channel.</p>
-			<div className="flex flex-wrap items-center gap-2">
-				<Input readOnly value={pairingCommand(pairing.code)} className="min-w-0 flex-1 font-mono text-xs" />
+		{pairing && <div {...stylex.props(sx.mx4, sx.mb4, sx.roundedLg, sx.bgRaised, sx.p4)}>
+			<div {...stylex.props(sx.fontSemibold, sx.textFg, typography.itemTitle)}>Connect on this machine</div>
+			<p {...stylex.props(sx.mb3, sx.mt1, sx.leadingRelaxed, sx.textDim, typography.supporting)}>Run this once on the computer. It detects capabilities and opens a reconnecting Runner channel.</p>
+			<div {...stylex.props(sx.flex, sx.flexWrap, sx.itemsCenter, sx.gap2)}>
+				<Input readOnly value={pairingCommand(pairing.code)} className={mergeStylexOverrideClassName("", sx.minW0, sx.flex1, sx.fontMono, sx.textXs)} />
 				<Button size="sm" onClick={() => void copy()}>Copy</Button>
 				<Button size="sm" variant="ghost" onClick={() => setPairing(null)}>Done</Button>
 			</div>
-			<p className="mb-0 mt-2 text-supporting text-faint">This one-time code expires at {new Date(pairing.expiresAt).toLocaleTimeString()}.</p>
-			<p className="mb-0 mt-1 text-supporting text-faint">New machine? Install the command first: install.sh on macOS and Linux, install.ps1 on Windows.</p>
+			<p {...stylex.props(sx.mb0, sx.mt2, sx.textFaint, typography.supporting)}>This one-time code expires at {new Date(pairing.expiresAt).toLocaleTimeString()}.</p>
+			<p {...stylex.props(sx.mb0, sx.mt1, sx.textFaint, typography.supporting)}>New machine? Install the command first: install.sh on macOS and Linux, install.ps1 on Windows.</p>
 		</div>}
 
 		<SettingsGroupLabel actions={<Button size="sm" variant="ghost" onClick={() => void load()}>Refresh</Button>}>Workspace inventory</SettingsGroupLabel>
 		{loading ? <SettingCardSkeleton rows={3} icon={40} label="Loading Runners" /> : !runners.length ? (
 			<SettingCard>
-				<div className="px-5 py-5">
-					<div className="text-item-title font-medium text-fg">No Runners connected</div>
-					<p className="mb-0 mt-1 text-supporting leading-relaxed text-dim">Choose a computer, connect it with a pairing command, then choose its permissions.</p>
+				<div {...stylex.props(sx.px5, sx.py5)}>
+					<div {...stylex.props(sx.fontMedium, sx.textFg, typography.itemTitle)}>No Runners connected</div>
+					<p {...stylex.props(sx.mb0, sx.mt1, sx.leadingRelaxed, sx.textDim, typography.supporting)}>Choose a computer, connect it with a pairing command, then choose its permissions.</p>
 				</div>
 			</SettingCard>
 		) : (
-			<div className="grid gap-3">
+			<div {...stylex.props(sx.grid, sx.gap3)}>
 				{runners.map((runner) => <RunnerRow key={runner.id} runner={runner} admin={admin} busy={busyId === runner.id} onChange={change} onRevoke={revoke} />)}
 			</div>
 		)}
@@ -207,17 +378,17 @@ function RunnerRow({ runner, admin, busy, onChange, onRevoke }: { runner: Runner
 	const labelRef = useRef<HTMLInputElement>(null);
 	return <>
 		<SettingCard>
-			<div className="grid grid-cols-[minmax(0,1fr)_5.75rem] gap-x-4 px-5 py-4 desktop:grid-cols-[minmax(0,1fr)_13rem]">
-				<div className="col-start-1 row-start-1 flex min-w-0 items-start gap-3">
+			<div {...mergeStylexProps("", sx.gridColsMinmax01fr575rem, sx.desktopGridColsMinmax01fr13rem, sx.grid, sx.gapX4, sx.px5, sx.py4)}>
+				<div {...stylex.props(sx.colStart1, sx.rowStart1, sx.flex, sx.minW0, sx.itemsStart, sx.gap3)}>
 					<RunnerIcon />
-					<div className="min-w-0 flex-1">
-						<div className="flex flex-wrap items-center gap-2">
-							<span className="text-item-title font-semibold text-fg">{runner.label || runner.name}</span>
-							<span className={cn("rounded-full px-2 py-0.5 text-meta font-medium capitalize", stateStyle[runner.state])}>{runner.state}</span>
+					<div {...stylex.props(sx.minW0, sx.flex1)}>
+						<div {...stylex.props(sx.flex, sx.flexWrap, sx.itemsCenter, sx.gap2)}>
+							<span {...stylex.props(sx.fontSemibold, sx.textFg, typography.itemTitle)}>{runner.label || runner.name}</span>
+							<span {...stylex.props(sx.stateChip, typography.meta, stateStyle[runner.state])}>{runner.state}</span>
 						</div>
-						<div className="mt-1 text-supporting leading-relaxed text-dim">{runner.platform} · {runner.arch} · {resourceSummary(runner)}</div>
-						{runner.workload && <div className="mt-2 text-supporting text-dim">Working: {runner.workload.operation || runner.workload.sessionId || "session work"}</div>}
-						<div className="mt-2 grid gap-0.5 text-meta text-faint">
+						<div {...stylex.props(sx.mt1, sx.leadingRelaxed, sx.textDim, typography.supporting)}>{runner.platform} · {runner.arch} · {resourceSummary(runner)}</div>
+						{runner.workload && <div {...stylex.props(sx.mt2, sx.textDim, typography.supporting)}>Working: {runner.workload.operation || runner.workload.sessionId || "session work"}</div>}
+						<div {...stylex.props(sx.mt2, sx.grid, sx.gap05, sx.textFaint, typography.meta)}>
 							{runner.capabilities.toolchains.length > 0 && <div>{runner.capabilities.toolchains.join(" · ")}</div>}
 							{runner.resources?.localInference?.length ? <div>Local inference: {runner.resources.localInference.map((runtime) => `${runtime.runtime}${runtime.models.length ? ` (${runtime.models.join(", ")})` : ""}`).join(" · ")}</div> : null}
 							{runner.migration?.kind === "kubernetes" && <div>Kubernetes · {runner.migration.context} / {runner.migration.namespace} / {runner.migration.workload}</div>}
@@ -225,7 +396,7 @@ function RunnerRow({ runner, admin, busy, onChange, onRevoke }: { runner: Runner
 					</div>
 				</div>
 				{admin && (
-					<div className="col-start-2 row-start-1 flex justify-end self-start">
+					<div {...stylex.props(sx.colStart2, sx.rowStart1, sx.flex, sx.justifyEnd, sx.selfStart)}>
 						<Button size="sm" onClick={() => setEditing(true)}>Configure</Button>
 					</div>
 				)}
@@ -269,7 +440,7 @@ function RunnerDetails({ runner, busy, labelRef, onChange, onRevoke, onSaved }: 
 	return <>
 		<Modal.Header
 			title={runner.label || runner.name}
-			description={<><span className={`capitalize ${stateStyle[runner.state]}`}>{runner.state}</span> · {runner.platform} · {runner.arch} · {resourceSummary(runner)}</>}
+			description={<><span {...stylex.props(sx.capitalize, stateStyle[runner.state])}>{runner.state}</span> · {runner.platform} · {runner.arch} · {resourceSummary(runner)}</>}
 		/>
 		{/* Every field here is a comma-separated LIST, and a list clips in a
 		    half-dialog column (the same reason SetupTeam runs its email and
@@ -279,8 +450,8 @@ function RunnerDetails({ runner, busy, labelRef, onChange, onRevoke, onSaved }: 
 		    only come from grouping. The three zones are what the fields
 		    actually are: what the Runner is called, who may use it, and what
 		    it is doing. 20px between them against 12px inside. */}
-		<form className="flex flex-col gap-5" onSubmit={(event) => void save(event)}>
-			<div className="flex flex-col gap-3">
+		<form {...stylex.props(sx.flex, sx.flexCol, sx.gap5)} onSubmit={(event) => void save(event)}>
+			<div {...stylex.props(sx.flex, sx.flexCol, sx.gap3)}>
 				<Field label="Label">
 					<Input ref={labelRef} value={label} onChange={(event) => setLabel(event.target.value)} placeholder={runner.name} spellCheck={false} />
 				</Field>
@@ -288,7 +459,7 @@ function RunnerDetails({ runner, busy, labelRef, onChange, onRevoke, onSaved }: 
 					<Input value={tags} onChange={(event) => setTags(event.target.value)} placeholder="No tags" autoCapitalize="none" spellCheck={false} />
 				</Field>
 			</div>
-			<div className="flex flex-col gap-3">
+			<div {...stylex.props(sx.flex, sx.flexCol, sx.gap3)}>
 				<Field label="Allowed people" title="Comma-separated. Blank means every workspace member.">
 					<Input value={users} onChange={(event) => setUsers(event.target.value)} placeholder="All workspace members" autoCapitalize="none" spellCheck={false} />
 				</Field>
@@ -302,14 +473,14 @@ function RunnerDetails({ runner, busy, labelRef, onChange, onRevoke, onSaved }: 
 			{/* Label left, control right: the shape every toggle in settings
 			    already has, so two of them read as a list rather than as pairs
 			    floating in a row. */}
-			<div className="flex flex-col">
+			<div {...stylex.props(sx.flex, sx.flexCol)}>
 				<SwitchRow label="Maintenance" checked={maintenance} onChange={setMaintenance} disabled={busy} />
 				<SwitchRow label="Commands" checked={commands} onChange={setCommands} disabled={busy} />
 				{inference ? <SwitchRow label="Local inference" checked={inferenceEnabled} onChange={setInferenceEnabled} disabled={busy} /> : null}
 			</div>
 			<Modal.Footer>
 				<Button variant="danger" onClick={() => onRevoke(runner)} disabled={busy}>Revoke</Button>
-				<span className="flex-1" />
+				<span {...stylex.props(sx.flex1)} />
 				<Modal.Close render={<Button variant="ghost" disabled={busy}>Cancel</Button>} />
 				<Button variant="primary" type="submit" disabled={busy}>Save</Button>
 			</Modal.Footer>
@@ -321,7 +492,7 @@ function SwitchRow({ label, checked, onChange, disabled }: { label: string; chec
 	// `text-dim`, matching Field's label: both name a control, so both are
 	// chrome. Two label colours at one size in one dialog reads as arbitrary,
 	// and it is the values (the typed text, the lit switch) that should carry.
-	return <label className="flex min-h-9 items-center justify-between gap-4 text-label font-medium text-dim">
+	return <label {...stylex.props(sx.flex, sx.minH9, sx.itemsCenter, sx.justifyBetween, sx.gap4, sx.fontMedium, sx.textDim, typography.label)}>
 		{label}
 		<Switch checked={checked} onCheckedChange={onChange} disabled={disabled} />
 	</label>;

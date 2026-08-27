@@ -1,5 +1,5 @@
 import { repoLabel } from "../lib/repo-label";
-import { cn } from "../ui/cn";
+import { cn, mergeStylexProps, mergeStylexClassName, mergeStylexOverrideClassName } from "../ui/cn";
 import { FALLBACK_REPO, sessionRepoOr } from "../lib/session-repo";
 import { sessionSourceLabel } from "../lib/brand";
 import { SOURCE_CHIP, sourceChipTone } from "../lib/source-chip-classes";
@@ -35,6 +35,169 @@ import { EmptyState, ListSkeleton } from "../ui/state";
 import { IconChevronRight, IconFilter, IconUnarchive } from "./icons";
 import { RepoTile } from "./RepoTile";
 import { UserAvatar } from "./UserAvatar";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+import { sharedClassStyles } from "../styles/shared-class-styles.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	w200px: {
+			width: "200px"
+	},
+	minW90px: {
+			minWidth: "90px"
+	},
+	shrink100: {
+			flexShrink: "100"
+	},
+	minW220px: {
+			minWidth: "220px"
+	},
+	minW0: {
+			minWidth: "0"
+	},
+	flex1: {
+			flex: "1"
+	},
+	truncate: {
+			textOverflow: "ellipsis",
+			whiteSpace: "nowrap",
+			overflow: "hidden"
+	},
+	size18px: {
+			width: "18px",
+			height: "18px"
+	},
+	shrink0: {
+			flexShrink: "0"
+	},
+	minH0: {
+			minHeight: "0"
+	},
+	wFull: {
+			width: "100%"
+	},
+	overflowYAuto: {
+			overflowY: "auto"
+	},
+	mxAuto: {
+			marginInline: "auto"
+	},
+	maxW860px: {
+			maxWidth: "860px"
+	},
+	px6: {
+			paddingInline: "24px"
+	},
+	pb60px: {
+			paddingBottom: "60px"
+	},
+	pt7: {
+			paddingTop: "28px"
+	},
+	mb3: {
+			marginBottom: "12px"
+	},
+	flex: {
+			display: "flex"
+	},
+	itemsCenter: {
+			alignItems: "center"
+	},
+	gap2: {
+			gap: "8px"
+	},
+	m0: {
+			margin: "0"
+	},
+	mb18px: {
+			marginBottom: "18px"
+	},
+	textDim: {
+			color: "var(--text-dim)"
+	},
+	textFg: {
+		color: "var(--text)",
+	},
+	mt4: {
+		marginTop: "16px",
+	},
+	bgActive: {
+		backgroundColor: "var(--bg-active)",
+	},
+	hidden: {
+			display: "none"
+	},
+	mt1: {
+			marginTop: "4px"
+	},
+	textFaint: {
+			color: "var(--text-faint)"
+	},
+	px3: {
+			paddingInline: "12px"
+	},
+	pt4: {
+			paddingTop: "16px"
+	},
+
+	phoneTransitionNone: {
+		"@media (max-width: 720px)": {
+			"transitionProperty": "none"
+		}
+	},
+	phoneWillChangeTransform: {
+		"@media (max-width: 720px)": {
+			"willChange": "transform"
+		}
+	},
+
+	phoneMinH11: {
+		"@media (max-width: 720px)": {
+			"minHeight": "44px"
+		}
+	},
+	phoneWFull: {
+		"@media (max-width: 720px)": {
+			"width": "100%"
+		}
+	},
+	phonePx35: {
+		"@media (max-width: 720px)": {
+			"paddingInline": "14px"
+		}
+	},
+	phoneTextInputPhone: {
+		"@media (max-width: 720px)": {
+			"fontSize": "var(--type-input-phone)"
+		}
+	},
+	phonePbCalc55remEnvSafeAreaInsetBottom0px: {
+		"@media (max-width: 720px)": {
+			"paddingBottom": "calc(5.5rem + env(safe-area-inset-bottom,0px))"
+		}
+	},
+	phonePt2: {
+		"@media (max-width: 720px)": {
+			"paddingTop": "8px"
+		}
+	},
+	phoneMb35: {
+		"@media (max-width: 720px)": {
+			"marginBottom": "14px"
+		}
+	},
+	phoneInline: {
+		"@media (max-width: 720px)": {
+			"display": "inline"
+		}
+	},
+	phoneBlock: {
+		"@media (max-width: 720px)": {
+			"display": "block"
+		}
+	},
+});
 
 interface Props {
 	sessions: UnifiedSession[];
@@ -358,8 +521,7 @@ setBusy(null);
 	// Match Pull requests on desktop. On a phone the title and filter share the
 	// top bar, while Search floats at the thumb edge below the list.
 	const searchAction = (
-		<Input
-			className="w-[200px] min-w-[90px] shrink-[100] phone:min-h-11 phone:w-full phone:px-3.5 phone:text-input-phone"
+		<Input {...mergeStylexProps("", sx.phoneMinH11, sx.phoneWFull, sx.phonePx35, sx.phoneTextInputPhone, sx.w200px, sx.minW90px, sx.shrink100)}
 			type="search"
 			aria-label="Search archived sessions"
 			placeholder="Search archived…"
@@ -377,31 +539,31 @@ setBusy(null);
 							variant="ghost"
 							icon={<IconFilter size={18} />}
 							aria-label={`Filters, ${activeFilterCount} active`}
-							className={activeFilterCount > 0 ? "shrink-0 text-fg" : "shrink-0"}
+							className={mergeStylexOverrideClassName("", sx.shrink0, activeFilterCount > 0 && sx.textFg)}
 						>
 							Filters{activeFilterCount > 0 ? ` ${activeFilterCount}` : ""}
 						</Button>
 					}
 				/>
-				<Menu.Popup align="end" className="min-w-[220px]">
+				<Menu.Popup align="end" className={mergeStylexOverrideClassName("", sx.minW220px)}>
 					<Menu.Group>
 						<Menu.GroupLabel>Owner</Menu.GroupLabel>
 						<Menu.RadioGroup value={owner} onValueChange={(value) => setOwner(String(value))}>
 							<Menu.RadioItem value="mine" closeOnClick>
 								<UserAvatar name={currentUser} size={18} />
-								<span className="min-w-0 flex-1">My archived</span>
+								<span {...stylex.props(sx.minW0, sx.flex1)}>My archived</span>
 								<Menu.Check on={owner === "mine"} />
 							</Menu.RadioItem>
 							{people.map(({ key, label }) => (
 								<Menu.RadioItem key={key} value={key} closeOnClick>
 									<UserAvatar name={label} size={18} />
-									<span className="min-w-0 flex-1 truncate">{label}</span>
+									<span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>{label}</span>
 									<Menu.Check on={owner === key} />
 								</Menu.RadioItem>
 							))}
 							<Menu.RadioItem value="everyone" closeOnClick>
-								<span className="size-[18px] shrink-0" />
-								<span className="min-w-0 flex-1">Everyone</span>
+								<span {...stylex.props(sx.size18px, sx.shrink0)} />
+								<span {...stylex.props(sx.minW0, sx.flex1)}>Everyone</span>
 								<Menu.Check on={owner === "everyone"} />
 							</Menu.RadioItem>
 						</Menu.RadioGroup>
@@ -413,14 +575,14 @@ setBusy(null);
 								<Menu.GroupLabel>Repository</Menu.GroupLabel>
 								<Menu.RadioGroup value={repo} onValueChange={(value) => setRepo(String(value))}>
 									<Menu.RadioItem value="all" closeOnClick>
-										<span className="size-[18px] shrink-0" />
-										<span className="min-w-0 flex-1">All repos</span>
+										<span {...stylex.props(sx.size18px, sx.shrink0)} />
+										<span {...stylex.props(sx.minW0, sx.flex1)}>All repos</span>
 										<Menu.Check on={repo === "all"} />
 									</Menu.RadioItem>
 									{repos.map((name) => (
 										<Menu.RadioItem key={name} value={name} closeOnClick>
 											<RepoTile name={name} size={18} />
-											<span className="min-w-0 flex-1 truncate">{repoLabel(name)}</span>
+											<span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>{repoLabel(name)}</span>
 											<Menu.Check on={repo === name} />
 										</Menu.RadioItem>
 									))}
@@ -436,7 +598,7 @@ setBusy(null);
 								<Menu.RadioGroup value={reason} onValueChange={(value) => setReason(value as ReasonFilter)}>
 									{(["all", "auto", "manual"] as const).map((value) => (
 										<Menu.RadioItem key={value} value={value} closeOnClick>
-											<span className="min-w-0 flex-1">{{ all: "All", auto: "Auto-archived", manual: "Manual" }[value]}</span>
+											<span {...stylex.props(sx.minW0, sx.flex1)}>{{ all: "All", auto: "Auto-archived", manual: "Manual" }[value]}</span>
 											<Menu.Check on={reason === value} />
 										</Menu.RadioItem>
 									))}
@@ -475,15 +637,15 @@ setBusy(null);
 	return (
 		<div
 			data-page-scroll
-			className="min-h-0 w-full flex-1 overflow-y-auto"
+			{...stylex.props(sx.minH0, sx.wFull, sx.flex1, sx.overflowYAuto)}
 		>
 			{desktopPortaled ? createPortal(actions, topbarActionsEl) : null}
 			{mobileFilterPortaled ? createPortal(filterAction, mobileActionsEl) : null}
-			<div className="mx-auto w-full max-w-[860px] px-6 pb-[60px] pt-7 phone:px-3.5 phone:pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))] phone:pt-2 phone:[body.kb-open_&]:pb-[5rem] phone:[body.kb-open_&]:pt-[max(env(safe-area-inset-top,0px),8px)]">
+			<div {...mergeStylexProps("phone:[body.kb-open_&]:pb-[5rem] phone:[body.kb-open_&]:pt-[max(env(safe-area-inset-top,0px),8px)]", sx.phonePx35, sx.phonePbCalc55remEnvSafeAreaInsetBottom0px, sx.phonePt2, sx.mxAuto, sx.wFull, sx.maxW860px, sx.px6, sx.pb60px, sx.pt7)}>
 				{!isPhone && !desktopPortaled ? (
-					<div className="mb-3 flex items-center gap-2">{actions}</div>
+					<div {...stylex.props(sx.mb3, sx.flex, sx.itemsCenter, sx.gap2)}>{actions}</div>
 				) : null}
-				<p className="m-0 mb-[18px] text-supporting text-dim phone:mb-3.5">
+				<p {...mergeStylexProps("", sx.phoneMb35, sx.m0, sx.mb18px, sx.textDim, typography.supporting)}>
 					{count}
 				</p>
 			{archived.length === 0 && !loaded ? (
@@ -496,7 +658,7 @@ setBusy(null);
 					rows={8}
 					label="Loading archived sessions"
 					className={ARCHIVED_LIST}
-					rowClassName="px-3"
+					rowClassName={mergeStylexClassName("", sharedClassStyles.px3)}
 				/>
 			) : archived.length === 0 ? (
 				<Card>
@@ -508,7 +670,7 @@ setBusy(null);
 			) : (
 				<div className={ARCHIVED_LIST}>
 					{sections.map((section, sectionIndex) => (
-						<section key={section.key} className={sectionIndex > 0 ? "mt-4" : undefined}>
+						<section key={section.key} {...stylex.props(sectionIndex > 0 && sx.mt4)}>
 							<h2 className={ARCHIVED_SECTION_LABEL}>{section.label}</h2>
 							<ul className={ARCHIVED_SECTION_ROWS}>
 								{section.items.map((s) => {
@@ -519,19 +681,19 @@ setBusy(null);
 									// reason. The repo is the tile, which carries it in a glance.
 									const meta = [
 										chip && (
-											<span key="chip" className={cn(SOURCE_CHIP, chip.tone)}>
+											<span key="chip" className={`${SOURCE_CHIP} ${chip.tone}`}>
 												{chip.label}
 											</span>
 										),
 										owner === "everyone" && s.startedBy && (
-											<span key="by" className="truncate">
+											<span key="by" {...stylex.props(sx.truncate)}>
 												{s.startedBy}
 											</span>
 										),
 										reason === "all" && isAutoReason(s) && (
 											<span
 												key="auto"
-												className={cn(SOURCE_CHIP, "bg-active text-dim")}
+												{...mergeStylexProps(SOURCE_CHIP, sx.bgActive, sx.textDim)}
 												title={`Auto-archived (${s.archivedReason})`}
 											>
 												auto
@@ -576,8 +738,8 @@ setBusy(null);
 														<div
 															className={cn(
 																ARCHIVED_ROW,
-																dragging && "phone:transition-none phone:will-change-transform",
-																swipeOffset && "phone:will-change-transform",
+																dragging && mergeStylexClassName("", sx.phoneTransitionNone, sx.phoneWillChangeTransform),
+																swipeOffset && mergeStylexClassName("", sx.phoneWillChangeTransform),
 															)}
 															style={
 																swipeOffset
@@ -607,12 +769,12 @@ setBusy(null);
 														{meta.length > 0 ? (
 															<span className={ARCHIVED_ROW_META}>
 																{meta}
-																<span className="hidden shrink-0 phone:inline">
+																<span {...mergeStylexProps("", sx.phoneInline, sx.hidden, sx.shrink0)}>
 																	{relativeTime(s.lastActivity)}
 																</span>
 															</span>
 														) : (
-															<span className="mt-1 hidden text-meta text-faint phone:block">
+															<span {...mergeStylexProps("", sx.phoneBlock, sx.mt1, sx.hidden, sx.textFaint, typography.meta)}>
 																{relativeTime(s.lastActivity)}
 															</span>
 														)}
@@ -621,7 +783,7 @@ setBusy(null);
 														<span className={ARCHIVED_ROW_TIME}>
 															{relativeTime(s.lastActivity)}
 														</span>
-														<IconChevronRight size={16} className="shrink-0" />
+														<IconChevronRight size={16} className={mergeStylexOverrideClassName("", sx.shrink0)} />
 													</span>
 													<Button
 														size="sm"
@@ -651,7 +813,7 @@ setBusy(null);
 						</section>
 					))}
 					{archived.length > PAGE_SIZE && (
-						<p className="m-0 px-3 pt-4 text-meta text-faint">
+						<p {...stylex.props(sx.m0, sx.px3, sx.pt4, sx.textFaint, typography.meta)}>
 							Showing the first {PAGE_SIZE} of {archived.length}. Search to
 							reach the older ones.
 						</p>

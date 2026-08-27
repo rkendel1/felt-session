@@ -12,7 +12,7 @@ import { beforeAll, describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 
 const store = new Map<string, string>();
-Object.assign(globalThis, {
+const testGlobals = {
 	localStorage: {
 		getItem: (k: string) => store.get(k) ?? null,
 		setItem: (k: string, v: string) => void store.set(k, v),
@@ -30,7 +30,10 @@ Object.assign(globalThis, {
 		}
 	},
 	fetch: () => Promise.reject(new Error("offline in tests")),
-});
+};
+for (const [key, value] of Object.entries(testGlobals)) {
+	Object.defineProperty(globalThis, key, { value, configurable: true, writable: true });
+}
 
 let sheet: typeof import("./ShortcutCheatSheet");
 let mod: typeof import("../lib/shortcuts");

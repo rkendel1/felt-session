@@ -1,7 +1,14 @@
+import { readFileSync } from "node:fs";
 import { expect, test } from "bun:test";
+import { newStylexCollector, stylexCss, stylexTransform } from "../../server/stylex-build";
 import { renderToStaticMarkup } from "react-dom/server";
 import { PrSeriesRows } from "./PrSeriesRows";
 import type { SessionPrRef } from "../lib/pr-refs";
+
+const toneSource = new URL("../lib/pr-tone-classes.ts", import.meta.url).pathname;
+const toneCollector = newStylexCollector();
+stylexTransform(toneSource, readFileSync(toneSource, "utf8"), toneCollector);
+const toneCss = stylexCss(toneCollector);
 
 function ref(over: Partial<SessionPrRef> = {}): SessionPrRef {
 	return {
@@ -102,8 +109,8 @@ test("each row is toned by its own state, not the series'", () => {
 	expect(html).toContain('data-tone="green"');
 	expect(html).toContain('data-tone="red"');
 	// …and the tone is on the row's own parts, not just the wrapper.
-	expect(html).toContain("text-green");
-	expect(html).toContain("text-red");
+	expect(toneCss).toContain("color:var(--green)");
+	expect(toneCss).toContain("color:var(--red)");
 });
 
 test("rows carry their state wash across the full surface", () => {
@@ -111,9 +118,9 @@ test("rows carry their state wash across the full surface", () => {
 		<PrSeriesRows refs={[ref({ title: "Fix the uploader" })]} />,
 	);
 
-	expect(html).toContain("bg-green-soft");
+	expect(toneCss).toContain("background-color:var(--green-soft)");
 	// The compact number chip remains one weight down from the primary row.
-	expect(html).toContain("bg-control");
+	expect(toneCss).toContain("background-color:var(--control-surface)");
 	// A PR with no URL still gets its row, minus the outbound link.
 	const noUrl = renderToStaticMarkup(
 		<PrSeriesRows refs={[ref({ url: undefined })]} />,

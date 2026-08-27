@@ -38,11 +38,354 @@ import {
   useCodeOrganizationSettings,
 } from "../hooks/useCodeDisplaySettings";
 import { PrFileTree } from "./pr/PrFileTree";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+import { mergeStylexProps, mergeStylexClassName, mergeStylexOverrideClassName } from "../ui/cn";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	flex: {
+			display: "flex"
+	},
+	w340px: {
+			width: "340px"
+	},
+	maxWCalc100vw24px: {
+			maxWidth: "calc(100vw - 24px)"
+	},
+	flexCol: {
+			flexDirection: "column"
+	},
+	gap05: {
+			gap: "2px"
+	},
+	p3: {
+			padding: "12px"
+	},
+	mx2: {
+			marginInline: "8px"
+	},
+	my15: {
+			marginBlock: "6px"
+	},
+	hPx: {
+			height: "1px"
+	},
+	bgLine: {
+			backgroundColor: "var(--border)"
+	},
+	m4: {
+			margin: "16px"
+	},
+	textDim: {
+			color: "var(--text-dim)"
+	},
+	roundedSm: {
+			borderRadius: "calc(4px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	bgYellow15: {
+			backgroundColor: "var(--yellow)"
+	},
+	px7px: {
+			paddingInline: "7px"
+	},
+	pyPx: {
+			paddingBlock: "1px"
+	},
+	fontBold: {
+			fontWeight: "var(--font-weight-bold)"
+	},
+	textYellow: {
+			color: "var(--yellow)"
+	},
+	ml2: {
+			marginLeft: "8px"
+	},
+	minH0: {
+			minHeight: "0"
+	},
+	px2: {
+			paddingInline: "8px"
+	},
+	py05: {
+			paddingBlock: "2px"
+	},
+	mlAuto: {
+			marginLeft: "auto"
+	},
+	shrink0: {
+			flexShrink: "0"
+	},
+	itemsCenter: {
+			alignItems: "center"
+	},
+	gap2: {
+			gap: "8px"
+	},
+	h10: {
+			height: "40px"
+	},
+	gap25: {
+			gap: "10px"
+	},
+	overflowXAuto: {
+			overflowX: "auto"
+	},
+	borderB: {
+			borderBottomStyle: "solid",
+			borderBottomWidth: "1px"
+	},
+	borderDivider: {
+			borderColor: "var(--divider)"
+	},
+	px35: {
+			paddingInline: "14px"
+	},
+	whitespaceNowrap: {
+			whiteSpace: "nowrap"
+	},
+	ScrollbarWidthNone: {
+			scrollbarWidth: "none"
+	},
+	sticky: {
+			position: "sticky"
+	},
+	z2: {
+			zIndex: "2"
+	},
+	gap1: {
+			gap: "4px"
+	},
+	bgPanelSurface: {
+			backgroundColor: "var(--panel-surface)"
+	},
+	px25: {
+			paddingInline: "10px"
+	},
+	py15: {
+			paddingBlock: "6px"
+	},
+	roundedFull: {
+			borderRadius: "calc(infinity * 1px)"
+	,
+		cornerShape: "round"},
+	bgFaint20: {
+			backgroundColor: "var(--text-faint)"
+	},
+	px5px: {
+			paddingInline: "5px"
+	},
+	textFaint: {
+			color: "var(--text-faint)"
+	},
+	minW0: {
+			minWidth: "0"
+	},
+	flex1: {
+			flex: "1"
+	},
+	hFull: {
+			height: "100%"
+	},
+	minH280px: {
+			minHeight: "280px"
+	},
+	justifyCenter: {
+			justifyContent: "center"
+	},
+	gap3: {
+			gap: "12px"
+	},
+	px4: {
+			paddingInline: "16px"
+	},
+	pt12: {
+			paddingTop: "48px"
+	},
+	pb24: {
+			paddingBottom: "96px"
+	},
+	textCenter: {
+			textAlign: "center"
+	},
+	h14: {
+			height: "56px"
+	},
+	w14: {
+			width: "56px"
+	},
+	fontMedium: {
+			fontWeight: "var(--font-weight-medium)"
+	},
+	textSm: {
+			fontSize: "var(--type-label)",
+			lineHeight: "var(--tw-leading,var(--text-sm--line-height))"
+	},
+	mt1: {
+			marginTop: "4px"
+	},
+	textXs: {
+			fontSize: "var(--type-label)",
+			lineHeight: "var(--tw-leading,var(--text-xs--line-height))"
+	},
+
+	z1: {
+		"zIndex": "1"
+	},
+	afterAbsolute: {
+		"::after": {
+			"content": "var(--tw-content)",
+			"position": "absolute"
+		}
+	},
+	afterInsetX0: {
+		"::after": {
+			"content": "var(--tw-content)",
+			"insetInline": "0"
+		}
+	},
+	afterTopFull: {
+		"::after": {
+			"content": "var(--tw-content)",
+			"top": "100%"
+		}
+	},
+	afterH25: {
+		"::after": {
+			"content": "var(--tw-content)",
+			"height": "10px"
+		}
+	},
+	afterBgPanelSurface: {
+		"::after": {
+			"content": "var(--tw-content)",
+			"backgroundColor": "var(--panel-surface)"
+		}
+	},
+	afterContent: {
+		"::after": {
+			"--tw-content": "\"\"",
+			"content": "var(--tw-content)"
+		}
+	},
+	Container: {
+		"containerType": "inline-size"
+	},
+	inlineFlex: {
+		"display": "inline-flex"
+	},
+	cursorPointer: {
+		"cursor": "pointer"
+	},
+	gap15: {
+		"gap": "6px"
+	},
+	roundedMd: {
+		"borderRadius": "calc(7px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	border: {
+		"borderStyle": "var(--tw-border-style)",
+		"borderWidth": "1px"
+	},
+	px9px: {
+		"paddingInline": "9px"
+	},
+	py3px: {
+		"paddingBlock": "3px"
+	},
+	phonePx3: {
+		"@media (max-width: 720px)": {
+			"paddingInline": "12px"
+		}
+	},
+	phonePy2: {
+		"@media (max-width: 720px)": {
+			"paddingBlock": "8px"
+		}
+	},
+	maxWFull: {
+		"maxWidth": "100%"
+	},
+	overflowClip: {
+		"overflow": "clip"
+	},
+	pb7: {
+		"paddingBottom": "28px"
+	},
+
+	borderLine: {
+		"borderColor": "var(--border)"
+	},
+	bgPanel: {
+		"backgroundColor": "var(--bg-panel)"
+	},
+	textFg: {
+		"color": "var(--text)"
+	},
+	borderTransparent: {
+		"borderColor": "transparent"
+	},
+	bgTransparent: {
+		"backgroundColor": "transparent"
+	},
+	hoverTextFg: {
+		"@media (hover: hover)": {
+			":hover": {
+				"color": "var(--text)"
+			}
+		}
+	},
+	pt25: {
+		"paddingTop": "10px"
+	},
+	px0: {
+		"paddingInline": "0"
+	},
+	pt0: {
+		"paddingTop": "0"
+	},
+
+	topCalcVarDiffPanelTop0px37px: {
+		"top": "calc(var(--diff-panel-top,0px) + 37px)"
+	},
+	phoneTopCalcVarDiffPanelTop0px47px: {
+		"@media (max-width: 720px)": {
+			"top": "calc(var(--diff-panel-top,0px) + 47px)"
+		}
+	},
+	topVarDiffPanelTop0px: {
+		"top": "var(--diff-panel-top,0px)"
+	},
+	ReviewFileHeaderTopCalcVarDiffPanelTop0px87px: {
+		"--review-file-header-top": "calc(var(--diff-panel-top,0px) + 87px)"
+	},
+	phoneReviewFileHeaderTopCalcVarDiffPanelTop0px97px: {
+		"@media (max-width: 720px)": {
+			"--review-file-header-top": "calc(var(--diff-panel-top,0px) + 97px)"
+		}
+	},
+	ReviewFileHeaderTopCalcVarDiffPanelTop0px50px: {
+		"--review-file-header-top": "calc(var(--diff-panel-top,0px) + 50px)"
+	},
+
+	fontSemibold: {
+		"--tw-font-weight": "var(--font-weight-semibold)",
+		"fontWeight": "var(--font-weight-semibold)"
+	},
+	textGreen: {
+		"color": "var(--green)"
+	},
+	textRed: {
+		"color": "var(--red)"
+	},
+});
 
 /* The +/− counts. Kept as constants because CommentableDiff carries the same
    pair on its file rows and group headers, and the two must read alike. */
-const DIFF_ADD = "font-semibold text-green";
-const DIFF_DEL = "font-semibold text-red";
+const DIFF_ADD = mergeStylexClassName("", sx.fontSemibold, sx.textGreen);
+const DIFF_DEL = mergeStylexClassName("", sx.fontSemibold, sx.textRed);
 
 interface Props {
   sessionId: string;
@@ -359,12 +702,12 @@ if (generation === flowGeneration.current) setFlowLoading(false);
         side="bottom"
         align="end"
         initialFocus
-        className="flex w-[340px] max-w-[calc(100vw-24px)] flex-col gap-0.5 p-3"
+        className={mergeStylexOverrideClassName("", sx.flex, sx.w340px, sx.maxWCalc100vw24px, sx.flexCol, sx.gap05, sx.p3)}
       >
         {source && onSourceChange && (
           <>
             <DiffSourceSetting value={source} onValueChange={onSourceChange} />
-            <div aria-hidden className="mx-2 my-1.5 h-px bg-line" />
+            <div aria-hidden {...stylex.props(sx.mx2, sx.my15, sx.hPx, sx.bgLine)} />
           </>
         )}
         <SettingRow label="Code view">
@@ -394,7 +737,7 @@ if (generation === flowGeneration.current) setFlowLoading(false);
           </Segmented>
         </SettingRow>
 
-        <div aria-hidden className="mx-2 my-1.5 h-px bg-line" />
+        <div aria-hidden {...stylex.props(sx.mx2, sx.my15, sx.hPx, sx.bgLine)} />
 
         <CodeOrganizationSettings
           settings={organizationSettings}
@@ -403,7 +746,7 @@ if (generation === flowGeneration.current) setFlowLoading(false);
           showFileListSetting={showFileList}
         />
 
-        <div aria-hidden className="mx-2 my-1.5 h-px bg-line" />
+        <div aria-hidden {...stylex.props(sx.mx2, sx.my15, sx.hPx, sx.bgLine)} />
 
         <CodeDisplaySettings {...codeDisplaySettings} />
       </Popover.Popup>
@@ -412,7 +755,7 @@ if (generation === flowGeneration.current) setFlowLoading(false);
   const emptyState = <DiffEmptyState isRunning={isRunning} />;
 
   if (loading) return <LoadingState>Loading diff…</LoadingState>;
-  if (error) return <InlineAlert className="m-4">{error}</InlineAlert>;
+  if (error) return <InlineAlert className={mergeStylexOverrideClassName("", sx.m4)}>{error}</InlineAlert>;
   if (!repos || !repos.length) return emptyState;
 
   // Repos that actually have changes; if none, show the empty state.
@@ -438,7 +781,7 @@ if (generation === flowGeneration.current) setFlowLoading(false);
 
   const toolbarContents = (
     <>
-      <span className="text-dim">
+      <span {...stylex.props(sx.textDim)}>
         {d.files.length} file{d.files.length === 1 ? "" : "s"}
         {groupsLoading && (
           <span role="status" aria-label="Organizing files">
@@ -449,7 +792,7 @@ if (generation === flowGeneration.current) setFlowLoading(false);
       <span className={DIFF_ADD}>+{d.totalAdditions}</span>
       <span className={DIFF_DEL}>−{d.totalDeletions}</span>
       {d.truncated && (
-        <span className="rounded-sm bg-yellow/15 px-[7px] py-px text-meta font-bold text-yellow">
+        <span {...stylex.props(sx.roundedSm, sx.bgYellow15, sx.px7px, sx.pyPx, sx.fontBold, sx.textYellow, typography.meta)}>
           truncated
         </span>
       )}
@@ -457,7 +800,7 @@ if (generation === flowGeneration.current) setFlowLoading(false);
         <Button
           variant="default"
           size="sm"
-          className="ml-2 min-h-0 px-2 py-0.5 text-meta"
+          className={mergeStylexOverrideClassName("", sx.ml2, sx.minH0, sx.px2, sx.py05, typography.meta)}
           onClick={tellAgentAboutEdits}
           title="Sends a note listing your hand-edits so they get reviewed and committed"
         >
@@ -465,10 +808,10 @@ if (generation === flowGeneration.current) setFlowLoading(false);
           {handEdited.length === 1 ? "" : "s"}
         </Button>
       )}
-      <div className="ml-auto flex shrink-0 items-center gap-2">
+      <div {...stylex.props(sx.mlAuto, sx.flex, sx.shrink0, sx.itemsCenter, sx.gap2)}>
         <div
           ref={setDiffControlsTarget}
-          className="flex shrink-0 items-center gap-2"
+          {...stylex.props(sx.flex, sx.shrink0, sx.itemsCenter, sx.gap2)}
         />
         {codeSettings}
         <Tooltip label="Refresh diff">
@@ -494,9 +837,9 @@ if (generation === flowGeneration.current) setFlowLoading(false);
       // Paint through the section's 10px top gutter. The gutter still belongs
       // to the diff below, but code cannot scroll through its empty space.
       <div
-        className={`sticky ${multi ? "top-[calc(var(--diff-panel-top,0px)+37px)] phone:top-[calc(var(--diff-panel-top,0px)+47px)]" : "top-[var(--diff-panel-top,0px)]"} z-1 bg-panel-surface after:absolute after:inset-x-0 after:top-full after:h-2.5 after:bg-panel-surface after:content-['']`}
+        className={[mergeStylexClassName("", sx.sticky), multi ? mergeStylexClassName("", sx.topCalcVarDiffPanelTop0px37px, sx.phoneTopCalcVarDiffPanelTop0px47px) : mergeStylexClassName("", sx.topVarDiffPanelTop0px), mergeStylexClassName("", sx.z1, sx.bgPanelSurface, sx.afterAbsolute, sx.afterInsetX0, sx.afterTopFull, sx.afterH25, sx.afterBgPanelSurface, sx.afterContent)].filter(Boolean).join(" ")}
       >
-        <div className="flex h-10 items-center gap-2.5 overflow-x-auto border-b border-divider px-3.5 text-label whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div {...mergeStylexProps("[&::-webkit-scrollbar]:hidden", sx.flex, sx.h10, sx.itemsCenter, sx.gap25, sx.overflowXAuto, sx.borderB, sx.borderDivider, sx.px35, sx.whitespaceNowrap, sx.ScrollbarWidthNone, typography.label)}>
           {toolbarContents}
         </div>
       </div>
@@ -506,11 +849,11 @@ if (generation === flowGeneration.current) setFlowLoading(false);
 
   return (
     <div
-      className={`@container flex min-h-0 flex-col ${multi ? "[--review-file-header-top:calc(var(--diff-panel-top,0px)+87px)] phone:[--review-file-header-top:calc(var(--diff-panel-top,0px)+97px)]" : "[--review-file-header-top:calc(var(--diff-panel-top,0px)+50px)]"}`}
+      className={[mergeStylexClassName("", sx.Container, sx.flex, sx.minH0, sx.flexCol), multi ? mergeStylexClassName("", sx.ReviewFileHeaderTopCalcVarDiffPanelTop0px87px, sx.phoneReviewFileHeaderTopCalcVarDiffPanelTop0px97px) : mergeStylexClassName("", sx.ReviewFileHeaderTopCalcVarDiffPanelTop0px50px)].filter(Boolean).join(" ")}
       ref={panelRef}
     >
       {multi && (
-        <div className="sticky top-[var(--diff-panel-top,0px)] z-2 flex gap-1 overflow-x-auto border-b border-divider bg-panel-surface px-2.5 py-1.5">
+        <div {...mergeStylexProps("", sx.topVarDiffPanelTop0px, sx.sticky, sx.z2, sx.flex, sx.gap1, sx.overflowXAuto, sx.borderB, sx.borderDivider, sx.bgPanelSurface, sx.px25, sx.py15)}>
           {changed.map((r, i) => {
             return (
               <button
@@ -518,16 +861,14 @@ if (generation === flowGeneration.current) setFlowLoading(false);
                 // The active pill supplies its own surface and border colour —
                 // the base has the geometry only, so nothing carries two
                 // competing colour utilities.
-                className={`inline-flex cursor-pointer items-center gap-1.5 rounded-md border px-[9px] py-[3px] text-label whitespace-nowrap phone:px-3 phone:py-2 ${
-                  i === active
-                    ? "border-line bg-panel text-fg"
-                    : "border-transparent bg-transparent text-dim hover:text-fg"
-                }`}
+                className={[mergeStylexClassName("", sx.inlineFlex, sx.cursorPointer, sx.itemsCenter, sx.gap15, sx.roundedMd, sx.border, sx.px9px, sx.py3px, typography.label, sx.whitespaceNowrap, sx.phonePx3, sx.phonePy2), i === active
+                    ? mergeStylexClassName("", sx.borderLine, sx.bgPanel, sx.textFg)
+                    : mergeStylexClassName("", sx.borderTransparent, sx.bgTransparent, sx.textDim, sx.hoverTextFg)].filter(Boolean).join(" ")}
                 onClick={() => setActive(i)}
                 title={r.primary ? "Primary repo" : "Attached repo"}
               >
                 {repoLabel(r.repo)}
-                <span className="rounded-full bg-faint/20 px-[5px] text-meta text-faint">
+                <span {...stylex.props(sx.roundedFull, sx.bgFaint20, sx.px5px, sx.textFaint, typography.meta)}>
                   {r.diff.files.length}
                 </span>
               </button>
@@ -538,7 +879,7 @@ if (generation === flowGeneration.current) setFlowLoading(false);
 
       {toolbar}
 
-      <div className="flex min-h-0 min-w-0 flex-1">
+      <div {...stylex.props(sx.flex, sx.minH0, sx.minW0, sx.flex1)}>
         {showFileList && fileListMode !== "hidden" && orderedFiles.length > 0 && (
           <PrFileTree
             files={orderedFiles}
@@ -547,7 +888,7 @@ if (generation === flowGeneration.current) setFlowLoading(false);
             onOpenFile={openFlowLocation}
           />
         )}
-        <div className="min-w-0 flex-1">
+        <div {...stylex.props(sx.minW0, sx.flex1)}>
       {view === "flow" ? (
         <CodeFlow
           data={flow?.key === flowKey ? flow.data : null}
@@ -562,7 +903,7 @@ if (generation === flowGeneration.current) setFlowLoading(false);
          supplies the review canvas's shared 8px inset; standalone Changes
          keeps this panel's own inset. */
       <div
-        className={`${toolbarTarget === undefined ? "px-2.5 pt-2.5" : "px-0 pt-0"} min-w-0 max-w-full overflow-clip pb-7 [&_[class*=pierre]]:max-w-full`}
+        className={[toolbarTarget === undefined ? mergeStylexClassName("", sx.px25, sx.pt25) : mergeStylexClassName("", sx.px0, sx.pt0), mergeStylexClassName("[&_[class*=pierre]]:max-w-full", sx.minW0, sx.maxWFull, sx.overflowClip, sx.pb7)].filter(Boolean).join(" ")}
       >
         <CommentableDiff
           key={cur.repo}
@@ -644,10 +985,10 @@ if (generation === flowGeneration.current) setFlowLoading(false);
  */
 function DiffEmptyState({ isRunning }: { isRunning: boolean }) {
   return (
-    <div className="flex h-full min-h-[280px] flex-col items-center justify-center gap-3 px-4 pt-12 pb-24 text-center">
+    <div {...stylex.props(sx.flex, sx.hFull, sx.minH280px, sx.flexCol, sx.itemsCenter, sx.justifyCenter, sx.gap3, sx.px4, sx.pt12, sx.pb24, sx.textCenter)}>
       <svg
         viewBox="0 0 40 40"
-        className="h-14 w-14 text-faint"
+        {...stylex.props(sx.h14, sx.w14, sx.textFaint)}
         fill="none"
         stroke="currentColor"
         strokeWidth={2}
@@ -659,13 +1000,13 @@ function DiffEmptyState({ isRunning }: { isRunning: boolean }) {
         <circle cx="27" cy="27" r="5" />
         <path d="M13 18v5a4 4 0 0 0 4 4h5" />
       </svg>
-      <div className="flex flex-col gap-1">
-        <div className="text-item-title font-medium text-dim">No file changes yet</div>
-        <div className="text-sm text-faint">Changes appear here.</div>
+      <div {...stylex.props(sx.flex, sx.flexCol, sx.gap1)}>
+        <div {...stylex.props(sx.fontMedium, sx.textDim, typography.itemTitle)}>No file changes yet</div>
+        <div {...stylex.props(sx.textSm, sx.textFaint)}>Changes appear here.</div>
       </div>
       {isRunning && (
-        <div className="mt-1 flex items-center gap-2 text-xs text-faint">
-          <Spinner className="text-faint" />
+        <div {...stylex.props(sx.mt1, sx.flex, sx.itemsCenter, sx.gap2, sx.textXs, sx.textFaint)}>
+          <Spinner className={mergeStylexOverrideClassName("", sx.textFaint)} />
           <span>Pulling latest…</span>
         </div>
       )}

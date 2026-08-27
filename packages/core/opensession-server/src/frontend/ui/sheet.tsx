@@ -1,7 +1,294 @@
 import * as React from "react";
 import { createPortal } from "react-dom";
-import { cn } from "./cn";
+import { cn, mergeStylexProps, mergeStylexClassName } from "./cn";
 import { PhoneTopBarAction } from "./top-bar";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	flex: {
+			display: "flex"
+	},
+	shrink0: {
+			flexShrink: "0"
+	},
+	touchNone: {
+			touchAction: "none"
+	},
+	justifyCenter: {
+			justifyContent: "center"
+	},
+	pb15: {
+			paddingBottom: "6px"
+	},
+	pt25: {
+			paddingTop: "10px"
+	},
+	h5px: {
+			height: "5px"
+	},
+	w9: {
+			width: "36px"
+	},
+	roundedFull: {
+			borderRadius: "calc(infinity * 1px)"
+	,
+		cornerShape: "round"},
+	bgActive: {
+			backgroundColor: "var(--bg-active)"
+	},
+	fixed: {
+			position: "fixed"
+	},
+	inset0: {
+			inset: "0"
+	},
+	z10000: {
+			zIndex: "10000"
+	},
+	invisible: {
+			visibility: "hidden"
+	},
+	pointerEventsNone: {
+			pointerEvents: "none"
+	},
+	absolute: {
+			position: "absolute"
+	},
+	bgBlack45: {
+			backgroundColor: "color-mix(in srgb, var(--color-black) 45%, transparent)"
+	},
+	flexCol: {
+			flexDirection: "column"
+	},
+	overflowHidden: {
+			overflow: "hidden"
+	},
+	outlineNone: {
+			outlineStyle: "none"
+	},
+	CornerShapeSquircle: {
+			cornerShape: "squircle"
+	},
+	minH0: {
+			minHeight: "0"
+	},
+	overflowYAuto: {
+			overflowY: "auto"
+	},
+	overscrollContain: {
+			overscrollBehavior: "contain"
+	},
+	px25: {
+			paddingInline: "10px"
+	},
+	pb35: {
+			paddingBottom: "14px"
+	},
+	truncate: {
+			textOverflow: "ellipsis",
+			whiteSpace: "nowrap",
+			overflow: "hidden"
+	},
+	px3: {
+			paddingInline: "12px"
+	},
+	pb2: {
+			paddingBottom: "8px"
+	},
+	pt15: {
+			paddingTop: "6px"
+	},
+	textFaint: {
+			color: "var(--text-faint)"
+	},
+	mx25: {
+			marginInline: "10px"
+	},
+	my15: {
+			marginBlock: "6px"
+	},
+	hPx: {
+			height: "1px"
+	},
+	bgLine: {
+			backgroundColor: "var(--border)"
+	},
+	wFull: {
+			width: "100%"
+	},
+	itemsCenter: {
+			alignItems: "center"
+	},
+	gap13px: {
+			gap: "13px"
+	},
+	roundedControl: {
+			borderRadius: "calc(12px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	px35: {
+			paddingInline: "14px"
+	},
+	py15px: {
+			paddingBlock: "15px"
+	},
+	textLeft: {
+			textAlign: "left"
+	},
+
+	transitionOpacity: {
+		"transitionProperty": "opacity",
+		"transitionTimingFunction": "var(--tw-ease,var(--ease))",
+		"transitionDuration": "var(--tw-duration,var(--dur-micro))"
+	},
+	durationVarDurLg: {
+		"--tw-duration": "var(--dur-lg)",
+		"transitionDuration": "var(--dur-lg)"
+	},
+	durationVarDur: {
+		"--tw-duration": "var(--dur)",
+		"transitionDuration": "var(--dur)"
+	},
+	opacity100: {
+		"opacity": "1"
+	},
+	opacity0: {
+		"opacity": "0"
+	},
+	hDvh: {
+		"height": "100dvh"
+	},
+	maxHNone: {
+		"maxHeight": "none"
+	},
+	roundedNone: {
+		"borderRadius": "0"
+	,
+		cornerShape: "var(--cs)"},
+	bgSurface: {
+		"backgroundColor": "var(--bg)"
+	},
+	pbEnvSafeAreaInsetBottom: {
+		"paddingBottom": "env(safe-area-inset-bottom)"
+	},
+	ptEnvSafeAreaInsetTop: {
+		"paddingTop": "env(safe-area-inset-top)"
+	},
+	shadowNone: {
+		"--tw-shadow": "0 0 transparent",
+		"boxShadow": "var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow)"
+	},
+	insetX0: {
+		"insetInline": "0"
+	},
+	bottom0: {
+		"bottom": "0"
+	},
+	maxH94dvh: {
+		"maxHeight": "94dvh"
+	},
+	left12: {
+		"left": "50%"
+	},
+	top12: {
+		"top": "50%"
+	},
+	maxH85vh: {
+		"maxHeight": "85vh"
+	},
+	w92vw: {
+		"width": "92vw"
+	},
+	maxW30rem: {
+		"maxWidth": "30rem"
+	},
+	TranslateX12: {
+		"--tw-translate-x": "calc(calc(1 / 2 * 100%) * -1)",
+		"translate": "var(--tw-translate-x) var(--tw-translate-y)"
+	},
+	TranslateY12: {
+		"--tw-translate-y": "calc(calc(1 / 2 * 100%) * -1)",
+		"translate": "var(--tw-translate-x) var(--tw-translate-y)"
+	},
+	roundedCalc18pxVarRf: {
+		"borderRadius": "calc(18px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	bgRaised: {
+		"backgroundColor": "var(--bg-raised)"
+	},
+	transitionTransform: {
+		"transitionProperty": "transform,translate,scale,rotate",
+		"transitionTimingFunction": "var(--tw-ease,var(--ease))",
+		"transitionDuration": "var(--tw-duration,var(--dur-micro))"
+	},
+	easeVarEase: {
+		"--tw-ease": "var(--ease)",
+		"transitionTimingFunction": "var(--ease)"
+	},
+	translateY0: {
+		"--tw-translate-y": "0",
+		"translate": "var(--tw-translate-x) var(--tw-translate-y)"
+	},
+	translateYFull: {
+		"--tw-translate-y": "100%",
+		"translate": "var(--tw-translate-x) var(--tw-translate-y)"
+	},
+	originCenter: {
+		"transformOrigin": "50%"
+	},
+	scale100: {
+		"--tw-scale-x": "100%",
+		"--tw-scale-y": "100%",
+		"--tw-scale-z": "100%",
+		"scale": "var(--tw-scale-x) var(--tw-scale-y)"
+	},
+	scale096: {
+		"scale": ".96"
+	},
+	activeBgPressed: {
+		":active": {
+			"backgroundColor": "var(--hover-strong)"
+		}
+	},
+
+	roundedTCalcVarSheetRadius34pxVarRf: {
+		"borderTopLeftRadius": "calc(var(--sheet-radius,34px) * var(--rf))",
+		"borderTopRightRadius": "calc(var(--sheet-radius,34px) * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	shadow012px40pxRgba000035: {
+		"--tw-shadow": "0 -12px 40px var(--tw-shadow-color,color-mix(in srgb, var(--color-black) 35%, transparent))",
+		"boxShadow": "var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow)"
+	},
+	transitionTransformOpacity: {
+		"transitionProperty": "transform,opacity",
+		"transitionTimingFunction": "var(--tw-ease,var(--ease))",
+		"transitionDuration": "var(--tw-duration,var(--dur-micro))"
+	},
+
+	textFg: {
+		"color": "var(--text)"
+	},
+	textRed: {
+		"color": "var(--red)"
+	},
+	fontSemibold: {
+		"--tw-font-weight": "var(--font-weight-semibold)",
+		"fontWeight": "var(--font-weight-semibold)"
+	},
+	textAccent: {
+		"color": "var(--accent-ink)"
+	},
+	textGreen: {
+		"color": "var(--green)"
+	},
+	textPurple: {
+		"color": "var(--purple)"
+	},
+});
 
 /**
  * The app's sheet/dialog language for surfaces that own their own open state —
@@ -233,65 +520,48 @@ export function ResponsiveDialog({
 
 	return createPortal(
 		<div
-			className={cn(
-				"fixed inset-0 z-[10000]",
-				parked && "invisible pointer-events-none",
-			)}
+			{...stylex.props(sx.fixed, sx.inset0, sx.z10000, parked && sx.invisible, parked && sx.pointerEventsNone)}
 			role="dialog"
 			aria-modal={parked ? undefined : "true"}
 			aria-label={label}
 			aria-hidden={parked || undefined}
 		>
 			{!phonePage && (
-				<div
-					className={cn(
-						"absolute inset-0 bg-black/45",
-						backdropClassName,
-						animated && [
-							"transition-opacity",
+				<div {...mergeStylexProps(cn(backdropClassName, animated && [
+							mergeStylexClassName("", sx.transitionOpacity),
 							phone
-								? "duration-[var(--dur-lg)]"
-								: "duration-[var(--dur)]",
-							shown ? "opacity-100" : "opacity-0",
-						],
-					)}
+								? mergeStylexClassName("", sx.durationVarDurLg)
+								: mergeStylexClassName("", sx.durationVarDur),
+							shown ? mergeStylexClassName("", sx.opacity100) : mergeStylexClassName("", sx.opacity0),
+						]), sx.absolute, sx.inset0, sx.bgBlack45)}
 					onClick={onClose}
 				/>
 			)}
 			<div
 				ref={panelRef}
-				tabIndex={-1}
-				className={cn(
-					// Radii are authored the way base.css authors every corner in the
-					// app, `calc(<px> * var(--rf))`, so they follow the squircle bump
-					// and its circular fallback with everything else.
-					"absolute flex flex-col overflow-hidden outline-none [corner-shape:squircle]",
-					phone
+				tabIndex={-1} {...mergeStylexProps(cn(phone
 						? phonePage
-							? "inset-0 h-dvh max-h-none rounded-none bg-surface pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)] shadow-none"
-							: "inset-x-0 bottom-0 max-h-[94dvh] rounded-t-[calc(var(--sheet-radius,34px)*var(--rf))] bg-surface pb-[env(safe-area-inset-bottom)] shadow-[0_-12px_40px_rgba(0,0,0,0.35)]"
-						: "left-1/2 top-1/2 max-h-[85vh] w-[92vw] max-w-[30rem] -translate-x-1/2 -translate-y-1/2 rounded-[calc(18px*var(--rf))] bg-raised smooth-shadow-ring-lg",
-					animated &&
+							? mergeStylexClassName("", sx.inset0, sx.hDvh, sx.maxHNone, sx.roundedNone, sx.bgSurface, sx.pbEnvSafeAreaInsetBottom, sx.ptEnvSafeAreaInsetTop, sx.shadowNone)
+							: mergeStylexClassName("", sx.roundedTCalcVarSheetRadius34pxVarRf, sx.shadow012px40pxRgba000035, sx.insetX0, sx.bottom0, sx.maxH94dvh, sx.bgSurface, sx.pbEnvSafeAreaInsetBottom)
+						: mergeStylexClassName("smooth-shadow-ring-lg", sx.left12, sx.top12, sx.maxH85vh, sx.w92vw, sx.maxW30rem, sx.TranslateX12, sx.TranslateY12, sx.roundedCalc18pxVarRf, sx.bgRaised), animated &&
 						(phone
 							? [
-									"transition-transform duration-[var(--dur-lg)] ease-[var(--ease)]",
-									shown ? "translate-y-0" : "translate-y-full",
+									mergeStylexClassName("", sx.transitionTransform, sx.durationVarDurLg, sx.easeVarEase),
+									shown ? mergeStylexClassName("", sx.translateY0) : mergeStylexClassName("", sx.translateYFull),
 								]
 							: [
-									"origin-center transition-[transform,opacity] duration-[var(--dur)] ease-[var(--ease)]",
-									shown ? "scale-100 opacity-100" : "scale-[0.96] opacity-0",
-								]),
-					phone ? sheetClassName : modalClassName,
-				)}
+									mergeStylexClassName("", sx.transitionTransformOpacity, sx.originCenter, sx.durationVarDur, sx.easeVarEase),
+									shown ? mergeStylexClassName("", sx.scale100, sx.opacity100) : mergeStylexClassName("", sx.scale096, sx.opacity0),
+								]), phone ? sheetClassName : modalClassName), sx.absolute, sx.flex, sx.flexCol, sx.overflowHidden, sx.outlineNone, sx.CornerShapeSquircle)}
 			>
 				{phone && !phonePage && showPhoneGrabber && (
 					<div
-						className="flex shrink-0 touch-none justify-center pb-1.5 pt-2.5"
+						{...stylex.props(sx.flex, sx.shrink0, sx.touchNone, sx.justifyCenter, sx.pb15, sx.pt25)}
 						onTouchStart={onTouchStart}
 						onTouchMove={onTouchMove}
 						onTouchEnd={onTouchEnd}
 					>
-						<div className="h-[5px] w-9 rounded-full bg-active" />
+						<div {...stylex.props(sx.h5px, sx.w9, sx.roundedFull, sx.bgActive)} />
 					</div>
 				)}
 				{typeof children === "function" ? children(onClose) : children}
@@ -329,11 +599,7 @@ export function SheetBody({
 	children: React.ReactNode;
 }) {
 	return (
-		<div
-			className={cn(
-				"min-h-0 overflow-y-auto overscroll-contain px-2.5 pb-3.5",
-				className,
-			)}
+		<div {...mergeStylexProps(cn(className), sx.minH0, sx.overflowYAuto, sx.overscrollContain, sx.px25, sx.pb35)}
 		>
 			{children}
 		</div>
@@ -349,7 +615,7 @@ export function SheetTitle({
 	children: React.ReactNode;
 }) {
 	return (
-		<div className={cn("truncate px-3 pb-2 pt-1.5 text-label text-faint", className)}>
+		<div {...mergeStylexProps(cn(className), sx.truncate, sx.px3, sx.pb2, sx.pt15, typography.label, sx.textFaint)}>
 			{children}
 		</div>
 	);
@@ -357,7 +623,7 @@ export function SheetTitle({
 
 /** Hairline between two groups of sheet actions. */
 export function SheetSeparator({ className }: { className?: string }) {
-	return <div className={cn("mx-2.5 my-1.5 h-px bg-line", className)} />;
+	return <div {...mergeStylexProps(cn(className), sx.mx25, sx.my15, sx.hPx, sx.bgLine)} />;
 }
 
 /**
@@ -370,11 +636,11 @@ export function SheetSeparator({ className }: { className?: string }) {
  */
 const SHEET_ITEM_TONE = {
 	/** Icons stay quiet against the label — the legacy sheet's look. */
-	default: "text-fg [&_svg]:text-faint",
-	danger: "text-red [&_svg]:text-red",
-	accent: "font-semibold text-accent [&_svg]:text-faint",
-	green: "font-semibold text-green [&_svg]:text-faint",
-	purple: "font-semibold text-purple [&_svg]:text-faint",
+	default: mergeStylexClassName("[&_svg]:text-faint", sx.textFg),
+	danger: mergeStylexClassName("[&_svg]:text-red", sx.textRed),
+	accent: mergeStylexClassName("[&_svg]:text-faint", sx.fontSemibold, sx.textAccent),
+	green: mergeStylexClassName("[&_svg]:text-faint", sx.fontSemibold, sx.textGreen),
+	purple: mergeStylexClassName("[&_svg]:text-faint", sx.fontSemibold, sx.textPurple),
 } as const;
 
 export type SheetItemTone = keyof typeof SHEET_ITEM_TONE;
@@ -387,12 +653,7 @@ export function SheetItem({
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & { tone?: SheetItemTone }) {
 	return (
 		<button
-			type="button"
-			className={cn(
-				"flex w-full items-center gap-[13px] rounded-control px-3.5 py-[15px] text-left text-body active:bg-pressed [&_svg]:shrink-0",
-				SHEET_ITEM_TONE[tone],
-				className,
-			)}
+			type="button" {...mergeStylexProps(cn(mergeStylexClassName("[&_svg]:shrink-0", sx.activeBgPressed), SHEET_ITEM_TONE[tone], className), sx.flex, sx.wFull, sx.itemsCenter, sx.gap13px, sx.roundedControl, sx.px35, sx.py15px, sx.textLeft, typography.body)}
 			{...rest}
 		>
 			{children}

@@ -11,6 +11,174 @@ import { plainThreadUrl } from "./PlainThreadPanel";
 import { IconArrowUpRight, IconGitMerge } from "./icons";
 import { Popover } from "../ui/popover";
 import { pointerCanHover } from "../lib/pointer";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+import { mergeStylexProps, mergeStylexClassName, mergeStylexOverrideClassName } from "../ui/cn";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	mt9px: {
+			marginTop: "9px"
+	},
+	flex: {
+			display: "flex"
+	},
+	flexCol: {
+			flexDirection: "column"
+	},
+	gap3px: {
+			gap: "3px"
+	},
+	gap2: {
+			gap: "8px"
+	},
+	leading135: {
+			lineHeight: "1.35"
+	},
+	w74px: {
+			width: "74px"
+	},
+	shrink0: {
+			flexShrink: "0"
+	},
+	textFaint: {
+			color: "var(--text-faint)"
+	},
+	minW0: {
+			minWidth: "0"
+	},
+	truncate: {
+			textOverflow: "ellipsis",
+			whiteSpace: "nowrap",
+			overflow: "hidden"
+	},
+	textDim: {
+			color: "var(--text-dim)"
+	},
+	inlineFlex: {
+			display: "inline-flex"
+	},
+	itemsCenter: {
+			alignItems: "center"
+	},
+	gap05: {
+			gap: "2px"
+	},
+	textXs: {
+			fontSize: "var(--type-label)",
+			lineHeight: "var(--tw-leading,var(--text-xs--line-height))"
+	},
+	noUnderline: {
+			textDecorationLine: "none"
+	},
+	opacity70: {
+			opacity: ".7"
+	},
+	mt35: {
+			marginTop: "14px"
+	},
+	mlAuto: {
+			marginLeft: "auto"
+	},
+	textRed: {
+			color: "var(--red)"
+	},
+	textYellow: {
+			color: "var(--yellow)"
+	},
+	textGreen: {
+			color: "var(--green)"
+	},
+	gap7px: {
+			gap: "7px"
+	},
+	flex1: {
+			flex: "1"
+	},
+	mt5px: {
+			marginTop: "5px"
+	},
+	fontSemibold: {
+			fontWeight: "var(--font-weight-semibold)"
+	},
+	leading13: {
+			lineHeight: "1.3"
+	},
+	mt7px: {
+			marginTop: "7px"
+	},
+	roundedMd: {
+			borderRadius: "calc(7px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	bgAccentSoft: {
+			backgroundColor: "var(--accent-soft)"
+	},
+	px2: {
+			paddingInline: "8px"
+	},
+	py5px: {
+			paddingBlock: "5px"
+	},
+	leadingSnug: {
+			lineHeight: "var(--leading-snug)"
+	},
+	mt1: {
+			marginTop: "4px"
+	},
+	mt2: {
+			marginTop: "8px"
+	},
+	flexWrap: {
+			flexWrap: "wrap"
+	},
+	gap1: {
+			gap: "4px"
+	},
+	roundedSm: {
+			borderRadius: "calc(4px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	border: {
+			borderStyle: "solid",
+			borderWidth: "1px"
+	},
+	borderLine: {
+			borderColor: "var(--border)"
+	},
+	bgSurface: {
+			backgroundColor: "var(--bg)"
+	},
+	px15: {
+			paddingInline: "6px"
+	},
+	py05: {
+			paddingBlock: "2px"
+	},
+	rowCard: {
+		width: "min(300px, calc(100vw - 24px))", paddingInline: "13px", paddingTop: "11px", paddingBottom: "12px",
+	},
+	statusDot: { width: "7px", height: "7px", borderRadius: "calc(infinity * 1px)",
+		cornerShape: "var(--cs)",},
+	statusDotAttention: { backgroundColor: "var(--yellow)" },
+	statusDotDefault: { backgroundColor: "var(--text-faint)" },
+	stateLine: { marginTop: "3px", fontWeight: "var(--font-weight-medium)" },
+	textBlue: { color: "var(--blue)" },
+
+	hoverTextFg: {
+		"@media (hover: hover)": {
+			":hover": {
+				"color": "var(--text)"
+			}
+		}
+	},
+	lineClamp3: {
+		"WebkitLineClamp": "3",
+		"WebkitBoxOrient": "vertical",
+		"display": "-webkit-box",
+		"overflow": "hidden"
+	},
+});
 
 /**
  * Hover cards for the sidebar's rows.
@@ -27,9 +195,6 @@ import { pointerCanHover } from "../lib/pointer";
  *  positioning, collision flip, arrow, dwell) is ui/popover's, and so is the
  *  corner now: the card used to override it a step tighter than the menus it
  *  sits beside, which is a difference nobody meant. */
-const ROW_CARD_CLASS =
-	"w-[min(300px,calc(100vw-24px))] px-[13px] pt-[11px] pb-3";
-
 /**
  * The one popup every sidebar row's hover card is drawn in: to the row's
  * right, top-aligned with it, pointing back at it. Pass `anchor` for a row
@@ -63,7 +228,7 @@ export function RowCardPopup({
 			arrow
 			elevation="lg"
 			anchor={anchor}
-			className={ROW_CARD_CLASS}
+			className={mergeStylexOverrideClassName("", sx.rowCard)}
 		>
 			{children}
 		</Popover.Popup>
@@ -109,11 +274,11 @@ export function useRowHoverCard(
 export function CardRows({ rows }: { rows: Array<[string, React.ReactNode]> }) {
 	if (rows.length === 0) return null;
 	return (
-		<div className="mt-[9px] flex flex-col gap-[3px]">
+		<div {...stylex.props(sx.mt9px, sx.flex, sx.flexCol, sx.gap3px)}>
 			{rows.map(([label, value], i) => (
-				<div className="flex gap-2 text-meta leading-[1.35]" key={i}>
-					<span className="w-[74px] shrink-0 text-faint">{label}</span>
-					<span className="min-w-0 truncate text-dim">{value}</span>
+				<div {...stylex.props(sx.flex, sx.gap2, sx.leading135, typography.meta)} key={i}>
+					<span {...stylex.props(sx.w74px, sx.shrink0, sx.textFaint)}>{label}</span>
+					<span {...stylex.props(sx.minW0, sx.truncate, sx.textDim)}>{value}</span>
 				</div>
 			))}
 		</div>
@@ -143,11 +308,10 @@ export function CardLink({
 			href={href}
 			target="_blank"
 			rel="noopener noreferrer"
-			title={title}
-			className="inline-flex shrink-0 items-center gap-0.5 text-xs text-dim no-underline hover:text-fg"
+			title={title} {...mergeStylexProps("", sx.hoverTextFg, sx.inlineFlex, sx.shrink0, sx.itemsCenter, sx.gap05, typography.label, sx.textDim, sx.noUnderline)}
 		>
 			{children}
-			<IconArrowUpRight size={15} className="opacity-70" />
+			<IconArrowUpRight size={15} className={mergeStylexOverrideClassName("", sx.opacity70)} />
 		</a>
 	);
 }
@@ -183,7 +347,7 @@ export function CardPrChip({
 			{/* Cap band, so the number centres on the chip the way the action
 			    button beside it centres its word. */}
 			<span className={CAP_LABEL}>{number != null ? `#${number}` : "PR"}</span>
-			<IconArrowUpRight size={15} className="opacity-70" />
+			<IconArrowUpRight size={15} className={mergeStylexOverrideClassName("", sx.opacity70)} />
 		</a>
 	);
 }
@@ -210,11 +374,11 @@ export function CardFooter({
 	// Children.toArray drops exactly the ones that render nothing.
 	if (React.Children.toArray(children).length === 0 && !time) return null;
 	return (
-		<div className="mt-3.5 flex min-w-0 items-center gap-2">
+		<div {...stylex.props(sx.mt35, sx.flex, sx.minW0, sx.itemsCenter, sx.gap2)}>
 			{children}
 			{time && (
 				<span
-					className="ml-auto shrink-0 text-meta text-faint"
+					{...stylex.props(sx.mlAuto, sx.shrink0, sx.textFaint, typography.meta)}
 					title={timeTitle}
 				>
 					{time}
@@ -238,10 +402,10 @@ export function CardFooter({
 export function osReviewLabel(review: OsReview): React.ReactNode {
 	const tone =
 		review.verdict === "approve"
-			? "text-green"
+			? sx.textGreen
 			: review.verdict === "request_changes"
-				? "text-red"
-				: "text-dim";
+				? sx.textRed
+				: sx.textDim;
 	const verdict =
 		review.verdict === "approve"
 			? "approved"
@@ -261,7 +425,7 @@ export function osReviewLabel(review: OsReview): React.ReactNode {
 			: "";
 	return (
 		<span
-			className={review.stale ? "text-faint" : tone}
+			{...stylex.props(review.stale ? sx.textFaint : tone)}
 			title={
 				review.stale
 					? `Reviewed ${relativeTime(review.at)}, on a commit this branch has moved past${confidence}`
@@ -280,10 +444,10 @@ export function checksLabel(
 ): React.ReactNode {
 	if (!checks || checks.total === 0) return null;
 	if (checks.failed > 0)
-		return <span className="text-red">{checks.failed} failing</span>;
+		return <span {...stylex.props(sx.textRed)}>{checks.failed} failing</span>;
 	if (checks.pending > 0)
-		return <span className="text-yellow">{checks.pending} running</span>;
-	return <span className="text-green">all {checks.total} passing</span>;
+		return <span {...stylex.props(sx.textYellow)}>{checks.pending} running</span>;
+	return <span {...stylex.props(sx.textGreen)}>all {checks.total} passing</span>;
 }
 
 /** A status worth calling out in the card's callout strip rather than a row. */
@@ -338,38 +502,41 @@ export function PrRowCard({ item }: { item: ReviewQueueItem }) {
 
 	return (
 		<>
-			<div className="flex min-w-0 items-center gap-[7px]">
-				<span className="min-w-0 flex-1 truncate text-meta text-dim">{pr.branch}</span>
+			<div {...stylex.props(sx.flex, sx.minW0, sx.itemsCenter, sx.gap7px)}>
+				<span {...stylex.props(sx.minW0, sx.flex1, sx.truncate, sx.textDim, typography.meta)}>{pr.branch}</span>
 				{pr.isDraft && (
-					<span className="shrink-0 text-meta text-faint">draft</span>
+					<span {...stylex.props(sx.shrink0, sx.textFaint, typography.meta)}>draft</span>
 				)}
-				<span className="flex shrink-0 items-center">
+				<span {...stylex.props(sx.flex, sx.shrink0, sx.itemsCenter)}>
 					{item.bucket === "ready" ? (
-						<IconGitMerge className="text-green" size={20} />
+						<IconGitMerge className={mergeStylexOverrideClassName("", sx.textGreen)} size={20} />
 					) : (
 						<span
-							className={`size-[7px] rounded-full ${
-								item.bucket === "attention" ? "bg-yellow" : "bg-faint"
-							}`}
+							{...stylex.props(
+								sx.statusDot,
+								item.bucket === "attention" ? sx.statusDotAttention : sx.statusDotDefault,
+							)}
 						/>
 					)}
 				</span>
 			</div>
 
-			<div className="mt-[5px] text-label font-semibold leading-[1.3]">{pr.title}</div>
+			<div {...stylex.props(sx.mt5px, sx.fontSemibold, sx.leading13, typography.label)}>{pr.title}</div>
 
 			{problem ? (
-				<div className="mt-[7px] rounded-md bg-accent-soft px-2 py-[5px] text-meta leading-snug text-dim">{problem}</div>
+				<div {...stylex.props(sx.mt7px, sx.roundedMd, sx.bgAccentSoft, sx.px2, sx.py5px, sx.leadingSnug, sx.textDim, typography.meta)}>{problem}</div>
 			) : (
 				state && (
-					<div className={`mt-[3px] text-meta font-medium ${TONE_TEXT[state.tone]}`}>
+					<div
+						className={`${stylex.props(sx.stateLine, typography.meta).className} ${TONE_TEXT[state.tone]}`}
+					>
 						{state.label}
 					</div>
 				)
 			)}
 
 			{pr.reviewActive && (
-				<div className="mt-[7px] rounded-md bg-accent-soft px-2 py-[5px] text-meta leading-snug text-dim">
+				<div {...stylex.props(sx.mt7px, sx.roundedMd, sx.bgAccentSoft, sx.px2, sx.py5px, sx.leadingSnug, sx.textDim, typography.meta)}>
 					An automated review is still running.
 				</div>
 			)}
@@ -391,11 +558,14 @@ export function PrRowCard({ item }: { item: ReviewQueueItem }) {
 // Mirrors SUPPORT_PRIORITY_GROUPS in Sidebar.tsx (Plain priorities are ints
 // 0..3, unset buckets as Normal); kept local so the card file doesn't import
 // the sidebar that renders it.
-const PRIORITY_META: Record<number, { label: string; cls: string }> = {
-	0: { label: "Urgent", cls: "text-red" },
-	1: { label: "High", cls: "text-yellow" },
-	2: { label: "Normal", cls: "text-blue" },
-	3: { label: "Low", cls: "text-faint" },
+const PRIORITY_META: Record<
+	number,
+	{ label: string; tone: "red" | "yellow" | "blue" | "faint" }
+> = {
+	0: { label: "Urgent", tone: "red" },
+	1: { label: "High", tone: "yellow" },
+	2: { label: "Normal", tone: "blue" },
+	3: { label: "Low", tone: "faint" },
 };
 
 /** The card body for a Support row. `previewText` is the ticket's equivalent
@@ -421,34 +591,46 @@ export function SupportRowCard({
 		rows.push(["Email", t.customer.email]);
 	rows.push([
 		"Assignee",
-		t.assignee ? t.assignee.name : <span className="text-faint">unassigned</span>,
+		t.assignee ? t.assignee.name : <span {...stylex.props(sx.textFaint)}>unassigned</span>,
 	]);
 	if (session) rows.push(["Session", session.title]);
 	if (t.createdAt) rows.push(["Opened", relativeTime(t.createdAt)]);
 
 	return (
 		<>
-			<div className="flex min-w-0 items-center gap-[7px]">
-				<span className="min-w-0 flex-1 truncate text-meta text-dim">{customer}</span>
-				<span className={`shrink-0 text-meta ${priority.cls}`}>
+			<div {...stylex.props(sx.flex, sx.minW0, sx.itemsCenter, sx.gap7px)}>
+				<span {...stylex.props(sx.minW0, sx.flex1, sx.truncate, sx.textDim, typography.meta)}>{customer}</span>
+				<span
+					{...stylex.props(
+						sx.shrink0,
+						typography.meta,
+						priority.tone === "red"
+							? sx.textRed
+							: priority.tone === "yellow"
+								? sx.textYellow
+								: priority.tone === "blue"
+									? sx.textBlue
+									: sx.textFaint,
+					)}
+				>
 					{priority.label}
 				</span>
 			</div>
 
-			<div className="mt-[5px] text-label font-semibold leading-[1.3]">{t.title || customer}</div>
+			<div {...stylex.props(sx.mt5px, sx.fontSemibold, sx.leading13, typography.label)}>{t.title || customer}</div>
 
 			{preview && (
-				<div className="selectable mt-1 text-meta leading-snug text-dim line-clamp-3">
+				<div {...mergeStylexProps("selectable", sx.lineClamp3, sx.mt1, sx.leadingSnug, sx.textDim, typography.meta)}>
 					{preview}
 				</div>
 			)}
 
 			{labels.length > 0 && (
-				<div className="mt-2 flex flex-wrap gap-1">
+				<div {...stylex.props(sx.mt2, sx.flex, sx.flexWrap, sx.gap1)}>
 					{labels.map((l) => (
 						<span
 							key={l.id}
-							className="rounded-sm border border-line bg-surface px-1.5 py-0.5 text-meta text-dim"
+							{...stylex.props(sx.roundedSm, sx.border, sx.borderLine, sx.bgSurface, sx.px15, sx.py05, sx.textDim, typography.meta)}
 						>
 							{l.icon ? `${l.icon} ` : ""}
 							{l.name}

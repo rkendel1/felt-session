@@ -128,7 +128,7 @@ describe("preparePromptImages", () => {
 			height: 1,
 			close() {},
 		})) as typeof createImageBitmap;
-		globalThis.document = {
+		Object.defineProperty(globalThis, "document", { configurable: true, writable: true, value: {
 			createElement: () => ({
 				width: 0,
 				height: 0,
@@ -137,7 +137,7 @@ describe("preparePromptImages", () => {
 					new Blob([new Uint8Array([1, 2, 3])], { type: "image/jpeg" }),
 				),
 			}),
-		} as unknown as Document;
+		} as unknown as Document });
 		try {
 			const result = await preparePromptImages([
 				"data:image/heic;base64,aGVsbG8=",
@@ -145,7 +145,8 @@ describe("preparePromptImages", () => {
 			expect(result?.[0]).toStartWith("data:image/jpeg;base64,");
 		} finally {
 			globalThis.createImageBitmap = originalBitmap;
-			globalThis.document = originalDocument;
+			if (originalDocument === undefined) delete (globalThis as { document?: Document }).document;
+			else Object.defineProperty(globalThis, "document", { configurable: true, writable: true, value: originalDocument });
 		}
 	});
 

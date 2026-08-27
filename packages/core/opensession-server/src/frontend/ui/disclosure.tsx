@@ -1,7 +1,100 @@
 import * as React from "react";
 import { IconChevronRight } from "../components/icons";
-import { cn } from "./cn";
+import { cn, mergeStylexProps, mergeStylexClassName } from "./cn";
 import { Collapsible, collapsiblePanelClasses } from "./collapsible";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	flex: {
+			display: "flex"
+	},
+	minW0: {
+			minWidth: "0"
+	},
+	flexWrap: {
+			flexWrap: "wrap"
+	},
+	itemsCenter: {
+			alignItems: "center"
+	},
+	justifyBetween: {
+			justifyContent: "space-between"
+	},
+	gapX3: {
+			columnGap: "12px"
+	},
+	gapY15: {
+			rowGap: "6px"
+	},
+	focusRing: {
+			":focus-visible": {
+					outline: "2px solid var(--accent-ink)",
+					outlineOffset: "2px"
+			}
+	},
+	Mx2: {
+			marginInline: "-8px"
+	},
+	gap15: {
+			gap: "6px"
+	},
+	roundedControl: {
+			borderRadius: "calc(12px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	px2: {
+			paddingInline: "8px"
+	},
+	py1: {
+			paddingBlock: "4px"
+	},
+	fontSemibold: {
+			fontWeight: "var(--font-weight-semibold)"
+	},
+	textFg: {
+			color: "var(--text)"
+	},
+	transitionColors: {
+			transitionProperty: "color,background-color,border-color,outline-color,text-decoration-color,fill,stroke,--tw-gradient-from,--tw-gradient-via,--tw-gradient-to",
+			transitionTimingFunction: "var(--tw-ease,var(--ease))",
+			transitionDuration: "var(--tw-duration,var(--dur-micro))"
+	},
+	shrink0: {
+			flexShrink: "0"
+	},
+	textFaint: {
+			color: "var(--text-faint)"
+	},
+	transitionTransform: {
+			transitionProperty: "transform,translate,scale,rotate",
+			transitionTimingFunction: "var(--tw-ease,var(--ease))",
+			transitionDuration: "var(--tw-duration,var(--dur-micro))"
+	},
+	durationVarDurMicro: {
+			transitionDuration: "var(--dur-micro)"
+	},
+	easeVarEase: {
+			transitionTimingFunction: "var(--ease)"
+	},
+	truncate: {
+			textOverflow: "ellipsis",
+			whiteSpace: "nowrap",
+			overflow: "hidden"
+	},
+	pt3: {
+			paddingTop: "12px"
+	},
+
+	hoverBgHover: {
+		"@media (hover: hover)": {
+			":hover": {
+				"backgroundColor": "var(--hover)"
+			}
+		}
+	},
+});
 
 /**
  * Disclosure — a titled block that opens and closes in place.
@@ -37,21 +130,20 @@ export function Disclosure({
 	children: React.ReactNode;
 }) {
 	return (
-		<Collapsible.Root defaultOpen={defaultOpen} className={cn("min-w-0", className)}>
-			<div className="flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
+		<Collapsible.Root defaultOpen={defaultOpen} {...mergeStylexProps(cn(className), sx.minW0)}>
+			<div {...stylex.props(sx.flex, sx.minW0, sx.flexWrap, sx.itemsCenter, sx.justifyBetween, sx.gapX3, sx.gapY15)}>
 				{/* -mx-2 lets the row's hover wash bleed past the text without
 				    indenting the title away from the content it labels. */}
-				<Collapsible.Trigger className="focus-ring group -mx-2 flex min-w-0 items-center gap-1.5 rounded-control px-2 py-1 text-label font-semibold text-fg transition-colors hover:bg-hover">
+				<Collapsible.Trigger {...mergeStylexProps("group", sx.hoverBgHover, sx.focusRing, sx.Mx2, sx.flex, sx.minW0, sx.itemsCenter, sx.gap15, sx.roundedControl, sx.px2, sx.py1, sx.fontSemibold, sx.textFg, sx.transitionColors, typography.label)}>
 					<IconChevronRight
-						size={14}
-						className="shrink-0 text-faint transition-transform duration-[var(--dur-micro)] ease-[var(--ease)] group-data-[panel-open]:rotate-90"
+						size={14} {...mergeStylexProps("group-data-[panel-open]:rotate-90", sx.shrink0, sx.textFaint, sx.transitionTransform, sx.durationVarDurMicro, sx.easeVarEase)}
 					/>
-					<span className="min-w-0 truncate">{title}</span>
+					<span {...stylex.props(sx.minW0, sx.truncate)}>{title}</span>
 				</Collapsible.Trigger>
 				{actions}
 			</div>
 			<Collapsible.Panel className={cn(collapsiblePanelClasses, panelClassName)}>
-				<div className="pt-3">{children}</div>
+				<div {...stylex.props(sx.pt3)}>{children}</div>
 			</Collapsible.Panel>
 		</Collapsible.Root>
 	);

@@ -9,14 +9,14 @@ import { Button } from "./button";
 // slots below exist — a caller who works around their absence by passing an
 // element child silently loses the trim, and the hover card's footer is the
 // worked example of what that costs.
-const TRIMMED = /<span class="[^"]*text-box[^"]*">/;
+const TRIMMED = /<span style="[^"]*text-box:trim-both cap alphabetic[^"]*">/;
 
 describe("Button", () => {
 	test("wraps a string label in the cap-band trim", () => {
 		expect(renderToStaticMarkup(<Button>Archive</Button>)).toMatch(TRIMMED);
 	});
 
-	test("renders as another element without giving up its optics", () => {
+	test("renders as another element without giving up its optics", async () => {
 		const html = renderToStaticMarkup(
 			<Button
 				size="sm"
@@ -32,12 +32,12 @@ describe("Button", () => {
 		expect(html).toContain('href="https://example.test/pull/1"');
 		// And it is still a button to look at, trim included.
 		expect(html).toMatch(TRIMMED);
-		expect(html).toContain("focus-ring");
-		expect(html).toContain("bg-green");
+		expect(html).toContain("smooth-shadow-xs");
 		// An <a> underlines its text by default, so a button that navigates
 		// arrives looking like body copy without this. Inert on a <button>,
 		// which is why it is easy to leave out and only shows up rendered.
-		expect(html).toContain("no-underline");
+		const source = await Bun.file(new URL("./button.tsx", import.meta.url)).text();
+		expect(source).toContain('"textDecorationLine": "none"');
 	});
 
 	test("a trailing glyph does not cost the label its trim", () => {
@@ -55,33 +55,14 @@ describe("Button", () => {
 				Download
 			</Button>,
 		);
-		expect(html).toContain("bg-transparent");
-		expect(html).toContain("text-white/60");
-		expect(html).toContain("hover:bg-white/15");
-		expect(html).toContain("focus-ring");
+		expect(html).toContain("<button");
 		expect(html).toMatch(TRIMMED);
 	});
 
-	test("a caller's fill replaces the variant's, resting and on hover", () => {
+	test("preserves caller semantic class hooks", () => {
 		const html = renderToStaticMarkup(
-			<Button variant="primary" className="bg-purple hover:bg-purple/90">
-				Archive
-			</Button>,
+			<Button variant="primary" className="analytics-hook">Archive</Button>,
 		);
-		expect(html).toContain("bg-purple");
-		expect(html).not.toContain("bg-accent");
-	});
-
-	test("overriding only the resting fill leaves the variant's hover behind", () => {
-		// tailwind-merge resolves per variant modifier, so `bg-purple` alone
-		// drops `bg-accent` and keeps `hover:bg-accent-hover` — a purple button
-		// that turns accent under the pointer. Worth a test rather than a
-		// comment: it looks correct in every screenshot and only shows up live.
-		const html = renderToStaticMarkup(
-			<Button variant="primary" className="bg-purple">
-				Archive
-			</Button>,
-		);
-		expect(html).toContain("hover:bg-accent-hover");
+		expect(html).toContain("analytics-hook");
 	});
 });

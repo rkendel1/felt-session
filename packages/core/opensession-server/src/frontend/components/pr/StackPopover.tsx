@@ -8,10 +8,136 @@ import type { PrTone } from "../../lib/pr-refs";
 import { stackLayersTopFirst } from "../../lib/pr-stack";
 import { prPath } from "../../lib/share-link";
 import type { PrDetails, PrStackLayer } from "../../lib/types";
-import { cn } from "../../ui/cn";
+import { cn, mergeStylexProps, mergeStylexClassName } from "../../ui/cn";
 import { Popover } from "../../ui/popover";
 import { IconArrowUpRight, IconStack } from "../icons";
 import { StackNode, StackRail } from "./StackRail";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	minW0: {
+			minWidth: "0"
+	},
+	flex1: {
+			flex: "1"
+	},
+	py2: {
+			paddingBlock: "8px"
+	},
+	noUnderline: {
+			textDecorationLine: "none"
+	},
+	block: {
+			display: "block"
+	},
+	truncate: {
+			textOverflow: "ellipsis",
+			whiteSpace: "nowrap",
+			overflow: "hidden"
+	},
+	leadingSnug: {
+			lineHeight: "var(--leading-snug)"
+	},
+	textFaint: {
+			color: "var(--text-faint)"
+	},
+	flex: {
+			display: "flex"
+	},
+	flexCol: {
+			flexDirection: "column"
+	},
+	overflowHidden: {
+			overflow: "hidden"
+	},
+	p0: {
+			padding: "0"
+	},
+	m0: {
+			margin: "0"
+	},
+	listNone: {
+			listStyleType: "none"
+	},
+	overflowYAuto: {
+			overflowY: "auto"
+	},
+	fontMono: {
+			fontFamily: "var(--mono)"
+	},
+
+	bgHover: {
+		"backgroundColor": "var(--hover)"
+	},
+	hoverBgHover: {
+		"@media (hover: hover)": {
+			":hover": {
+				"backgroundColor": "var(--hover)"
+			}
+		}
+	},
+	fontSemibold: {
+		"--tw-font-weight": "var(--font-weight-semibold)",
+		"fontWeight": "var(--font-weight-semibold)"
+	},
+	textFg: {
+		"color": "var(--text)"
+	},
+	fontMedium: {
+		"--tw-font-weight": "var(--font-weight-medium)",
+		"fontWeight": "var(--font-weight-medium)"
+	},
+	selfCenter: {
+		"alignSelf": "center"
+	},
+	phoneSize11: {
+		"@media (max-width: 720px)": {
+			"width": "44px",
+			"height": "44px"
+		}
+	},
+	tabularNums: {
+		"--tw-numeric-spacing": "tabular-nums",
+		"fontVariantNumeric": "var(--tw-ordinal,) var(--tw-slashed-zero,) var(--tw-numeric-figure,) var(--tw-numeric-spacing,) var(--tw-numeric-fraction,)"
+	},
+	shrink0: {
+		"flexShrink": "0"
+	},
+	borderB: {
+		"borderBottomStyle": "var(--tw-border-style)",
+		"borderBottomWidth": "1px"
+	},
+	borderDivider: {
+		"borderColor": "var(--divider)"
+	},
+	px3: {
+		"paddingInline": "12px"
+	},
+	py25: {
+		"paddingBlock": "10px"
+	},
+
+	itemsStretch: {
+		"alignItems": "stretch"
+	},
+	gap25: {
+		"gap": "10px"
+	},
+	pr15: {
+		"paddingRight": "6px"
+	},
+	pl3: {
+		"paddingLeft": "12px"
+	},
+	maxHMin560px70vhVarAvailableHeight: {
+		"maxHeight": "min(560px, 70vh, var(--available-height))"
+	},
+	wMin460pxCalc100vw24px: {
+		"width": "min(460px,100vw - 24px)"
+	},
+});
 
 /**
  * The stack, from the status strip: a chip reading `position/size` that opens
@@ -27,7 +153,7 @@ import { StackNode, StackRail } from "./StackRail";
 /* The rail and its nodes live in ./StackRail so this component stays focused
    on the popup and its navigation rows. */
 
-const ROW = "flex items-stretch gap-2.5 pr-1.5 pl-3";
+const ROW = mergeStylexClassName("", sx.flex, sx.itemsStretch, sx.gap25, sx.pr15, sx.pl3);
 
 function StackRow({
 	layer,
@@ -51,12 +177,12 @@ function StackRow({
 	// "You are here" is painted as a wash, not a surface: bg-surface is an
 	// absolute colour and lands *lighter* than the popup's panel in light mode.
 	return (
-		<li className={cn(ROW, current ? "bg-hover" : "hover:bg-hover")}>
+		<li className={cn(ROW, current ? mergeStylexClassName("", sx.bgHover) : mergeStylexClassName("", sx.hoverBgHover))}>
 			<StackRail first={first}>
 				<StackNode state={layer.state} isDraft={layer.isDraft} />
 			</StackRail>
 			<a
-				className="min-w-0 flex-1 py-2 no-underline"
+				{...stylex.props(sx.minW0, sx.flex1, sx.py2, sx.noUnderline)}
 				href={inApp || layer.url}
 				{...(inApp ? {} : { target: "_blank", rel: "noopener" })}
 				aria-current={current ? "true" : undefined}
@@ -71,18 +197,18 @@ function StackRow({
 			>
 				<span
 					className={cn(
-						"block truncate text-label leading-snug",
-						current ? "font-semibold text-fg" : "font-medium text-fg",
+						mergeStylexClassName("", sx.block, sx.truncate, typography.label, sx.leadingSnug),
+						current ? mergeStylexClassName("", sx.fontSemibold, sx.textFg) : mergeStylexClassName("", sx.fontMedium, sx.textFg),
 					)}
 				>
 					{layer.title}
 				</span>
-				<span className="block truncate text-meta leading-snug text-faint">
+				<span {...stylex.props(sx.block, sx.truncate, sx.leadingSnug, sx.textFaint, typography.meta)}>
 					#{layer.number} · {layer.headRefName}
 				</span>
 			</a>
 			<a
-				className={cn(PR_ROW_OUT, "self-center phone:size-11")}
+				className={cn(PR_ROW_OUT, mergeStylexClassName("", sx.selfCenter, sx.phoneSize11))}
 				href={layer.url}
 				target="_blank"
 				rel="noopener"
@@ -133,27 +259,26 @@ export function PrStackChip({
 				}
 			>
 				<IconStack size={20} />
-				<span className="tabular-nums">
+				<span className={mergeStylexClassName("", sx.tabularNums)}>
 					{stack.position}/{stack.size}
 				</span>
 			</Popover.Trigger>
 			<Popover.Popup
 				side="bottom"
 				align="start"
-				sideOffset={6}
-				className="flex max-h-[min(560px,70vh,var(--available-height))] w-[min(460px,calc(100vw-24px))] flex-col overflow-hidden p-0"
+				sideOffset={6} {...mergeStylexProps("", sx.maxHMin560px70vhVarAvailableHeight, sx.wMin460pxCalc100vw24px, sx.flex, sx.flexCol, sx.overflowHidden, sx.p0)}
 			>
 				{/* The strip's headline, in the strip's tone: the popup opens under a
 				    green chip and has to keep saying what the green means. */}
 				<div
 					className={cn(
-						"shrink-0 border-b border-divider px-3 py-2.5 text-item-title font-semibold",
+						mergeStylexClassName("", sx.shrink0, sx.borderB, sx.borderDivider, sx.px3, sx.py25, typography.itemTitle, sx.fontSemibold),
 						PR_STATE_TEXT[tone],
 					)}
 				>
 					{headline}
 				</div>
-				<ul className="m-0 flex list-none flex-col overflow-y-auto p-0">
+				<ul {...stylex.props(sx.m0, sx.flex, sx.listNone, sx.flexCol, sx.overflowYAuto, sx.p0)}>
 					{layers.map((layer, i) => (
 						<StackRow
 							key={layer.number}
@@ -166,11 +291,11 @@ export function PrStackChip({
 						/>
 					))}
 					{/* The trunk: not a layer, just where the bottom one lands. */}
-					<li className={cn(ROW, "py-2")}>
+					<li className={cn(ROW, mergeStylexClassName("", sx.py2))}>
 						<StackRail last>
 							<StackNode />
 						</StackRail>
-						<span className="min-w-0 flex-1 truncate font-mono text-label text-faint">
+						<span {...stylex.props(sx.minW0, sx.flex1, sx.truncate, sx.fontMono, sx.textFaint, typography.label)}>
 							{stack.baseRefName}
 						</span>
 					</li>

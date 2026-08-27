@@ -7,7 +7,7 @@ async function source(name: string) {
 test("the conversation model menu can make its current model the personal default", async () => {
 	const picker = await source("./ModelEffortSelect.tsx");
 
-	expect(picker).toContain("<span className=\"min-w-0 truncate\">Set as default</span>");
+	expect(picker).toContain("<span {...stylex.props(sx.minW0, sx.truncate)}>Set as default</span>");
 	expect(picker).toContain("onClick={() => onSetAsDefault(effectiveModel)}");
 	expect(picker).toContain("disabled={isPreferredDefault}");
 });

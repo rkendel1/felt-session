@@ -1,6 +1,169 @@
 import { renderPrCommentMarkdown } from "../../lib/markdown";
 import { formatPrCommentPrompt, stripHtmlComments } from "../../lib/pr-prompts";
 import type { PrComment, PrDetails } from "../../lib/types";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../../styles/typography.stylex";
+import { mergeStylexProps, mergeStylexClassName } from "../../ui/cn";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	roundedXl: {
+			borderRadius: "calc(18px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	border: {
+			borderStyle: "solid",
+			borderWidth: "1px"
+	},
+	borderDashed: {
+			borderStyle: "dashed"
+	},
+	borderLine: {
+			borderColor: "var(--border)"
+	},
+	px4: {
+			paddingInline: "16px"
+	},
+	py10: {
+			paddingBlock: "40px"
+	},
+	textCenter: {
+			textAlign: "center"
+	},
+	textXs: {
+			fontSize: "var(--type-label)",
+			lineHeight: "var(--tw-leading,var(--text-xs--line-height))"
+	},
+	textFaint: {
+			color: "var(--text-faint)"
+	},
+	minW0: {
+			minWidth: "0"
+	},
+	borderLine60: {
+			borderColor: "var(--border)"
+	},
+	bgSurface: {
+			backgroundColor: "var(--bg)"
+	},
+	smoothShadowSm: {
+			boxShadow: "0 1px 3px -1px var(--smooth-shadow-color), 0 4px 10px -4px var(--smooth-shadow-color)"
+	},
+	flex: {
+			display: "flex"
+	},
+	itemsCenter: {
+			alignItems: "center"
+	},
+	gap2: {
+			gap: "8px"
+	},
+	borderB: {
+			borderBottomStyle: "solid",
+			borderBottomWidth: "1px"
+	},
+	borderDivider: {
+			borderColor: "var(--divider)"
+	},
+	py3: {
+			paddingBlock: "12px"
+	},
+	size7: {
+			width: "28px",
+			height: "28px"
+	},
+	justifyCenter: {
+			justifyContent: "center"
+	},
+	roundedFull: {
+			borderRadius: "calc(infinity * 1px)"
+	,
+		cornerShape: "round"},
+	bgActive: {
+			backgroundColor: "var(--bg-active)"
+	},
+	fontSemibold: {
+			fontWeight: "var(--font-weight-semibold)"
+	},
+	textFg: {
+			color: "var(--text)"
+	},
+	py4: {
+			paddingBlock: "16px"
+	},
+	leadingRelaxed: {
+			lineHeight: "var(--leading-relaxed)"
+	},
+	textDim: {
+			color: "var(--text-dim)"
+	},
+	mxAuto: {
+			marginInline: "auto"
+	},
+	wFull: {
+			width: "100%"
+	},
+	maxW760px: {
+			maxWidth: "760px"
+	},
+	flexCol: {
+			flexDirection: "column"
+	},
+	gap4: {
+			gap: "16px"
+	},
+	flex1: {
+			flex: "1"
+	},
+	roundedMd: {
+			borderRadius: "calc(7px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	border0: {
+			borderStyle: "solid",
+			borderWidth: "0"
+	},
+	bgTransparent: {
+			backgroundColor: "transparent"
+	},
+	px15: {
+			paddingInline: "6px"
+	},
+	py1: {
+			paddingBlock: "4px"
+	},
+	opacity0: {
+			opacity: "0"
+	},
+	transitionOpacity: {
+			transitionProperty: "opacity",
+			transitionTimingFunction: "var(--tw-ease,var(--ease))",
+			transitionDuration: "var(--tw-duration,var(--dur-micro))"
+	},
+	noUnderline: {
+			textDecorationLine: "none"
+	},
+
+	hoverBgHover: {
+		"@media (hover: hover)": {
+			":hover": {
+				"backgroundColor": "var(--hover)"
+			}
+		}
+	},
+	hoverTextFg: {
+		"@media (hover: hover)": {
+			":hover": {
+				"color": "var(--text)"
+			}
+		}
+	},
+	focusVisibleOpacity100: {
+		":focusVisible": {
+			"opacity": "1"
+		}
+	},
+});
 
 function PrDescriptionCard({
   author,
@@ -11,23 +174,22 @@ function PrDescriptionCard({
 }) {
   if (!descriptionHtml)
     return (
-      <div className="rounded-xl border border-dashed border-line px-4 py-10 text-center text-xs text-faint">
+      <div {...stylex.props(sx.roundedXl, sx.border, sx.borderDashed, sx.borderLine, sx.px4, sx.py10, sx.textCenter, sx.textXs, sx.textFaint)}>
         This pull request has no description.
       </div>
     );
   return (
-    <article className="min-w-0 rounded-xl border border-line/60 bg-surface smooth-shadow-sm">
-      <div className="flex items-center gap-2 border-b border-divider px-4 py-3">
-        <span className="flex size-7 items-center justify-center rounded-full bg-active text-meta font-semibold text-fg">
+    <article {...stylex.props(sx.minW0, sx.roundedXl, sx.border, sx.borderLine60, sx.bgSurface, sx.smoothShadowSm)}>
+      <div {...stylex.props(sx.flex, sx.itemsCenter, sx.gap2, sx.borderB, sx.borderDivider, sx.px4, sx.py3)}>
+        <span {...stylex.props(sx.flex, sx.size7, sx.itemsCenter, sx.justifyCenter, sx.roundedFull, sx.bgActive, sx.fontSemibold, sx.textFg, typography.meta)}>
           {author.slice(0, 1).toUpperCase()}
         </span>
         <div>
-          <div className="text-xs font-semibold text-fg">{author}</div>
-          <div className="text-meta text-faint">Opened this pull request</div>
+          <div {...stylex.props(sx.textXs, sx.fontSemibold, sx.textFg)}>{author}</div>
+          <div {...stylex.props(sx.textFaint, typography.meta)}>Opened this pull request</div>
         </div>
       </div>
-      <div
-        className="markdown px-4 py-4 text-body leading-relaxed text-dim"
+      <div {...mergeStylexProps("markdown", sx.px4, sx.py4, sx.leadingRelaxed, sx.textDim, typography.body)}
         dangerouslySetInnerHTML={{ __html: descriptionHtml }}
       />
     </article>
@@ -62,11 +224,11 @@ export function ConversationView({
        and `mx-auto` (an auto cross-axis margin) opts it out of stretching, so
        without it the box sizes to its content and `max-w` becomes a fixed 760px
        that a phone can't fit. */
-    <div className="mx-auto flex w-full min-w-0 max-w-[760px] flex-col gap-4">
+    <div {...stylex.props(sx.mxAuto, sx.flex, sx.wFull, sx.minW0, sx.maxW760px, sx.flexCol, sx.gap4)}>
       <PrDescriptionCard author={author} descriptionHtml={descriptionHtml} />
 
       {comments.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-line px-4 py-10 text-center text-xs text-faint">
+        <div {...stylex.props(sx.roundedXl, sx.border, sx.borderDashed, sx.borderLine, sx.px4, sx.py10, sx.textCenter, sx.textXs, sx.textFaint)}>
           No comments yet.
         </div>
       ) : (
@@ -76,36 +238,30 @@ export function ConversationView({
             ? new Date(comment.createdAt).toLocaleString()
             : null;
           return (
-            <article
-              /* A grid item's automatic minimum size is its min-content
-                 width, so a wide comment (a deploy table, a long path) would
-                 otherwise stretch the track past the viewport. */
-              className="group min-w-0 rounded-xl border border-line/60 bg-surface smooth-shadow-sm"
+            <article {...mergeStylexProps("group", sx.minW0, sx.roundedXl, sx.border, sx.borderLine60, sx.bgSurface, sx.smoothShadowSm)}
               key={`${comment.url || comment.createdAt || index}`}
             >
-              <div className="flex items-center gap-2 border-b border-divider px-4 py-3">
-                <span className="flex size-7 items-center justify-center rounded-full bg-active text-meta font-semibold text-fg">
+              <div {...stylex.props(sx.flex, sx.itemsCenter, sx.gap2, sx.borderB, sx.borderDivider, sx.px4, sx.py3)}>
+                <span {...stylex.props(sx.flex, sx.size7, sx.itemsCenter, sx.justifyCenter, sx.roundedFull, sx.bgActive, sx.fontSemibold, sx.textFg, typography.meta)}>
                   {(comment.author || "?").slice(0, 1).toUpperCase()}
                 </span>
-                <div className="min-w-0 flex-1">
-                  <div className="text-xs font-semibold text-fg">
+                <div {...stylex.props(sx.minW0, sx.flex1)}>
+                  <div {...stylex.props(sx.textXs, sx.fontSemibold, sx.textFg)}>
                     {comment.author || "Unknown"}
                   </div>
                   {timestamp && (
-                    <div className="text-meta text-faint">{timestamp}</div>
+                    <div {...stylex.props(sx.textFaint, typography.meta)}>{timestamp}</div>
                   )}
                 </div>
                 {onAddToInput && pr && (
-                  <button
-                    className="rounded-md border-0 bg-transparent px-1.5 py-1 text-meta text-faint opacity-0 transition-opacity hover:bg-hover hover:text-fg focus-visible:opacity-100 group-hover:opacity-100"
+                  <button {...mergeStylexProps("group-hover:opacity-100", sx.hoverBgHover, sx.hoverTextFg, sx.focusVisibleOpacity100, sx.roundedMd, sx.border0, sx.bgTransparent, sx.px15, sx.py1, sx.textFaint, sx.opacity0, sx.transitionOpacity, typography.meta)}
                     onClick={() => onAddToInput(formatPrCommentPrompt(comment, pr))}
                   >
                     Add to session
                   </button>
                 )}
                 {comment.url && (
-                  <a
-                    className="text-meta text-faint no-underline hover:text-fg"
+                  <a {...mergeStylexProps("", sx.hoverTextFg, sx.textFaint, sx.noUnderline, typography.meta)}
                     href={comment.url}
                     target="_blank"
                     rel="noopener"
@@ -114,8 +270,7 @@ export function ConversationView({
                   </a>
                 )}
               </div>
-              <div
-                className="markdown px-4 py-4 text-body leading-relaxed text-dim"
+              <div {...mergeStylexProps("markdown", sx.px4, sx.py4, sx.leadingRelaxed, sx.textDim, typography.body)}
                 dangerouslySetInnerHTML={{
                   __html: renderPrCommentMarkdown(body, { repo }),
                 }}

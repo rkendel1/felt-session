@@ -14,7 +14,7 @@ import { currentPlanItem, parsePlanItems, planDoneCount } from "@tellahq/openses
 import { PlanChecklist } from "./PlanChecklist";
 import { resolveEntryImageSrc } from "../lib/osBlob";
 import { BASE_PATH } from "../lib/base";
-import { cn } from "../ui/cn";
+import { cn, mergeStylexProps, mergeStylexClassName, mergeStylexOverrideClassName } from "../ui/cn";
 import {
   TOOL_CODE_WELL,
   TOOL_PRE,
@@ -66,6 +66,220 @@ import {
   IconExpand,
   IconArrowUpRight,
 } from "./icons";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+import { motionStyles } from "../styles/animations.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	block: {
+			display: "block"
+	},
+	minW0: {
+			minWidth: "0"
+	},
+	truncate: {
+			textOverflow: "ellipsis",
+			whiteSpace: "nowrap",
+			overflow: "hidden"
+	},
+	opacity55: {
+			opacity: ".55"
+	},
+	hidden: {
+			display: "none"
+	},
+	flexShrink0: {
+			flexShrink: "0"
+	},
+	textFaint: {
+			color: "var(--text-faint)"
+	},
+	relative: {
+			position: "relative"
+	},
+	z1: {
+			zIndex: "1"
+	},
+	flex: {
+			display: "flex"
+	},
+	size22px: {
+			width: "22px",
+			height: "22px"
+	},
+	selfCenter: {
+			alignSelf: "center"
+	},
+	itemsCenter: {
+			alignItems: "center"
+	},
+	justifyCenter: {
+			justifyContent: "center"
+	},
+	transitionOpacity: {
+			transitionProperty: "opacity",
+			transitionTimingFunction: "var(--tw-ease,var(--ease))",
+			transitionDuration: "var(--tw-duration,var(--dur-micro))"
+	},
+	duration150: {
+			transitionDuration: ".15s"
+	},
+	itemsBaseline: {
+			alignItems: "baseline"
+	},
+	gap1: {
+			gap: "4px"
+	},
+	overflowHidden: {
+			overflow: "hidden"
+	},
+	leading5: {
+			lineHeight: "20px"
+	},
+	fontMedium: {
+			fontWeight: "var(--font-weight-medium)"
+	},
+	textDim: {
+			color: "var(--text-dim)"
+	},
+	transitionColors: {
+			transitionProperty: "color,background-color,border-color,outline-color,text-decoration-color,fill,stroke,--tw-gradient-from,--tw-gradient-via,--tw-gradient-to",
+			transitionTimingFunction: "var(--tw-ease,var(--ease))",
+			transitionDuration: "var(--tw-duration,var(--dur-micro))"
+	},
+	gap15: {
+			gap: "6px"
+	},
+	leading4: {
+			lineHeight: "16px"
+	},
+	textGreen: {
+			color: "var(--green)"
+	},
+	textRed: {
+			color: "var(--red)"
+	},
+	size4: {
+			width: "16px",
+			height: "16px"
+	},
+	shrink0: {
+			flexShrink: "0"
+	},
+	opacity70: {
+			opacity: ".7"
+	},
+	size11px: {
+			width: "11px",
+			height: "11px"
+	},
+	animateSpin: {
+			animation: "var(--animate-spin)"
+	},
+	roundedFull: {
+			borderRadius: "calc(infinity * 1px)"
+	,
+		cornerShape: "round"},
+	border: {
+			borderStyle: "solid",
+			borderWidth: "1px"
+	},
+	borderBLineStrong: {
+			borderBottomColor: "var(--border-strong)"
+	},
+	borderLLineStrong: {
+			borderLeftColor: "var(--border-strong)"
+	},
+	borderRLineStrong: {
+			borderRightColor: "var(--border-strong)"
+	},
+	borderTDim: {
+			borderTopColor: "var(--text-dim)"
+	},
+	mb15: {
+			marginBottom: "6px"
+	},
+	ml30px: {
+			marginLeft: "30px"
+	},
+	mt1: {
+			marginTop: "4px"
+	},
+	px1: {
+			paddingInline: "4px"
+	},
+	py15: {
+			paddingBlock: "6px"
+	},
+	roundedControl: {
+			borderRadius: "calc(12px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	border0: {
+			borderStyle: "solid",
+			borderWidth: "0"
+	},
+	bgTransparent: {
+			backgroundColor: "transparent"
+	},
+	px15: {
+			paddingInline: "6px"
+	},
+	py1: {
+			paddingBlock: "4px"
+	},
+	fontSans: { fontFamily: "var(--sans)" },
+	wFull: { width: "100%" },
+	cursorPointer: { cursor: "pointer" },
+	gap2: { gap: "8px" },
+	textLeft: { textAlign: "left" },
+	rowHover: { ":hover": { "@media (hover: hover)": { backgroundColor: "color-mix(in srgb, var(--hover) 40%, transparent)" } } },
+	absolute: { position: "absolute" },
+	opacity0: { opacity: 0 },
+	transitionOpacityTransform: { transitionProperty: "opacity, transform" },
+	rotate180: { transform: "rotate(180deg)" },
+	fontNormal: { fontWeight: "var(--font-weight-normal)" },
+	phoneHidden: { "@media (max-width: 720px)": { display: "none" } },
+	phoneShrink0: { "@media (max-width: 720px)": { flexShrink: 0 } },
+	py3px: { paddingBlock: "3px" },
+	inputPanel: { overflow: "hidden", borderRadius: "calc(14px * var(--rf))", backgroundColor: "var(--bg-panel)", padding: "6px",
+		cornerShape: "var(--cs)",},
+	mt0: { marginTop: 0 },
+	my0: { marginBlock: 0 },
+	opacity100: { opacity: 1 },
+	subagentTransition: { transitionProperty: "opacity, color, background-color", ":focus": { opacity: 1 } },
+	desktopHoverReveal: { "@media (min-width: 721px)": { opacity: 0, ":hover": { "@media (hover: hover)": { opacity: 1 } } } },
+
+	tabularNums: {
+		"--tw-numeric-spacing": "tabular-nums",
+		"fontVariantNumeric": "var(--tw-ordinal,) var(--tw-slashed-zero,) var(--tw-numeric-figure,) var(--tw-numeric-spacing,) var(--tw-numeric-fraction,)"
+	},
+	phoneFlexShrink0: {
+		"@media (max-width: 720px)": {
+			"flexShrink": "0"
+		}
+	},
+	hoverBgHover40: {
+		"@media (hover: hover)": {
+			":hover": {
+				"backgroundColor": "var(--hover)"
+			},
+			"@supports (color: color-mix(in lab, red, red))": {
+				":hover": {
+					"backgroundColor": "color-mix(in oklab, var(--hover) 40%, transparent)"
+				}
+			}
+		}
+	},
+	hoverTextFg: {
+		"@media (hover: hover)": {
+			":hover": {
+				"color": "var(--text)"
+			}
+		}
+	},
+});
 
 interface Props {
   entry: TranscriptEntry;
@@ -251,9 +465,9 @@ export function PathSummary({ path }: { path: string }) {
   const { directory, separator, filename } = pathSummaryParts(path);
   if (!separator) return <>{filename}</>;
   return (
-    <span className="block min-w-0 truncate" title={path}>
-      {directory && <span className="opacity-55">{directory}</span>}
-      <span className="opacity-55">{separator}</span>
+    <span {...stylex.props(sx.block, sx.minW0, sx.truncate)} title={path}>
+      {directory && <span {...stylex.props(sx.opacity55)}>{directory}</span>}
+      <span {...stylex.props(sx.opacity55)}>{separator}</span>
       <span>{filename}</span>
     </span>
   );
@@ -291,8 +505,7 @@ function RunningToolDuration({ entry }: { entry: TranscriptEntry }) {
   if (durationMs === null) return null;
   return (
     <span
-      data-tool-duration
-      className="hidden flex-shrink-0 text-meta tabular-nums text-faint group-hover:block"
+      data-tool-duration {...mergeStylexProps("group-hover:block", sx.tabularNums, sx.hidden, sx.flexShrink0, sx.textFaint, typography.meta)}
     >
       {formatToolDuration(durationMs)}
     </span>
@@ -423,7 +636,7 @@ export const ToolCallBlock = function ToolCallBlock({
   const subagentLive = canOpenSubagent && !result;
 
   return (
-    <div className="relative" data-eid={entry.id}>
+    <div {...stylex.props(sx.relative)} data-eid={entry.id}>
       {/* Tool rows have no spare inline space for a timestamp, so reveal the
           call's wall-clock time on hover or keyboard focus. */}
       <Tooltip label={fullTime(entry.timestamp)}>
@@ -431,25 +644,15 @@ export const ToolCallBlock = function ToolCallBlock({
         type="button"
         aria-expanded={expanded}
         onClick={() => rememberExpansion(!expanded)}
-        className={cn(
-          // Baseline, not centre: the 14px tool name, the 13px mono path and
-          // the 11px trailing meta all ride this row, and centring aligns
-          // their boxes rather than their text. Items with no text baseline
-          // (the glyph, the spinner, the failure mark) opt back into centring.
-          "group flex w-full min-w-0 cursor-pointer items-baseline gap-2 rounded-control border-0 bg-transparent px-1 py-[3px] text-left font-sans transition-colors",
-          "hover:bg-hover/40"
-        )}
+        {...mergeStylexProps("group", sx.flex, sx.wFull, sx.minW0, sx.cursorPointer, sx.itemsBaseline, sx.gap2, sx.roundedControl, sx.border0, sx.bgTransparent, sx.px1, sx.py3px, sx.textLeft, sx.fontSans, sx.transitionColors, sx.rowHover)}
       >
-        <span className="relative z-[1] flex size-[22px] flex-shrink-0 self-center items-center justify-center text-faint">
-          <span className="transition-opacity duration-150 group-hover:opacity-0">
+        <span {...stylex.props(sx.relative, sx.z1, sx.flex, sx.size22px, sx.flexShrink0, sx.selfCenter, sx.itemsCenter, sx.justifyCenter, sx.textFaint)}>
+          <span {...mergeStylexProps("group-hover:opacity-0", sx.transitionOpacity, sx.duration150)}>
             <ToolGlyph toolName={toolName} size={20} />
           </span>
           <IconChevronDown
             size={20}
-            className={cn(
-              "absolute block text-dim opacity-0 transition-[opacity,transform] duration-150 group-hover:opacity-100",
-              expanded && "rotate-180"
-            )}
+            {...mergeStylexProps("group-hover:opacity-100", sx.absolute, sx.block, sx.textDim, sx.opacity0, sx.transitionOpacityTransform, sx.duration150, expanded && sx.rotate180)}
           />
         </span>
 
@@ -458,8 +661,7 @@ export const ToolCallBlock = function ToolCallBlock({
           // strength: down a fold of Open Session calls the product name is the
           // same on every row, so it should read as the path to the part that
           // differs rather than compete with it.
-          <span
-            className="flex min-w-0 items-baseline gap-1 overflow-hidden text-item-title leading-5 font-medium text-dim transition-colors group-hover:text-fg phone:flex-shrink-0"
+          <span {...mergeStylexProps("group-hover:text-fg", sx.phoneFlexShrink0, sx.flex, sx.minW0, sx.itemsBaseline, sx.gap1, sx.overflowHidden, sx.leading5, sx.fontMedium, sx.textDim, sx.transitionColors, typography.itemTitle)}
             title={mcpParts.join(" · ")}
           >
             {mcpParts.map((part, i) => {
@@ -468,21 +670,13 @@ export const ToolCallBlock = function ToolCallBlock({
                 <React.Fragment key={i}>
                   {i > 0 && (
                     <span
-                      className={cn(
-                        "flex-shrink-0 text-faint",
-                        scopedOpenSession && i === 1 && "phone:hidden"
-                      )}
+                      {...stylex.props(sx.flexShrink0, sx.textFaint, scopedOpenSession && i === 1 && sx.phoneHidden)}
                     >
                       ·
                     </span>
                   )}
                   <span
-                    className={cn(
-                      context
-                        ? "flex-shrink-0 font-normal opacity-70"
-                        : "truncate phone:flex-shrink-0",
-                      scopedOpenSession && i === 0 && "phone:hidden"
-                    )}
+                    {...stylex.props(context ? sx.flexShrink0 : sx.truncate, context && sx.fontNormal, context && sx.opacity70, !context && sx.phoneShrink0, scopedOpenSession && i === 0 && sx.phoneHidden)}
                   >
                     {part}
                   </span>
@@ -491,7 +685,7 @@ export const ToolCallBlock = function ToolCallBlock({
             })}
           </span>
         ) : (
-          <span className="flex-shrink-0 text-item-title leading-5 font-medium text-dim transition-colors group-hover:text-fg">{toolName}</span>
+          <span {...mergeStylexProps("group-hover:text-fg", sx.flexShrink0, sx.leading5, sx.fontMedium, sx.textDim, sx.transitionColors, typography.itemTitle)}>{toolName}</span>
         )}
 
         {/* Baseline, not centre: the path is mono and the ± counts are sans, so
@@ -501,29 +695,23 @@ export const ToolCallBlock = function ToolCallBlock({
             Nothing grows into spare room here: changes and duration should
             follow the tool summary instead of lining up against the right edge. */}
         <span
-          className={cn(
-            "flex min-w-0 items-baseline gap-2",
-            mcp && "phone:hidden"
-          )}
+          {...stylex.props(sx.flex, sx.minW0, sx.itemsBaseline, sx.gap2, mcp && sx.phoneHidden)}
         >
-          <span className="flex min-w-0 items-baseline gap-1.5">
-            {fileMark && <ExtBadge name={fileMark} className="self-center" />}
+          <span {...stylex.props(sx.flex, sx.minW0, sx.itemsBaseline, sx.gap15)}>
+            {fileMark && <ExtBadge name={fileMark} className={mergeStylexOverrideClassName("", sx.selfCenter)} />}
             <span
-              className={cn(
-                "min-w-0 text-label leading-4 text-dim",
-                isFileTool ? "flex overflow-hidden" : "truncate"
-              )}
+              {...stylex.props(sx.minW0, typography.label, sx.leading4, sx.textDim, isFileTool ? sx.flex : sx.truncate, isFileTool && sx.overflowHidden)}
             >
               {isFileTool ? <PathSummary path={summary} /> : summary}
             </span>
           </span>
           {lineStats && (
-            <span className="flex flex-shrink-0 gap-1.5 text-label leading-4">
+            <span {...stylex.props(sx.flex, sx.flexShrink0, sx.gap15, sx.leading4, typography.label)}>
               {lineStats.additions > 0 && (
-                <span className="text-green">+{lineStats.additions}</span>
+                <span {...stylex.props(sx.textGreen)}>+{lineStats.additions}</span>
               )}
               {lineStats.deletions > 0 && (
-                <span className="text-red">-{lineStats.deletions}</span>
+                <span {...stylex.props(sx.textRed)}>-{lineStats.deletions}</span>
               )}
             </span>
           )}
@@ -549,7 +737,7 @@ export const ToolCallBlock = function ToolCallBlock({
             title="Open this file"
           >
             Open
-            <IconArrowUpRight className="size-4 shrink-0 opacity-70" />
+            <IconArrowUpRight className={mergeStylexOverrideClassName("", sx.size4, sx.shrink0, sx.opacity70)} />
           </span>
         )}
 
@@ -557,11 +745,8 @@ export const ToolCallBlock = function ToolCallBlock({
           <span
             role="button"
             tabIndex={0}
-            className={cn(
-              TOOL_ROW_CHIP,
-              "opacity-100 transition-[opacity,color,background-color] focus:opacity-100",
-              !subagentLive && "md:opacity-0 md:group-hover:opacity-100"
-            )}
+            className={`${stylex.props(sx.opacity100, sx.subagentTransition, !subagentLive && sx.desktopHoverReveal).className} ${TOOL_ROW_CHIP}`}
+            style={stylex.props(sx.opacity100, sx.subagentTransition, !subagentLive && sx.desktopHoverReveal).style}
             onClick={(e) => {
               e.stopPropagation();
               onOpenSubagent!(agentId!, summary);
@@ -569,7 +754,7 @@ export const ToolCallBlock = function ToolCallBlock({
             title="Open this sub-agent's conversation"
           >
             {subagentLive ? "Watch" : "Open"}
-            <IconArrowUpRight className="size-4 shrink-0 opacity-70" />
+            <IconArrowUpRight className={mergeStylexOverrideClassName("", sx.size4, sx.shrink0, sx.opacity70)} />
           </span>
         )}
 
@@ -582,7 +767,7 @@ export const ToolCallBlock = function ToolCallBlock({
         )}
 
         {duration && (
-          <span className="flex-shrink-0 text-meta tabular-nums text-faint">{duration}</span>
+          <span {...mergeStylexProps("", sx.tabularNums, sx.flexShrink0, sx.textFaint, typography.meta)}>{duration}</span>
         )}
         {pending && <RunningToolDuration entry={entry} />}
 
@@ -592,24 +777,22 @@ export const ToolCallBlock = function ToolCallBlock({
           // still end in a red × reads as a verdict instead of a state. Border
           // written one side at a time — a `border-color` shorthand next to a
           // `border-top-color` is a two-utilities-one-property race.
-          <span className="size-[11px] flex-shrink-0 self-center animate-spin rounded-full border border-b-line-strong border-l-line-strong border-r-line-strong border-t-dim" />
+          <span {...stylex.props(sx.size11px, sx.flexShrink0, sx.selfCenter, motionStyles.spin, sx.roundedFull, sx.border, sx.borderBLineStrong, sx.borderLLineStrong, sx.borderRLineStrong, sx.borderTDim)} />
         ) : failed ? (
-          <span className="flex-shrink-0 self-center text-faint opacity-70">
+          <span {...stylex.props(sx.flexShrink0, sx.selfCenter, sx.textFaint, sx.opacity70)}>
             <IconX size={18} />
           </span>
         ) : !result ? (
-          <span className="flex-shrink-0 text-meta text-faint">–</span>
+          <span {...stylex.props(sx.flexShrink0, sx.textFaint, typography.meta)}>–</span>
         ) : null}
       </button>
       </Tooltip>
 
       {expanded && (
-        <div className="relative z-[1] mb-1.5 ml-[30px] mt-1 space-y-1.5">
+        <div {...mergeStylexProps("space-y-1.5", sx.relative, sx.z1, sx.mb15, sx.ml30px, sx.mt1)}>
           {inputNode && (
             <div
-              className={cn(
-                inputNeedsPanel && "overflow-hidden rounded-lg bg-panel p-1.5"
-              )}
+              {...stylex.props(inputNeedsPanel && sx.inputPanel)}
             >
               {inputNode}
             </div>
@@ -619,7 +802,7 @@ export const ToolCallBlock = function ToolCallBlock({
             <>
               {resultContent && (
                 <div className="space-y-1">
-                  <div className="px-1 text-meta font-medium leading-4 text-faint">
+                  <div {...stylex.props(sx.px1, sx.fontMedium, sx.leading4, sx.textFaint, typography.meta)}>
                     {failed ? "Error" : "Output"}
                   </div>
                   <div className={TOOL_CODE_WELL}>
@@ -628,13 +811,13 @@ export const ToolCallBlock = function ToolCallBlock({
                 </div>
               )}
               {shownResult.images && shownResult.images.length > 0 && (
-                <div className={cn(TOOL_RESULT_MEDIA, !resultContent && "!mt-0")}>
+                <div className={`${stylex.props(!resultContent && sx.mt0).className} ${TOOL_RESULT_MEDIA}`} style={stylex.props(!resultContent && sx.mt0).style}>
                   {shownResult.images.map((raw, i) => {
                     const src = resolveEntryImageSrc(raw, sessionId);
                     return (
                       <a key={i} href={src} target="_blank" rel="noopener noreferrer" className="md-image-link">
                         <img
-                          className={cn("md-image", !resultContent && "!my-0")}
+                          className={`${stylex.props(!resultContent && sx.my0).className} md-image`} style={stylex.props(!resultContent && sx.my0).style}
                           src={src}
                           alt=""
                           loading="lazy"
@@ -736,7 +919,7 @@ function toolInputNode(toolName: string, input: unknown): React.ReactNode | null
   // the status flap above the composer uses).
   if (toolName === "TodoWrite") {
     const items = parsePlanItems(input);
-    if (items.length > 0) return <PlanChecklist items={items} className="px-1 py-1.5" />;
+    if (items.length > 0) return <PlanChecklist items={items} className={mergeStylexOverrideClassName("", sx.px1, sx.py15)} />;
   }
 
   // Read's input is fully covered by the row summary (plus offset/limit when
@@ -810,8 +993,7 @@ function DetailDisclosure({
   return (
     <button
       type="button"
-      aria-expanded={expanded}
-      className="mt-1 rounded-control border-0 bg-transparent px-1.5 py-1 font-sans text-meta font-medium text-faint hover:bg-hover/40 hover:text-fg"
+      aria-expanded={expanded} {...mergeStylexProps("", sx.hoverBgHover40, sx.hoverTextFg, sx.mt1, sx.roundedControl, sx.border0, sx.bgTransparent, sx.px15, sx.py1, sx.fontSans, sx.fontMedium, sx.textFaint, typography.meta)}
       onClick={onClick}
     >
       {expanded ? "Show preview" : `Show full detail · ${Math.round(length / 1024)} KB`}

@@ -1,12 +1,29 @@
 import React, { useEffect, useRef } from "react";
 import { cn } from "./cn";
+import * as stylex from "@stylexjs/stylex";
+import { mergeStylexClassName } from "./cn";
+
+const sx = stylex.create({
+	minW0: {
+		"minWidth": "0"
+	},
+	overflowHidden: {
+		"overflow": "hidden"
+	},
+	whitespaceNowrap: {
+		"whiteSpace": "nowrap"
+	},
+	textClip: {
+		"textOverflow": "clip"
+	},
+});
 
 const OVERFLOW_FADE =
-	"min-w-0 overflow-hidden whitespace-nowrap text-clip " +
-	"data-[overflow]:[-webkit-mask-image:linear-gradient(to_right,#000_0,#000_calc(100%_-_24px),transparent_100%)] " +
-	"data-[overflow]:[mask-image:linear-gradient(to_right,#000_0,#000_calc(100%_-_24px),transparent_100%)] " +
-	"rtl:data-[overflow]:[-webkit-mask-image:linear-gradient(to_left,#000_0,#000_calc(100%_-_24px),transparent_100%)] " +
-	"rtl:data-[overflow]:[mask-image:linear-gradient(to_left,#000_0,#000_calc(100%_-_24px),transparent_100%)]";
+	mergeStylexClassName("", sx.minW0, sx.overflowHidden, sx.whitespaceNowrap, sx.textClip) + " " +
+	"data-[overflow]:[-webkit-mask-image:linear-gradient(to_right,var(--color-black)_0,var(--color-black)_calc(100%_-_24px),transparent_100%)] " +
+	"data-[overflow]:[mask-image:linear-gradient(to_right,var(--color-black)_0,var(--color-black)_calc(100%_-_24px),transparent_100%)] " +
+	"rtl:data-[overflow]:[-webkit-mask-image:linear-gradient(to_left,var(--color-black)_0,var(--color-black)_calc(100%_-_24px),transparent_100%)] " +
+	"rtl:data-[overflow]:[mask-image:linear-gradient(to_left,var(--color-black)_0,var(--color-black)_calc(100%_-_24px),transparent_100%)]";
 
 /** Clips single-line text and adds a soft trailing fade only when it overflows. */
 export function OverflowFadeText({

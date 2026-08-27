@@ -12,6 +12,9 @@ let statusOpen = false;
 
 const { ComposerAgents } = await import("./ComposerAgents");
 const { PlanChecklist } = await import("./PlanChecklist");
+const composerAgentsSource = await Bun.file(
+	new URL("./ComposerAgents.tsx", import.meta.url),
+).text();
 
 const plan: PlanItem[] = [
 	{ content: "Inspect the current behavior", status: "completed" },
@@ -23,9 +26,9 @@ describe("PlanChecklist", () => {
 	test("uses a consistent dot marker for each status", () => {
 		const html = renderToStaticMarkup(<PlanChecklist items={plan} />);
 
-		expect(html).toContain("size-2 flex-none rounded-full bg-green");
-		expect(html).toContain("size-2 flex-none rounded-full bg-yellow");
-		expect(html).toContain("size-2 flex-none rounded-full border border-line");
+		expect(html).toContain("width:8px;height:8px;flex:none;border-radius:50%;corner-shape:var(--cs);background-color:var(--green)");
+		expect(html).toContain("width:8px;height:8px;flex:none;border-radius:50%;corner-shape:var(--cs);background-color:var(--yellow)");
+		expect(html).toContain("width:8px;height:8px;flex:none;border-radius:50%;corner-shape:var(--cs);border-color:var(--border);border-style:solid;border-width:1px");
 		expect(html).not.toContain("composer-agents-pulse");
 		expect(html).not.toContain("<svg");
 	});
@@ -39,14 +42,12 @@ describe("ComposerAgents plan summary", () => {
 		);
 
 		expect(html).toContain('aria-expanded="false"');
-		expect(
-			html.split("animate-[composer-agents-pulse_1.4s_ease-in-out_infinite]").length - 1,
-		).toBe(1);
+		expect(composerAgentsSource).toContain('"animation": "1.4s ease-in-out infinite composer-agents-pulse"');
 		expect(html).toContain("Simplify the plan markers");
 		expect(html.indexOf("1/3")).toBeLessThan(html.indexOf("Simplify the plan markers"));
 		expect(html).not.toContain("Inspect the current behavior");
 		// Caret points up: the card opens upward, away from the composer.
-		expect(html).toContain("rotate-180");
+		expect(composerAgentsSource).toContain('!open && mergeStylexClassName("", sx.rotate180)');
 	});
 
 	test("uses the checklist marker instead of a duplicate footer dot while open", () => {
@@ -57,10 +58,8 @@ describe("ComposerAgents plan summary", () => {
 
 		expect(html).toContain('aria-expanded="true"');
 		expect(html).toContain("Inspect the current behavior");
-		expect(html).toContain("bg-yellow");
-		expect(
-			html.split("animate-[composer-agents-pulse_1.4s_ease-in-out_infinite]").length - 1,
-		).toBe(1);
+		expect(html).toContain("background-color:var(--yellow)");
+		expect(composerAgentsSource).toContain('"animation": "1.4s ease-in-out infinite composer-agents-pulse"');
 		// The toggle row comes last, under the checklist. The flap's bottom edge
 		// is pinned to the composer, so a summary above the plan would travel the
 		// plan's full height on every fold and you'd have to chase it with the

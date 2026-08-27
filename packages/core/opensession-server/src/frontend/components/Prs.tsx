@@ -1,3 +1,5 @@
+import { mergeStylexProps, mergeStylexOverrideClassName } from "../ui/cn";
+import { utilityClassName } from "../ui/cn";
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { UnifiedSession } from "../lib/types";
@@ -50,6 +52,274 @@ import {
   IconSidebarLeft,
   IconX,
 } from "./icons";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	minW0: {
+			minWidth: "0"
+	},
+	roundedXl: {
+			borderRadius: "calc(18px * var(--rf))",
+
+		cornerShape: "var(--cs)",},
+	bgPanel: {
+			backgroundColor: "var(--bg-panel)"
+	},
+	bgRaised: {
+			backgroundColor: "var(--bg-raised)"
+	},
+	px5: {
+			paddingInline: "calc(4px * 5)"
+	},
+	py4: {
+			paddingBlock: "calc(4px * 4)"
+	},
+	flex: {
+			display: "flex"
+	},
+	itemsCenter: {
+			alignItems: "center"
+	},
+	itemsStretch: {
+		alignItems: "stretch",
+	},
+	gap2: {
+			gap: "calc(4px * 2)"
+	},
+	fontMedium: {
+			fontWeight: "var(--font-weight-medium)"
+	},
+	textDim: {
+			color: "var(--text-dim)"
+	},
+	mt2: {
+			marginTop: "calc(4px * 2)"
+	},
+	block: {
+			display: "block"
+	},
+	h6: {
+			height: "calc(4px * 6)"
+	},
+	w16: {
+			width: "calc(4px * 16)"
+	},
+	roundedSm: {
+			borderRadius: "calc(4px * var(--rf))",
+
+		cornerShape: "var(--cs)",},
+	mt1: {
+			marginTop: "4px"
+	},
+	truncate: {
+			overflow: "hidden",
+			textOverflow: "ellipsis",
+			whiteSpace: "nowrap"
+	},
+	fontSemibold: {
+			fontWeight: "var(--font-weight-semibold)"
+	},
+	textFg: {
+			color: "var(--text)"
+	},
+	textFaint: {
+			color: "var(--text-faint)"
+	},
+	grid: {
+			display: "grid"
+	},
+	wFull: {
+			width: "100%"
+	},
+	cursorPointer: {
+			cursor: "pointer"
+	},
+	gridCols2: {
+			gridTemplateColumns: "repeat(2, minmax(0, 1fr))"
+	},
+	gap3: {
+			gap: "calc(4px * 3)"
+	},
+	textLeft: {
+			textAlign: "left"
+	},
+	w200px: {
+			width: "200px"
+	},
+	minW90px: {
+			minWidth: "90px"
+	},
+	shrink100: {
+			flexShrink: "100"
+	},
+	mlAuto: {
+			marginLeft: "auto"
+	},
+	maxW150px: {
+			maxWidth: "150px"
+	},
+	minW200px: {
+			minWidth: "200px"
+	},
+	maxW320px: {
+			maxWidth: "320px"
+	},
+	size18px: {
+			width: "18px",
+			height: "18px"
+	},
+	shrink0: {
+			flexShrink: "0"
+	},
+	flex1: {
+			flex: "1"
+	},
+	minH0: {
+			minHeight: "0"
+	},
+	overflowYAuto: {
+			overflowY: "auto"
+	},
+	bgSurface: {
+			backgroundColor: "var(--bg)"
+	},
+	mxAuto: {
+			marginInline: "auto"
+	},
+	maxW920px: {
+			maxWidth: "920px"
+	},
+	px6: {
+			paddingInline: "calc(4px * 6)"
+	},
+	pb15: {
+			paddingBottom: "calc(4px * 15)"
+	},
+	pt7: {
+			paddingTop: "calc(4px * 7)"
+	},
+	mb6: {
+			marginBottom: "calc(4px * 6)"
+	},
+	mb8: {
+			marginBottom: "calc(4px * 8)"
+	},
+	mb5: {
+			marginBottom: "calc(4px * 5)"
+	},
+	itemsBaseline: {
+			alignItems: "baseline"
+	},
+	leading13: {
+			lineHeight: "1.3"
+	},
+	justifySelfEnd: {
+			justifySelf: "flex-end"
+	},
+	ml2: {
+			marginLeft: "calc(4px * 2)"
+	},
+	relative: {
+			position: "relative"
+	},
+	absolute: {
+			position: "absolute"
+	},
+	inset0: {
+			inset: "0"
+	},
+	left0: {
+			left: "0"
+	},
+	z10: {
+			zIndex: "10"
+	},
+	opacity0: {
+			opacity: "0"
+	},
+	opacity100: {
+			opacity: "1"
+	},
+	pointerEventsNone: {
+			pointerEvents: "none"
+	},
+	textGreen: {
+			color: "var(--green)"
+	},
+	h8: {
+			height: "32px"
+	},
+	w8: {
+			width: "32px"
+	},
+	pl8: {
+			paddingLeft: "32px"
+	},
+	insetY0: {
+			top: "0",
+			bottom: "0"
+	},
+	/** The field grows and fades in place rather than appearing beside the
+	 *  glyph, so the trailing filters never jump. */
+	transitionWidth: {
+			transitionProperty: "width",
+			transitionDuration: "var(--dur)",
+			transitionTimingFunction: "var(--ease)",
+		"@media (prefers-reduced-motion: reduce)": {
+			"transitionProperty": "none"
+		}
+	},
+	transitionOpacityMicro: {
+			transitionProperty: "opacity",
+			transitionDuration: "var(--dur-micro)",
+			transitionTimingFunction: "var(--ease)",
+		"@media (prefers-reduced-motion: reduce)": {
+			"transitionProperty": "none"
+		}
+	},
+	hideSearchCancel: {
+		"::-webkit-search-cancel-button": {
+			"display": "none"
+		}
+	},
+	textRed: {
+			color: "var(--red)"
+	},
+	justifyCenter: {
+			justifyContent: "center"
+	},
+	pb4: {
+			paddingBottom: "calc(4px * 4)"
+	},
+	minH13: {
+			minHeight: "calc(4px * 13)"
+	},
+	borderB: {
+			borderBottomStyle: "solid",
+			borderBottomWidth: "1px"
+	},
+	borderLine: {
+			borderColor: "var(--border)"
+	},
+	px3: {
+			paddingInline: "calc(4px * 3)"
+	},
+	px1: {
+			paddingInline: "4px"
+	},
+	fontNormal: {
+			fontWeight: "var(--font-weight-normal)"
+	},
+	minH10: {
+			minHeight: "calc(4px * 10)"
+	},
+	size10: {
+			width: "calc(4px * 10)",
+			height: "calc(4px * 10)"
+	},
+});
 
 interface Props {
   sessions: UnifiedSession[];
@@ -154,26 +424,26 @@ function OverviewTile({
   loading?: boolean;
 }) {
   return (
-    <span className="min-w-0 rounded-xl bg-raised px-5 py-4">
-      <span className="flex items-center gap-2 text-label font-medium text-dim">
+    <span {...stylex.props(sx.minW0, sx.roundedXl, sx.bgRaised, sx.px5, sx.py4)}>
+      <span {...stylex.props(sx.flex, sx.itemsCenter, sx.gap2, sx.fontMedium, sx.textDim, typography.label)}>
         {live !== undefined ? (
           <span
             aria-hidden="true"
             className={
               live
-                ? "size-1.5 shrink-0 rounded-full bg-green motion-safe:animate-pulse"
-                : "size-1.5 shrink-0 rounded-full bg-line"
+                ? utilityClassName("size-1.5 shrink-0 rounded-full bg-green motion-safe:animate-pulse")
+                : utilityClassName("size-1.5 shrink-0 rounded-full bg-line")
             }
           />
         ) : null}
         {label}
       </span>
       {loading ? (
-        <span className="mt-2 block h-6 w-16 rounded-sm bg-line motion-safe:animate-pulse" />
+        <span {...mergeStylexProps("bg-line motion-safe:animate-pulse", sx.mt2, sx.block, sx.h6, sx.w16, sx.roundedSm)}  />
       ) : (
-        <span className="mt-1 block truncate text-stat font-semibold text-fg">{value}</span>
+        <span {...stylex.props(sx.mt1, sx.block, sx.truncate, sx.fontSemibold, sx.textFg, typography.stat)}>{value}</span>
       )}
-      {detail ? <span className="mt-1 block truncate text-meta text-faint">{detail}</span> : null}
+      {detail ? <span {...stylex.props(sx.mt1, sx.block, sx.truncate, sx.textFaint, typography.meta)}>{detail}</span> : null}
     </span>
   );
 }
@@ -208,7 +478,7 @@ function OverviewStats({
       }
       aria-label="Open Analytics"
       aria-busy={!stats}
-      className="focus-ring grid w-full cursor-pointer grid-cols-2 items-stretch gap-3 rounded-xl text-left tabular-nums desktop:grid-cols-4"
+      {...mergeStylexProps("focus-ring tabular-nums desktop:grid-cols-4", sx.grid, sx.wFull, sx.itemsStretch, sx.cursorPointer, sx.gridCols2, sx.gap3, sx.roundedXl, sx.textLeft)}
     >
       <OverviewTile
         label="Agents running"
@@ -426,17 +696,28 @@ setAddingToSidebar(false);
           trailing filters. A non-empty search stays open when focus moves on,
           so the active filter remains visible. */}
       <div
-        className={cn(
-          "relative h-8 shrink-0 transition-[width] duration-[var(--dur)] ease-[var(--ease)] motion-reduce:transition-none",
-          searchExpanded ? "w-[200px] min-w-[90px] shrink-[100]" : "w-8",
+        {...stylex.props(
+          sx.relative,
+          sx.h8,
+          sx.shrink0,
+          sx.transitionWidth,
+          searchExpanded ? sx.w200px : sx.w8,
+          searchExpanded && sx.minW90px,
+          searchExpanded && sx.shrink100,
         )}
       >
         <Input
           ref={searchInputRef}
-          className={cn(
-            "absolute inset-0 h-8 pl-8 [&::-webkit-search-cancel-button]:hidden",
-            "transition-opacity duration-[var(--dur-micro)] ease-[var(--ease)] motion-reduce:transition-none",
-            searchExpanded ? "opacity-100" : "pointer-events-none opacity-0",
+          className={mergeStylexOverrideClassName(
+            "",
+            sx.absolute,
+            sx.inset0,
+            sx.h8,
+            sx.pl8,
+            sx.hideSearchCancel,
+            sx.transitionOpacityMicro,
+            searchExpanded ? sx.opacity100 : sx.opacity0,
+            !searchExpanded && sx.pointerEventsNone,
           )}
           type="search"
           aria-label="Search pull requests"
@@ -459,9 +740,14 @@ setAddingToSidebar(false);
           <Button
             variant="ghost"
             icon={<IconSearch size={18} />}
-            className={cn(
-              "absolute inset-y-0 left-0 z-10",
-              searchExpanded && "pointer-events-none text-faint",
+            className={mergeStylexOverrideClassName(
+              "",
+              sx.absolute,
+              sx.insetY0,
+              sx.left0,
+              sx.z10,
+              Boolean(searchExpanded) && sx.pointerEventsNone,
+              Boolean(searchExpanded) && sx.textFaint,
             )}
             aria-label="Search pull requests"
             aria-expanded={searchExpanded}
@@ -475,27 +761,27 @@ setAddingToSidebar(false);
       {/* Search sits with the page name. The scopes and CTA remain a trailing
           group, so widening the pane grows the quiet space between the two
           jobs instead of separating the field from its heading. */}
-      <div className="ml-auto flex min-w-0 items-center gap-2">
+      <div {...stylex.props(sx.mlAuto, sx.flex, sx.minW0, sx.itemsCenter, sx.gap2)}>
       {people.length > 0 && (
         <Menu.Root>
           <Menu.Trigger
             render={
-              <Button variant="ghost" className="min-w-0" icon={<IconPeople size={18} />} caret>
-                <span className="max-w-[150px] truncate">
+              <Button variant="ghost" className={mergeStylexOverrideClassName("", sx.minW0)} icon={<IconPeople size={18} />} caret>
+                <span {...stylex.props(sx.maxW150px, sx.truncate)}>
                   {person === "all" ? "Anyone" : personLabel(person)}
                 </span>
               </Button>
             }
           />
-          <Menu.Popup align="end" className="min-w-[200px] max-w-[320px]">
+          <Menu.Popup align="end" className={mergeStylexOverrideClassName("", sx.minW200px, sx.maxW320px)}>
             <Menu.RadioGroup
               value={person}
               onValueChange={(value) => setPerson(String(value))}
             >
               <Menu.RadioItem value="all" closeOnClick>
                 {/* Sized to the faces below so every label shares one edge. */}
-                <span className="size-[18px] shrink-0" />
-                <span className="min-w-0 flex-1 truncate">Anyone</span>
+                <span {...stylex.props(sx.size18px, sx.shrink0)} />
+                <span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>Anyone</span>
                 <Menu.Check on={person === "all"} />
               </Menu.RadioItem>
               {people.map((who) => {
@@ -503,7 +789,7 @@ setAddingToSidebar(false);
                 return (
                   <Menu.RadioItem key={key} value={key} closeOnClick>
                     <UserAvatar name={who.name} size={18} />
-                    <span className="min-w-0 flex-1 truncate">
+                    <span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>
                       {key === currentUser.toLowerCase()
                         ? `${who.fullName} (you)`
                         : who.fullName}
@@ -521,25 +807,25 @@ setAddingToSidebar(false);
         <Menu.Root>
           <Menu.Trigger
             render={
-              <Button variant="ghost" className="min-w-0" icon={<IconRepo size={18} />} caret>
-                <span className="max-w-[150px] truncate">
+              <Button variant="ghost" className={mergeStylexOverrideClassName("", sx.minW0)} icon={<IconRepo size={18} />} caret>
+                <span {...stylex.props(sx.maxW150px, sx.truncate)}>
                   {repo === "all" ? "All repos" : repoLabel(repo)}
                 </span>
               </Button>
             }
           />
-          <Menu.Popup align="end" className="min-w-[200px] max-w-[320px]">
+          <Menu.Popup align="end" className={mergeStylexOverrideClassName("", sx.minW200px, sx.maxW320px)}>
             <Menu.RadioGroup value={repo} onValueChange={(value) => setRepo(String(value))}>
               <Menu.RadioItem value="all" closeOnClick>
                 {/* Sized to the tiles below so every label shares one edge. */}
-                <span className="size-[18px] shrink-0" />
-                <span className="min-w-0 flex-1 truncate">All repos</span>
+                <span {...stylex.props(sx.size18px, sx.shrink0)} />
+                <span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>All repos</span>
                 <Menu.Check on={repo === "all"} />
               </Menu.RadioItem>
               {repoOptions.map((name) => (
                 <Menu.RadioItem key={name} value={name} closeOnClick>
                   <RepoTile name={name} size={18} />
-                  <span className="min-w-0 flex-1 truncate">{repoLabel(name)}</span>
+                  <span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>{repoLabel(name)}</span>
                   <Menu.Check on={repo === name} />
                 </Menu.RadioItem>
               ))}
@@ -557,7 +843,7 @@ setAddingToSidebar(false);
             render={
               <Button
                 variant="ghost"
-                className={showArchived ? "shrink-0 text-fg" : "shrink-0"}
+                className={showArchived ? utilityClassName("shrink-0 text-fg") : utilityClassName("shrink-0")}
                 aria-label="More filters"
                 icon={<IconDotsHorizontal size={18} />}
               />
@@ -574,7 +860,7 @@ setAddingToSidebar(false);
             closeOnClick
           >
             <IconArchive size={18} />
-            <span className="min-w-0 flex-1 truncate">Show archived</span>
+            <span {...stylex.props(sx.minW0, sx.flex1, sx.truncate)}>Show archived</span>
             <Menu.Check on={showArchived} />
           </Menu.CheckboxItem>
         </Menu.Popup>
@@ -585,7 +871,7 @@ setAddingToSidebar(false);
           is what makes it scan as the button that makes something. */}
       <Button
         variant="primary"
-        className="shrink-0"
+        className={mergeStylexOverrideClassName("", sx.shrink0)}
         icon={<IconPlus size={18} />}
         onClick={onNewSession}
       >
@@ -598,18 +884,13 @@ setAddingToSidebar(false);
   return (
     // The page frame every other list page in the app uses: one centred
     // column at the shared width and padding, a PageHeader on top.
-    <div data-page-scroll className="min-h-0 w-full flex-1 overflow-y-auto bg-surface">
+    <div data-page-scroll {...stylex.props(sx.minH0, sx.wFull, sx.flex1, sx.overflowYAuto, sx.bgSurface)}>
       {topbarActionsEl ? createPortal(actions, topbarActionsEl) : null}
-      <div
-        className={cn(
-          PR_PAGE_COLUMN,
-          "pb-15 pt-7 max-[560px]:px-4 max-[560px]:pb-12 max-[560px]:pt-[18px]",
-        )}
-      >
+      <div {...mergeStylexProps("max-[560px]:px-4 max-[560px]:pb-12 max-[560px]:pt-[18px]", sx.mxAuto, sx.wFull, sx.maxW920px, sx.px6, sx.pb15, sx.pt7)} >
         {/* The page name and search live together in the top bar. The day's
             orientation figures take the same card row Analytics uses, while
             the pull-request sections remain the page's primary content. */}
-        <div className="mb-6 max-[560px]:mb-4">
+        <div {...mergeStylexProps("max-[560px]:mb-4", sx.mb6)} >
           <OverviewStats
             running={running}
             stats={stats}
@@ -635,16 +916,16 @@ setAddingToSidebar(false);
         ) : (
           <div className={PR_LIST}>
             {sections.map((section) => (
-              <section key={section.state} className="mb-8">
+              <section key={section.state} {...stylex.props(sx.mb8)}>
                 <h2 className={PR_SECTION_LABEL}>
                   {section.label}
-                  <span className="text-label font-medium text-faint">{section.total}</span>
+                  <span {...stylex.props(sx.fontMedium, sx.textFaint, typography.label)}>{section.total}</span>
                 </h2>
                 {section.groups.map(([label, rows]) => (
-                  <div key={label} className="mb-5">
+                  <div key={label} {...stylex.props(sx.mb5)}>
                     <h3 className={PR_GROUP_LABEL}>
                       {label}
-                      <span className="font-medium">{rows.length}</span>
+                      <span {...stylex.props(sx.fontMedium)}>{rows.length}</span>
                     </h3>
                     <div>
                       {rows.map((row) => {
@@ -661,7 +942,7 @@ setAddingToSidebar(false);
                                 healthy, so the resting mark is drawn as
                                 structure and green now means approved. */}
                             <span
-                              className={`${status.quiet ? "text-dim" : status.className} flex items-center`}
+                              className={utilityClassName(`${status.quiet ? "text-dim" : status.className} flex items-center`)}
                               title={status.label}
                             >
                               <StateIcon state={row.state} />
@@ -675,12 +956,12 @@ setAddingToSidebar(false);
                                 in kebab case on most rows and cost the list
                                 half its height; it stays in the row's tooltip,
                                 in search, and in the panel the row opens. */}
-                            <span className="flex min-w-0 items-baseline gap-2">
-                              <span className="truncate text-item-title font-medium leading-[1.3] text-fg">
+                            <span {...stylex.props(sx.flex, sx.minW0, sx.itemsBaseline, sx.gap2)}>
+                              <span {...stylex.props(sx.truncate, sx.fontMedium, sx.leading13, sx.textFg, typography.itemTitle)}>
                                 {row.title}
                               </span>
                               {row.number && (
-                                <span className="shrink-0 text-meta tabular-nums text-faint">
+                                <span {...mergeStylexProps("tabular-nums", sx.shrink0, sx.textFaint, typography.meta)} >
                                   #{row.number}
                                 </span>
                               )}
@@ -690,15 +971,15 @@ setAddingToSidebar(false);
                                 is the convention rather than a status, and it
                                 reads at a glance in a way a neutral pair of
                                 numbers does not. */}
-                            <span className="justify-self-end text-meta tabular-nums phone:hidden">
+                            <span {...mergeStylexProps("tabular-nums phone:hidden", sx.justifySelfEnd, typography.meta)} >
                               {row.additions !== undefined && (
-                                <span className="text-green">+{compactDiff(row.additions)}</span>
+                                <span {...stylex.props(sx.textGreen)}>+{compactDiff(row.additions)}</span>
                               )}
                               {row.deletions !== undefined && (
-                                <span className="ml-2 text-red">−{compactDiff(row.deletions)}</span>
+                                <span {...stylex.props(sx.ml2, sx.textRed)}>−{compactDiff(row.deletions)}</span>
                               )}
                             </span>
-                            <span className="justify-self-end text-meta tabular-nums text-faint">
+                            <span {...mergeStylexProps("tabular-nums", sx.justifySelfEnd, sx.textFaint, typography.meta)} >
                               {compactAge(row.updatedAt)}
                             </span>
                           </button>
@@ -710,7 +991,7 @@ setAddingToSidebar(false);
               </section>
             ))}
             {remainingRows > 0 && (
-              <div className="flex justify-center pb-4">
+              <div {...stylex.props(sx.flex, sx.justifyCenter, sx.pb4)}>
                 <Button
                   variant="ghost"
                   onClick={() =>
@@ -731,17 +1012,17 @@ setAddingToSidebar(false);
         phone={isPhone}
         label={preview ? `Pull request: ${preview.title}` : "Pull request"}
         showPhoneGrabber={false}
-        modalClassName="h-[min(820px,85vh)] w-[min(1280px,92vw)] max-w-none bg-surface"
-        sheetClassName="top-0 h-[100dvh] max-h-none bg-surface [border-radius:0]! [box-shadow:none]!"
+        modalClassName={utilityClassName("h-[min(820px,85vh)] w-[min(1280px,92vw)] max-w-none bg-surface")}
+        sheetClassName={utilityClassName("top-0 h-[100dvh] max-h-none bg-surface [border-radius:0]! [box-shadow:none]!")}
       >
         {preview && (
           <>
-            <div className="flex min-h-13 shrink-0 items-center gap-2 border-b border-line bg-panel px-3 phone:min-h-14">
-              <div className="flex min-w-0 flex-1 items-center gap-2 px-1 text-item-title font-medium text-fg">
-                <IconPullRequest size={19} className="shrink-0 text-dim" />
-                <span className="truncate">{repoLabel(preview.repo)}</span>
+            <div {...mergeStylexProps("phone:min-h-14", sx.flex, sx.minH13, sx.shrink0, sx.itemsCenter, sx.gap2, sx.borderB, sx.borderLine, sx.bgPanel, sx.px3)} >
+              <div {...stylex.props(sx.flex, sx.minW0, sx.flex1, sx.itemsCenter, sx.gap2, sx.px1, sx.fontMedium, sx.textFg, typography.itemTitle)}>
+                <IconPullRequest size={19} className={mergeStylexOverrideClassName("", sx.shrink0, sx.textDim)} />
+                <span {...stylex.props(sx.truncate)}>{repoLabel(preview.repo)}</span>
                 {preview.number && (
-                  <span className="shrink-0 font-normal tabular-nums text-faint">
+                  <span {...mergeStylexProps("tabular-nums", sx.shrink0, sx.fontNormal, sx.textFaint)} >
                     #{preview.number}
                   </span>
                 )}
@@ -749,7 +1030,7 @@ setAddingToSidebar(false);
               {preview.workspaceId ? (
                 <Button
                   variant="default"
-                  className="min-h-10 shrink-0 phone:min-h-11"
+                  className={mergeStylexOverrideClassName("phone:min-h-11", sx.minH10, sx.shrink0)}
                   icon={<IconSidebarLeft size={18} />}
                   onClick={() => {
                     onOpenWorkspace(preview.workspaceId!, preview);
@@ -761,7 +1042,7 @@ setAddingToSidebar(false);
               ) : preview.state === "OPEN" ? (
                 <Button
                   variant="default"
-                  className="min-h-10 shrink-0 phone:min-h-11"
+                  className={mergeStylexOverrideClassName("phone:min-h-11", sx.minH10, sx.shrink0)}
                   icon={<IconSidebarLeft size={18} />}
                   disabled={addingToSidebar}
                   onClick={() => void addPreviewToSidebar()}
@@ -771,13 +1052,13 @@ setAddingToSidebar(false);
               ) : null}
               <Button
                 variant="ghost"
-                className="size-10 shrink-0 phone:size-11"
+                className={mergeStylexOverrideClassName("phone:size-11", sx.size10, sx.shrink0)}
                 icon={<IconX size={20} />}
                 aria-label="Close pull request"
                 onClick={() => setPreview(null)}
               />
             </div>
-            <div className="min-h-0 flex-1">
+            <div {...stylex.props(sx.minH0, sx.flex1)}>
               <PrQueuePreview
                 key={`${preview.repo}:${preview.branch}`}
                 repo={preview.repo}

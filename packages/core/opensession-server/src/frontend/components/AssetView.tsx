@@ -41,7 +41,7 @@ import {
 import { absoluteLink, copyToClipboard } from "../lib/share-link";
 import { useIsPhone } from "../hooks/useIsPhone";
 import { Button } from "../ui/button";
-import { cn } from "../ui/cn";
+import { cn, mergeStylexProps, mergeStylexClassName, mergeStylexOverrideClassName } from "../ui/cn";
 import { Menu } from "../ui/menu";
 import { ResponsiveDialog } from "../ui/sheet";
 import { toast } from "../ui/toast";
@@ -60,6 +60,456 @@ import {
 	IconTrash,
 	IconX,
 } from "./icons";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+import { sharedClassStyles } from "../styles/shared-class-styles.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	flex: {
+			display: "flex"
+	},
+	minH7: {
+			minHeight: "28px"
+	},
+	shrink0: {
+			flexShrink: "0"
+	},
+	itemsCenter: {
+			alignItems: "center"
+	},
+	justifyCenter: {
+			justifyContent: "center"
+	},
+	gap1: {
+			gap: "4px"
+	},
+	minW10: {
+			minWidth: "40px"
+	},
+	px1: {
+			paddingInline: "4px"
+	},
+	cursorPointer: {
+			cursor: "pointer"
+	},
+	border0: {
+			borderStyle: "solid",
+			borderWidth: "0"
+	},
+	bgTransparent: {
+			backgroundColor: "transparent"
+	},
+	p1: {
+			padding: "4px"
+	},
+	leadingNone: {
+			lineHeight: "1"
+	},
+	textFaint: {
+			color: "var(--text-faint)"
+	},
+	textRed: {
+			color: "var(--red)"
+	},
+	maxWFull: {
+			maxWidth: "100%"
+	},
+	flexCol: {
+			flexDirection: "column"
+	},
+	gap05: {
+			gap: "2px"
+	},
+	textCenter: {
+			textAlign: "center"
+	},
+	gap2: {
+			gap: "8px"
+	},
+	textWhite55: {
+			color: "#ffffff8c"
+	},
+	minW0: {
+			minWidth: "0"
+	},
+	flex1: {
+			flex: "1"
+	},
+	truncate: {
+			textOverflow: "ellipsis",
+			whiteSpace: "nowrap",
+			overflow: "hidden"
+	},
+	fontMedium: {
+			fontWeight: "var(--font-weight-medium)"
+	},
+	textFg: {
+			color: "var(--text)"
+	},
+	leadingSnug: {
+			lineHeight: "var(--leading-snug)"
+	},
+	textDim: {
+			color: "var(--text-dim)"
+	},
+	size7: {
+			width: "28px",
+			height: "28px"
+	},
+	px0: {
+			paddingInline: "0"
+	},
+	hFull: {
+			height: "100%"
+	},
+	wFull: {
+			width: "100%"
+	},
+	bgWhite: {
+			backgroundColor: "var(--color-white)"
+	},
+	overflowAuto: {
+			overflow: "auto"
+	},
+	p3: {
+			padding: "12px"
+	},
+	maxHFull: {
+			maxHeight: "100%"
+	},
+	cursorZoomIn: {
+			cursor: "zoom-in"
+	},
+	objectContain: {
+			objectFit: "contain"
+	},
+	p4: {
+			padding: "16px"
+	},
+	px4: {
+			paddingInline: "16px"
+	},
+	py3: {
+			paddingBlock: "12px"
+	},
+	whitespacePreWrap: {
+			whiteSpace: "pre-wrap"
+	},
+	breakWords: {
+			overflowWrap: "break-word"
+	},
+	fontMono: {
+			fontFamily: "var(--mono)"
+	},
+	leading15: {
+			lineHeight: "1.5"
+	},
+	minH10: {
+			minHeight: "40px"
+	},
+	px12: {
+			paddingInline: "48px"
+	},
+	pb2: {
+			paddingBottom: "8px"
+	},
+	minH0: {
+			minHeight: "0"
+	},
+	px6: {
+			paddingInline: "24px"
+	},
+	textWhite60: {
+			color: "color-mix(in srgb, var(--color-white) 60%, transparent)"
+	},
+	px5: {
+			paddingInline: "20px"
+	},
+	pt2: {
+			paddingTop: "8px"
+	},
+	pb4: {
+			paddingBottom: "16px"
+	},
+	absolute: {
+			position: "absolute"
+	},
+	right3: {
+			right: "12px"
+	},
+	top3: {
+			top: "12px"
+	},
+	z20: {
+			zIndex: "20"
+	},
+	grid: {
+			display: "grid"
+	},
+	size11: {
+			width: "44px",
+			height: "44px"
+	},
+	placeItemsCenter: {
+			placeItems: "center"
+	},
+	roundedFull: {
+			borderRadius: "calc(infinity * 1px)"
+	,
+		cornerShape: "round"},
+	bgWhite15: {
+			backgroundColor: "color-mix(in srgb, var(--color-white) 15%, transparent)"
+	},
+	textWhite: {
+			color: "var(--color-white)"
+	},
+	right0: {
+			right: "0"
+	},
+	top0: {
+			top: "0"
+	},
+	size10: {
+			width: "40px",
+			height: "40px"
+	},
+	borderB: { borderBottomStyle: "solid", borderBottomWidth: "1px" },
+	borderDivider: { borderColor: "var(--divider)" },
+	px3: { paddingInline: "12px" },
+	py2: { paddingBlock: "8px" },
+
+	size9: {
+		"width": "36px",
+		"height": "36px"
+	},
+	hoverBgWhite15: {
+		"@media (hover: hover)": {
+			":hover": {
+				"backgroundColor": "color-mix(in srgb, var(--color-white) 15%, transparent)"
+			},
+			"@supports (color: color-mix(in lab, red, red))": {
+				":hover": {
+					"backgroundColor": "color-mix(in oklab, var(--color-white) 15%, transparent)"
+				}
+			}
+		}
+	},
+	hoverTextWhite: {
+		"@media (hover: hover)": {
+			":hover": {
+				"color": "var(--color-white)"
+			}
+		}
+	},
+	block: {
+		"display": "block"
+	},
+	size15: {
+		"width": "6px",
+		"height": "6px"
+	},
+	transitionColors: {
+		"transitionProperty": "color,background-color,border-color,outline-color,text-decoration-color,fill,stroke,--tw-gradient-from,--tw-gradient-via,--tw-gradient-to",
+		"transitionTimingFunction": "var(--tw-ease,var(--ease))",
+		"transitionDuration": "var(--tw-duration,var(--dur-micro))"
+	},
+	bgFg: {
+		"backgroundColor": "var(--text)"
+	},
+	bgWhite35: {
+		"backgroundColor": "#ffffff59",
+		"@supports (color: color-mix(in lab, red, red))": {
+			"backgroundColor": "color-mix(in oklab, var(--color-white) 35%, transparent)"
+		}
+	},
+	bgLineStrong: {
+		"backgroundColor": "var(--border-strong)"
+	},
+	tabularNums: {
+		"--tw-numeric-spacing": "tabular-nums",
+		"fontVariantNumeric": "var(--tw-ordinal,) var(--tw-slashed-zero,) var(--tw-numeric-figure,) var(--tw-numeric-spacing,) var(--tw-numeric-fraction,)"
+	},
+	top12: {
+		"top": "50%"
+	},
+	TranslateY12: {
+		"--tw-translate-y": "calc(calc(1 / 2 * 100%) * -1)",
+		"translate": "var(--tw-translate-x) var(--tw-translate-y)"
+	},
+	bgRaised: {
+		"backgroundColor": "var(--bg-raised)"
+	},
+	rightFull: {
+		"right": "100%"
+	},
+	mr3: {
+		"marginRight": "12px"
+	},
+	leftFull: {
+		"left": "100%"
+	},
+	ml3: {
+		"marginLeft": "12px"
+	},
+	activeScale096: {
+		":active": {
+			"scale": ".96"
+		}
+	},
+	phoneSize11: {
+		"@media (max-width: 720px)": {
+			"width": "44px",
+			"height": "44px"
+		}
+	},
+	hoverBgWhite10: {
+		"@media (hover: hover)": {
+			":hover": {
+				"backgroundColor": "color-mix(in srgb, var(--color-white) 10%, transparent)"
+			},
+			"@supports (color: color-mix(in lab, red, red))": {
+				":hover": {
+					"backgroundColor": "color-mix(in oklab, var(--color-white) 10%, transparent)"
+				}
+			}
+		}
+	},
+	hoverTextWhite80: {
+		"@media (hover: hover)": {
+			":hover": {
+				"color": "#fffc"
+			},
+			"@supports (color: color-mix(in lab, red, red))": {
+				":hover": {
+					"color": "color-mix(in oklab, var(--color-white) 80%, transparent)"
+				}
+			}
+		}
+	},
+	bgPanel: {
+		"backgroundColor": "var(--bg-panel)"
+	},
+	activeBgPressed: {
+		":active": {
+			"backgroundColor": "var(--hover-strong)"
+		}
+	},
+	roundedControl: {
+		"borderRadius": "calc(12px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	hoverBgHover: {
+		"@media (hover: hover)": {
+			":hover": {
+				"backgroundColor": "var(--hover)"
+			}
+		}
+	},
+	hoverTextFg: {
+		"@media (hover: hover)": {
+			":hover": {
+				"color": "var(--text)"
+			}
+		}
+	},
+	textXs: {
+		"fontSize": "var(--type-label)",
+		"lineHeight": "var(--tw-leading,var(--text-xs--line-height))"
+	},
+	bgWhite10: {
+		"backgroundColor": "color-mix(in srgb, var(--color-white) 10%, transparent)",
+		"@supports (color: color-mix(in lab, red, red))": {
+			"backgroundColor": "color-mix(in oklab, var(--color-white) 10%, transparent)"
+		}
+	},
+	ring1: {
+		"--tw-ring-shadow": "var(--tw-ring-inset,) 0 0 0 calc(1px + var(--tw-ring-offset-width)) var(--tw-ring-color,currentcolor)",
+		"boxShadow": "var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow)"
+	},
+	ringWhite10: {
+		"--tw-ring-color": "color-mix(in srgb, var(--color-white) 10%, transparent)",
+		"@supports (color: color-mix(in lab, red, red))": {
+			"--tw-ring-color": "color-mix(in oklab, var(--color-white) 10%, transparent)"
+		}
+	},
+	backdropBlurXl: {
+		"--tw-backdrop-blur": "blur(var(--blur-xl))",
+		"WebkitBackdropFilter": "var(--tw-backdrop-blur,) var(--tw-backdrop-brightness,) var(--tw-backdrop-contrast,) var(--tw-backdrop-grayscale,) var(--tw-backdrop-hue-rotate,) var(--tw-backdrop-invert,) var(--tw-backdrop-opacity,) var(--tw-backdrop-saturate,) var(--tw-backdrop-sepia,)",
+		"backdropFilter": "var(--tw-backdrop-blur,) var(--tw-backdrop-brightness,) var(--tw-backdrop-contrast,) var(--tw-backdrop-grayscale,) var(--tw-backdrop-hue-rotate,) var(--tw-backdrop-invert,) var(--tw-backdrop-opacity,) var(--tw-backdrop-saturate,) var(--tw-backdrop-sepia,)"
+	},
+	left0: {
+		"left": "0"
+	},
+	topFull: {
+		"top": "100%"
+	},
+	mt2: {
+		"marginTop": "8px"
+	},
+	textSm: {
+		"fontSize": "var(--type-label)",
+		"lineHeight": "var(--tw-leading,var(--text-sm--line-height))"
+	},
+	lineClamp2: {
+		"WebkitLineClamp": "2",
+		"WebkitBoxOrient": "vertical",
+		"display": "-webkit-box",
+		"overflow": "hidden"
+	},
+	textWhite75: {
+		"color": "#ffffffbf",
+		"@supports (color: color-mix(in lab, red, red))": {
+			"color": "color-mix(in oklab, var(--color-white) 75%, transparent)"
+		}
+	},
+	overflowHidden: {
+		"overflow": "hidden"
+	},
+	bgBlack: {
+		"backgroundColor": "var(--color-black)"
+	},
+	relative: {
+		"position": "relative"
+	},
+	m3: {
+		"margin": "12px"
+	},
+	roundedXl: {
+		"borderRadius": "calc(18px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	bgSurface: {
+		"backgroundColor": "var(--bg)"
+	},
+
+	transitionTransformBackgroundColorColor: {
+		"transitionProperty": "transform,background-color,color",
+		"transitionTimingFunction": "var(--tw-ease,var(--ease))",
+		"transitionDuration": "var(--tw-duration,var(--dur-micro))"
+	},
+	maxWMin720px90vw: {
+		"maxWidth": "min(720px,90vw)"
+	},
+
+	transitionTransformBackgroundColor: {
+		"transitionProperty": "transform,background-color",
+		"transitionTimingFunction": "var(--tw-ease,var(--ease))",
+		"transitionDuration": "var(--tw-duration,var(--dur-micro))"
+	},
+	hoverBgWhite20: {
+		"@media (hover: hover)": {
+			":hover": {
+				"backgroundColor": "color-mix(in srgb, var(--color-white) 20%, transparent)"
+			},
+			"@supports (color: color-mix(in lab, red, red))": {
+				":hover": {
+					"backgroundColor": "color-mix(in oklab, var(--color-white) 20%, transparent)"
+				}
+			}
+		}
+	},
+});
 
 type AssetNavigation = {
 	index: number;
@@ -84,7 +534,7 @@ function AssetPager({
 	return (
 		<nav
 			aria-label="Asset navigation"
-			className="flex min-h-7 shrink-0 items-center justify-center gap-1"
+			{...stylex.props(sx.flex, sx.minH7, sx.shrink0, sx.itemsCenter, sx.justifyCenter, sx.gap1)}
 		>
 			{arrows && (
 				<Tooltip label="Previous asset (Left arrow)">
@@ -94,8 +544,8 @@ function AssetPager({
 						icon={<IconChevronLeft size={16} />}
 						aria-label="Previous asset"
 						className={cn(
-							"size-9",
-							onDark && "text-white/60 hover:bg-white/15 hover:text-white",
+							mergeStylexClassName("", sx.size9),
+							onDark && mergeStylexClassName("", sx.textWhite60, sx.hoverBgWhite15, sx.hoverTextWhite),
 						)}
 						onClick={onPrevious}
 					/>
@@ -104,7 +554,7 @@ function AssetPager({
 			<div
 				aria-label={positionLabel}
 				title={positionLabel}
-				className="flex min-w-10 items-center justify-center px-1"
+				{...stylex.props(sx.flex, sx.minW10, sx.itemsCenter, sx.justifyCenter, sx.px1)}
 			>
 				{count <= 10 ? (
 					Array.from({ length: count }, (_, dot) => (
@@ -113,19 +563,18 @@ function AssetPager({
 							type="button"
 							onClick={() => onSelect(dot)}
 							aria-label={`Show ${dot + 1} of ${count}`}
-							aria-current={dot === index ? "true" : undefined}
-							className="group shrink-0 cursor-pointer border-0 bg-transparent p-1 leading-none"
+							aria-current={dot === index ? "true" : undefined} {...mergeStylexProps("group", sx.shrink0, sx.cursorPointer, sx.border0, sx.bgTransparent, sx.p1, sx.leadingNone)}
 						>
 							<span
 								className={cn(
-									"block size-1.5 rounded-full transition-colors",
+									mergeStylexClassName("", sx.block, sx.size15, sx.roundedFull, sx.transitionColors),
 									dot === index
 										? onDark
-											? "bg-white"
-											: "bg-fg"
+											? mergeStylexClassName("", sx.bgWhite)
+											: mergeStylexClassName("", sx.bgFg)
 										: onDark
-											? "bg-white/35 group-hover:bg-white/70"
-											: "bg-line-strong group-hover:bg-dim",
+											? mergeStylexClassName("group-hover:bg-white/70", sx.bgWhite35)
+											: mergeStylexClassName("group-hover:bg-dim", sx.bgLineStrong),
 								)}
 							/>
 						</button>
@@ -134,8 +583,8 @@ function AssetPager({
 					<span
 						role="status"
 						className={cn(
-							"px-1 text-meta tabular-nums",
-							onDark ? "text-white/60" : "text-faint",
+							mergeStylexClassName("", sx.px1, typography.meta, sx.tabularNums),
+							onDark ? mergeStylexClassName("", sx.textWhite60) : mergeStylexClassName("", sx.textFaint),
 						)}
 					>
 						{index + 1} / {count}
@@ -150,8 +599,8 @@ function AssetPager({
 						icon={<IconChevronRight size={16} />}
 						aria-label="Next asset"
 						className={cn(
-							"size-9",
-							onDark && "text-white/60 hover:bg-white/15 hover:text-white",
+							mergeStylexClassName("", sx.size9),
+							onDark && mergeStylexClassName("", sx.textWhite60, sx.hoverBgWhite15, sx.hoverTextWhite),
 						)}
 						onClick={onNext}
 					/>
@@ -184,8 +633,8 @@ function AssetSideButton({
 				}
 				aria-label={label}
 				className={cn(
-					"absolute top-1/2 z-20 size-10 -translate-y-1/2 rounded-full bg-raised smooth-shadow-sm",
-					previous ? "right-full mr-3" : "left-full ml-3",
+					mergeStylexClassName("smooth-shadow-sm", sx.absolute, sx.top12, sx.z20, sx.size10, sx.TranslateY12, sx.roundedFull, sx.bgRaised),
+					previous ? mergeStylexClassName("", sx.rightFull, sx.mr3) : mergeStylexClassName("", sx.leftFull, sx.ml3),
 				)}
 				onClick={onClick}
 			/>
@@ -249,17 +698,17 @@ toast("Could not delete that file");
 			<Menu.Trigger
 				aria-label={deleteOnly ? "More asset actions" : "Asset actions"}
 				className={cn(
-					"flex shrink-0 items-center justify-center border-0",
+					mergeStylexClassName("", sx.flex, sx.shrink0, sx.itemsCenter, sx.justifyCenter, sx.border0),
 					bar
 						? cn(
-								"size-10 rounded-full bg-transparent transition-[transform,background-color,color] active:scale-[0.96] phone:size-11",
+								mergeStylexClassName("", sx.transitionTransformBackgroundColorColor, sx.size10, sx.roundedFull, sx.bgTransparent, sx.activeScale096, sx.phoneSize11),
 								phone
-									? "text-white/55 hover:bg-white/10 hover:text-white/80 data-[popup-open]:bg-white/10 data-[popup-open]:text-white/80"
-									: "text-white/60 hover:bg-white/15 hover:text-white data-[popup-open]:bg-white/15 data-[popup-open]:text-white",
+									? mergeStylexClassName("data-[popup-open]:bg-white/10 data-[popup-open]:text-white/80", sx.textWhite55, sx.hoverBgWhite10, sx.hoverTextWhite80)
+									: mergeStylexClassName("data-[popup-open]:bg-white/15 data-[popup-open]:text-white", sx.textWhite60, sx.hoverBgWhite15, sx.hoverTextWhite),
 							)
 						: phone
-							? "size-11 rounded-full bg-panel text-dim active:bg-pressed data-[popup-open]:bg-pressed data-[popup-open]:text-fg"
-							: "size-7 rounded-control bg-transparent text-dim hover:bg-hover hover:text-fg data-[popup-open]:bg-hover data-[popup-open]:text-fg",
+							? mergeStylexClassName("data-[popup-open]:bg-pressed data-[popup-open]:text-fg", sx.size11, sx.roundedFull, sx.bgPanel, sx.textDim, sx.activeBgPressed)
+							: mergeStylexClassName("data-[popup-open]:bg-hover data-[popup-open]:text-fg", sx.size7, sx.roundedControl, sx.bgTransparent, sx.textDim, sx.hoverBgHover, sx.hoverTextFg),
 				)}
 			>
 				<IconDotsHorizontal size={phone ? 24 : 16} />
@@ -272,7 +721,7 @@ toast("Could not delete that file");
 								? { onClick: onDownload }
 								: { render: <a href={sessionAssetDownloadUrl(sessionId, file)} /> })}
 						>
-							<IconArrowDown size={18} className="text-faint" />
+							<IconArrowDown size={18} className={mergeStylexOverrideClassName("", sx.textFaint)} />
 							Download
 						</Menu.Item>
 						<Menu.Item
@@ -280,7 +729,7 @@ toast("Could not delete that file");
 								? { onClick: onOpen }
 								: { render: <a href={rawUrl} target="_blank" rel="noreferrer" /> })}
 						>
-							<IconArrowUpRight size={18} className="text-faint" />
+							<IconArrowUpRight size={18} className={mergeStylexOverrideClassName("", sx.textFaint)} />
 							{nativeShare ? "Open or share" : "Open in a browser tab"}
 						</Menu.Item>
 						<Menu.Item
@@ -288,13 +737,13 @@ toast("Could not delete that file");
 								copyToClipboard(absoluteLink(stableUrl), () => toast("Link copied"))
 							}
 						>
-							<IconCopy size={18} className="text-faint" />
+							<IconCopy size={18} className={mergeStylexOverrideClassName("", sx.textFaint)} />
 							Copy link
 						</Menu.Item>
 						<Menu.Separator />
 					</>
 				)}
-				<Menu.Item onClick={onDelete} className="text-red">
+				<Menu.Item onClick={onDelete} className={mergeStylexOverrideClassName("", sx.textRed)}>
 					<IconTrash size={18} />
 					Delete
 				</Menu.Item>
@@ -328,9 +777,9 @@ function AssetOverlayActionBar({
 	const name = file.path.split("/").pop() || "asset";
 	const commentable = assetPreviewKind(file.path) === "image";
 	const actionClass = cn(
-		"shrink-0 cursor-pointer",
+		mergeStylexClassName("", sx.shrink0, sx.cursorPointer),
 		phone &&
-			"size-11 rounded-full px-0 text-xs text-white/55 hover:bg-white/10 hover:text-white/80",
+			mergeStylexClassName("", sx.size11, sx.roundedFull, sx.px0, sx.textXs, sx.textWhite55, sx.hoverBgWhite10, sx.hoverTextWhite80),
 	);
 	const actionSize: "sm" | "md" = phone ? "sm" : "md";
 	const actionLabel = (label: string) => (phone ? null : label);
@@ -356,9 +805,9 @@ if (!nativeShareWasCancelled(error)) toast("Could not share that link");
 			role="group"
 			aria-label="Asset actions"
 			className={cn(
-				"flex items-center justify-center gap-1",
+				mergeStylexClassName("", sx.flex, sx.itemsCenter, sx.justifyCenter, sx.gap1),
 				phone &&
-					"rounded-full bg-white/10 p-1 ring-1 ring-white/10 backdrop-blur-xl",
+					mergeStylexClassName("", sx.roundedFull, sx.bgWhite10, sx.p1, sx.ring1, sx.ringWhite10, sx.backdropBlurXl),
 			)}
 		>
 			{commentable && (
@@ -492,16 +941,16 @@ function AssetOverlayFooter({
 	return (
 		<div
 			className={cn(
-				"z-20 flex shrink-0 flex-col items-center gap-1 px-3 py-2",
-				!phone && "absolute left-0 right-0 top-full mt-2",
+				mergeStylexClassName("", sx.z20, sx.flex, sx.shrink0, sx.flexCol, sx.itemsCenter, sx.gap1, sx.px3, sx.py2),
+				!phone && mergeStylexClassName("", sx.absolute, sx.left0, sx.right0, sx.topFull, sx.mt2),
 			)}
 		>
-			<div className="flex max-w-full flex-col items-center gap-0.5 text-center">
-				<div className="flex max-w-full items-center justify-center gap-2">
+			<div {...stylex.props(sx.flex, sx.maxWFull, sx.flexCol, sx.itemsCenter, sx.gap05, sx.textCenter)}>
+				<div {...stylex.props(sx.flex, sx.maxWFull, sx.itemsCenter, sx.justifyCenter, sx.gap2)}>
 					<div
 						className={cn(
-							"max-w-full truncate font-medium text-white",
-							phone ? "text-label" : "text-sm",
+							mergeStylexClassName("", sx.maxWFull, sx.truncate, sx.fontMedium, sx.textWhite),
+							phone ? mergeStylexClassName("", typography.label) : mergeStylexClassName("", sx.textSm),
 						)}
 						title={file.path}
 					>
@@ -509,7 +958,7 @@ function AssetOverlayFooter({
 					</div>
 					{showSize && (
 						<span
-							className="shrink-0 text-meta text-white/55"
+							{...stylex.props(sx.shrink0, sx.textWhite55, typography.meta)}
 						>
 							{formatAssetSize(file.size)}
 						</span>
@@ -518,15 +967,15 @@ function AssetOverlayFooter({
 				{file.description && (
 					<div
 						className={cn(
-							"max-w-[min(720px,90vw)] line-clamp-2 leading-snug text-white/75",
-							phone ? "text-supporting" : "text-sm",
+							mergeStylexClassName("", sx.maxWMin720px90vw, sx.lineClamp2, sx.leadingSnug, sx.textWhite75),
+							phone ? mergeStylexClassName("", typography.supporting) : mergeStylexClassName("", sx.textSm),
 						)}
 					>
 						{file.description}
 					</div>
 				)}
 			</div>
-			<div className="flex max-w-full items-center justify-center gap-2">
+			<div {...stylex.props(sx.flex, sx.maxWFull, sx.itemsCenter, sx.justifyCenter, sx.gap2)}>
 				{navigation && (
 					<AssetPager navigation={navigation} arrows={phone} onDark />
 				)}
@@ -574,25 +1023,20 @@ export function AssetActions({
 		: null;
 
 	return (
-		<div
-			className={cn(
-				"flex shrink-0 items-center gap-2 border-b border-divider px-3 py-2",
-				className,
-			)}
-		>
-			<div className="min-w-0 flex-1" title={file.path}>
-				<div className="truncate text-label font-medium text-fg">{name}</div>
+		<div {...mergeStylexProps(className, sx.flex, sx.shrink0, sx.itemsCenter, sx.gap2, sx.borderB, sx.borderDivider, sx.px3, sx.py2)}>
+			<div {...stylex.props(sx.minW0, sx.flex1)} title={file.path}>
+				<div {...stylex.props(sx.truncate, sx.fontMedium, sx.textFg, typography.label)}>{name}</div>
 				{file.description && (
-					<div className="line-clamp-2 text-supporting leading-snug text-dim">
+					<div {...mergeStylexProps("", sx.lineClamp2, sx.leadingSnug, sx.textDim, typography.supporting)}>
 						{file.description}
 					</div>
 				)}
 				{folder && (
-					<div className="truncate text-meta text-faint">{folder}</div>
+					<div {...stylex.props(sx.truncate, sx.textFaint, typography.meta)}>{folder}</div>
 				)}
 			</div>
 			{showSize && (
-				<span className="shrink-0 text-meta text-faint">
+				<span {...stylex.props(sx.shrink0, sx.textFaint, typography.meta)}>
 					{formatAssetSize(file.size)}
 				</span>
 			)}
@@ -600,7 +1044,7 @@ export function AssetActions({
 				<Button
 					variant="ghost"
 					size="sm"
-					className="shrink-0"
+					className={mergeStylexOverrideClassName("", sx.shrink0)}
 					onClick={onOpenAsTab}
 				>
 					Open as tab
@@ -619,7 +1063,7 @@ export function AssetActions({
 					variant="ghost"
 					size="sm"
 					aria-label="Close"
-					className="size-7 shrink-0 justify-center px-0"
+					className={mergeStylexOverrideClassName("", sx.size7, sx.shrink0, sx.justifyCenter, sx.px0)}
 					onClick={onClose}
 				>
 					<IconX size={16} />
@@ -675,7 +1119,7 @@ export function AssetPreview({
 	}, [rawUrl, kind]);
 
 	return (
-		<div className={cn("min-h-0 flex-1 overflow-auto", className)}>
+		<div {...mergeStylexProps(className, sx.minH0, sx.flex1, sx.overflowAuto)}>
 			{kind === "html" ? (
 				// allow-same-origin so the page can fetch() sibling assets
 				// (./data.json); the sandbox still blocks top navigation. The
@@ -696,7 +1140,7 @@ export function AssetPreview({
 							onOpenNewSession(prefill);
 						});
 					}}
-					className="h-full w-full border-0 bg-white"
+					{...stylex.props(sx.hFull, sx.wFull, sx.border0, sx.bgWhite)}
 				/>
 			) : kind === "pdf" ? (
 				// No sandbox: Chrome's built-in PDF viewer won't render in a
@@ -705,16 +1149,16 @@ export function AssetPreview({
 					key={rawUrl}
 					title={file.path}
 					src={rawUrl}
-					className="h-full w-full border-0"
+					{...stylex.props(sx.hFull, sx.wFull, sx.border0)}
 				/>
 			) : kind === "image" ? (
 				<div
-					className="flex h-full items-center justify-center overflow-auto p-3"
+					{...stylex.props(sx.flex, sx.hFull, sx.itemsCenter, sx.justifyCenter, sx.overflowAuto, sx.p3)}
 					onClick={onBackdropClick}
 				>
 					<button
 						type="button"
-						className="flex max-h-full max-w-full cursor-zoom-in border-0 bg-transparent"
+						{...stylex.props(sx.flex, sx.maxHFull, sx.maxWFull, sx.cursorZoomIn, sx.border0, sx.bgTransparent)}
 						onClick={(event) => {
 							event.stopPropagation();
 							openLightbox(
@@ -735,40 +1179,39 @@ export function AssetPreview({
 						<img
 							src={rawUrl}
 							alt={file.path}
-							className="max-h-full max-w-full object-contain"
+							{...stylex.props(sx.maxHFull, sx.maxWFull, sx.objectContain)}
 						/>
 					</button>
 				</div>
 			) : kind === "video" ? (
-				<video src={rawUrl} controls className="h-full w-full" />
+				<video src={rawUrl} controls {...stylex.props(sx.hFull, sx.wFull)} />
 			) : kind === "audio" ? (
-				<div className="p-4">
-					<audio src={rawUrl} controls className="w-full" />
+				<div {...stylex.props(sx.p4)}>
+					<audio src={rawUrl} controls {...stylex.props(sx.wFull)} />
 				</div>
 			) : kind === "markdown" ? (
 				textFailed ? (
-					<div className="p-4 text-label text-faint">Could not load this file.</div>
+					<div {...stylex.props(sx.p4, sx.textFaint, typography.label)}>Could not load this file.</div>
 				) : text === null ? (
-					<div className="p-4 text-label text-faint">Loading…</div>
+					<div {...stylex.props(sx.p4, sx.textFaint, typography.label)}>Loading…</div>
 				) : (
-					<MarkdownBody
-						className="markdown px-4 py-3 text-label"
+					<MarkdownBody {...mergeStylexProps("markdown", sx.px4, sx.py3, typography.label)}
 						html={marked.parse(text, { async: false }) as string}
 					/>
 				)
 			) : kind === "text" ? (
 				textFailed ? (
-					<div className="p-4 text-label text-faint">Could not load this file.</div>
+					<div {...stylex.props(sx.p4, sx.textFaint, typography.label)}>Could not load this file.</div>
 				) : text === null ? (
-					<div className="p-4 text-label text-faint">Loading…</div>
+					<div {...stylex.props(sx.p4, sx.textFaint, typography.label)}>Loading…</div>
 				) : (
-					<pre className="whitespace-pre-wrap break-words px-4 py-3 font-mono text-label leading-[1.5] text-fg">
+					<pre {...stylex.props(sx.whitespacePreWrap, sx.breakWords, sx.px4, sx.py3, sx.fontMono, sx.leading15, sx.textFg, typography.label)}>
 						{text}
 						{file.size > ASSET_TEXT_CAP ? "\n… (truncated preview)" : ""}
 					</pre>
 				)
 			) : (
-				<div className="flex h-full items-center justify-center text-label text-faint">
+				<div {...stylex.props(sx.flex, sx.hFull, sx.itemsCenter, sx.justifyCenter, sx.textFaint, typography.label)}>
 					No inline preview for this file type. Use Download.
 				</div>
 			)}
@@ -926,32 +1369,32 @@ export function AssetOverlay({
 			label={`Preview ${name}`}
 			// Assets float directly on the scrim, like transcript media. Files
 			// that need a page surface bring their own inside the stage below.
-			modalClassName="h-[min(820px,78vh)] w-[min(1120px,84vw)] max-w-none overflow-visible bg-transparent [box-shadow:none]!"
-			sheetClassName="top-0 h-[100dvh] max-h-none bg-black [border-radius:0]! [box-shadow:none]!"
-			backdropClassName="bg-black/85"
+			modalClassName={mergeStylexClassName("[box-shadow:none]!", sharedClassStyles.hMin820px78vh, sharedClassStyles.wMin1120px84vw, sharedClassStyles.maxWNone, sharedClassStyles.overflowVisible, sharedClassStyles.bgTransparent)}
+			sheetClassName={mergeStylexClassName("[border-radius:0]! [box-shadow:none]!", sharedClassStyles.top0, sharedClassStyles.h100dvh, sharedClassStyles.maxHNone, sharedClassStyles.bgBlack)}
+			backdropClassName={mergeStylexClassName("", sharedClassStyles.bgBlack85)}
 			showPhoneGrabber={false}
 		>
 			<div
 				className={cn(
-					"flex min-h-0 flex-1 flex-col overflow-hidden",
-					isPhone && "bg-black",
+					mergeStylexClassName("", sx.flex, sx.minH0, sx.flex1, sx.flexCol, sx.overflowHidden),
+					isPhone && mergeStylexClassName("", sx.bgBlack),
 				)}
 			>
 				{/* Desktop keeps the centered action bar above the asset. Phones put
 				    the same controls at the bottom, beside the caption and pager. */}
 				{!isPhone && (
-					<div className="flex min-h-10 shrink-0 items-center justify-center px-12 pb-2">
+					<div {...stylex.props(sx.flex, sx.minH10, sx.shrink0, sx.itemsCenter, sx.justifyCenter, sx.px12, sx.pb2)}>
 						{actions}
 					</div>
 				)}
 				<div
 					className={cn(
-						"relative flex min-h-0 flex-1",
-						!visual && "m-3 overflow-hidden rounded-xl bg-surface text-fg",
+						mergeStylexClassName("", sx.relative, sx.flex, sx.minH0, sx.flex1),
+						!visual && mergeStylexClassName("", sx.m3, sx.overflowHidden, sx.roundedXl, sx.bgSurface, sx.textFg),
 					)}
 				>
 					{missingPath === file.path ? (
-						<div className="flex min-h-0 flex-1 items-center justify-center px-6 text-center text-label text-white/60">
+						<div {...stylex.props(sx.flex, sx.minH0, sx.flex1, sx.itemsCenter, sx.justifyCenter, sx.px6, sx.textCenter, sx.textWhite60, typography.label)}>
 							This file is no longer available.
 						</div>
 					) : (
@@ -968,7 +1411,7 @@ export function AssetOverlay({
 				</div>
 				{isPhone && footer}
 				{isPhone && (
-					<div className="flex shrink-0 items-center justify-center px-5 pt-2 pb-4">
+					<div {...stylex.props(sx.flex, sx.shrink0, sx.itemsCenter, sx.justifyCenter, sx.px5, sx.pt2, sx.pb4)}>
 						{actions}
 					</div>
 				)}
@@ -977,8 +1420,7 @@ export function AssetOverlay({
 			{isPhone ? (
 				<button
 					type="button"
-					aria-label="Close"
-					className="absolute right-3 top-3 z-20 grid size-11 place-items-center rounded-full border-0 bg-white/15 text-white backdrop-blur-xl transition-[transform,background-color] active:scale-[0.96] hover:bg-white/20"
+					aria-label="Close" {...mergeStylexProps("", sx.backdropBlurXl, sx.transitionTransformBackgroundColor, sx.activeScale096, sx.hoverBgWhite20, sx.absolute, sx.right3, sx.top3, sx.z20, sx.grid, sx.size11, sx.placeItemsCenter, sx.roundedFull, sx.border0, sx.bgWhite15, sx.textWhite)}
 					onClick={onClose}
 				>
 					<IconX size={24} />
@@ -987,8 +1429,7 @@ export function AssetOverlay({
 				<Tooltip label="Close">
 					<button
 						type="button"
-						aria-label="Close"
-						className="absolute right-0 top-0 z-20 grid size-10 place-items-center rounded-full border-0 bg-white/15 text-white backdrop-blur-xl transition-[transform,background-color] active:scale-[0.96] hover:bg-white/20"
+						aria-label="Close" {...mergeStylexProps("", sx.backdropBlurXl, sx.transitionTransformBackgroundColor, sx.activeScale096, sx.hoverBgWhite20, sx.absolute, sx.right0, sx.top0, sx.z20, sx.grid, sx.size10, sx.placeItemsCenter, sx.roundedFull, sx.border0, sx.bgWhite15, sx.textWhite)}
 						onClick={onClose}
 					>
 						<IconX size={20} />

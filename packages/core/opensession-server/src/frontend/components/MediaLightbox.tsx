@@ -30,7 +30,7 @@ import {
 } from "../lib/walkthrough-label";
 import { useIsPhone } from "../hooks/useIsPhone";
 import { Button } from "../ui/button";
-import { cn } from "../ui/cn";
+import { cn, mergeStylexProps, mergeStylexClassName } from "../ui/cn";
 import { toast } from "../ui/toast";
 import {
 	anchoredCommentPosition,
@@ -60,6 +60,694 @@ import {
 	IconShare,
 	IconX,
 } from "./icons";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	boxBorder: {
+			boxSizing: "border-box"
+	},
+	shrink0: {
+			flexShrink: "0"
+	},
+	rounded2xl: {
+			borderRadius: "calc(22px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	border: {
+			borderStyle: "solid",
+			borderWidth: "1px"
+	},
+	borderWhite20: {
+			borderColor: "color-mix(in srgb, var(--color-white) 20%, transparent)"
+	},
+	bgVarDiagramCanvas: {
+			backgroundColor: "var(--diagram-canvas)"
+	},
+	p4: {
+			padding: "16px"
+	},
+	TransformOrigin00: {
+			transformOrigin: "0 0"
+	},
+	minH0: {
+			minHeight: "0"
+	},
+	minW0: {
+			minWidth: "0"
+	},
+	maxHFull: {
+			maxHeight: "100%"
+	},
+	maxWFull: {
+			maxWidth: "100%"
+	},
+	objectContain: {
+			objectFit: "contain"
+	},
+	pointerEventsNone: {
+			pointerEvents: "none"
+	},
+	absolute: {
+			position: "absolute"
+	},
+	overflowHidden: {
+			overflow: "hidden"
+	},
+	cursorMove: {
+			cursor: "move"
+	},
+	touchNone: {
+			touchAction: "none"
+	},
+	rounded3px: {
+			borderRadius: "3px"
+	,
+		cornerShape: "var(--cs)"},
+	borderWhite: {
+			borderColor: "var(--color-white)"
+	},
+	fixed: {
+			position: "fixed"
+	},
+	inset0: {
+			inset: "0"
+	},
+	z11000: {
+			zIndex: "11000"
+	},
+	flex: {
+			display: "flex"
+	},
+	flexCol: {
+			flexDirection: "column"
+	},
+	bgBlack85: {
+			backgroundColor: "color-mix(in srgb, var(--color-black) 85%, transparent)"
+	},
+	flex1: {
+			flex: "1"
+	},
+	selfStretch: {
+			alignSelf: "stretch"
+	},
+	itemsCenter: {
+			alignItems: "center"
+	},
+	justifyCenter: {
+			justifyContent: "center"
+	},
+	gap05: {
+			gap: "2px"
+	},
+	px6: {
+			paddingInline: "24px"
+	},
+	textCenter: {
+			textAlign: "center"
+	},
+	gap2: {
+			gap: "8px"
+	},
+	textSm: {
+			fontSize: "var(--type-label)",
+			lineHeight: "var(--tw-leading,var(--text-sm--line-height))"
+	},
+	fontMedium: {
+			fontWeight: "var(--font-weight-medium)"
+	},
+	leadingSnug: {
+			lineHeight: "var(--leading-snug)"
+	},
+	textWhite: {
+			color: "var(--color-white)"
+	},
+	textWhite75: {
+			color: "#ffffffbf"
+	},
+	h12: {
+			height: "48px"
+	},
+	snapMandatory: { "--tw-scroll-snap-strictness": "mandatory" },
+	gap1: {
+			gap: "4px"
+	},
+	overflowXAuto: {
+			overflowX: "auto"
+	},
+	pxCalc5022px: {
+			paddingInline: "calc(50% - 22px)"
+	},
+	ScrollbarWidthNone: {
+			scrollbarWidth: "none"
+	},
+	grid: {
+			display: "grid"
+	},
+	size11: {
+			width: "44px",
+			height: "44px"
+	},
+	snapCenter: {
+			scrollSnapAlign: "center"
+	},
+	placeItemsCenter: {
+			placeItems: "center"
+	},
+	border0: {
+			borderStyle: "solid",
+			borderWidth: "0"
+	},
+	bgTransparent: {
+			backgroundColor: "transparent"
+	},
+	p0: {
+			padding: "0"
+	},
+	sizeFull: {
+			width: "100%",
+			height: "100%"
+	},
+	objectCover: {
+			objectFit: "cover"
+	},
+	gridCols3: {
+			gridTemplateColumns: "repeat(3,minmax(0,1fr))"
+	},
+	px5: {
+			paddingInline: "20px"
+	},
+	justifySelfStart: {
+			justifySelf: "flex-start"
+	},
+	insetX0: {
+			insetInline: "0"
+	},
+	bottomCalc16pxEnvSafeAreaInsetBottom: {
+			bottom: "calc(16px + env(safe-area-inset-bottom))"
+	},
+	z20: {
+			zIndex: "20"
+	},
+	px4: {
+			paddingInline: "16px"
+	},
+	pointerEventsAuto: {
+			pointerEvents: "auto"
+	},
+	roundedFull: {
+			borderRadius: "calc(infinity * 1px)"
+	,
+		cornerShape: "round"},
+	borderWhite10: {
+			borderColor: "color-mix(in srgb, var(--color-white) 10%, transparent)"
+	},
+	bgBlack55: {
+			backgroundColor: "color-mix(in srgb, var(--color-black) 55%, transparent)"
+	},
+	py1: {
+			paddingBlock: "4px"
+	},
+	pl4: {
+			paddingLeft: "16px"
+	},
+	pr1: {
+			paddingRight: "4px"
+	},
+	minH9: {
+			minHeight: "36px"
+	},
+	px3: {
+			paddingInline: "12px"
+	},
+	textWhite70: {
+			color: "#ffffffb3"
+	},
+	cursorText: {
+			cursor: "text"
+	},
+	rounded22px: {
+			borderRadius: "22px"
+	,
+		cornerShape: "var(--cs)"},
+	p15: {
+			padding: "6px"
+	},
+	itemsEnd: {
+			alignItems: "flex-end"
+	},
+	block: {
+			display: "block"
+	},
+	wFull: {
+			width: "100%"
+	},
+	resizeNone: {
+			resize: "none"
+	},
+	appearanceNone: {
+			appearance: "none"
+	},
+	px25: {
+			paddingInline: "10px"
+	},
+	py2: {
+			paddingBlock: "8px"
+	},
+	outlineNone: {
+			outlineStyle: "none"
+	},
+	size9: {
+			width: "36px",
+			height: "36px"
+	},
+	textWhite60: {
+			color: "color-mix(in srgb, var(--color-white) 60%, transparent)"
+	},
+	bgAccent: {
+			backgroundColor: "var(--accent)"
+	},
+	transitionTransform: {
+			transitionProperty: "transform,translate,scale,rotate",
+			transitionTimingFunction: "var(--tw-ease,var(--ease))",
+			transitionDuration: "var(--tw-duration,var(--dur-micro))"
+	},
+	pb1: {
+			paddingBottom: "4px"
+	},
+	textRed: {
+			color: "var(--red)"
+	},
+	truncate: {
+			textOverflow: "ellipsis",
+			whiteSpace: "nowrap",
+			overflow: "hidden"
+	},
+	gap15: {
+			gap: "6px"
+	},
+	cursorPointer: {
+			cursor: "pointer"
+	},
+	p1: {
+			padding: "4px"
+	},
+	leadingNone: {
+			lineHeight: "1"
+	},
+	textWhite50: {
+			color: "#ffffff80"
+	},
+
+	relative: {
+		"position": "relative"
+	},
+	selectNone: {
+		"WebkitUserSelect": "none",
+		"userSelect": "none"
+	},
+	dropShadow002pxRgb00005: {
+		"--tw-drop-shadow-size": "drop-shadow(0 0 2px var(--tw-drop-shadow-color,color-mix(in srgb, var(--color-black) 50%, transparent)))",
+		"--tw-drop-shadow": "var(--tw-drop-shadow-size)",
+		"filter": "var(--tw-blur,) var(--tw-brightness,) var(--tw-contrast,) var(--tw-grayscale,) var(--tw-hue-rotate,) var(--tw-invert,) var(--tw-saturate,) var(--tw-sepia,) var(--tw-drop-shadow,)"
+	},
+	leftCalc12pxEnvSafeAreaInsetLeft: {
+		"left": "calc(12px + env(safe-area-inset-left))"
+	},
+	rightCalc12pxEnvSafeAreaInsetRight: {
+		"right": "calc(12px + env(safe-area-inset-right))"
+	},
+	topCalc12pxEnvSafeAreaInsetTop: {
+		"top": "calc(12px + env(safe-area-inset-top))"
+	},
+	z10: {
+		"zIndex": "10"
+	},
+	durationVarDur: {
+		"--tw-duration": "var(--dur)",
+		"transitionDuration": "var(--dur)"
+	},
+	easeVarEase: {
+		"--tw-ease": "var(--ease)",
+		"transitionTimingFunction": "var(--ease)"
+	},
+	motionReduceTransitionNone: {
+		"@media (prefers-reduced-motion: reduce)": {
+			"transitionProperty": "none"
+		}
+	},
+	TranslateY2: {
+		"--tw-translate-y": "calc(4px * -2)",
+		"translate": "var(--tw-translate-x) var(--tw-translate-y)"
+	},
+	opacity0: {
+		"opacity": "0"
+	},
+	hidden: {
+		"display": "none"
+	},
+	bgWhite15: {
+		"backgroundColor": "color-mix(in srgb, var(--color-white) 15%, transparent)",
+		"@supports (color: color-mix(in lab, red, red))": {
+			"backgroundColor": "color-mix(in oklab, var(--color-white) 15%, transparent)"
+		}
+	},
+	right0: {
+		"right": "0"
+	},
+	gap3: {
+		"gap": "12px"
+	},
+	pb2: {
+		"paddingBottom": "8px"
+	},
+	ptCalc56pxEnvSafeAreaInsetTop: {
+		"paddingTop": "calc(56px + env(safe-area-inset-top))"
+	},
+	smPx4: {
+		"@media (min-width: 40rem)": {
+			"paddingInline": "16px"
+		}
+	},
+	gap0: {
+		"gap": "0"
+	},
+	px0: {
+		"paddingInline": "0"
+	},
+	bottom0: {
+		"bottom": "0"
+	},
+	bgLinearToB: {
+		"--tw-gradient-position": "to bottom",
+		"@supports (background-image: linear-gradient(in lab, red, red))": {
+			"--tw-gradient-position": "to bottom in oklab"
+		},
+		"backgroundImage": "linear-gradient(var(--tw-gradient-stops))"
+	},
+	fromTransparent: {
+		"--tw-gradient-from": "transparent",
+		"--tw-gradient-stops": "var(--tw-gradient-via-stops,var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position))"
+	},
+	viaBlack85: {
+		"--tw-gradient-via": "color-mix(in srgb, var(--color-black) 85%, transparent)",
+		"@supports (color: color-mix(in lab, red, red))": {
+			"--tw-gradient-via": "color-mix(in oklab, var(--color-black) 85%, transparent)"
+		},
+		"--tw-gradient-via-stops": "var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-via) var(--tw-gradient-via-position), var(--tw-gradient-to) var(--tw-gradient-to-position)",
+		"--tw-gradient-stops": "var(--tw-gradient-via-stops)"
+	},
+	toBlack: {
+		"--tw-gradient-to": "var(--color-black)",
+		"--tw-gradient-stops": "var(--tw-gradient-via-stops,var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position))"
+	},
+	pt8: {
+		"paddingTop": "32px"
+	},
+	translateY3: {
+		"--tw-translate-y": "calc(4px * 3)",
+		"translate": "var(--tw-translate-x) var(--tw-translate-y)"
+	},
+	roundedSm: {
+		"borderRadius": "calc(4px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	outline: {
+		"outlineStyle": "var(--tw-outline-style)",
+		"outlineWidth": "1px"
+	},
+	outline1: {
+		"outlineStyle": "var(--tw-outline-style)",
+		"outlineWidth": "1px"
+	},
+	outlineOffset1: {
+		"outlineOffset": "1px"
+	},
+	h11: {
+		"height": "44px"
+	},
+	w11: {
+		"width": "44px"
+	},
+	opacity100: {
+		"opacity": "1"
+	},
+	outlineWhite85: {
+		"outlineColor": "#ffffffd9",
+		"@supports (color: color-mix(in lab, red, red))": {
+			"outlineColor": "color-mix(in oklab, var(--color-white) 85%, transparent)"
+		}
+	},
+	h9: {
+		"height": "36px"
+	},
+	w7: {
+		"width": "28px"
+	},
+	opacity60: {
+		"opacity": ".6"
+	},
+	outlineTransparent: {
+		"outlineColor": "transparent"
+	},
+	justifySelfCenter: {
+		"justifySelf": "center"
+	},
+	colStart3: {
+		"gridColumnStart": "3"
+	},
+	justifySelfEnd: {
+		"justifySelf": "flex-end"
+	},
+	pb4: {
+		"paddingBottom": "16px"
+	},
+	pt4: {
+		"paddingTop": "16px"
+	},
+	size15: {
+		"width": "6px",
+		"height": "6px"
+	},
+	scale067: {
+		"scale": ".67"
+	},
+	bgWhite: {
+		"backgroundColor": "var(--color-white)"
+	},
+	bgWhite30: {
+		"backgroundColor": "#ffffff4d",
+		"@supports (color: color-mix(in lab, red, red))": {
+			"backgroundColor": "color-mix(in oklab, var(--color-white) 30%, transparent)"
+		}
+	},
+
+	cursorCrosshair: {
+		"cursor": "crosshair"
+	},
+	cursorGrab: {
+		"cursor": "grab"
+	},
+	cursorZoomIn: {
+		"cursor": "zoom-in"
+	},
+
+	transitionOpacityTransform: {
+		"transitionProperty": "opacity,transform",
+		"transitionTimingFunction": "var(--tw-ease,var(--ease))",
+		"transitionDuration": "var(--tw-duration,var(--dur-micro))"
+	},
+	pbMax14pxEnvSafeAreaInsetBottom: {
+		"paddingBottom": "max(14px, env(safe-area-inset-bottom))"
+	},
+	transitionWidthHeightOpacity: {
+		"transitionProperty": "width,height,opacity",
+		"transitionTimingFunction": "var(--tw-ease,var(--ease))",
+		"transitionDuration": "var(--tw-duration,var(--dur-micro))"
+	},
+	transitionScaleBackgroundColor: {
+		"transitionProperty": "scale,background-color",
+		"transitionTimingFunction": "var(--tw-ease,var(--ease))",
+		"transitionDuration": "var(--tw-duration,var(--dur-micro))"
+	},
+
+	shadow0009999pxRgb00005: {
+		"--tw-shadow": "0 0 0 9999px var(--tw-shadow-color,color-mix(in srgb, var(--color-black) 50%, transparent))",
+		"boxShadow": "var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow)"
+	},
+	shadow0001pxRgb000022: {
+		"--tw-shadow": "0 0 0 1px var(--tw-shadow-color,color-mix(in srgb, var(--color-black) 22%, transparent))",
+		"boxShadow": "var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow)"
+	},
+	phoneH100dvh: {
+		"@media (max-width: 720px)": {
+			"height": "100dvh"
+		}
+	},
+	phoneBgBlack: {
+		"@media (max-width: 720px)": {
+			"backgroundColor": "var(--color-black)"
+		}
+	},
+	h10: {
+		"height": "40px"
+	},
+	w10: {
+		"width": "40px"
+	},
+	bgWhite10: {
+		"backgroundColor": "color-mix(in srgb, var(--color-white) 10%, transparent)",
+		"@supports (color: color-mix(in lab, red, red))": {
+			"backgroundColor": "color-mix(in oklab, var(--color-white) 10%, transparent)"
+		}
+	},
+	hoverBgWhite20: {
+		"@media (hover: hover)": {
+			":hover": {
+				"backgroundColor": "color-mix(in srgb, var(--color-white) 20%, transparent)"
+			},
+			"@supports (color: color-mix(in lab, red, red))": {
+				":hover": {
+					"backgroundColor": "color-mix(in oklab, var(--color-white) 20%, transparent)"
+				}
+			}
+		}
+	},
+	phoneH11: {
+		"@media (max-width: 720px)": {
+			"height": "44px"
+		}
+	},
+	phoneW11: {
+		"@media (max-width: 720px)": {
+			"width": "44px"
+		}
+	},
+	lineClamp2: {
+		"WebkitLineClamp": "2",
+		"WebkitBoxOrient": "vertical",
+		"display": "-webkit-box",
+		"overflow": "hidden"
+	},
+	snapX: {
+		"scrollSnapType": "x var(--tw-scroll-snap-strictness)"
+	},
+	transitionTransformBackgroundColorOpacity: {
+		"transitionProperty": "transform,background-color,opacity",
+		"transitionTimingFunction": "var(--tw-ease,var(--ease))",
+		"transitionDuration": "var(--tw-duration,var(--dur-micro))"
+	},
+	durationVarDurMicro: {
+		"--tw-duration": "var(--dur-micro)",
+		"transitionDuration": "var(--dur-micro)"
+	},
+	activeScale096: {
+		":active": {
+			"scale": ".96"
+		}
+	},
+	disabledOpacity035: {
+		":disabled": {
+			"opacity": ".35"
+		}
+	},
+	shadowInset01px0Rgb255255255008012px44pxRgb00005: {
+		"--tw-shadow": "inset 0 1px 0 var(--tw-shadow-color,color-mix(in srgb, var(--color-white) 8%, transparent)), 0 12px 44px var(--tw-shadow-color,color-mix(in srgb, var(--color-black) 50%, transparent))",
+		"boxShadow": "var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow)"
+	},
+	backdropBlur2xl: {
+		"--tw-backdrop-blur": "blur(40px)",
+		"WebkitBackdropFilter": "var(--tw-backdrop-blur,) var(--tw-backdrop-brightness,) var(--tw-backdrop-contrast,) var(--tw-backdrop-grayscale,) var(--tw-backdrop-hue-rotate,) var(--tw-backdrop-invert,) var(--tw-backdrop-opacity,) var(--tw-backdrop-saturate,) var(--tw-backdrop-sepia,)",
+		"backdropFilter": "var(--tw-backdrop-blur,) var(--tw-backdrop-brightness,) var(--tw-backdrop-contrast,) var(--tw-backdrop-grayscale,) var(--tw-backdrop-hue-rotate,) var(--tw-backdrop-invert,) var(--tw-backdrop-opacity,) var(--tw-backdrop-saturate,) var(--tw-backdrop-sepia,)"
+	},
+	backdropSaturate150: {
+		"--tw-backdrop-saturate": "saturate(150%)",
+		"WebkitBackdropFilter": "var(--tw-backdrop-blur,) var(--tw-backdrop-brightness,) var(--tw-backdrop-contrast,) var(--tw-backdrop-grayscale,) var(--tw-backdrop-hue-rotate,) var(--tw-backdrop-invert,) var(--tw-backdrop-opacity,) var(--tw-backdrop-saturate,) var(--tw-backdrop-sepia,)",
+		"backdropFilter": "var(--tw-backdrop-blur,) var(--tw-backdrop-brightness,) var(--tw-backdrop-contrast,) var(--tw-backdrop-grayscale,) var(--tw-backdrop-hue-rotate,) var(--tw-backdrop-invert,) var(--tw-backdrop-opacity,) var(--tw-backdrop-saturate,) var(--tw-backdrop-sepia,)"
+	},
+	hoverBgWhite10: {
+		"@media (hover: hover)": {
+			":hover": {
+				"backgroundColor": "color-mix(in srgb, var(--color-white) 10%, transparent)"
+			},
+			"@supports (color: color-mix(in lab, red, red))": {
+				":hover": {
+					"backgroundColor": "color-mix(in oklab, var(--color-white) 10%, transparent)"
+				}
+			}
+		}
+	},
+	hoverTextWhite: {
+		"@media (hover: hover)": {
+			":hover": {
+				"color": "var(--color-white)"
+			}
+		}
+	},
+	phoneMinH11: {
+		"@media (max-width: 720px)": {
+			"minHeight": "44px"
+		}
+	},
+	shadowInset01px0Rgb255255255008016px50pxRgb00005: {
+		"--tw-shadow": "inset 0 1px 0 var(--tw-shadow-color,color-mix(in srgb, var(--color-white) 8%, transparent)), 0 16px 50px var(--tw-shadow-color,color-mix(in srgb, var(--color-black) 50%, transparent))",
+		"boxShadow": "var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow)"
+	},
+	placeholderTextWhite45: {
+		"::placeholder": {
+			"color": "color-mix(in srgb, var(--color-white) 45%, transparent)"
+		},
+		"@supports (color: color-mix(in lab, red, red))": {
+			"::placeholder": {
+				"color": "color-mix(in oklab, var(--color-white) 45%, transparent)"
+			}
+		}
+	},
+	phoneTextInputPhone: {
+		"@media (max-width: 720px)": {
+			"fontSize": "var(--type-input-phone)"
+		}
+	},
+	phoneSize11: {
+		"@media (max-width: 720px)": {
+			"width": "44px",
+			"height": "44px"
+		}
+	},
+	activeScale094: {
+		":active": {
+			"scale": ".94"
+		}
+	},
+	disabledBgWhite15: {
+		":disabled": {
+			"backgroundColor": "color-mix(in srgb, var(--color-white) 15%, transparent)"
+		},
+		"@supports (color: color-mix(in lab, red, red))": {
+			":disabled": {
+				"backgroundColor": "color-mix(in oklab, var(--color-white) 15%, transparent)"
+			}
+		}
+	},
+	disabledTextWhite40: {
+		":disabled": {
+			"color": "color-mix(in srgb, var(--color-white) 40%, transparent)"
+		},
+		"@supports (color: color-mix(in lab, red, red))": {
+			":disabled": {
+				"color": "color-mix(in oklab, var(--color-white) 40%, transparent)"
+			}
+		}
+	},
+	maxWMin720px90vw: {
+		"maxWidth": "min(720px,90vw)"
+	},
+	tabularNums: {
+		"--tw-numeric-spacing": "tabular-nums",
+		"fontVariantNumeric": "var(--tw-ordinal,) var(--tw-slashed-zero,) var(--tw-numeric-figure,) var(--tw-numeric-spacing,) var(--tw-numeric-fraction,)"
+	},
+});
 
 /**
  * Full-screen lightbox for all in-app media: workspace-media thumbnails (the
@@ -1361,9 +2049,7 @@ function ZoomableMedia({
 	return (
 		<div
 			ref={wrapRef}
-			className={`relative flex min-h-0 min-w-0 flex-1 touch-none select-none items-center justify-center self-stretch ${
-				commentMode ? "cursor-crosshair" : zoomed ? "cursor-grab" : "cursor-zoom-in"
-			}`}
+			className={[mergeStylexClassName("", sx.relative, sx.flex, sx.minH0, sx.minW0, sx.flex1, sx.touchNone, sx.selectNone, sx.itemsCenter, sx.justifyCenter, sx.selfStretch), commentMode ? mergeStylexClassName("", sx.cursorCrosshair) : zoomed ? mergeStylexClassName("", sx.cursorGrab) : mergeStylexClassName("", sx.cursorZoomIn)].filter(Boolean).join(" ")}
 			onPointerDown={onPointerDown}
 			onPointerMove={onPointerMove}
 			onPointerUp={onPointerEnd}
@@ -1374,12 +2060,7 @@ function ZoomableMedia({
 				<div
 					ref={boxRef}
 					role="img"
-					aria-label="Diagram"
-					// The same hairline and corner the photo takes, over the well
-					// the diagram is drawn on in the transcript: a light-theme
-					// chart is near-black ink, which would be unreadable straight
-					// on the scrim.
-					className="box-border shrink-0 rounded-2xl border border-white/20 bg-[var(--diagram-canvas)] p-4 [transform-origin:0_0] [&>svg]:block [&>svg]:h-full [&>svg]:w-full"
+					aria-label="Diagram" {...mergeStylexProps("[&>svg]:block [&>svg]:h-full [&>svg]:w-full", sx.boxBorder, sx.shrink0, sx.rounded2xl, sx.border, sx.borderWhite20, sx.bgVarDiagramCanvas, sx.p4, sx.TransformOrigin00)}
 					style={{ width: fit?.w, height: fit?.h, viewTransitionName }}
 					// The markup is mermaid's own output, already rendered into the
 					// transcript by MarkdownBody; this is the same SVG, resized.
@@ -1406,7 +2087,7 @@ function ZoomableMedia({
 						// screen-sized photo reads as a crop rather than a shape.
 						// Anything rounder would leave the scale, and it starts
 						// clipping content that sits in a screenshot's own corner.
-						className="min-h-0 min-w-0 max-h-full max-w-full rounded-2xl border border-white/20 object-contain [transform-origin:0_0]"
+						{...stylex.props(sx.minH0, sx.minW0, sx.maxHFull, sx.maxWFull, sx.rounded2xl, sx.border, sx.borderWhite20, sx.objectContain, sx.TransformOrigin00)}
 						style={{ viewTransitionName }}
 					/>
 					{commentMode && shownRegionBox && imageBox && (
@@ -1416,7 +2097,7 @@ function ZoomableMedia({
 						   it to the picture's own rounded box so it cannot leak over the
 						   scrim and the chrome. */
 						<div
-							className="pointer-events-none absolute overflow-hidden rounded-2xl"
+							{...stylex.props(sx.pointerEventsNone, sx.absolute, sx.overflowHidden, sx.rounded2xl)}
 							style={{
 								left: imageBox.left,
 								top: imageBox.top,
@@ -1425,8 +2106,7 @@ function ZoomableMedia({
 							}}
 							aria-hidden="true"
 						>
-							<div
-								className="absolute shadow-[0_0_0_9999px_rgb(0_0_0/0.5)]"
+							<div {...mergeStylexProps("", sx.shadow0009999pxRgb00005, sx.absolute)}
 								style={{
 									left: shownRegionBox.left - imageBox.left,
 									top: shownRegionBox.top - imageBox.top,
@@ -1441,12 +2121,7 @@ function ZoomableMedia({
 							// The region is a thing you can take hold of, not a mark:
 							// press it to move it, press a handle to resize it.
 							// Dragging bare picture still starts a new one.
-							data-region-handle="move"
-							// A hairline, not a coloured frame: the dimmed surround is
-							// what says where the selection is, so the line only has to
-							// trace it. The dark hairline under it keeps the white edge
-							// legible on a white screenshot.
-							className="absolute cursor-move touch-none rounded-[3px] border border-white shadow-[0_0_0_1px_rgb(0_0_0/0.22)]"
+							data-region-handle="move" {...mergeStylexProps("", sx.shadow0001pxRgb000022, sx.absolute, sx.cursorMove, sx.touchNone, sx.rounded3px, sx.border, sx.borderWhite)}
 							style={shownRegionBox}
 							aria-hidden="true"
 						>
@@ -1472,7 +2147,7 @@ function ZoomableMedia({
 										// region; the square around it is what the finger
 										// gets.
 										className={cn(
-											"absolute grid touch-none place-items-center",
+											mergeStylexClassName("", sx.absolute, sx.grid, sx.touchNone, sx.placeItemsCenter),
 											handle.position,
 											handle.cursor,
 										)}
@@ -1484,7 +2159,7 @@ function ZoomableMedia({
 									>
 										<span
 											className={cn(
-												"block border-white drop-shadow-[0_0_2px_rgb(0_0_0/0.5)]",
+												mergeStylexClassName("", sx.block, sx.borderWhite, sx.dropShadow002pxRgb00005),
 												handle.mark,
 											)}
 										/>
@@ -1504,7 +2179,7 @@ const MAX_VISIBLE_DOTS = 7;
 
 // Download / Open: quiet buttons in the top action cluster, matching the asset
 // preview's separation between actions above and descriptions below.
-const lightboxAction = "shrink-0 cursor-pointer";
+const lightboxAction = mergeStylexClassName("", sx.shrink0, sx.cursorPointer);
 
 const PREVIEW_LABEL: Record<LightboxItem["kind"], string> = {
 	image: "Image preview",
@@ -1889,7 +2564,7 @@ sendingCommentRef.current = false;
 	// spread under it across the whole viewport (z-index applies to flex items
 	// without needing position).
 	const navBtn =
-		"z-10 grid h-10 w-10 shrink-0 place-items-center rounded-full border-0 bg-white/10 p-0 text-white hover:bg-white/20 phone:h-11 phone:w-11";
+		mergeStylexClassName("", sx.z10, sx.grid, sx.h10, sx.w10, sx.shrink0, sx.placeItemsCenter, sx.roundedFull, sx.border0, sx.bgWhite10, sx.p0, sx.textWhite, sx.hoverBgWhite20, sx.phoneH11, sx.phoneW11);
 	// Wide enough for a sentence, never wider than the screen it floats on.
 	const commentCardWidth = Math.min(340, Math.max(220, viewport.width - 24));
 	const commentAnchor =
@@ -1907,13 +2582,12 @@ sendingCommentRef.current = false;
 	// top and bottom so the image's center stays at the viewport's center.
 	const phoneStagePadding = (68 + phoneBottomHeight) / 2;
 	const phoneAction =
-		"grid size-11 shrink-0 place-items-center rounded-full border-0 bg-transparent p-0 text-white transition-[transform,background-color,opacity] duration-[var(--dur-micro)] ease-[var(--ease)] active:scale-[0.96] disabled:opacity-[0.35]";
+		mergeStylexClassName("", sx.grid, sx.size11, sx.shrink0, sx.placeItemsCenter, sx.roundedFull, sx.border0, sx.bgTransparent, sx.p0, sx.textWhite, sx.transitionTransformBackgroundColorOpacity, sx.durationVarDurMicro, sx.easeVarEase, sx.activeScale096, sx.disabledOpacity035);
 
 	return (
 		<motion.div
 			ref={dialogRef}
-			data-media-lightbox=""
-			className="fixed inset-0 z-[11000] flex flex-col bg-black/85 phone:h-[100dvh] phone:bg-black"
+			data-media-lightbox="" {...mergeStylexProps("", sx.phoneH100dvh, sx.phoneBgBlack, sx.fixed, sx.inset0, sx.z11000, sx.flex, sx.flexCol, sx.bgBlack85)}
 			role="dialog"
 			tabIndex={-1}
 			aria-modal="true"
@@ -1928,10 +2602,10 @@ sendingCommentRef.current = false;
 		>
 			<div
 				className={cn(
-					"pointer-events-none absolute left-[calc(12px+env(safe-area-inset-left))] right-[calc(12px+env(safe-area-inset-right))] top-[calc(12px+env(safe-area-inset-top))] z-10 flex items-center justify-center",
+					mergeStylexClassName("", sx.pointerEventsNone, sx.absolute, sx.leftCalc12pxEnvSafeAreaInsetLeft, sx.rightCalc12pxEnvSafeAreaInsetRight, sx.topCalc12pxEnvSafeAreaInsetTop, sx.z10, sx.flex, sx.itemsCenter, sx.justifyCenter),
 					isPhone &&
-						"transition-[opacity,transform] duration-[var(--dur)] ease-[var(--ease)] motion-reduce:transition-none",
-					isPhone && !chromeVisible && "-translate-y-2 opacity-0",
+						mergeStylexClassName("", sx.transitionOpacityTransform, sx.durationVarDur, sx.easeVarEase, sx.motionReduceTransitionNone),
+					isPhone && !chromeVisible && mergeStylexClassName("", sx.TranslateY2, sx.opacity0),
 				)}
 				inert={isPhone && !chromeVisible ? true : undefined}
 				aria-hidden={isPhone && !chromeVisible ? true : undefined}
@@ -1942,7 +2616,7 @@ sendingCommentRef.current = false;
 				<div
 					role="group"
 					aria-label="Media actions"
-					className={isPhone ? "hidden" : "pointer-events-auto flex items-center gap-1"}
+					className={isPhone ? mergeStylexClassName("", sx.hidden) : mergeStylexClassName("", sx.pointerEventsAuto, sx.flex, sx.itemsCenter, sx.gap1)}
 				>
 					{commentable && (
 						<Button
@@ -1951,7 +2625,7 @@ sendingCommentRef.current = false;
 							icon={<IconMessage size={20} />}
 							className={cn(
 								lightboxAction,
-								commenting && "bg-white/15 text-white",
+								commenting && mergeStylexClassName("", sx.bgWhite15, sx.textWhite),
 							)}
 							onClick={() => {
 								if (commenting) resetComment();
@@ -2052,7 +2726,7 @@ sendingCommentRef.current = false;
 				<button
 					ref={closeRef}
 					type="button"
-					className={cn(navBtn, "pointer-events-auto absolute right-0")}
+					className={cn(navBtn, mergeStylexClassName("", sx.pointerEventsAuto, sx.absolute, sx.right0))}
 					onClick={requestClose}
 					aria-label="Close"
 				>
@@ -2062,8 +2736,8 @@ sendingCommentRef.current = false;
 
 			<div
 				className={cn(
-					"flex min-h-0 flex-1 items-center justify-center gap-3 px-3 pb-2 pt-[calc(56px+env(safe-area-inset-top))] sm:px-4",
-					isPhone && "gap-0 px-0",
+					mergeStylexClassName("", sx.flex, sx.minH0, sx.flex1, sx.itemsCenter, sx.justifyCenter, sx.gap3, sx.px3, sx.pb2, sx.ptCalc56pxEnvSafeAreaInsetTop, sx.smPx4),
+					isPhone && mergeStylexClassName("", sx.gap0, sx.px0),
 				)}
 				style={
 					isPhone
@@ -2091,7 +2765,7 @@ sendingCommentRef.current = false;
 					</button>
 				)}
 				<motion.div
-					className="flex min-h-0 min-w-0 flex-1 self-stretch"
+					{...stylex.props(sx.flex, sx.minH0, sx.minW0, sx.flex1, sx.selfStretch)}
 					initial={
 						useHeroTransition
 							? false
@@ -2154,7 +2828,7 @@ sendingCommentRef.current = false;
 						// close too. Without this, only the thin strip outside this
 						// wrapper was a backdrop and the lightbox felt stuck.
 						<div
-							className="flex min-h-0 min-w-0 flex-1 items-center justify-center self-stretch"
+							{...stylex.props(sx.flex, sx.minH0, sx.minW0, sx.flex1, sx.itemsCenter, sx.justifyCenter, sx.selfStretch)}
 							onMouseDown={(e) => {
 								if (e.target === e.currentTarget) requestClose();
 							}}
@@ -2168,7 +2842,7 @@ sendingCommentRef.current = false;
 								playsInline
 								// Same hairline as the photo: a dark first frame needs
 								// an edge against the scrim just as much.
-								className="min-h-0 min-w-0 max-h-full max-w-full rounded-2xl border border-white/20"
+								{...stylex.props(sx.minH0, sx.minW0, sx.maxHFull, sx.maxWFull, sx.rounded2xl, sx.border, sx.borderWhite20)}
 							/>
 						</div>
 					)}
@@ -2189,17 +2863,17 @@ sendingCommentRef.current = false;
 				<div
 					ref={phoneBottomRef}
 					className={cn(
-						"absolute inset-x-0 bottom-0 z-10 flex flex-col gap-3 bg-linear-to-b from-transparent via-black/85 to-black px-0 pb-[max(14px,env(safe-area-inset-bottom))] pt-8 transition-[opacity,transform] duration-[var(--dur)] ease-[var(--ease)] motion-reduce:transition-none",
-						!chromeVisible && "pointer-events-none translate-y-3 opacity-0",
+						mergeStylexClassName("", sx.pbMax14pxEnvSafeAreaInsetBottom, sx.transitionOpacityTransform, sx.absolute, sx.insetX0, sx.bottom0, sx.z10, sx.flex, sx.flexCol, sx.gap3, sx.bgLinearToB, sx.fromTransparent, sx.viaBlack85, sx.toBlack, sx.px0, sx.pt8, sx.durationVarDur, sx.easeVarEase, sx.motionReduceTransitionNone),
+						!chromeVisible && mergeStylexClassName("", sx.pointerEventsNone, sx.translateY3, sx.opacity0),
 					)}
 					inert={!chromeVisible ? true : undefined}
 					aria-hidden={!chromeVisible ? true : undefined}
 				>
 					{!commenting && (item.walkthroughLabel || caption || description) && (
-						<div className="flex max-w-full flex-col items-center gap-0.5 px-6 text-center">
-							<div className="flex max-w-full items-center justify-center gap-2">
+						<div {...stylex.props(sx.flex, sx.maxWFull, sx.flexCol, sx.itemsCenter, sx.gap05, sx.px6, sx.textCenter)}>
+							<div {...stylex.props(sx.flex, sx.maxWFull, sx.itemsCenter, sx.justifyCenter, sx.gap2)}>
 								{caption && (
-									<div className="line-clamp-2 min-w-0 max-w-full text-sm font-medium leading-snug text-white">
+									<div {...mergeStylexProps("", sx.lineClamp2, sx.minW0, sx.maxWFull, sx.textSm, sx.fontMedium, sx.leadingSnug, sx.textWhite)}>
 										{caption}
 									</div>
 								)}
@@ -2215,7 +2889,7 @@ sendingCommentRef.current = false;
 								)}
 							</div>
 							{description && (
-								<div className="line-clamp-2 max-w-full text-sm leading-snug text-white/75">
+								<div {...mergeStylexProps("", sx.lineClamp2, sx.maxWFull, sx.textSm, sx.leadingSnug, sx.textWhite75)}>
 									{description}
 								</div>
 							)}
@@ -2224,8 +2898,7 @@ sendingCommentRef.current = false;
 
 					{many && (
 						<div
-							ref={filmstripRef}
-							className="flex h-12 snap-x snap-mandatory items-center gap-1 overflow-x-auto px-[calc(50%_-_22px)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+							ref={filmstripRef} {...mergeStylexProps("[&::-webkit-scrollbar]:hidden", sx.snapX, sx.flex, sx.h12, sx.snapMandatory, sx.itemsCenter, sx.gap1, sx.overflowXAuto, sx.pxCalc5022px, sx.ScrollbarWidthNone)}
 							role="group"
 							aria-label="Media filmstrip"
 						>
@@ -2236,17 +2909,17 @@ sendingCommentRef.current = false;
 										key={`${thumb.src}-${thumbIndex}`}
 										type="button"
 										data-lightbox-thumb={thumbIndex}
-										className="grid size-11 shrink-0 snap-center place-items-center border-0 bg-transparent p-0"
+										{...stylex.props(sx.grid, sx.size11, sx.shrink0, sx.snapCenter, sx.placeItemsCenter, sx.border0, sx.bgTransparent, sx.p0)}
 										onClick={() => go(thumbIndex)}
 										aria-label={`Show ${thumb.kind} ${thumbIndex + 1} of ${items.length}`}
 										aria-current={active ? "true" : undefined}
 									>
 										<span
 											className={cn(
-												"block overflow-hidden rounded-sm outline outline-1 outline-offset-1 transition-[width,height,opacity] duration-[var(--dur)] ease-[var(--ease)] motion-reduce:transition-none",
+												mergeStylexClassName("", sx.transitionWidthHeightOpacity, sx.block, sx.overflowHidden, sx.roundedSm, sx.outline, sx.outline1, sx.outlineOffset1, sx.durationVarDur, sx.easeVarEase, sx.motionReduceTransitionNone),
 												active
-													? "h-11 w-11 opacity-100 outline-white/85"
-													: "h-9 w-7 opacity-60 outline-transparent",
+													? mergeStylexClassName("", sx.h11, sx.w11, sx.opacity100, sx.outlineWhite85)
+													: mergeStylexClassName("", sx.h9, sx.w7, sx.opacity60, sx.outlineTransparent),
 											)}
 										>
 											{thumb.kind === "video" ? (
@@ -2255,14 +2928,14 @@ sendingCommentRef.current = false;
 													muted
 													playsInline
 													preload="metadata"
-													className="size-full object-cover"
+													{...stylex.props(sx.sizeFull, sx.objectCover)}
 												/>
 											) : (
 												<img
 													src={thumb.src}
 													alt=""
 													loading="lazy"
-													className="size-full object-cover"
+													{...stylex.props(sx.sizeFull, sx.objectCover)}
 												/>
 											)}
 										</span>
@@ -2272,8 +2945,8 @@ sendingCommentRef.current = false;
 						</div>
 					)}
 
-					<div className="grid grid-cols-3 items-center px-5">
-						<div className="justify-self-start">
+					<div {...stylex.props(sx.grid, sx.gridCols3, sx.itemsCenter, sx.px5)}>
+						<div {...stylex.props(sx.justifySelfStart)}>
 							{nativeShare ? (
 								<button
 									type="button"
@@ -2303,7 +2976,7 @@ sendingCommentRef.current = false;
 						{commentable && (
 							<button
 								type="button"
-								className={cn(phoneAction, "justify-self-center", commenting && "bg-white/15")}
+								className={cn(phoneAction, mergeStylexClassName("", sx.justifySelfCenter), commenting && mergeStylexClassName("", sx.bgWhite15))}
 								onClick={() => {
 									if (commenting) resetComment();
 									else {
@@ -2321,7 +2994,7 @@ sendingCommentRef.current = false;
 
 						<button
 							type="button"
-							className={cn(phoneAction, "col-start-3 justify-self-end")}
+							className={cn(phoneAction, mergeStylexClassName("", sx.colStart3, sx.justifySelfEnd))}
 							onClick={copyImage}
 							disabled={item.kind === "video"}
 							aria-label={copied ? "Image copied" : "Copy image"}
@@ -2333,14 +3006,13 @@ sendingCommentRef.current = false;
 			)}
 
 			{commenting && !selection && (
-				<div className="pointer-events-none absolute inset-x-0 bottom-[calc(16px+env(safe-area-inset-bottom))] z-20 flex justify-center px-4">
-					<div className="pointer-events-auto flex items-center gap-1 rounded-full border border-white/10 bg-black/55 py-1 pl-4 pr-1 shadow-[inset_0_1px_0_rgb(255_255_255/0.08),0_12px_44px_rgb(0_0_0/0.5)] backdrop-blur-2xl backdrop-saturate-150">
-						<span className="text-label font-medium text-white">
+				<div {...stylex.props(sx.pointerEventsNone, sx.absolute, sx.insetX0, sx.bottomCalc16pxEnvSafeAreaInsetBottom, sx.z20, sx.flex, sx.justifyCenter, sx.px4)}>
+					<div {...mergeStylexProps("", sx.shadowInset01px0Rgb255255255008012px44pxRgb00005, sx.backdropBlur2xl, sx.backdropSaturate150, sx.pointerEventsAuto, sx.flex, sx.itemsCenter, sx.gap1, sx.roundedFull, sx.border, sx.borderWhite10, sx.bgBlack55, sx.py1, sx.pl4, sx.pr1)}>
+						<span {...stylex.props(sx.fontMedium, sx.textWhite, typography.label)}>
 							Drag over the part you mean
 						</span>
 						<button
-							type="button"
-							className="min-h-9 rounded-full px-3 text-label font-medium text-white/70 hover:bg-white/10 hover:text-white phone:min-h-11"
+							type="button" {...mergeStylexProps("", sx.hoverBgWhite10, sx.hoverTextWhite, sx.phoneMinH11, sx.minH9, sx.roundedFull, sx.px3, sx.fontMedium, sx.textWhite70, typography.label)}
 							onClick={resetComment}
 						>
 							Cancel
@@ -2351,11 +3023,7 @@ sendingCommentRef.current = false;
 
 			{commentAnchor && (
 				<motion.form
-					ref={commentCardRef}
-					/* Fixed and placed against the region: the remark and the pixels it
-					   is about read as one thing. Kept to a single row, because on a
-					   phone a taller card would cover the picture it is describing. */
-					className="fixed z-20 flex cursor-text flex-col gap-1 rounded-[22px] bg-black/55 p-1.5 shadow-[inset_0_1px_0_rgb(255_255_255/0.08),0_16px_50px_rgb(0_0_0/0.5)] backdrop-blur-2xl backdrop-saturate-150"
+					ref={commentCardRef} {...mergeStylexProps("", sx.shadowInset01px0Rgb255255255008016px50pxRgb00005, sx.backdropBlur2xl, sx.backdropSaturate150, sx.fixed, sx.z20, sx.flex, sx.cursorText, sx.flexCol, sx.gap1, sx.rounded22px, sx.bgBlack55, sx.p15)}
 					// It grows out of the corner of the region it belongs to, rather
 					// than fading in beside it.
 					initial={reduceMotion ? false : { opacity: 0, scale: 0.94 }}
@@ -2384,7 +3052,7 @@ sendingCommentRef.current = false;
 						commentInputRef.current?.focus({ preventScroll: true });
 					}}
 				>
-					<div className="flex items-end gap-1">
+					<div {...stylex.props(sx.flex, sx.itemsEnd, sx.gap1)}>
 						<textarea
 							ref={commentInputRef}
 							value={commentText}
@@ -2404,20 +3072,11 @@ sendingCommentRef.current = false;
 								}
 							}}
 							rows={1}
-							placeholder="What should change here?"
-							// No surface of its own: the bar behind it is the input.
-							// border-0 explicitly, because this app leaves the browser's
-							// own control styling in place rather than importing a
-							// preflight, and a bare textarea draws a grey 1px frame.
-							// A long remark grows the bar rather than scrolling inside
-							// one line, up to the point where it would start covering
-							// the picture it is about.
-							className="block w-full flex-1 resize-none appearance-none border-0 bg-transparent px-2.5 py-2 text-body leading-snug text-white outline-none [scrollbar-width:none] placeholder:text-white/45 phone:text-input-phone [&::-webkit-scrollbar]:hidden"
+							placeholder="What should change here?" {...mergeStylexProps("[&::-webkit-scrollbar]:hidden", sx.placeholderTextWhite45, sx.phoneTextInputPhone, sx.block, sx.wFull, sx.flex1, sx.resizeNone, sx.appearanceNone, sx.border0, sx.bgTransparent, sx.px25, sx.py2, sx.leadingSnug, sx.textWhite, sx.outlineNone, sx.ScrollbarWidthNone, typography.body)}
 							disabled={sendingComment}
 						/>
 						<button
-							type="button"
-							className="grid size-9 shrink-0 place-items-center rounded-full border-0 bg-transparent p-0 text-white/60 hover:bg-white/10 hover:text-white phone:size-11"
+							type="button" {...mergeStylexProps("", sx.hoverBgWhite10, sx.hoverTextWhite, sx.phoneSize11, sx.grid, sx.size9, sx.shrink0, sx.placeItemsCenter, sx.roundedFull, sx.border0, sx.bgTransparent, sx.p0, sx.textWhite60)}
 							onClick={resetComment}
 							disabled={sendingComment}
 							aria-label="Cancel comment"
@@ -2425,10 +3084,7 @@ sendingCommentRef.current = false;
 							<IconX size={16} />
 						</button>
 						<button
-							type="submit"
-							// The filled circle a message is sent with, in the app's own
-							// accent rather than a plain white chip.
-							className="grid size-9 shrink-0 place-items-center rounded-full border-0 bg-accent p-0 text-white transition-transform active:scale-[0.94] disabled:bg-white/15 disabled:text-white/40 phone:size-11"
+							type="submit" {...mergeStylexProps("", sx.activeScale094, sx.disabledBgWhite15, sx.disabledTextWhite40, sx.phoneSize11, sx.grid, sx.size9, sx.shrink0, sx.placeItemsCenter, sx.roundedFull, sx.border0, sx.bgAccent, sx.p0, sx.textWhite, sx.transitionTransform)}
 							disabled={!commentText.trim() || sendingComment}
 							aria-label={sendingComment ? "Sending comment" : "Send comment"}
 						>
@@ -2436,7 +3092,7 @@ sendingCommentRef.current = false;
 						</button>
 					</div>
 					{commentError && (
-						<div className="px-2.5 pb-1 text-label text-red" role="alert">
+						<div {...stylex.props(sx.px25, sx.pb1, sx.textRed, typography.label)} role="alert">
 							{commentError}
 						</div>
 					)}
@@ -2449,20 +3105,20 @@ sendingCommentRef.current = false;
 			{!isPhone && (
 				<div
 					className={cn(
-						"z-10 flex flex-col items-center gap-1.5 px-4 pb-4 pt-4",
+						mergeStylexClassName("", sx.z10, sx.flex, sx.flexCol, sx.itemsCenter, sx.gap15, sx.px4, sx.pb4, sx.pt4),
 					(commenting ||
 						(!item.walkthroughLabel && !caption && !description && !many)) &&
-						"hidden",
+						mergeStylexClassName("", sx.hidden),
 				)}
 				onMouseDown={(e) => {
 					if (e.target === e.currentTarget) requestClose();
 				}}
 			>
 				{(item.walkthroughLabel || caption || description) && (
-					<div className="flex max-w-full flex-col items-center gap-0.5 text-center">
-						<div className="flex max-w-full items-center justify-center gap-2">
+					<div {...stylex.props(sx.flex, sx.maxWFull, sx.flexCol, sx.itemsCenter, sx.gap05, sx.textCenter)}>
+						<div {...stylex.props(sx.flex, sx.maxWFull, sx.itemsCenter, sx.justifyCenter, sx.gap2)}>
 							{caption && (
-								<div className="min-w-0 max-w-full truncate text-sm font-medium text-white">
+								<div {...stylex.props(sx.minW0, sx.maxWFull, sx.truncate, sx.textSm, sx.fontMedium, sx.textWhite)}>
 									{caption}
 								</div>
 							)}
@@ -2478,36 +3134,35 @@ sendingCommentRef.current = false;
 							)}
 						</div>
 						{description && (
-							<div className="max-w-[min(720px,90vw)] line-clamp-2 text-sm leading-snug text-white/75">
+							<div {...mergeStylexProps("", sx.maxWMin720px90vw, sx.lineClamp2, sx.textSm, sx.leadingSnug, sx.textWhite75)}>
 								{description}
 							</div>
 						)}
 					</div>
 				)}
-				<div className="flex items-center gap-1.5">
+				<div {...stylex.props(sx.flex, sx.itemsCenter, sx.gap15)}>
 					{many && (
 						// Dots provide direct jumps; the counter beside them gives the
 						// exact position without making the reader count circles.
-						<div className="flex items-center">
+						<div {...stylex.props(sx.flex, sx.itemsCenter)}>
 							{dotIndexes.map((dot, position) => (
 								<button
 									key={`${dot}-${items[dot].src}`}
 									type="button"
 									onClick={() => go(dot)}
 									aria-label={`Show ${dot + 1} of ${items.length}`}
-									aria-current={dot === index ? "true" : undefined}
-									className="group shrink-0 cursor-pointer border-0 bg-transparent p-1 leading-none"
+									aria-current={dot === index ? "true" : undefined} {...mergeStylexProps("group", sx.shrink0, sx.cursorPointer, sx.border0, sx.bgTransparent, sx.p1, sx.leadingNone)}
 								>
 									<span
 										className={cn(
-											"block size-1.5 rounded-full transition-[scale,background-color]",
+											mergeStylexClassName("", sx.transitionScaleBackgroundColor, sx.block, sx.size15, sx.roundedFull),
 											((position === 0 && dotStart > 0) ||
 												(position === dotIndexes.length - 1 &&
 													dotStart + dotIndexes.length < items.length)) &&
-												"scale-[0.67]",
+												mergeStylexClassName("", sx.scale067),
 											dot === index
-												? "bg-white"
-												: "bg-white/30 group-hover:bg-white/60",
+												? mergeStylexClassName("", sx.bgWhite)
+												: mergeStylexClassName("group-hover:bg-white/60", sx.bgWhite30),
 										)}
 									/>
 								</button>
@@ -2515,7 +3170,7 @@ sendingCommentRef.current = false;
 						</div>
 					)}
 					{many && (
-						<span className="text-meta font-medium tabular-nums text-white/50">
+						<span {...mergeStylexProps("", sx.tabularNums, sx.fontMedium, sx.textWhite50, typography.meta)}>
 							{index + 1} of {items.length}
 						</span>
 					)}

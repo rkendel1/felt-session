@@ -44,10 +44,218 @@ import {
 	SettingsPanel,
 } from "../../ui/settings";
 import { Input } from "../../ui/input";
+import { cn, mergeStylexProps, mergeStylexClassName, mergeStylexOverrideClassName } from "../../ui/cn";
 import { Badge } from "../../ui/badge";
 import { Segmented, SegmentedOption } from "../../ui/segmented";
 import { EmptyState, InlineAlert, Skeleton, SkeletonBar } from "../../ui/state";
 import { Switch } from "../../ui/switch";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	mt11: {
+			marginTop: "44px"
+	},
+	px5: {
+			paddingInline: "20px"
+	},
+	mb4: {
+			marginBottom: "16px"
+	},
+	h4: {
+			height: "16px"
+	},
+	w22: {
+			width: "22%"
+	},
+	borderB: {
+			borderBottomStyle: "solid",
+			borderBottomWidth: "1px"
+	},
+	borderDivider: {
+			borderColor: "var(--divider)"
+	},
+	pb3: {
+			paddingBottom: "12px"
+	},
+	grid: {
+			display: "grid"
+	},
+	gridCols1: {
+			gridTemplateColumns: "repeat(1,minmax(0,1fr))"
+	},
+	gapX12: {
+			columnGap: "48px"
+	},
+	flex: {
+			display: "flex"
+	},
+	itemsCenter: {
+			alignItems: "center"
+	},
+	gap35: {
+			gap: "14px"
+	},
+	py35: {
+			paddingBlock: "14px"
+	},
+	size9: {
+			width: "36px",
+			height: "36px"
+	},
+	shrink0: {
+			flexShrink: "0"
+	},
+	roundedControl: {
+			borderRadius: "calc(12px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	minW0: {
+			minWidth: "0"
+	},
+	flex1: {
+			flex: "1"
+	},
+	mb1: {
+			marginBottom: "4px"
+	},
+	itemsBaseline: {
+			alignItems: "baseline"
+	},
+	justifyBetween: {
+			justifyContent: "space-between"
+	},
+	gap3: {
+			gap: "12px"
+	},
+	m0: {
+			margin: "0"
+	},
+	fontTitle: {
+			fontWeight: "var(--title-weight)",
+		"--settings-leading": "1.1"
+	},
+	tracking001em: {
+			letterSpacing: "-.01em"
+	},
+	textFg: {
+			color: "var(--text)"
+	},
+	textFaint: {
+			color: "var(--text-faint)"
+	},
+	gap15: {
+			gap: "6px"
+	},
+	truncate: {
+			textOverflow: "ellipsis",
+			whiteSpace: "nowrap",
+			overflow: "hidden"
+	},
+	fontMedium: {
+			fontWeight: "var(--font-weight-medium)"
+	},
+	textDim: {
+			color: "var(--text-dim)"
+	},
+	maxWNone: {
+			maxWidth: "none"
+	},
+	mb11: {
+			marginBottom: "44px"
+	},
+	flexWrap: {
+			flexWrap: "wrap"
+	},
+	gap25: {
+			gap: "10px"
+	},
+	pt4: {
+			paddingTop: "16px"
+	},
+	transitionOpacity: {
+			transitionProperty: "opacity",
+			transitionTimingFunction: "var(--tw-ease,var(--ease))",
+			transitionDuration: "var(--tw-duration,var(--dur-micro))"
+	},
+	gap2: {
+			gap: "8px"
+	},
+	minW180px: {
+			minWidth: "180px"
+	},
+	maxWFull: {
+			maxWidth: "100%"
+	},
+	overflowXAuto: {
+			overflowX: "auto"
+	},
+	ScrollbarWidthNone: {
+			scrollbarWidth: "none"
+	},
+	mt4: {
+			marginTop: "16px"
+	},
+	px0: {
+			paddingInline: "0"
+	},
+	installLink: {
+		display: "inline-flex",
+		minHeight: "26px",
+		flexShrink: 0,
+		alignItems: "center",
+		borderRadius: "calc(12px * var(--rf))",
+		borderStyle: "solid",
+		borderWidth: "1px",
+		borderColor: "var(--border)",
+		backgroundColor: "var(--button-surface)",
+		paddingInline: "10px",
+		fontWeight: "var(--font-weight-medium)",
+		color: "var(--text-dim)",
+		textDecorationLine: "none",
+		transitionProperty: "color, background-color, border-color",
+		transitionDuration: "var(--dur-micro)",
+		":hover": { "@media (hover: hover)": {
+			borderColor: "var(--border-strong)",
+			color: "var(--text)",
+		} },
+
+		cornerShape: "var(--cs)",},
+	mt2: { marginTop: "8px" },
+	h25: { height: "10px" },
+	w23pct: { width: "23%" },
+	w26pct: { width: "26%" },
+	w31pct: { width: "31%" },
+	w35pct: { width: "35%" },
+	w38pct: { width: "38%" },
+	w44pct: { width: "44%" },
+	w58pct: { width: "58%" },
+	w62pct: { width: "62%" },
+	w69pct: { width: "69%" },
+	w74pct: { width: "74%" },
+	w76pct: { width: "76%" },
+	w83pct: { width: "83%" },
+
+	Container: {
+		"containerType": "inline-size"
+	},
+
+	u560pxGridCols2: {
+		"gridTemplateColumns": "repeat(2,minmax(0,1fr))"
+	},
+	tabularNums: {
+		"--tw-numeric-spacing": "tabular-nums",
+		"fontVariantNumeric": "var(--tw-ordinal,) var(--tw-slashed-zero,) var(--tw-numeric-figure,) var(--tw-numeric-spacing,) var(--tw-numeric-fraction,)"
+	},
+	hoverOpacity80: {
+		"@media (hover: hover)": {
+			":hover": {
+				"opacity": ".8"
+			}
+		}
+	},
+});
 
 // ── The library: one browsable catalog over the things this instance can be
 // extended with. The server derives it (src/server/library.ts) from the
@@ -186,8 +394,6 @@ function EntryIcon({ entry, size = 34 }: { entry: LibraryEntry; size?: number })
 /** A card's action: a raised pill, the Button primitive's `default` recipe at
  *  `sm`. It is an anchor rather than a button because every install path is a
  *  place (the automation form, Setup), and a link is what a place takes. */
-const installLinkClass =
-	"inline-flex min-h-[26px] shrink-0 items-center rounded-control border border-line bg-button px-2.5 text-xs font-medium text-dim no-underline smooth-shadow-xs transition-colors hover:border-line-strong hover:text-fg";
 
 function EntryControl({
 	entry,
@@ -215,7 +421,10 @@ function EntryControl({
 		);
 
 	return (
-		<a className={installLinkClass} href={`${BASE_PATH}${entry.href}`}>
+		<a
+			className={cn(stylex.props(sx.installLink, typography.label).className, "smooth-shadow-xs")}
+			href={`${BASE_PATH}${entry.href}`}
+		>
 			{entry.install === "guided"
 				? "Set up"
 				: entry.install === "draft"
@@ -246,16 +455,16 @@ function EntryControl({
  */
 function CatalogSkeleton() {
 	return (
-		<Skeleton label="Loading the library" className="mt-11 px-5">
-			<SkeletonBar className="mb-4 h-4 w-[22%] border-b border-divider pb-3" />
-			<div className="@container">
-				<div className="grid grid-cols-1 gap-x-12 @[560px]:grid-cols-2">
-					{CATALOG_GHOST_ROWS.map((row) => (
-						<div key={row.name} className="flex items-center gap-3.5 py-3.5">
-							<SkeletonBar className="size-9 shrink-0 rounded-control" />
-							<div className="min-w-0 flex-1">
-								<SkeletonBar className={row.name} />
-								<SkeletonBar className={`mt-2 h-2.5 ${row.description}`} />
+		<Skeleton label="Loading the library" className={mergeStylexOverrideClassName("", sx.mt11, sx.px5)}>
+			<SkeletonBar className={mergeStylexOverrideClassName("", sx.mb4, sx.h4, sx.w22, sx.borderB, sx.borderDivider, sx.pb3)} />
+			<div className={mergeStylexClassName("", sx.Container)}>
+				<div {...mergeStylexProps("", sx.u560pxGridCols2, sx.grid, sx.gridCols1, sx.gapX12)}>
+					{CATALOG_GHOST_ROWS.map((row, index) => (
+						<div key={index} {...stylex.props(sx.flex, sx.itemsCenter, sx.gap35, sx.py35)}>
+							<SkeletonBar className={mergeStylexOverrideClassName("", sx.size9, sx.shrink0, sx.roundedControl)} />
+							<div {...stylex.props(sx.minW0, sx.flex1)}>
+								<SkeletonBar className={mergeStylexOverrideClassName("", row.name)} />
+								<SkeletonBar className={mergeStylexOverrideClassName("", sx.mt2, sx.h25, row.description)} />
 							</div>
 						</div>
 					))}
@@ -267,12 +476,12 @@ function CatalogSkeleton() {
 
 /** Ragged, and a name always shorter than the line under it — see ui/state. */
 const CATALOG_GHOST_ROWS = [
-	{ name: "w-[38%]", description: "w-[76%]" },
-	{ name: "w-[26%]", description: "w-[58%]" },
-	{ name: "w-[44%]", description: "w-[69%]" },
-	{ name: "w-[31%]", description: "w-[83%]" },
-	{ name: "w-[35%]", description: "w-[62%]" },
-	{ name: "w-[23%]", description: "w-[74%]" },
+	{ name: sx.w38pct, description: sx.w76pct },
+	{ name: sx.w26pct, description: sx.w58pct },
+	{ name: sx.w44pct, description: sx.w69pct },
+	{ name: sx.w31pct, description: sx.w83pct },
+	{ name: sx.w35pct, description: sx.w62pct },
+	{ name: sx.w23pct, description: sx.w74pct },
 ];
 
 function SectionHeading({
@@ -283,12 +492,12 @@ function SectionHeading({
 	count?: number;
 }) {
 	return (
-		<div className="mb-1 flex items-baseline justify-between gap-3 border-b border-divider pb-3">
-			<h2 className="m-0 text-section-title font-title tracking-[-0.01em] text-fg">
+		<div {...stylex.props(sx.mb1, sx.flex, sx.itemsBaseline, sx.justifyBetween, sx.gap3, sx.borderB, sx.borderDivider, sx.pb3)}>
+			<h2 {...stylex.props(sx.m0, sx.fontTitle, sx.tracking001em, sx.textFg, typography.sectionTitle)}>
 				{children}
 			</h2>
 			{count != null && (
-				<span className="text-supporting tabular-nums text-faint">{count}</span>
+				<span {...mergeStylexProps("", sx.tabularNums, sx.textFaint, typography.supporting)}>{count}</span>
 			)}
 		</div>
 	);
@@ -308,11 +517,11 @@ function EntryCard({
 		// two dozen entries the page reads as boxes rather than as things you can
 		// add. The mark carries the row, and the gutter between the columns is
 		// what separates one from the next.
-		<div className="flex items-center gap-3.5 py-3.5">
+		<div {...stylex.props(sx.flex, sx.itemsCenter, sx.gap35, sx.py35)}>
 			<EntryIcon entry={entry} size={36} />
-			<div className="min-w-0 flex-1">
-				<div className="flex items-center gap-1.5">
-					<span className="truncate text-item-title font-medium text-fg">
+			<div {...stylex.props(sx.minW0, sx.flex1)}>
+				<div {...stylex.props(sx.flex, sx.itemsCenter, sx.gap15)}>
+					<span {...stylex.props(sx.truncate, sx.fontMedium, sx.textFg, typography.itemTitle)}>
 						{entry.name}
 					</span>
 					{/* A template is the odd one out: it opens a pre-filled form to
@@ -320,7 +529,7 @@ function EntryCard({
 					    already says and this confirms before the click. */}
 					{entry.install === "draft" && <Badge>Template</Badge>}
 				</div>
-				<div className="truncate text-supporting text-dim">
+				<div {...stylex.props(sx.truncate, sx.textDim, typography.supporting)}>
 					{entry.description}
 					{entry.requires?.length
 						? ` Needs ${entry.requires.map(displayName).join(" and ")}.`
@@ -410,7 +619,7 @@ export function LibraryPanel() {
 
 	if (error)
 		return (
-			<SettingsPanel className="max-w-none">
+			<SettingsPanel className={mergeStylexOverrideClassName("", sx.maxWNone)}>
 				{header}
 				<InlineAlert>{error}</InlineAlert>
 			</SettingsPanel>
@@ -418,29 +627,26 @@ export function LibraryPanel() {
 
 	if (!entries)
 		return (
-			<SettingsPanel className="max-w-none">
+			<SettingsPanel className={mergeStylexOverrideClassName("", sx.maxWNone)}>
 				{header}
 				<CatalogSkeleton />
 			</SettingsPanel>
 		);
 
 	return (
-		<SettingsPanel className="max-w-none">
+		<SettingsPanel className={mergeStylexOverrideClassName("", sx.maxWNone)}>
 			{header}
 
 			{installed.length > 0 && (
-				<section className="mb-11 px-5">
+				<section {...stylex.props(sx.mb11, sx.px5)}>
 					<SectionHeading>Installed</SectionHeading>
-					<div className="flex flex-wrap gap-2.5 pt-4">
+					<div {...stylex.props(sx.flex, sx.flexWrap, sx.gap25, sx.pt4)}>
 						{installed.map((entry) => (
 							<a
 								key={entry.id}
 								href={`${BASE_PATH}${entry.href}`}
 								title={entry.name}
-								aria-label={entry.name}
-								// The tile's own corner, so the focus ring traces the mark
-								// rather than a squarer box behind it.
-								className="rounded-control transition-opacity hover:opacity-80"
+								aria-label={entry.name} {...mergeStylexProps("", sx.hoverOpacity80, sx.roundedControl, sx.transitionOpacity)}
 							>
 								<EntryIcon entry={entry} size={36} />
 							</a>
@@ -449,9 +655,9 @@ export function LibraryPanel() {
 				</section>
 			)}
 
-			<div className="flex flex-wrap items-center gap-2 px-5">
+			<div {...stylex.props(sx.flex, sx.flexWrap, sx.itemsCenter, sx.gap2, sx.px5)}>
 				<Input
-					className="min-w-[180px] flex-1"
+					className={mergeStylexOverrideClassName("", sx.minW180px, sx.flex1)}
 					placeholder="Search the library"
 					value={query}
 					onChange={(e) => setQuery(e.target.value)}
@@ -460,7 +666,7 @@ export function LibraryPanel() {
 				    than the sheet and the segmented control's own tap sizing makes
 				    them wider still, so the strip scrolls rather than wrapping into
 				    a second row of chrome above the catalog. */}
-				<div className="max-w-full overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+				<div {...mergeStylexProps("[&::-webkit-scrollbar]:hidden", sx.maxWFull, sx.overflowXAuto, sx.ScrollbarWidthNone)}>
 					<Segmented
 						label="Filter the library"
 						size="sm"
@@ -481,7 +687,7 @@ export function LibraryPanel() {
 			)}
 
 			{groups.map((group) => (
-				<section key={group.type} className="mt-11 px-5">
+				<section key={group.type} {...stylex.props(sx.mt11, sx.px5)}>
 					<SectionHeading count={group.entries.length}>
 						{TYPE_LABELS[group.type]}
 					</SectionHeading>
@@ -492,8 +698,8 @@ export function LibraryPanel() {
 					    column that isn't. The gutter is wide on purpose: with no
 					    fill under a row, the air is what tells the two columns
 					    apart. */}
-					<div className="@container">
-						<div className="grid grid-cols-1 gap-x-12 @[560px]:grid-cols-2">
+					<div className={mergeStylexClassName("", sx.Container)}>
+						<div {...mergeStylexProps("", sx.u560pxGridCols2, sx.grid, sx.gridCols1, sx.gapX12)}>
 							{group.entries.map((entry) => (
 								<EntryCard
 									key={entry.id}
@@ -509,7 +715,7 @@ export function LibraryPanel() {
 							))}
 						</div>
 					</div>
-					<SettingsHint className="mt-4 px-0">
+					<SettingsHint className={mergeStylexOverrideClassName("", sx.mt4, sx.px0)}>
 						{group.type === "tool" ? (
 							<>
 								{TYPE_BLURB.tool} These switches are saved in this browser only,

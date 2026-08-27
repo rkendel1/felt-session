@@ -1,3 +1,5 @@
+import { mergeStylexProps, mergeStylexOverrideClassName } from "../../ui/cn";
+import { utilityClassName } from "../../ui/cn";
 import { useEffect, useRef, useState } from "react";
 import type {
 	SandboxConnectionInfo,
@@ -34,6 +36,206 @@ import { toast } from "../../ui/toast";
 import { IconCheck, IconPlus } from "../icons";
 import { WorkspaceSandboxDefaults } from "./SandboxDefaults";
 import { SandboxProviderLogo } from "./SandboxProviderLogo";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	grid: {
+			display: "grid"
+	},
+	gap3: {
+			gap: "calc(4px * 3)"
+	},
+	roundedLg: {
+			borderRadius: "calc(14px * var(--rf))",
+
+		cornerShape: "var(--cs)",},
+	bgSurface: {
+			backgroundColor: "var(--bg)"
+	},
+	p3: {
+			padding: "calc(4px * 3)"
+	},
+	mb1: {
+			marginBottom: "4px"
+	},
+	fontMedium: {
+			fontWeight: "var(--font-weight-medium)"
+	},
+	textDim: {
+			color: "var(--text-dim)"
+	},
+	block: {
+			display: "block"
+	},
+	overflowXAuto: {
+			overflowX: "auto"
+	},
+	textSm: {
+			fontSize: "var(--type-label)",
+			lineHeight: "var(--tw-leading, var(--text-sm--line-height))"
+	},
+	textFg: {
+			color: "var(--text)"
+	},
+	cursorPointer: {
+			cursor: "pointer"
+	},
+	mt3: {
+			marginTop: "calc(4px * 3)"
+	},
+	mt1: {
+			marginTop: "4px"
+	},
+	flex1: {
+			flex: "1"
+	},
+	gapX4: {
+			columnGap: "calc(4px * 4)"
+	},
+	gapY3: {
+			rowGap: "calc(4px * 3)"
+	},
+	px5: {
+			paddingInline: "calc(4px * 5)"
+	},
+	py4: {
+			paddingBlock: "calc(4px * 4)"
+	},
+	colStart1: {
+			gridColumnStart: "1"
+	},
+	rowStart1: {
+			gridRowStart: "1"
+	},
+	flex: {
+			display: "flex"
+	},
+	minW0: {
+			minWidth: "0"
+	},
+	itemsStart: {
+			alignItems: "flex-start"
+	},
+	flexWrap: {
+			flexWrap: "wrap"
+	},
+	itemsCenter: {
+			alignItems: "center"
+	},
+	gap2: {
+			gap: "calc(4px * 2)"
+	},
+	fontSemibold: {
+			fontWeight: "var(--font-weight-semibold)"
+	},
+	leadingRelaxed: {
+			lineHeight: "var(--leading-relaxed)"
+	},
+	colStart2: {
+			gridColumnStart: "2"
+	},
+	justifyEnd: {
+			justifyContent: "flex-end"
+	},
+	selfStart: {
+			alignSelf: "flex-start"
+	},
+	colSpan2: {
+			gridColumn: "span 2 / span 2"
+	},
+	rowStart2: {
+			gridRowStart: "2"
+	},
+	itemsBaseline: {
+			alignItems: "baseline"
+	},
+	justifyBetween: {
+			justifyContent: "space-between"
+	},
+	gap4: {
+			gap: "calc(4px * 4)"
+	},
+	ml10: {
+			marginLeft: "calc(4px * 10)"
+	},
+	textFaint: {
+			color: "var(--text-faint)"
+	},
+	h26px: {
+			height: "26px"
+	},
+	wFit: {
+			width: "fit-content"
+	},
+	leading26px: {
+			lineHeight: "26px"
+	},
+	gap05: {
+			gap: "calc(4px * 0.5)"
+	},
+	pl3: {
+			paddingLeft: "calc(4px * 3)"
+	},
+	mlAuto: {
+			marginLeft: "auto"
+	},
+	shrink0: {
+			flexShrink: "0"
+	},
+	py5: {
+			paddingBlock: "calc(4px * 5)"
+	},
+	textCenter: {
+			textAlign: "center"
+	},
+	mxAuto: {
+			marginInline: "auto"
+	},
+	mb0: {
+			marginBottom: "0"
+	},
+	maxW30rem: {
+			maxWidth: "30rem"
+	},
+	py35: {
+			paddingBlock: "calc(4px * 3.5)"
+	},
+	mt2: {
+			marginTop: "calc(4px * 2)"
+	},
+	maxW24rem: {
+			maxWidth: "24rem"
+	},
+	h1: {
+			height: "4px"
+	},
+	overflowHidden: {
+			overflow: "hidden"
+	},
+	roundedFull: {
+			borderRadius: "calc(infinity * 1px)",
+
+		cornerShape: "round",},
+	bgHover: {
+			backgroundColor: "var(--hover)"
+	},
+	hFull: {
+			height: "100%"
+	},
+	bgAccent: {
+			backgroundColor: "var(--accent)"
+	},
+	transitionWidth: {
+			transitionProperty: "width",
+			transitionTimingFunction: "var(--tw-ease, var(--ease))",
+			transitionDuration: "var(--tw-duration, var(--dur-micro))"
+	},
+	durationVarDur: {
+			transitionDuration: "var(--dur)"
+	},
+});
 
 const PROVIDERS: Array<{
 	id: SandboxConnectionInfo["provider"];
@@ -82,10 +284,10 @@ const STATE_LABEL: Record<SandboxConnectionInfo["state"], string> = {
 };
 
 function statusClasses(state: SandboxConnectionInfo["state"]): string {
-	if (state === "ready") return "bg-green-soft text-green";
-	if (state === "needs_attention") return "bg-red-soft text-red";
-	if (state === "checking") return "bg-accent-soft text-accent";
-	return "bg-hover text-dim";
+	if (state === "ready") return utilityClassName("bg-green-soft text-green");
+	if (state === "needs_attention") return utilityClassName("bg-red-soft text-red");
+	if (state === "checking") return utilityClassName("bg-accent-soft text-accent");
+	return utilityClassName("bg-hover text-dim");
 }
 
 function latestOperation(
@@ -263,7 +465,7 @@ setSaving(false);
 				onOpenChange(next);
 			}}
 		>
-			<Modal.Content widthClassName="max-w-[31rem]" initialFocus={firstFieldRef}>
+			<Modal.Content widthClassName={utilityClassName("max-w-[31rem]")} initialFocus={firstFieldRef}>
 				<Modal.Header
 					title={`${exists ? "Configure" : "Connect"} ${provider.label}`}
 					description={
@@ -289,7 +491,7 @@ setSaving(false);
 				)}
 
 				{connection.provider === "modal" && (
-					<div className="grid gap-3 sm:grid-cols-2">
+					<div {...mergeStylexProps("sm:grid-cols-2", sx.grid, sx.gap3)} >
 						<Field label="Modal token ID">
 							<Input
 								ref={firstFieldRef}
@@ -313,9 +515,9 @@ setSaving(false);
 				)}
 
 				{!remote && (
-					<div className="rounded-lg bg-surface p-3">
-						<div className="mb-1 text-label font-medium text-dim">Setup command</div>
-						<code className="block select-all overflow-x-auto text-sm text-fg">
+					<div {...stylex.props(sx.roundedLg, sx.bgSurface, sx.p3)}>
+						<div {...stylex.props(sx.mb1, sx.fontMedium, sx.textDim, typography.label)}>Setup command</div>
+						<code {...mergeStylexProps("select-all", sx.block, sx.overflowXAuto, sx.textSm, sx.textFg)} >
 							{provider.command}
 						</code>
 					</div>
@@ -323,13 +525,13 @@ setSaving(false);
 
 				{remote && (
 					<>
-						<p className="m-0 text-supporting text-dim">
+						<p {...mergeStylexProps("m-0", sx.textDim, typography.supporting)} >
 							Remote providers use Public callback under Domains for webhooks and workload identity.
 						</p>
 						{connection.provider !== "box" && (
-							<details className="rounded-lg bg-surface p-3 text-supporting text-dim">
-								<summary className="cursor-pointer font-medium text-fg">Provider settings</summary>
-								<div className="mt-3 grid gap-3 sm:grid-cols-2">
+							<details {...stylex.props(sx.roundedLg, sx.bgSurface, sx.p3, sx.textDim, typography.supporting)}>
+								<summary {...stylex.props(sx.cursorPointer, sx.fontMedium, sx.textFg)}>Provider settings</summary>
+								<div {...mergeStylexProps("sm:grid-cols-2", sx.mt3, sx.grid, sx.gap3)} >
 									<Field label="Region">
 										<Input value={region} onChange={(event) => setRegion(event.target.value)} placeholder="Provider default" />
 									</Field>
@@ -359,7 +561,7 @@ setSaving(false);
 					</>
 				)}
 
-				<Modal.Footer className="mt-1">
+				<Modal.Footer className={mergeStylexOverrideClassName("", sx.mt1)}>
 					{exists &&
 						(confirmingDisconnect ? (
 							<>
@@ -375,7 +577,7 @@ setSaving(false);
 								Disconnect
 							</Button>
 						))}
-					<span className="flex-1" />
+					<span {...stylex.props(sx.flex1)} />
 					<Modal.Close render={<Button variant="ghost" disabled={saving}>Cancel</Button>} />
 					<Button variant="primary" onClick={() => void connect()} disabled={saving}>
 						{saving ? "Starting…" : remote ? "Connect and test" : "Test setup"}
@@ -436,25 +638,25 @@ setBusy(false);
 	return (
 		<>
 			<SettingCard>
-				<div className="grid grid-cols-[minmax(0,1fr)_5.75rem] gap-x-4 gap-y-3 px-5 py-4 desktop:grid-cols-[minmax(0,1fr)_13rem]">
-					<div className="col-start-1 row-start-1 flex min-w-0 items-start gap-3">
+				<div {...mergeStylexProps("grid-cols-[minmax(0,1fr)_5.75rem] desktop:grid-cols-[minmax(0,1fr)_13rem]", sx.grid, sx.gapX4, sx.gapY3, sx.px5, sx.py4)} >
+					<div {...stylex.props(sx.colStart1, sx.rowStart1, sx.flex, sx.minW0, sx.itemsStart, sx.gap3)}>
 						<SandboxProviderLogo provider={connection.provider} />
-						<div className="min-w-0 flex-1">
-							<div className="flex flex-wrap items-center gap-2">
-								<div className="text-item-title font-semibold text-fg">{provider.label}</div>
-								<span className={cn("rounded-full px-2 py-0.5 text-meta font-medium", statusClasses(checking ? "checking" : connection.state))}>
+						<div {...stylex.props(sx.minW0, sx.flex1)}>
+							<div {...stylex.props(sx.flex, sx.flexWrap, sx.itemsCenter, sx.gap2)}>
+								<div {...stylex.props(sx.fontSemibold, sx.textFg, typography.itemTitle)}>{provider.label}</div>
+								<span className={cn(utilityClassName("rounded-full px-2 py-0.5 text-meta font-medium"), statusClasses(checking ? "checking" : connection.state))}>
 									{checking ? "Checking" : STATE_LABEL[connection.state]}
 								</span>
 							</div>
-							<p className="m-0 mt-1 text-supporting leading-relaxed text-dim">{provider.description}</p>
+							<p {...mergeStylexProps("m-0", sx.mt1, sx.leadingRelaxed, sx.textDim, typography.supporting)} >{provider.description}</p>
 							{summary && (
-								<p className={cn("m-0 mt-2 text-supporting", connection.state === "needs_attention" ? "text-red" : "text-dim")}>
+								<p className={cn(utilityClassName("m-0 mt-2 text-supporting"), connection.state === "needs_attention" ? utilityClassName("text-red") : utilityClassName("text-dim"))}>
 									{summary}
 								</p>
 							)}
 						</div>
 					</div>
-					<div className="col-start-2 row-start-1 flex justify-end self-start">
+					<div {...stylex.props(sx.colStart2, sx.rowStart1, sx.flex, sx.justifyEnd, sx.selfStart)}>
 						{connection.state === "not_configured" ? (
 							<Button size="sm" variant="primary" onClick={() => setDialogOpen(true)} disabled={!canManage || checking}>
 								{connection.provider === "docker" || connection.provider === "microvm" ? "Enable" : "Connect"}
@@ -469,11 +671,11 @@ setBusy(false);
 						)}
 					</div>
 					{(connection.qualification || connection.state !== "not_configured") && (
-						<div className="col-span-2 row-start-2 flex items-baseline justify-between gap-4">
+						<div {...stylex.props(sx.colSpan2, sx.rowStart2, sx.flex, sx.itemsBaseline, sx.justifyBetween, sx.gap4)}>
 							{connection.qualification && (
-								<details className="ml-10 min-w-0 text-meta text-faint">
-									<summary className="h-[26px] w-fit cursor-pointer select-none leading-[26px] hover:text-fg">Diagnostics</summary>
-									<div className="mt-1 grid gap-0.5 pl-3">
+								<details {...stylex.props(sx.ml10, sx.minW0, sx.textFaint, typography.meta)}>
+									<summary {...mergeStylexProps("select-none hover:text-fg", sx.h26px, sx.wFit, sx.cursorPointer, sx.leading26px)} >Diagnostics</summary>
+									<div {...stylex.props(sx.mt1, sx.grid, sx.gap05, sx.pl3)}>
 										<span>Connection {connection.id}</span>
 										<span>Adapter {connection.qualification.adapterSignature}</span>
 										{connection.qualification.checkedAt && <span>Checked {new Date(connection.qualification.checkedAt).toLocaleString()}</span>}
@@ -482,7 +684,7 @@ setBusy(false);
 								</details>
 							)}
 							{connection.state !== "not_configured" && (
-								<div className="ml-auto flex shrink-0 items-center gap-2">
+								<div {...stylex.props(sx.mlAuto, sx.flex, sx.shrink0, sx.itemsCenter, sx.gap2)}>
 									{connection.state === "ready" && !checking && (
 										<Button size="sm" icon={<IconCheck size={17} />} onClick={() => void testAgain()} disabled={!canManage || busy}>
 											Test again
@@ -580,13 +782,13 @@ setSaving(false);
 
 	return (
 		<Modal.Root open={open} onOpenChange={onOpenChange}>
-			<Modal.Content widthClassName="max-w-[32rem]">
+			<Modal.Content widthClassName={utilityClassName("max-w-[32rem]")}>
 				<Modal.Header
 					title={target ? `Configure ${target.repo} snapshot` : "Create a project snapshot"}
 					description="Open Session builds a reusable, credential-free project snapshot only when you opt in here. Each new session still gets its own isolated sandbox."
 				/>
 				{!target ? (
-					<div className="grid gap-3 sm:grid-cols-2">
+					<div {...mergeStylexProps("sm:grid-cols-2", sx.grid, sx.gap3)} >
 						<Field label="Provider">
 							<Select
 								value={provider}
@@ -612,11 +814,11 @@ setSaving(false);
 						</Field>
 					</div>
 				) : (
-					<div className="flex items-center gap-3 rounded-lg bg-surface p-3">
+					<div {...stylex.props(sx.flex, sx.itemsCenter, sx.gap3, sx.roundedLg, sx.bgSurface, sx.p3)}>
 						<SandboxProviderLogo provider={target.provider} />
 						<div>
-							<div className="text-item-title font-medium text-fg">{target.repo}</div>
-							<div className="text-supporting text-dim">{providerLabel(target.provider)}</div>
+							<div {...stylex.props(sx.fontMedium, sx.textFg, typography.itemTitle)}>{target.repo}</div>
+							<div {...stylex.props(sx.textDim, typography.supporting)}>{providerLabel(target.provider)}</div>
 						</div>
 					</div>
 				)}
@@ -630,7 +832,7 @@ setSaving(false);
 						))}
 					</Select>
 				</Field>
-				<div className="rounded-lg bg-surface p-3 text-supporting leading-relaxed text-dim">
+				<div {...stylex.props(sx.roundedLg, sx.bgSurface, sx.p3, sx.leadingRelaxed, sx.textDim, typography.supporting)}>
 					{provider === "daytona" &&
 						"Daytona supports custom resource combinations, but these documented sizes avoid invalid or undersized setups."}
 					{provider === "box" &&
@@ -747,7 +949,7 @@ export function SandboxesPanel() {
 					You can use Ready connections, but only a workspace administrator can configure them.
 				</SettingsHint>
 			)}
-			<div className="grid gap-3">
+			<div {...stylex.props(sx.grid, sx.gap3)}>
 				{loading && (
 					<SettingCardSkeleton rows={3} icon={40} label="Loading sandbox connections" />
 				)}
@@ -785,12 +987,12 @@ export function SandboxesPanel() {
 					>
 						Project snapshots
 					</SettingsGroupLabel>
-					<div className="grid gap-3">
+					<div {...stylex.props(sx.grid, sx.gap3)}>
 						{configuredEnvironments.length === 0 && (
 							<SettingCard>
-								<div className="px-5 py-5 text-center">
-									<div className="text-item-title font-medium text-fg">No project snapshots</div>
-									<p className="mx-auto mb-0 mt-1 max-w-[30rem] text-supporting leading-relaxed text-dim">
+								<div {...stylex.props(sx.px5, sx.py5, sx.textCenter)}>
+									<div {...stylex.props(sx.fontMedium, sx.textFg, typography.itemTitle)}>No project snapshots</div>
+									<p {...stylex.props(sx.mxAuto, sx.mb0, sx.mt1, sx.maxW30rem, sx.leadingRelaxed, sx.textDim, typography.supporting)}>
 										Choose only the projects that should get a reusable sandbox snapshot. Nothing
 										is built automatically.
 									</p>
@@ -815,47 +1017,47 @@ export function SandboxesPanel() {
 											: "Snapshot is stale";
 								return (
 									<SettingCard key={`${environment.repo}:${environment.provider}`}>
-										<div className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-3 px-5 py-3.5">
-											<div className="col-span-2 row-start-1 flex min-w-0 items-start gap-3">
+										<div {...mergeStylexProps("grid-cols-[minmax(0,1fr)_auto]", sx.grid, sx.gapX4, sx.gapY3, sx.px5, sx.py35)} >
+											<div {...stylex.props(sx.colSpan2, sx.rowStart1, sx.flex, sx.minW0, sx.itemsStart, sx.gap3)}>
 												<SandboxProviderLogo provider={environment.provider} />
-												<div className="min-w-0 flex-1">
-													<div className="text-item-title font-medium text-fg">{environment.repo}</div>
+												<div {...stylex.props(sx.minW0, sx.flex1)}>
+													<div {...stylex.props(sx.fontMedium, sx.textFg, typography.itemTitle)}>{environment.repo}</div>
 													<div
 														className={cn(
-															"mt-0.5 text-supporting",
-															environment.state === "failed" && !running ? "text-red" : "text-dim",
+															utilityClassName("mt-0.5 text-supporting"),
+															environment.state === "failed" && !running ? utilityClassName("text-red") : utilityClassName("text-dim"),
 														)}
 													>
 														{provider.label} · {status}
 													</div>
-													<div className="mt-1 text-meta text-faint">{machineSummary(environment)}</div>
+													<div {...stylex.props(sx.mt1, sx.textFaint, typography.meta)}>{machineSummary(environment)}</div>
 													{running && (
-														<div className="mt-2 max-w-[24rem]">
-															<div className="h-1 overflow-hidden rounded-full bg-hover">
+														<div {...stylex.props(sx.mt2, sx.maxW24rem)}>
+															<div {...stylex.props(sx.h1, sx.overflowHidden, sx.roundedFull, sx.bgHover)}>
 																<div
-																	className="h-full rounded-full bg-accent transition-[width] duration-[var(--dur)]"
+																	{...stylex.props(sx.hFull, sx.roundedFull, sx.bgAccent, sx.transitionWidth, sx.durationVarDur)}
 																	style={{ width: `${operation.progress || 2}%` }}
 																/>
 															</div>
 															{operation.detail && (
-																<div className="mt-1 text-meta text-faint">{operation.detail}</div>
+																<div {...stylex.props(sx.mt1, sx.textFaint, typography.meta)}>{operation.detail}</div>
 															)}
 														</div>
 													)}
 												</div>
 											</div>
-											<div className="col-span-2 row-start-2 flex items-baseline justify-between gap-4">
+											<div {...stylex.props(sx.colSpan2, sx.rowStart2, sx.flex, sx.itemsBaseline, sx.justifyBetween, sx.gap4)}>
 												{(operation || environment.failureCode) && (
-													<details className="ml-10 min-w-0 text-meta text-faint">
-														<summary className="h-[26px] w-fit cursor-pointer select-none leading-[26px] hover:text-fg">Details</summary>
-														<div className="mt-1 grid gap-0.5 pl-3">
+													<details {...stylex.props(sx.ml10, sx.minW0, sx.textFaint, typography.meta)}>
+														<summary {...mergeStylexProps("select-none hover:text-fg", sx.h26px, sx.wFit, sx.cursorPointer, sx.leading26px)} >Details</summary>
+														<div {...stylex.props(sx.mt1, sx.grid, sx.gap05, sx.pl3)}>
 															{operation && <span>{operation.stage} · updated {new Date(operation.updatedAt).toLocaleString()}</span>}
 															{(environment.failureCode || operation?.failureCode) && <span>Code {environment.failureCode || operation?.failureCode}</span>}
 														</div>
 													</details>
 												)}
 												<Button
-													className="ml-auto shrink-0"
+													className={mergeStylexOverrideClassName("", sx.mlAuto, sx.shrink0)}
 													size="sm"
 													disabled={!canManage || running}
 													onClick={() => {

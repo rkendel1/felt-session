@@ -26,6 +26,191 @@
  */
 
 import { SIDEBAR_HOVER_LAYER, SIDEBAR_RAIL_GAP } from "./sidebar-classes";
+import * as stylex from "@stylexjs/stylex";
+import { mergeStylexClassName } from "../ui/cn";
+import { type as typography } from "../styles/typography.stylex";
+
+const sx = stylex.create({
+	flex: {
+		"display": "flex"
+	},
+	minH0: {
+		"minHeight": "0"
+	},
+	flexCol: {
+		"flexDirection": "column"
+	},
+	phoneWFull: {
+		"@media (max-width: 720px)": {
+			"width": "100%"
+		}
+	},
+	phoneFlex1: {
+		"@media (max-width: 720px)": {
+			"flex": "1"
+		}
+	},
+	desktopW300px: {
+		"@media (min-width: 721px)": {
+			"width": "300px"
+		}
+	},
+	desktopShrink0: {
+		"@media (min-width: 721px)": {
+			"flexShrink": "0"
+		}
+	},
+	desktopBorderR: {
+		"@media (min-width: 721px)": {
+			"borderRightStyle": "var(--tw-border-style)",
+			"borderRightWidth": "1px"
+		}
+	},
+	desktopBorderDivider: {
+		"@media (min-width: 721px)": {
+			"borderColor": "var(--divider)"
+		}
+	},
+	hVarDesktopHeaderH: {
+		"height": "var(--desktop-header-h)"
+	},
+	shrink0: {
+		"flexShrink": "0"
+	},
+	itemsCenter: {
+		"alignItems": "center"
+	},
+	gap2: {
+		"gap": "8px"
+	},
+	bgSurface: {
+		"backgroundColor": "var(--bg)"
+	},
+	px4: {
+		"paddingInline": "16px"
+	},
+	desktopBorderB: {
+		"@media (min-width: 721px)": {
+			"borderBottomStyle": "var(--tw-border-style)",
+			"borderBottomWidth": "1px"
+		}
+	},
+	mlAuto: {
+		"marginLeft": "auto"
+	},
+	fontMedium: {
+		"--tw-font-weight": "var(--font-weight-medium)",
+		"fontWeight": "var(--font-weight-medium)"
+	},
+	tabularNums: {
+		"--tw-numeric-spacing": "tabular-nums",
+		"fontVariantNumeric": "var(--tw-ordinal,) var(--tw-slashed-zero,) var(--tw-numeric-figure,) var(--tw-numeric-spacing,) var(--tw-numeric-fraction,)"
+	},
+	textFaint: {
+		"color": "var(--text-faint)"
+	},
+	m0: {
+		"margin": "0"
+	},
+	fontSemibold: {
+		"--tw-font-weight": "var(--font-weight-semibold)",
+		"fontWeight": "var(--font-weight-semibold)"
+	},
+	textFg: {
+		"color": "var(--text)"
+	},
+	phoneTextSectionTitle: {
+		"@media (max-width: 720px)": {
+			"fontSize": "var(--type-section-title)"
+		}
+	},
+	flex1: {
+		"flex": "1"
+	},
+	overflowYAuto: {
+		"overflowY": "auto"
+	},
+	px15: {
+		"paddingInline": "6px"
+	},
+	pt3: {
+		"paddingTop": "12px"
+	},
+	pb3: {
+		"paddingBottom": "12px"
+	},
+	ScrollbarWidthNone: {
+		"scrollbarWidth": "none"
+	},
+	mt15: {
+		"marginTop": "6px"
+	},
+	wFull: {
+		"width": "100%"
+	},
+	cursorPointer: {
+		"cursor": "pointer"
+	},
+	itemsStart: {
+		"alignItems": "flex-start"
+	},
+	roundedRow: {
+		"borderRadius": "calc(12px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	border0: {
+		"borderStyle": "var(--tw-border-style)",
+		"borderWidth": "0"
+	},
+	bgTransparent: {
+		"backgroundColor": "transparent"
+	},
+	py35: {
+		"paddingBlock": "14px"
+	},
+	pr3: {
+		"paddingRight": "12px"
+	},
+	pl25: {
+		"paddingLeft": "10px"
+	},
+	textLeft: {
+		"textAlign": "left"
+	},
+	minW0: {
+		"minWidth": "0"
+	},
+	itemsBaseline: {
+		"alignItems": "baseline"
+	},
+	truncate: {
+		"textOverflow": "ellipsis",
+		"whiteSpace": "nowrap",
+		"overflow": "hidden"
+	},
+	textDim: {
+		"color": "var(--text-dim)"
+	},
+	phoneText16px: {
+		"@media (max-width: 720px)": {
+			"fontSize": "16px"
+		}
+	},
+	mt1: {
+		"marginTop": "4px"
+	},
+	block: {
+		"display": "block"
+	},
+	phoneText14px: {
+		"@media (max-width: 720px)": {
+			"fontSize": "14px"
+		}
+	},
+	textRight: {
+		"textAlign": "right"
+	},
+});
 
 /**
  * The column. Paper, like the pane it sits in, separated by the chrome seam
@@ -37,9 +222,9 @@ import { SIDEBAR_HOVER_LAYER, SIDEBAR_RAIL_GAP } from "./sidebar-classes";
  * component.
  */
 export const REPORTS_COLUMN =
-	"flex min-h-0 flex-col " +
-	"phone:w-full phone:flex-1 " +
-	"desktop:w-[300px] desktop:shrink-0 desktop:border-r desktop:border-divider";
+	mergeStylexClassName("", sx.flex, sx.minH0, sx.flexCol) + " " +
+	mergeStylexClassName("", sx.phoneWFull, sx.phoneFlex1) + " " +
+	mergeStylexClassName("", sx.desktopW300px, sx.desktopShrink0, sx.desktopBorderR, sx.desktopBorderDivider);
 
 /**
  * The column's heading, at both widths: a title bar, not a label over a list.
@@ -63,8 +248,8 @@ export const REPORTS_COLUMN =
 export const REPORTS_COLUMN_HEADER =
 	// `wco-chrome`: a row across the top of a pane is where the desktop shell
 	// expects to drag the window from, and base.css hangs that off this one name.
-	"wco-chrome flex h-[var(--desktop-header-h)] shrink-0 items-center gap-2 " +
-	"bg-surface px-4 desktop:border-b desktop:border-divider";
+	mergeStylexClassName("wco-chrome", sx.flex, sx.hVarDesktopHeaderH, sx.shrink0, sx.itemsCenter, sx.gap2) + " " +
+	mergeStylexClassName("", sx.bgSurface, sx.px4, sx.desktopBorderB, sx.desktopBorderDivider);
 
 /**
  * What the column can say about itself, on the heading's right. `text-meta` is
@@ -72,7 +257,7 @@ export const REPORTS_COLUMN_HEADER =
  * shifting width as reports land.
  */
 export const REPORTS_COLUMN_COUNT =
-	"ml-auto shrink-0 text-meta font-medium tabular-nums text-faint";
+	mergeStylexClassName("", sx.mlAuto, sx.shrink0, typography.meta, sx.fontMedium, sx.tabularNums, sx.textFaint);
 
 /**
  * The heading itself, set the way the app sets every other title in a bar:
@@ -91,7 +276,7 @@ export const REPORTS_COLUMN_COUNT =
  * was trying to stop being.
  */
 export const REPORTS_COLUMN_TITLE =
-	"m-0 text-item-title font-semibold text-fg phone:text-section-title";
+	mergeStylexClassName("", sx.m0, typography.itemTitle, sx.fontSemibold, sx.textFg, sx.phoneTextSectionTitle);
 
 /**
  * The scrolling list, outdented past the column's gutter so a row's pill
@@ -109,8 +294,8 @@ export const REPORTS_COLUMN_TITLE =
  * travel past the top of this box and out of sight under that bar.
  */
 export const REPORTS_LIST =
-	"min-h-0 flex-1 overflow-y-auto px-1.5 pt-3 pb-3 " +
-	"[scrollbar-width:none] [&::-webkit-scrollbar]:hidden";
+	mergeStylexClassName("", sx.minH0, sx.flex1, sx.overflowYAuto, sx.px15, sx.pt3, sx.pb3) + " " +
+	mergeStylexClassName("[&::-webkit-scrollbar]:hidden", sx.ScrollbarWidthNone);
 
 /**
  * A row: an automation, with the headline of its latest report under it.
@@ -126,24 +311,24 @@ export const REPORTS_LIST =
  * SETTINGS_NAV_ROW's doc has the longer version of that argument.
  */
 export const REPORTS_ROW =
-	"group mt-1.5 flex w-full cursor-pointer items-start rounded-row border-0 " +
-	"bg-transparent py-3.5 pr-3 pl-2.5 text-left data-active:bg-selected " +
-	`${SIDEBAR_RAIL_GAP} ${SIDEBAR_HOVER_LAYER}`;
+	mergeStylexClassName("group", sx.mt15, sx.flex, sx.wFull, sx.cursorPointer, sx.itemsStart, sx.roundedRow, sx.border0) + " " +
+	mergeStylexClassName("data-active:bg-selected", sx.bgTransparent, sx.py35, sx.pr3, sx.pl25, sx.textLeft) +
+	" " + [SIDEBAR_RAIL_GAP, SIDEBAR_HOVER_LAYER].filter(Boolean).join(" ");
 
 /** The name and the time share the row's first line. */
-export const REPORTS_ROW_HEAD = "flex min-w-0 items-baseline gap-2";
+export const REPORTS_ROW_HEAD = mergeStylexClassName("", sx.flex, sx.minW0, sx.itemsBaseline, sx.gap2);
 
 export const REPORTS_ROW_NAME =
-	"min-w-0 flex-1 truncate text-item-title font-medium text-dim " +
-	"group-hover:text-fg group-data-active:text-fg phone:text-[16px]";
+	mergeStylexClassName("", sx.minW0, sx.flex1, sx.truncate, typography.itemTitle, sx.fontMedium, sx.textDim) + " " +
+	mergeStylexClassName("group-hover:text-fg group-data-active:text-fg", sx.phoneText16px);
 
 /**
  * The latest report's title, faint under a dim name so the row reads its name
  * first. Both step up one when the row is the open one.
  */
 export const REPORTS_ROW_LATEST =
-	"mt-1 block truncate text-label text-faint " +
-	"group-data-active:text-dim phone:text-[14px]";
+	mergeStylexClassName("", sx.mt1, sx.block, sx.truncate, typography.label, sx.textFaint) + " " +
+	mergeStylexClassName("group-data-active:text-dim", sx.phoneText14px);
 
 /**
  * When it landed. SIDEBAR_WS_TIME's box without the gutter that string
@@ -151,4 +336,4 @@ export const REPORTS_ROW_LATEST =
  * actions, so the digits sit on the row's own right padding.
  */
 export const REPORTS_ROW_TIME =
-	"shrink-0 text-right text-meta tabular-nums text-faint";
+	mergeStylexClassName("", sx.shrink0, sx.textRight, typography.meta, sx.tabularNums, sx.textFaint);

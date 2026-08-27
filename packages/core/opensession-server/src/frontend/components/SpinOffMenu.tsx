@@ -11,6 +11,119 @@ import { Field, fieldClasses } from "../ui/input";
 import { noAutofill } from "../lib/composer-autofill";
 import { composerSessionRef } from "../lib/share-link";
 import type { NewSessionPrefill } from "../lib/new-session-link";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+import { mergeStylexProps, mergeStylexClassName, mergeStylexOverrideClassName } from "../ui/cn";
+import { sharedClassStyles } from "../styles/shared-class-styles.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	grow: {
+			flexGrow: "1"
+	},
+	textFaint: {
+			color: "var(--text-faint)"
+	},
+	w80: {
+			width: "320px"
+	},
+	overflowHidden: {
+			overflow: "hidden"
+	},
+	p0: {
+			padding: "0"
+	},
+	fontSemibold: {
+			fontWeight: "var(--font-weight-semibold)"
+	},
+	textFg: {
+			color: "var(--text)"
+	},
+	leading14: {
+			lineHeight: "1.4"
+	},
+	flex1: {
+			flex: "1"
+	},
+	borderAccent: {
+			borderColor: "var(--accent)"
+	},
+	bgAccentSoft: {
+			backgroundColor: "var(--accent-soft)"
+	},
+	textAccent: {
+			color: "var(--accent-ink)"
+	},
+
+	h10: {
+		"height": "40px"
+	},
+	resizeY: {
+		"resize": "vertical"
+	},
+	py2: {
+		"paddingBlock": "8px"
+	},
+	leadingRelaxed: {
+		"--tw-leading": "var(--leading-relaxed)",
+		"lineHeight": "var(--leading-relaxed)"
+	},
+
+	hoverBorderAccent: {
+		"@media (hover: hover)": {
+			":hover": {
+				"borderColor": "var(--accent)"
+			}
+		}
+	},
+	hoverTextAccent: {
+		"@media (hover: hover)": {
+			":hover": {
+				"color": "var(--accent-ink)"
+			}
+		}
+	},
+
+	flexCol: {
+		"flexDirection": "column"
+	},
+	itemsStart: {
+		"alignItems": "flex-start"
+	},
+	gap05: {
+		"gap": "2px"
+	},
+	roundedNone: {
+		"borderRadius": "0"
+	,
+		cornerShape: "var(--cs)"},
+	borderB: {
+		"borderBottomStyle": "var(--tw-border-style)",
+		"borderBottomWidth": "1px"
+	},
+	borderLine: {
+		"borderColor": "var(--border)"
+	},
+	px35: {
+		"paddingInline": "14px"
+	},
+	py25: {
+		"paddingBlock": "10px"
+	},
+	borderLineStrong: {
+		"borderColor": "var(--border-strong)"
+	},
+	textSm: {
+		"fontSize": "var(--type-label)",
+		"lineHeight": "var(--tw-leading,var(--text-sm--line-height))"
+	},
+	focusShadow0003pxVarAccentSoft: {
+		":focus": {
+			"--tw-shadow": "0 0 0 3px var(--tw-shadow-color,var(--accent-soft))",
+			"boxShadow": "var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow)"
+		}
+	},
+});
 
 type Flavor = "build" | "learnings" | "analyze";
 
@@ -147,13 +260,13 @@ export function SpinOffMenu({
 
   // Two-line rows in a flush-edged popup (no inner padding, divider between rows).
   const itemCls =
-    "flex-col items-start gap-0.5 rounded-none border-b border-line px-3.5 py-2.5 last:border-b-0";
+    mergeStylexClassName("last:border-b-0", sx.flexCol, sx.itemsStart, sx.gap05, sx.roundedNone, sx.borderB, sx.borderLine, sx.px35, sx.py25);
 
   // The menu's own field look — the primitive's corner/fill/focus, plus the
   // accent halo this surface authored.
   const fieldCls = fieldClasses(
     "lg",
-    "border-line-strong text-sm focus:shadow-[0_0_0_3px_var(--accent-soft)]",
+    mergeStylexClassName("", sx.borderLineStrong, sx.textSm, sx.focusShadow0003pxVarAccentSoft),
   );
 
   const flavorMeta: Record<Flavor, { title: string; description: string }> = {
@@ -179,29 +292,29 @@ export function SpinOffMenu({
               the session menu and owns it. Spin off hands the transcript to
               a fresh agent run rather than branching this one. */}
           <IconSparkle size={20} className={MENU_ICON} />
-          <span className="grow">Spin off</span>
-          <IconChevronRight size={16} className="text-faint" />
+          <span {...stylex.props(sx.grow)}>Spin off</span>
+          <IconChevronRight size={16} className={mergeStylexOverrideClassName("", sx.textFaint)} />
         </Menu.SubmenuTrigger>
-        <Menu.Popup className="w-80 overflow-hidden p-0">
+        <Menu.Popup className={mergeStylexOverrideClassName("", sx.w80, sx.overflowHidden, sx.p0)}>
           {isAsk && (
             <Menu.Item closeOnClick={false} onClick={() => pick("build")} className={itemCls}>
-              <span className="text-label font-semibold text-fg">Build this</span>
-              <span className="text-supporting leading-[1.4] text-faint">Start a coding session with this conversation as context</span>
+              <span {...stylex.props(sx.fontSemibold, sx.textFg, typography.label)}>Build this</span>
+              <span {...stylex.props(sx.leading14, sx.textFaint, typography.supporting)}>Start a coding session with this conversation as context</span>
             </Menu.Item>
           )}
           <Menu.Item closeOnClick={false} onClick={() => pick("learnings")} className={itemCls}>
-            <span className="text-label font-semibold text-fg">Capture learnings → docs PR</span>
-            <span className="text-supporting leading-[1.4] text-faint">{AGENT_NAME} adds what was learned here to {session.repo || "the repository"} docs</span>
+            <span {...stylex.props(sx.fontSemibold, sx.textFg, typography.label)}>Capture learnings → docs PR</span>
+            <span {...stylex.props(sx.leading14, sx.textFaint, typography.supporting)}>{AGENT_NAME} adds what was learned here to {session.repo || "the repository"} docs</span>
           </Menu.Item>
           <Menu.Item closeOnClick={false} onClick={() => pick("analyze")} className={itemCls}>
-            <span className="text-label font-semibold text-fg">Analyze session</span>
-            <span className="text-supporting leading-[1.4] text-faint">What went well, what didn't, and a better prompt</span>
+            <span {...stylex.props(sx.fontSemibold, sx.textFg, typography.label)}>Analyze session</span>
+            <span {...stylex.props(sx.leading14, sx.textFaint, typography.supporting)}>What went well, what didn't, and a better prompt</span>
           </Menu.Item>
           {/* Closes the whole menu rather than opening the form above: there is
               nothing to fill in here, the composer IS the form. */}
           <Menu.Item onClick={openLinkedSession} className={itemCls}>
-            <span className="text-label font-semibold text-fg">Reference this session</span>
-            <span className="text-supporting leading-[1.4] text-faint">Opens the new-session composer with a link to this one — you write the prompt</span>
+            <span {...stylex.props(sx.fontSemibold, sx.textFg, typography.label)}>Reference this session</span>
+            <span {...stylex.props(sx.leading14, sx.textFaint, typography.supporting)}>Opens the new-session composer with a link to this one — you write the prompt</span>
           </Menu.Item>
         </Menu.Popup>
       </Menu.SubmenuRoot>
@@ -220,7 +333,7 @@ export function SpinOffMenu({
         disablePointerDismissal={starting}
       >
         <Modal.Content
-          widthClassName="max-w-[28rem]"
+          widthClassName={mergeStylexClassName("", sharedClassStyles.maxW28rem)}
           initialFocus={needsBranch ? branchRef : undefined}
         >
           <Modal.Header
@@ -232,7 +345,7 @@ export function SpinOffMenu({
             <Field label="Branch">
               <input
                 ref={branchRef}
-                className={`${fieldCls} h-10`}
+                className={[fieldCls, mergeStylexClassName("", sx.h10)].filter(Boolean).join(" ")}
                 value={branch}
                 onChange={(e) => setBranch(e.target.value)}
                 disabled={starting}
@@ -243,7 +356,7 @@ export function SpinOffMenu({
           {flavor !== "analyze" && (
             <Field label={flavor === "build" ? "Task" : "Extra guidance (optional)"}>
               <textarea
-                className={`${fieldCls} resize-y py-2 leading-relaxed`}
+                className={[fieldCls, mergeStylexClassName("", sx.resizeY, sx.py2, sx.leadingRelaxed)].filter(Boolean).join(" ")}
                 value={task}
                 onChange={(e) => setTask(e.target.value)}
                 rows={3}
@@ -256,16 +369,15 @@ export function SpinOffMenu({
 
           <Modal.Footer>
             {starting && (
-              <span className="text-supporting text-faint">
+              <span {...stylex.props(sx.textFaint, typography.supporting)}>
                 Starting the session. We'll take you there automatically.
               </span>
             )}
-            <div className="flex-1" />
+            <div {...stylex.props(sx.flex1)} />
             <Button onClick={() => setFlavor(null)} disabled={starting}>
               Cancel
             </Button>
-            <Button
-              className="border-accent bg-accent-soft text-accent hover:border-accent hover:text-accent"
+            <Button {...mergeStylexProps("", sx.hoverBorderAccent, sx.hoverTextAccent, sx.borderAccent, sx.bgAccentSoft, sx.textAccent)}
               onClick={start}
               disabled={!canStart}
             >

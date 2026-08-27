@@ -22,9 +22,321 @@ import {
 	type RangeSpan,
 } from "../lib/date-grid";
 import { Button } from "./button";
-import { cn } from "./cn";
+import { cn, mergeStylexProps, mergeStylexClassName, mergeStylexOverrideClassName } from "./cn";
 import { Popover } from "./popover";
 import { Segmented, SegmentedKnob, SegmentedOption } from "./segmented";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	roundedNone: {
+			borderRadius: "0"
+	,
+		cornerShape: "var(--cs)"},
+	bgTransparent: {
+			backgroundColor: "transparent"
+	},
+	p0: {
+			padding: "0"
+	},
+	mx1: {
+			marginInline: "4px"
+	},
+	h35: {
+			height: "14px"
+	},
+	wPx: {
+			width: "1px"
+	},
+	shrink0: {
+			flexShrink: "0"
+	},
+	bgLineStrong: {
+			backgroundColor: "var(--border-strong)"
+	},
+	relative: {
+			position: "relative"
+	},
+	flex: {
+			display: "flex"
+	},
+	itemsCenter: {
+			alignItems: "center"
+	},
+	gap15: {
+			gap: "6px"
+	},
+	opacity55: {
+			opacity: ".55"
+	},
+	TextBoxTrimBothCapAlphabetic: {
+			textBox: "trim-both cap alphabetic"
+	},
+	p25: {
+			padding: "10px"
+	},
+	mb2: {
+			marginBottom: "8px"
+	},
+	wFull: {
+			width: "100%"
+	},
+	justifyCenter: {
+			justifyContent: "center"
+	},
+	textCenter: {
+			textAlign: "center"
+	},
+	gap4: {
+			gap: "16px"
+	},
+	w252px: {
+			width: "252px"
+	},
+	justifyBetween: {
+			justifyContent: "space-between"
+	},
+	gap1: {
+			gap: "4px"
+	},
+	pb15: {
+			paddingBottom: "6px"
+	},
+	size26px: {
+			width: "26px",
+			height: "26px"
+	},
+	fontSemibold: {
+			fontWeight: "var(--font-weight-semibold)"
+	},
+	textFg: {
+			color: "var(--text)"
+	},
+	grid: {
+			display: "grid"
+	},
+	gridCols7: {
+			gridTemplateColumns: "repeat(7,minmax(0,1fr))"
+	},
+	pb1: {
+			paddingBottom: "4px"
+	},
+	fontMedium: {
+			fontWeight: "var(--font-weight-medium)"
+	},
+	textFaint: {
+			color: "var(--text-faint)"
+	},
+	h9: {
+			height: "36px"
+	},
+	placeItemsCenter: {
+			placeItems: "center"
+	},
+	inlineFlex: {
+			display: "inline-flex"
+	},
+	roundedLg: {
+			borderRadius: "calc(14px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	bgHover: {
+			backgroundColor: "var(--hover)"
+	},
+	p05: {
+			padding: "2px"
+	},
+	cursorPointer: {
+			cursor: "pointer"
+	},
+	roundedControl: {
+			borderRadius: "calc(12px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	py1: {
+			paddingBlock: "4px"
+	},
+	pr25: {
+			paddingRight: "10px"
+	},
+	pl15: {
+			paddingLeft: "6px"
+	},
+	whitespaceNowrap: {
+			whiteSpace: "nowrap"
+	},
+	transitionColors: {
+			transitionProperty: "color,background-color,border-color,outline-color,text-decoration-color,fill,stroke,--tw-gradient-from,--tw-gradient-via,--tw-gradient-to",
+			transitionTimingFunction: "var(--tw-ease,var(--ease))",
+			transitionDuration: "var(--tw-duration,var(--dur-micro))"
+	},
+	durationVarDurMicro: {
+			transitionDuration: "var(--dur-micro)"
+	},
+	easeVarEase: {
+			transitionTimingFunction: "var(--ease)"
+	},
+	focusRing: {
+			":focus-visible": {
+					outline: "2px solid var(--accent-ink)",
+					outlineOffset: "2px"
+			}
+	},
+	textDim: {
+			color: "var(--text-dim)"
+	},
+	pointerEventsNone: {
+			pointerEvents: "none"
+	},
+	absolute: {
+			position: "absolute"
+	},
+	insetX0: {
+			insetInline: "0"
+	},
+	insetY05: {
+			insetBlock: "2px"
+	},
+	bgAccentSoft: {
+			backgroundColor: "var(--accent-soft)"
+	},
+	roundedLMd: {
+			borderTopLeftRadius: "calc(7px * var(--rf))",
+			borderBottomLeftRadius: "calc(7px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	roundedRMd: {
+			borderTopRightRadius: "calc(7px * var(--rf))",
+			borderBottomRightRadius: "calc(7px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	h8: {
+			height: "32px"
+	},
+	roundedMd: {
+			borderRadius: "calc(7px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	ringLineStrong: { "--tw-ring-color": "var(--border-strong)" },
+	ringInset: { "--tw-ring-inset": "inset" },
+	bgAccent: {
+			backgroundColor: "var(--accent)"
+	},
+	textOnAccent: {
+			color: "var(--on-accent)"
+	},
+
+	selectNone: {
+		"WebkitUserSelect": "none",
+		"userSelect": "none"
+	},
+	phonePy2: {
+		"@media (max-width: 720px)": {
+			"paddingBlock": "8px"
+		}
+	},
+	phonePr3: {
+		"@media (max-width: 720px)": {
+			"paddingRight": "12px"
+		}
+	},
+	phonePl25: {
+		"@media (max-width: 720px)": {
+			"paddingLeft": "10px"
+		}
+	},
+	phoneTextItemTitle: {
+		"@media (max-width: 720px)": {
+			"fontSize": "var(--type-item-title)"
+		}
+	},
+	hoverTextFg: {
+		"@media (hover: hover)": {
+			":hover": {
+				"color": "var(--text)"
+			}
+		}
+	},
+	tabularNums: {
+		"--tw-numeric-spacing": "tabular-nums",
+		"fontVariantNumeric": "var(--tw-ordinal,) var(--tw-slashed-zero,) var(--tw-numeric-figure,) var(--tw-numeric-spacing,) var(--tw-numeric-fraction,)"
+	},
+	phoneH11: {
+		"@media (max-width: 720px)": {
+			"height": "44px"
+		}
+	},
+	ring1: {
+		"--tw-ring-shadow": "var(--tw-ring-inset,) 0 0 0 calc(1px + var(--tw-ring-offset-width)) var(--tw-ring-color,currentcolor)",
+		"boxShadow": "var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow)"
+	},
+	hoverBgAccentHover: {
+		"@media (hover: hover)": {
+			":hover": {
+				"backgroundColor": "var(--accent-hover)"
+			}
+		}
+	},
+	hoverBgHover: {
+		"@media (hover: hover)": {
+			":hover": {
+				"backgroundColor": "var(--hover)"
+			}
+		}
+	},
+	disabledCursorDefault: {
+		":disabled": {
+			"cursor": "default"
+		}
+	},
+	disabledTextFaint: {
+		":disabled": {
+			"color": "var(--text-faint)"
+		}
+	},
+	disabledOpacity45: {
+		":disabled": {
+			"opacity": ".45"
+		}
+	},
+	disabledHoverBgTransparent: {
+		"@media (hover: hover)": {
+			":disabled": {
+				":hover": {
+					"backgroundColor": "transparent"
+				}
+			}
+		}
+	},
+
+	transitionColorBackgroundColor: {
+		"transitionProperty": "color,background-color",
+		"transitionTimingFunction": "var(--tw-ease,var(--ease))",
+		"transitionDuration": "var(--tw-duration,var(--dur-micro))"
+	},
+
+	phoneMx15: {
+		"@media (max-width: 720px)": {
+			"marginInline": "6px"
+		}
+	},
+	phoneH5: {
+		"@media (max-width: 720px)": {
+			"height": "20px"
+		}
+	},
+	phoneW308px: {
+		"@media (max-width: 720px)": {
+			"width": "308px"
+		}
+	},
+	phoneH12: {
+		"@media (max-width: 720px)": {
+			"height": "48px"
+		}
+	},
+});
 
 /**
  * Date range field: the span a page is showing, as ONE control — the presets
@@ -111,8 +423,7 @@ export function DateRangeField({
 		// options' `rounded-control` (12) plus this 2px padding is `rounded-lg`.
 		<div
 			role="group"
-			aria-label={label}
-			className={cn("inline-flex items-center rounded-lg bg-hover p-0.5", className)}
+			aria-label={label} {...mergeStylexProps(cn(className), sx.inlineFlex, sx.itemsCenter, sx.roundedLg, sx.bgHover, sx.p05)}
 		>
 			{presetsOnTrack && (
 				<>
@@ -123,7 +434,7 @@ export function DateRangeField({
 						onValueChange={(v) => onRangeChange(...presetRange(Number(v)))}
 						// The group contributes its options only; the well around them
 						// belongs to the whole control.
-						className="rounded-none bg-transparent p-0"
+						className={mergeStylexOverrideClassName("", sx.roundedNone, sx.bgTransparent, sx.p0)}
 					>
 						{presets.map((p) => (
 							<SegmentedOption key={p.label} value={String(p.days)}>
@@ -135,8 +446,7 @@ export function DateRangeField({
 					    track's full height, so it separates the options without
 					    reading as the edge of a second box. */}
 					<span
-						aria-hidden
-						className="mx-1 h-3.5 w-px shrink-0 bg-line-strong phone:mx-1.5 phone:h-5"
+						aria-hidden {...mergeStylexProps("", sx.phoneMx15, sx.phoneH5, sx.mx1, sx.h35, sx.wPx, sx.shrink0, sx.bgLineStrong)}
 					/>
 				</>
 			)}
@@ -145,30 +455,18 @@ export function DateRangeField({
 					// The range is the label a sighted reader gets, so it belongs in
 					// the spoken one: a bare "Date range, button" says nothing about
 					// what is being charted.
-					aria-label={`${label}, ${rangeLabel}`}
-					className={cn(
-						"relative inline-flex cursor-pointer select-none items-center",
-						// The glyph's side is pulled in by the whitespace it carries,
-						// the way ui/button balances a leading icon.
-						"rounded-control py-1 pr-2.5 pl-1.5",
-						"text-control-label font-medium whitespace-nowrap",
-						"transition-colors duration-[var(--dur-micro)] ease-[var(--ease)] focus-ring",
-						// Phones get the tap box the options beside it take.
-						"phone:py-2 phone:pr-3 phone:pl-2.5 phone:text-item-title",
-						rangeWearsKnob ? "text-fg" : "text-dim hover:text-fg",
-						"data-[popup-open]:text-fg",
-					)}
+					aria-label={`${label}, ${rangeLabel}`} {...mergeStylexProps(cn(mergeStylexClassName("", sx.selectNone), mergeStylexClassName("", sx.phonePy2, sx.phonePr3, sx.phonePl25, sx.phoneTextItemTitle), rangeWearsKnob ? "" : mergeStylexClassName("", sx.hoverTextFg), "data-[popup-open]:text-fg"), sx.relative, sx.inlineFlex, sx.cursorPointer, sx.itemsCenter, sx.roundedControl, sx.py1, sx.pr25, sx.pl15, typography.controlLabel, sx.fontMedium, sx.whitespaceNowrap, sx.transitionColors, sx.durationVarDurMicro, sx.easeVarEase, sx.focusRing, rangeWearsKnob && sx.textFg, !(rangeWearsKnob) && sx.textDim)}
 				>
 					{rangeWearsKnob && <SegmentedKnob knobId={knobId} />}
 					{/* Above the knob, which fills the option. */}
-					<span className="relative flex items-center gap-1.5">
+					<span {...stylex.props(sx.relative, sx.flex, sx.itemsCenter, sx.gap15)}>
 						{/* Support, not the label: the dates are what is being read. `dense`
 						    is what keeps this option the height of the ones beside it —
 						    at the icon scale's own floor the glyph, not the text, would
 						    set it, and the control would stand a step taller than the
 						    presets it shares a track with. */}
-						<IconCalendar size={16} dense className="shrink-0 opacity-55" />
-						<span className="[text-box:trim-both_cap_alphabetic]">{rangeLabel}</span>
+						<IconCalendar size={16} dense className={mergeStylexOverrideClassName("", sx.shrink0, sx.opacity55)} />
+						<span {...stylex.props(sx.TextBoxTrimBothCapAlphabetic)}>{rangeLabel}</span>
 					</span>
 				</Popover.Trigger>
 				<Popover.Popup align="end" sideOffset={6} initialFocus={false}>
@@ -365,25 +663,22 @@ function RangeCalendar({
 	const canGoForward = !max || max >= addMonths(months[months.length - 1], 1);
 
 	return (
-		<div className="p-2.5" role="group" aria-label={label}>
+		<div {...stylex.props(sx.p25)} role="group" aria-label={label}>
 			{presets.length > 0 && (
 				<Segmented
 					label="Preset ranges"
 					size="md"
 					value={activePreset === null ? null : String(activePreset)}
-					onValueChange={(v) => onPreset(Number(v))}
-					// Full width, so the options divide the popup rather than huddling
-					// in one corner of it.
-					className="mb-2 flex w-full [&>*]:flex-1"
+					onValueChange={(v) => onPreset(Number(v))} {...mergeStylexProps("[&>*]:flex-1", sx.mb2, sx.flex, sx.wFull)}
 				>
 					{presets.map((p) => (
-						<SegmentedOption key={p.label} value={String(p.days)} className="justify-center">
-							<span className="w-full text-center">{p.label}</span>
+						<SegmentedOption key={p.label} value={String(p.days)} className={mergeStylexOverrideClassName("", sx.justifyCenter)}>
+							<span {...stylex.props(sx.wFull, sx.textCenter)}>{p.label}</span>
 						</SegmentedOption>
 					))}
 				</Segmented>
 			)}
-			<div ref={gridRef} onKeyDown={onKeyDown} className="flex gap-4">
+			<div ref={gridRef} onKeyDown={onKeyDown} {...stylex.props(sx.flex, sx.gap4)}>
 				{months.map((month, index) => {
 					const title = monthTitle(month);
 					const first = index === 0;
@@ -392,13 +687,13 @@ function RangeCalendar({
 						// Wider on a phone, where a day is a thumb target rather than a
 						// click: 308px puts the columns on 44px and still clears the
 						// 390px viewport.
-						<div key={month} className="w-[252px] phone:w-[308px]">
+						<div key={month} {...mergeStylexProps("", sx.phoneW308px, sx.w252px)}>
 							{/* The title is centred between the chevrons rather than sitting
 							    on the grid's left edge: with two grids side by side, a
 							    left-aligned title and one pair of chevrons can't say which
 							    month a step is about. Each grid keeps the step that leaves
 							    the pair, on its own outer edge. */}
-							<div className="flex items-center justify-between gap-1 pb-1.5">
+							<div {...stylex.props(sx.flex, sx.itemsCenter, sx.justifyBetween, sx.gap1, sx.pb15)}>
 								{first ? (
 									<MonthStep
 										label="Previous month"
@@ -407,11 +702,11 @@ function RangeCalendar({
 										icon={<IconChevronLeft size={20} />}
 									/>
 								) : (
-									<span aria-hidden className="size-[26px]" />
+									<span aria-hidden {...stylex.props(sx.size26px)} />
 								)}
 								{/* Live, because a chevron turns the month without moving
 								    focus. */}
-								<div aria-live="polite" className="text-item-title font-semibold text-fg">
+								<div aria-live="polite" {...stylex.props(sx.fontSemibold, sx.textFg, typography.itemTitle)}>
 									{title}
 								</div>
 								{last ? (
@@ -422,7 +717,7 @@ function RangeCalendar({
 										icon={<IconChevronRight size={20} />}
 									/>
 								) : (
-									<span aria-hidden className="size-[26px]" />
+									<span aria-hidden {...stylex.props(sx.size26px)} />
 								)}
 							</div>
 
@@ -432,13 +727,13 @@ function RangeCalendar({
 							    42-cell grid, because `role="grid"` wants real rows between
 							    it and its cells. */}
 							<div role="grid" aria-label={title}>
-								<div role="row" className="grid grid-cols-7">
+								<div role="row" {...stylex.props(sx.grid, sx.gridCols7)}>
 									{headings.map((h) => (
 										<span
 											key={h.long}
 											role="columnheader"
 											aria-label={h.long}
-											className="pb-1 text-center text-meta font-medium text-faint"
+											{...stylex.props(sx.pb1, sx.textCenter, sx.fontMedium, sx.textFaint, typography.meta)}
 										>
 											{/* The initial is decoration: every cell below announces
 											    its own weekday, and a `title` here would raise the
@@ -448,14 +743,14 @@ function RangeCalendar({
 									))}
 								</div>
 								{monthGrid(month, weekStart).map((week) => (
-									<div key={week[0]} role="row" className="grid grid-cols-7">
+									<div key={week[0]} role="row" {...stylex.props(sx.grid, sx.gridCols7)}>
 										{week.map((day, i) => {
 											// A day from a neighbouring month is blank: with two
 											// grids on screen it would otherwise print the same date
 											// twice, once in each, and a range band would be painted
 											// across both copies.
 											if (!isSameMonth(day, month)) {
-												return <div key={day} role="gridcell" className="h-9 phone:h-12" />;
+												return <div key={day} role="gridcell" {...mergeStylexProps("", sx.phoneH12, sx.h9)} />;
 											}
 											const span = rangeSpanAt(day, week, i, bandFrom, bandTo);
 											return (
@@ -552,17 +847,12 @@ function Day({
 		// span instead of standing a step taller than it.
 		<div
 			role="gridcell"
-			aria-selected={selected}
-			className="relative grid h-9 place-items-center phone:h-12"
+			aria-selected={selected} {...mergeStylexProps("", sx.phoneH12, sx.relative, sx.grid, sx.h9, sx.placeItemsCenter)}
 		>
 			{span && (
 				<span
 					aria-hidden
-					className={cn(
-						"pointer-events-none absolute inset-x-0 inset-y-0.5 bg-accent-soft",
-						span.open && "rounded-l-md",
-						span.close && "rounded-r-md",
-					)}
+					{...stylex.props(sx.pointerEventsNone, sx.absolute, sx.insetX0, sx.insetY05, sx.bgAccentSoft, span.open && sx.roundedLMd, span.close && sx.roundedRMd)}
 				/>
 			)}
 			<button
@@ -577,20 +867,7 @@ function Day({
 				aria-current={today ? "date" : undefined}
 				onClick={() => onPick(day)}
 				onPointerEnter={onPreview}
-				onFocus={onFocus}
-				className={cn(
-					"relative grid h-8 w-full cursor-pointer place-items-center rounded-md",
-					"text-control-label tabular-nums phone:h-11 phone:text-item-title",
-					"transition-[color,background-color] duration-[var(--dur-micro)] ease-[var(--ease)]",
-					"focus-ring text-fg",
-					// Today is marked by an edge rather than a fill: a second filled
-					// day in the month would compete with the ends of the range.
-					today && !selected && "font-semibold ring-1 ring-line-strong ring-inset",
-					selected
-						? "bg-accent font-semibold text-on-accent hover:bg-accent-hover"
-						: "hover:bg-hover",
-					"disabled:cursor-default disabled:text-faint disabled:opacity-45 disabled:hover:bg-transparent",
-				)}
+				onFocus={onFocus} {...mergeStylexProps(cn(mergeStylexClassName("", sx.tabularNums, sx.phoneH11, sx.phoneTextItemTitle), mergeStylexClassName("", sx.transitionColorBackgroundColor), today && !selected && mergeStylexClassName("", sx.ring1), selected ? mergeStylexClassName("", sx.hoverBgAccentHover) : mergeStylexClassName("", sx.hoverBgHover), mergeStylexClassName("", sx.disabledCursorDefault, sx.disabledTextFaint, sx.disabledOpacity45, sx.disabledHoverBgTransparent)), sx.relative, sx.grid, sx.h8, sx.wFull, sx.cursorPointer, sx.placeItemsCenter, sx.roundedMd, typography.controlLabel, sx.durationVarDurMicro, sx.easeVarEase, sx.focusRing, sx.textFg, today && !selected && sx.fontSemibold, today && !selected && sx.ringLineStrong, today && !selected && sx.ringInset, selected && sx.bgAccent, selected && sx.fontSemibold, selected && sx.textOnAccent)}
 			>
 				{dayOfMonth(day)}
 			</button>

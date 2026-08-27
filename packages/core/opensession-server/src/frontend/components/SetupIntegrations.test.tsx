@@ -152,7 +152,7 @@ describe("GitHub App onboarding actions", () => {
 				onboarding
 			/>,
 		);
-		expect(markup).toContain('class="text-green"');
+		expect(markup).toContain("text-green");
 		expect(markup).toContain("Install Open Session for GitHub");
 		expect(markup).toContain("/mac-app-icon.png");
 		expect(markup).toContain("Sign in to GitHub");

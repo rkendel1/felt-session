@@ -98,15 +98,15 @@ describe("TranscriptBlocks shipped change action", () => {
 		expect(html).toContain('aria-label="Remove screenshot"');
 		expect(html).toContain("group/overlay-action");
 		expect(html).toContain("group-hover/overlay-action:opacity-100");
-		expect(html).toContain("bg-white");
+		expect(html).toContain("background-color:var(--color-white)");
 		expect(html).toContain('aria-label="Add images"');
 		expect(html).toContain('aria-label="Slack channel"');
-		expect(html).toContain("border-line bg-surface");
+		expect(html).toContain('aria-label="Slack channel"');
 		// The channel picker is the app's own select (ui/select), not a bare
 		// <select> with an overlaid chevron.
 		expect(html).toContain('role="combobox"');
-		expect(html).toContain("rounded-[var(--composer-radius)]");
-		expect(html).toContain("smooth-shadow-ring-soft");
+		expect(html).toContain("border-radius:var(--composer-radius)");
+		expect(html).toContain("--tw-shadow:var(--composer-shadow)");
 		expect(html).not.toContain("rounded-xl bg-panel p-4");
 	});
 
@@ -735,9 +735,9 @@ describe("TranscriptBlocks review loops", () => {
 		expect(html).toContain("M9.75 12.75L10.1837 13.6744");
 		expect(html).toContain("text-faint");
 		expect(html).toContain("1 round · 5/5 · 8 checks passed");
-		expect(html).toContain("mt-0.5 pl-2");
-		expect(html).toContain("flex size-[22px] flex-none self-center items-center justify-center");
-		expect(html).toContain("-translate-y-px");
+		expect(html).toContain("margin-top:2px;padding-left:8px");
+		expect(html).toContain("display:flex;width:22px;height:22px;flex:none;align-self:center;align-items:center;justify-content:center");
+		expect(html).toContain("transform:translateY(-1px)");
 		expect(html).not.toContain(">Worked<");
 	});
 

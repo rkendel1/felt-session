@@ -7,8 +7,8 @@ test("a long phone prompt scrolls without moving the title bar or send button", 
   const layout = source.slice(motionStart, promptStart);
 
   expect(motionStart).toBeGreaterThan(-1);
-  expect(layout).toContain('"relative flex min-h-0 flex-col"');
-  expect(layout).toContain('"flex min-h-0 flex-1 flex-col"');
+  expect(layout).toContain("sx.relative, sx.flex, sx.minH0, sx.flexCol");
+  expect(layout).toContain("sx.flex, sx.minH0, sx.flex1, sx.flexCol");
 });
 
 test("the phone footer drops the covered safe-area inset while the keyboard is open", async () => {
@@ -18,7 +18,7 @@ test("the phone footer drops the covered safe-area inset while the keyboard is o
   const footer = source.slice(footerStart, footerEnd);
 
   expect(footerStart).toBeGreaterThan(-1);
-  expect(footer).toContain("phone:pb-[calc(0.75rem+env(safe-area-inset-bottom))]");
+  expect(footer).toContain("sx.phonePbCalc075remEnvSafeAreaInsetBottom");
   expect(footer).toContain("phone:[body.kb-open_&]:pb-3");
 });
 
@@ -32,7 +32,7 @@ test("the phone title bar's project trigger carries no surface of its own", asyn
   expect(trigger).not.toContain("phone:bg-");
   expect(trigger).not.toContain("phone:border");
   // Still a 44px target, even without a surface to show for it.
-  expect(trigger).toContain("phone:min-h-11");
+  expect(trigger).toContain("sx.phoneMinH11");
 });
 
 test("the new composer keeps the full model name ahead of its effort suffix", async () => {
@@ -42,7 +42,7 @@ test("the new composer keeps the full model name ahead of its effort suffix", as
   const pill = source.slice(pillStart, pillEnd);
 
   expect(pillStart).toBeGreaterThan(-1);
-  expect(pill).toContain("max-w-none");
+  expect(pill).toContain("sx.maxWNone");
   expect(pill).toContain("phone:[&_[data-effort]]:hidden");
   expect(pill).not.toContain("max-w-[150px]");
 });
@@ -168,8 +168,8 @@ test("the phone composer keeps its buttons concentric with the sheet corner", as
 
   expect(source).toContain("<PhoneTopBar");
   expect(source).toContain("<PhoneTopBarAction");
-  expect(source).toContain("phone:rounded-t-[calc(40px*var(--rf))]");
-  expect(source).toContain("phone:px-[18px] phone:pb-3 phone:pt-[18px]");
+  expect(source).toContain("sx.phoneRoundedTCalc40pxVarRf");
+  expect(source).toContain("sx.phonePx18px, sx.phonePb3, sx.phonePt18px");
 });
 
 test("a parked draft keeps the composer copy and carries its attachments", async () => {

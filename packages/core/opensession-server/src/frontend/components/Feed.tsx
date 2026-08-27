@@ -29,7 +29,41 @@ import { presenceState, StatusDot, useTeamPresence } from "./TeamPresence";
 import { EmptyState, ListSkeleton } from "../ui/state";
 import { Button } from "../ui/button";
 import { Menu } from "../ui/menu";
-import { cn } from "../ui/cn";
+import {
+	cn,
+	mergeStylexProps,
+	mergeStylexOverrideClassName,
+	utilityClassName,
+} from "../ui/cn";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	size24px: { width: "24px", height: "24px" },
+	roundedAvatar: {
+			borderRadius: "calc(32% * var(--rp))",
+		cornerShape: "var(--cs)"
+	},
+	shadowVarAvatarEdge: { boxShadow: "var(--avatar-edge)" },
+	maxW28: { maxWidth: "112px" },
+	maxW150px: { maxWidth: "150px" },
+	maxW920px: { maxWidth: "920px" },
+	minW200px: { minWidth: "200px" },
+	minH30px: { minHeight: "30px" },
+	pb15: { paddingBottom: "60px" },
+	pt6: { paddingTop: "24px" },
+	itemsBaseline: { alignItems: "baseline" },
+	leading13: { lineHeight: "1.3" },
+	justifySelfEnd: { justifySelf: "flex-end" },
+	ml2: { marginLeft: "8px" },
+	/** A phone floats its header over the scroll, so the column opens below it. */
+	phonePtHeader: {
+		"@media (max-width: 720px)": {
+			"paddingTop": "calc(var(--header-h) + 18px)"
+		}
+	},
+});
 import { IconFeed, IconPeople, IconRepo, IconRobot } from "./icons";
 import {
 	PEOPLE_CHIP,
@@ -103,7 +137,7 @@ function ScopeChip({
 			aria-pressed={selected}
 		>
 			{mark}
-			<span className="min-w-0 truncate">{label}</span>
+			<span className={utilityClassName("min-w-0 truncate")}>{label}</span>
 		</button>
 	);
 }
@@ -123,7 +157,12 @@ function FeedOwnerMark({ owner }: { owner: FeedOwner }) {
 	}
 	return (
 		<span
-			className="flex size-[24px] shrink-0 items-center justify-center rounded-avatar bg-active text-dim shadow-[var(--avatar-edge)]"
+			{...mergeStylexProps(
+				utilityClassName("flex shrink-0 items-center justify-center bg-active text-dim"),
+				sx.size24px,
+				sx.roundedAvatar,
+				sx.shadowVarAvatarEdge,
+			)}
 			title={owner.label}
 		>
 			<IconRobot size={14} />
@@ -295,7 +334,7 @@ export function Feed({ sessions, teamViewing, headerActionsEl, onSelect }: Props
 	const visibleCompactMembers = compactMembers.slice(0, 5);
 	const hiddenCompactMembers = compactMembers.length - visibleCompactMembers.length;
 	const compactPicker = (
-		<div className="flex items-center gap-0.5" aria-label="Filter feed by person">
+		<div className={utilityClassName("flex items-center gap-0.5")} aria-label="Filter feed by person">
 			{visibleCompactMembers.map((member) => {
 				const selected = scope.kind === "person" && scope.key === member.key;
 				return (
@@ -303,8 +342,8 @@ export function Feed({ sessions, teamViewing, headerActionsEl, onSelect }: Props
 						key={member.key}
 						type="button"
 						className={cn(
-							"focus-ring flex min-h-10 items-center gap-1.5 rounded-control p-1 text-label font-medium text-fg hover:bg-hover",
-							selected && "bg-accent-soft pr-2 text-accent",
+							utilityClassName("focus-ring flex min-h-10 items-center gap-1.5 rounded-control p-1 text-label font-medium text-fg hover:bg-hover"),
+							selected && utilityClassName("bg-accent-soft pr-2 text-accent"),
 						)}
 						onClick={() =>
 							pick(
@@ -318,7 +357,7 @@ export function Feed({ sessions, teamViewing, headerActionsEl, onSelect }: Props
 					>
 						<UserAvatar name={member.person.name} size={30} edge={false} />
 						{selected && (
-							<span className="max-w-28 truncate pr-0.5">
+							<span {...mergeStylexProps(utilityClassName("truncate pr-0.5"), sx.maxW28)}>
 								{member.isYou ? "You" : personLabel(member.key)}
 							</span>
 						)}
@@ -328,7 +367,7 @@ export function Feed({ sessions, teamViewing, headerActionsEl, onSelect }: Props
 			{hiddenCompactMembers > 0 && (
 				<button
 					type="button"
-					className="focus-ring flex size-10 min-h-10 items-center justify-center rounded-control bg-active text-label font-semibold text-dim hover:bg-hover"
+					className={utilityClassName("focus-ring flex size-10 min-h-10 items-center justify-center rounded-control bg-active text-label font-semibold text-dim hover:bg-hover")}
 					onClick={() => memberRowRef.current?.scrollIntoView({ block: "start" })}
 					aria-label={`Show ${hiddenCompactMembers} more people`}
 				>
@@ -345,12 +384,12 @@ export function Feed({ sessions, teamViewing, headerActionsEl, onSelect }: Props
 		dayGroups.length === 0 && (widening || personPrsLoading);
 
 	return (
-		<div className="flex min-h-0 w-full flex-1 flex-col bg-surface">
+		<div className={utilityClassName("flex min-h-0 w-full flex-1 flex-col bg-surface")}>
 			{membersPinned &&
 				headerActionsEl &&
-				createPortal(<div className="phone:hidden">{compactPicker}</div>, headerActionsEl)}
-			<div data-page-scroll className="min-h-0 flex-1 overflow-y-auto">
-				<div className="mx-auto w-full max-w-[920px] px-6 pb-15 pt-6 phone:px-4 phone:pb-12 phone:pt-[calc(var(--header-h)+18px)]">
+				createPortal(<div className={utilityClassName("phone:hidden")}>{compactPicker}</div>, headerActionsEl)}
+			<div data-page-scroll className={utilityClassName("min-h-0 flex-1 overflow-y-auto")}>
+				<div {...mergeStylexProps(utilityClassName("mx-auto w-full px-6 phone:px-4 phone:pb-12"), sx.maxW920px, sx.pb15, sx.pt6, sx.phonePtHeader)}>
 					{team.length > 0 && (
 						<div ref={memberRowRef} className={PEOPLE_CHIP_ROW}>
 							<ScopeChip
@@ -374,7 +413,7 @@ export function Feed({ sessions, teamViewing, headerActionsEl, onSelect }: Props
 									selected={scope.kind === "person" && scope.key === member.key}
 									onClick={() => pick({ kind: "person", key: member.key })}
 									mark={
-										<span className="relative flex">
+										<span className={utilityClassName("relative flex")}>
 											<UserAvatar name={member.person.name} size={26} />
 											<StatusDot
 												state={presenceState(member)}
@@ -394,8 +433,8 @@ export function Feed({ sessions, teamViewing, headerActionsEl, onSelect }: Props
 					)}
 					{feedLoading ? (
 					<>
-						<div className="mb-2 flex min-h-[30px] items-center">
-							<h3 className={cn(PEOPLE_SECTION_LABEL, "mb-0")}>Shipped</h3>
+						<div {...mergeStylexProps(utilityClassName("mb-2 flex items-center"), sx.minH30px)}>
+							<h3 className={cn(PEOPLE_SECTION_LABEL, utilityClassName("mb-0"))}>Shipped</h3>
 						</div>
 						<ListSkeleton
 							variant="bare"
@@ -417,8 +456,8 @@ export function Feed({ sessions, teamViewing, headerActionsEl, onSelect }: Props
 						    changing whose sidebar you are in, and it has to stay on
 						    screen when a pick empties the list, or the only way back
 						    is gone. */}
-						<div className="mb-2 flex min-h-[30px] items-center justify-between gap-3">
-							<h3 className={cn(PEOPLE_SECTION_LABEL, "mb-0")}>
+						<div {...mergeStylexProps(utilityClassName("mb-2 flex items-center justify-between gap-3"), sx.minH30px)}>
+							<h3 className={cn(PEOPLE_SECTION_LABEL, utilityClassName("mb-0"))}>
 								{scopeName ? `${scopeName} shipped` : "Shipped"}
 							</h3>
 							{repoOptions.length > 1 && (
@@ -426,27 +465,27 @@ export function Feed({ sessions, teamViewing, headerActionsEl, onSelect }: Props
 									<Menu.Trigger
 										render={
 											<Button variant="ghost" size="sm" icon={<IconRepo size={18} />} caret>
-												<span className="max-w-[150px] truncate">
+												<span {...mergeStylexProps(utilityClassName("truncate"), sx.maxW150px)}>
 													{repo === "all" ? "In all repos" : `In ${repoLabel(repo)}`}
 												</span>
 											</Button>
 										}
 									/>
-									<Menu.Popup align="end" className="min-w-[200px]">
+									<Menu.Popup align="end" className={mergeStylexOverrideClassName("", sx.minW200px)}>
 										<Menu.RadioGroup
 											value={repo}
 											onValueChange={(value) => setRepo(String(value))}
 										>
 											<Menu.RadioItem value="all" closeOnClick>
 												{/* Sized to the tiles below so every label shares one edge. */}
-												<span className="size-[18px] shrink-0" />
-												<span className="min-w-0 flex-1 truncate">All repos</span>
+												<span className={utilityClassName("size-[18px] shrink-0")} />
+												<span className={utilityClassName("min-w-0 flex-1 truncate")}>All repos</span>
 												<Menu.Check on={repo === "all"} />
 											</Menu.RadioItem>
 											{repoOptions.map((name) => (
 												<Menu.RadioItem key={name} value={name} closeOnClick>
 													<RepoTile name={name} size={18} />
-													<span className="min-w-0 flex-1 truncate">
+													<span className={utilityClassName("min-w-0 flex-1 truncate")}>
 														{repoLabel(name)}
 													</span>
 													<Menu.Check on={repo === name} />
@@ -483,10 +522,10 @@ export function Feed({ sessions, teamViewing, headerActionsEl, onSelect }: Props
 						) : null}
 						<div className={PR_LIST}>
 							{dayGroups.map(([label, rows]) => (
-								<div key={label} className="mb-5">
+								<div key={label} className={utilityClassName("mb-5")}>
 									<h4 className={PR_FEED_GROUP_LABEL}>
 										{label}
-										<span className="font-medium">{rows.length}</span>
+										<span className={utilityClassName("font-medium")}>{rows.length}</span>
 									</h4>
 									<div>
 										{rows.map((row) => (
@@ -521,13 +560,13 @@ export function Feed({ sessions, teamViewing, headerActionsEl, onSelect }: Props
 												    what the picture already said and made the feed twice
 												    as tall as it needed to be. The name is in the row's
 												    tooltip and in the repo filter above. */}
-												<span className="flex min-w-0 items-baseline gap-2">
-													<RepoTile name={row.repo} size={16} className="self-center" />
-													<span className="truncate text-item-title font-medium leading-[1.3] text-fg">
+												<span {...mergeStylexProps(utilityClassName("flex min-w-0 gap-2"), sx.itemsBaseline)}>
+													<RepoTile name={row.repo} size={16} className={utilityClassName("self-center")} />
+													<span {...mergeStylexProps(utilityClassName("truncate text-item-title font-medium text-fg"), sx.leading13)}>
 														{row.title}
 													</span>
 													{row.ref && (
-														<span className="shrink-0 text-meta tabular-nums text-faint">
+														<span {...mergeStylexProps(utilityClassName("shrink-0 tabular-nums text-faint"), typography.meta)}>
 															{row.ref}
 														</span>
 													)}
@@ -540,15 +579,15 @@ export function Feed({ sessions, teamViewing, headerActionsEl, onSelect }: Props
 												</span>
 												{/* A side that moved no lines is left off rather than
 												    written as a zero: every commit carries both counts. */}
-												<span className="justify-self-end text-meta tabular-nums phone:hidden">
+												<span {...mergeStylexProps(utilityClassName("tabular-nums phone:hidden"), sx.justifySelfEnd, typography.meta)}>
 													{!!row.additions && (
-														<span className="text-green">+{compactDiff(row.additions)}</span>
+														<span className={utilityClassName("text-green")}>+{compactDiff(row.additions)}</span>
 													)}
 													{!!row.deletions && (
-														<span className="ml-2 text-red">−{compactDiff(row.deletions)}</span>
+														<span {...mergeStylexProps(utilityClassName("text-red"), sx.ml2)}>−{compactDiff(row.deletions)}</span>
 													)}
 												</span>
-												<span className="justify-self-end text-meta tabular-nums text-faint">
+												<span {...mergeStylexProps(utilityClassName("tabular-nums text-faint"), sx.justifySelfEnd, typography.meta)}>
 													{compactAge(row.shippedAt)}
 												</span>
 											</button>
@@ -563,7 +602,7 @@ export function Feed({ sessions, teamViewing, headerActionsEl, onSelect }: Props
 						    it holds nothing older, so the last page ends in the list
 						    rather than in a button that would do nothing. */}
 						{canWiden && (
-							<div className="mt-1 flex justify-center">
+							<div className={utilityClassName("mt-1 flex justify-center")}>
 								<Button
 									variant="ghost"
 									size="sm"

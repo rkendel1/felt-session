@@ -2,7 +2,7 @@ import { beforeAll, beforeEach, describe, expect, test } from "bun:test";
 
 const store = new Map<string, string>();
 const listeners = new Map<string, Set<() => void>>();
-Object.assign(globalThis, {
+const testGlobals = {
 	localStorage: {
 		getItem: (key: string) => store.get(key) ?? null,
 		setItem: (key: string, value: string) => void store.set(key, value),
@@ -28,7 +28,10 @@ Object.assign(globalThis, {
 		}
 	},
 	fetch: () => Promise.reject(new Error("offline in tests")),
-});
+};
+for (const [key, value] of Object.entries(testGlobals)) {
+	Object.defineProperty(globalThis, key, { value, configurable: true, writable: true });
+}
 
 let pref: typeof import("./next-chat-pref");
 

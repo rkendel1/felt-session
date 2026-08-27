@@ -1,8 +1,18 @@
+import * as stylex from "@stylexjs/stylex";
 import React, { useEffect, useState } from "react";
 import { reportRawUrl } from "../lib/api";
 import { parseNewSessionLink, type NewSessionPrefill } from "../lib/new-session-link";
 import { effectiveTheme, onThemeChanged, type EffectiveTheme } from "../lib/theme";
 import { cn } from "../ui/cn";
+
+const sx = stylex.create({
+	frame: {
+		minHeight: 0,
+		flex: 1,
+		borderWidth: 0,
+		backgroundColor: "var(--bg)",
+	},
+});
 
 /**
  * A published report, rendered as the document it is.
@@ -86,7 +96,7 @@ export function ReportFrame({
 			}}
 			// Only ever seen for the moment before the document paints, so it
 			// takes the app's page colour rather than a report's paper white.
-			className={cn("min-h-0 flex-1 border-0 bg-bg", className)}
+			className={cn(stylex.props(sx.frame).className, className)}
 		/>
 	);
 }

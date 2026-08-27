@@ -3,6 +3,118 @@ import type { WSServerMessage } from "../lib/types";
 import { PRODUCT_NAME } from "../lib/brand";
 import { dismissToast, toast } from "../ui/toast";
 import { fetchHealthStatus } from "../lib/health";
+import * as stylex from "@stylexjs/stylex";
+import { type as typography } from "../styles/typography.stylex";
+import { mergeStylexProps, mergeStylexClassName } from "../ui/cn";
+
+const spin = stylex.keyframes({ to: { transform: "rotate(360deg)" } });
+
+/* Converted from Tailwind utilities; names mirror the original class tokens. */
+const sx = stylex.create({
+	fixed: {
+			position: "fixed"
+	},
+	inset0: {
+			inset: "0"
+	},
+	z10000: {
+			zIndex: "10000"
+	},
+	flex: {
+			display: "flex"
+	},
+	itemsCenter: {
+			alignItems: "center"
+	},
+	justifyCenter: {
+			justifyContent: "center"
+	},
+	bgBlack82: {
+			backgroundColor: "color-mix(in srgb, var(--color-black) 82%, transparent)"
+	},
+	p6: {
+			padding: "24px"
+	},
+	maxW340px: {
+			maxWidth: "340px"
+	},
+	flexCol: {
+			flexDirection: "column"
+	},
+	gap35: {
+			gap: "14px"
+	},
+	roundedLg: {
+			borderRadius: "calc(14px * var(--rf))"
+	,
+		cornerShape: "var(--cs)"},
+	border: {
+			borderStyle: "solid",
+			borderWidth: "1px"
+	},
+	borderLine: {
+			borderColor: "var(--border)"
+	},
+	bgPanel: {
+			backgroundColor: "var(--bg-panel)"
+	},
+	px26px: {
+			paddingInline: "26px"
+	},
+	py7: {
+			paddingBlock: "28px"
+	},
+	textCenter: {
+			textAlign: "center"
+	},
+	fontSemibold: {
+			fontWeight: "var(--font-weight-semibold)"
+	},
+	textFg: {
+			color: "var(--text)"
+	},
+	leading15: {
+			lineHeight: "1.5"
+	},
+	textDim: {
+			color: "var(--text-dim)"
+	},
+	mt15: {
+			marginTop: "6px"
+	},
+	maxWFull: {
+			maxWidth: "100%"
+	},
+	truncate: {
+			textOverflow: "ellipsis",
+			whiteSpace: "nowrap",
+			overflow: "hidden"
+	},
+	fontMedium: {
+			fontWeight: "var(--font-weight-medium)"
+	},
+	leading14: {
+			lineHeight: "1.4"
+	},
+	opacity80: {
+			opacity: ".8"
+	},
+	size30px: { width: "30px", height: "30px" },
+	roundedFull: { borderRadius: "calc(infinity * 1px)" ,
+		cornerShape: "round"},
+	border2: { borderStyle: "solid", borderWidth: "2px" },
+	borderGreen: { borderColor: "var(--green)" },
+	borderTopGreen: { borderTopColor: "var(--green)" },
+	spin: { animationName: spin, animationDuration: "0.8s", animationTimingFunction: "linear", animationIterationCount: "infinite" },
+	borderLineStrong: { borderColor: "var(--border-strong)" },
+	borderTopAccent: { borderTopColor: "var(--accent)" },
+
+	backdropBlur4px: {
+		"--tw-backdrop-blur": "blur(4px)",
+		"WebkitBackdropFilter": "var(--tw-backdrop-blur,) var(--tw-backdrop-brightness,) var(--tw-backdrop-contrast,) var(--tw-backdrop-grayscale,) var(--tw-backdrop-hue-rotate,) var(--tw-backdrop-invert,) var(--tw-backdrop-opacity,) var(--tw-backdrop-saturate,) var(--tw-backdrop-sepia,)",
+		"backdropFilter": "var(--tw-backdrop-blur,) var(--tw-backdrop-brightness,) var(--tw-backdrop-contrast,) var(--tw-backdrop-grayscale,) var(--tw-backdrop-hue-rotate,) var(--tw-backdrop-invert,) var(--tw-backdrop-opacity,) var(--tw-backdrop-saturate,) var(--tw-backdrop-sepia,)"
+	},
+});
 
 // Give foreground recovery enough time to probe and replace the stale PWA
 // socket before showing anything. Background time never counts toward this.
@@ -252,27 +364,30 @@ await fetchHealthStatus();
   if (phase !== "crashed") return null;
 
   return (
-    <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/82 p-6 backdrop-blur-[4px]" role="alertdialog" aria-live="assertive">
-      <div className="flex max-w-[340px] flex-col items-center gap-3.5 rounded-lg border border-line bg-panel px-[26px] py-7 text-center">
+    <div {...mergeStylexProps("", sx.backdropBlur4px, sx.fixed, sx.inset0, sx.z10000, sx.flex, sx.itemsCenter, sx.justifyCenter, sx.bgBlack82, sx.p6)} role="alertdialog" aria-live="assertive">
+      <div {...stylex.props(sx.flex, sx.maxW340px, sx.flexCol, sx.itemsCenter, sx.gap35, sx.roundedLg, sx.border, sx.borderLine, sx.bgPanel, sx.px26px, sx.py7, sx.textCenter)}>
         <div
-          className={`size-[30px] rounded-full border-2 ${
-            backOnline
-              ? "border-green border-t-green"
-              : "animate-[spin_0.8s_linear_infinite] border-line-strong border-t-accent"
-          }`}
+          {...stylex.props(
+            sx.size30px,
+            sx.roundedFull,
+            sx.border2,
+            backOnline ? sx.borderGreen : sx.borderLineStrong,
+            backOnline ? sx.borderTopGreen : sx.borderTopAccent,
+            !backOnline && sx.spin,
+          )}
         />
         {/* Deliberately not "is restarting": that's the calm pill's copy, and
             this state is the one that reloads your page. */}
-        <div className="text-item-title font-semibold text-fg">
+        <div {...stylex.props(sx.fontSemibold, sx.textFg, typography.itemTitle)}>
           {backOnline ? "Back online" : `${PRODUCT_NAME} isn't responding`}
         </div>
-        <div className="text-label leading-[1.5] text-dim">
+        <div {...stylex.props(sx.leading15, sx.textDim, typography.label)}>
           {backOnline
             ? "Refreshing…"
             : "The page will refresh automatically once the server is back."}
         </div>
         {!backOnline && restartBy && (
-          <div className="mt-1.5 max-w-full truncate text-label font-medium leading-[1.4] text-dim opacity-80">Triggered by {restartBy}</div>
+          <div {...stylex.props(sx.mt15, sx.maxWFull, sx.truncate, sx.fontMedium, sx.leading14, sx.textDim, sx.opacity80, typography.label)}>Triggered by {restartBy}</div>
         )}
       </div>
     </div>
