@@ -8,6 +8,21 @@
       "type": "http",
       "url": "https://mcp.sentry.dev/mcp"
     },
+    "fathom": {
+      "_comment": "First-party read-only Fathom server. Store real values only in your gitignored mcp-config.json.",
+      "command": "bun",
+      "args": [
+        "run",
+        "/home/ubuntu/projects/opensession/scripts/mcp-fathom.ts"
+      ],
+      "env": {
+        "FATHOM_API_TOKEN": "<site-specific-read-only-token>",
+        "FATHOM_SITE_ID": "<site-id>"
+      },
+      "allowedUsers": [
+        "Grant"
+      ]
+    },
     "my-custom-server": {
       "_comment": "Example: your own stdio MCP server. `command` (+ optional `args`) is spawned per run; pass its credentials via the per-server `env` block.",
       "command": "bun",
