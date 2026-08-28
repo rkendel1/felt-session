@@ -150,6 +150,26 @@ function domain(): string {
   return `gui/${process.getuid?.() ?? 501}`;
 }
 
+/** bootout returns before launchd has always finished retiring the old job.
+ * An immediate bootstrap then fails transiently with EIO, especially when a
+ * first setup is being repaired. Retry only that known handoff failure. */
+async function bootstrapLaunchAgent(
+  plist: string,
+): Promise<Awaited<ReturnType<typeof run>>> {
+  let result = await run(["launchctl", "bootstrap", domain(), plist]);
+  for (
+    let attempt = 0;
+    result.code !== 0 &&
+    /input\/output error/i.test(result.stderr) &&
+    attempt < 10;
+    attempt++
+  ) {
+    await Bun.sleep(200);
+    result = await run(["launchctl", "bootstrap", domain(), plist]);
+  }
+  return result;
+}
+
 /**
  * `systemctl --user` needs to find the user manager's socket. A login shell
  * has XDG_RUNTIME_DIR set by pam_systemd; a plain `ssh host cmd`, cron, or the
@@ -936,22 +956,12 @@ export async function install(
         "bootout",
         `${domain()}/${LAUNCHD_SESSION_KERNEL_LABEL}`,
       ]);
-      const kernel = await run([
-        "launchctl",
-        "bootstrap",
-        domain(),
-        LAUNCHD_SESSION_KERNEL_PLIST,
-      ]);
+      const kernel = await bootstrapLaunchAgent(LAUNCHD_SESSION_KERNEL_PLIST);
       if (kernel.code !== 0) {
         warn(`launchctl actor bootstrap failed: ${kernel.stderr}`);
         return false;
       }
-      const { code, stderr } = await run([
-        "launchctl",
-        "bootstrap",
-        domain(),
-        LAUNCHD_PLIST,
-      ]);
+      const { code, stderr } = await bootstrapLaunchAgent(LAUNCHD_PLIST);
       if (code !== 0) {
         warn(`launchctl bootstrap failed: ${stderr}`);
         return false;
