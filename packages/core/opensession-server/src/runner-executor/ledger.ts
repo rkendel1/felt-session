@@ -83,7 +83,7 @@ export interface DurableCommandLedger {
   purgeRetiredScope(scope: LedgerScope): Promise<boolean>;
 }
 
-/** Bounded reference ledger with the same atomic/state semantics as SQLite. */
+/** FeltDB-backed reference ledger with atomic state semantics. */
 export class InMemoryCommandLedger implements DurableCommandLedger {
   readonly #byReceipt = new Map<string, LedgerRecord>();
   readonly #byCommand = new Map<string, string>();
