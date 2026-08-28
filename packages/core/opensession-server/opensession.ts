@@ -17,6 +17,7 @@ import { startRunnerPortalReaper } from "./src/server/runner-portals";
 import { startTodoReminderTicker } from "./src/server/todos";
 import { startGeneratedTitleSweep } from "./src/server/generated-titles";
 import { startLiveActivitySync } from "./src/server/live-activities";
+import { startRuntimeInvestigationHandoffConsumer } from "./src/server/runtime-investigation-handoffs";
 import {
 	drainPendingTranscriptWakeBatch,
 	drainPendingTranscriptWakesAfter,
@@ -625,6 +626,9 @@ if (!g.__opensessionBooted) {
 	const devInstance = isDevInstance();
 	if (!devInstance) {
 	startLiveActivitySync();
+	void startRuntimeInvestigationHandoffConsumer().catch((error) =>
+		console.error("[runtime-handoff] startup failed:", error),
+	);
 
 	// Restore completed sandbox prewarms and maintain any explicit keep-ready
 	// targets. This is a boot hook rather than a module-scope side effect.

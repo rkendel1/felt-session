@@ -150,6 +150,12 @@
       "apiBase": "https://api.acme.code.storage/api",
       "webhookSecret": "whsec_replace_me"
     },
+    "feltdbRuntimeHandoffs": {
+      "_comment": "Optional canonical runtime-investigation intake. Use the workspace ID and authority endpoint emitted by `feltdb dev`. Environment variables FELTDB_WORKSPACE_ID, FELTDB_WORKSPACE_ENDPOINT, and FELTDB_WORKSPACE_TOKEN take precedence.",
+      "workspaceId": "ws_replace_me",
+      "endpoint": "http://127.0.0.1:7700",
+      "token": ""
+    },
     "accountHealth": {
       "notifyUser": "alice",
       "slackChannel": "D012345"
