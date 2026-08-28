@@ -12,8 +12,6 @@ import { Tooltip } from "../ui/tooltip";
 import { IconTile } from "./BrandTile";
 import { IconCheckCircleFilled, IconQuestionCircle } from "./icons";
 import githubCreateAppGuide from "../assets/github-create-app.svg";
-import githubDeviceFlowGuide from "../assets/github-enable-device-flow.svg";
-import githubInstallAppGuide from "../assets/github-install-app.svg";
 import {
 	githubAppCreateOwner,
 	githubAppInstallUrlForSlug,
@@ -387,13 +385,17 @@ export function GithubManifestSetup({
 					In GitHub, turn on Enable Device Flow and save the change. This lets
 					people sign in without sharing passwords or tokens.
 				</p>
-				<img src={githubDeviceFlowGuide} alt="GitHub settings showing the Enable Device Flow option" className="block h-auto w-full rounded-lg" />
-				<GithubSetupStep
-					label="Open GitHub settings"
-					guide={githubDeviceFlowGuide}
-					caption="Turn on Enable Device Flow, then click Save changes."
-					href={settingsUrl}
-				/>
+				<Button
+					variant="primary"
+					size="lg"
+					className="w-full phone:min-h-11"
+					disabled={!settingsUrl}
+					{...(settingsUrl
+						? { render: <a href={settingsUrl} target="_blank" rel="noreferrer" /> }
+						: {})}
+				>
+					Open GitHub settings
+				</Button>
 				<Button size="lg" onClick={() => advance("install")} className="w-full phone:min-h-11">Device Flow is enabled</Button>
 				</div>
 			)}
@@ -404,13 +406,17 @@ export function GithubManifestSetup({
 					Install your App and choose which repositories Open Session may access.
 					You can change this selection later in GitHub.
 				</p>
-				<img src={githubInstallAppGuide} alt="GitHub App repository selection" className="block h-auto w-full rounded-lg" />
-				<GithubSetupStep
-					label="Choose repositories in GitHub"
-					guide={githubInstallAppGuide}
-					caption="Choose all repositories or select individual repositories, then click Install."
-					href={installUrl}
-				/>
+				<Button
+					variant="primary"
+					size="lg"
+					className="w-full phone:min-h-11"
+					disabled={!installUrl}
+					{...(installUrl
+						? { render: <a href={installUrl} target="_blank" rel="noreferrer" /> }
+						: {})}
+				>
+					Choose repositories in GitHub
+				</Button>
 				<Button size="lg" onClick={() => advance("done")} className="w-full phone:min-h-11">I installed the App</Button>
 				</div>
 			)}

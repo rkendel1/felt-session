@@ -97,6 +97,10 @@ function manifestCallbackUrl(origin: string, publicPrefix: string): string {
 	return `${origin}${publicPrefix}/api/setup/github/manifest/callback`;
 }
 
+function loopbackHost(hostname: string): boolean {
+	return hostname === "127.0.0.1" || hostname === "localhost" || hostname === "[::1]";
+}
+
 export function buildGithubAppManifest(input: {
 	origin: string;
 	publicPrefix: string;
@@ -342,7 +346,9 @@ export async function handleSetupGithubManifestRoutes(
 			publicPrefix,
 			owner,
 			returnTo: body?.returnTo === "settings" ? "settings" : "welcome",
-			returnToApp: body?.desktop === true,
+			returnToApp:
+				body?.desktop === true ||
+				(body?.returnTo !== "settings" && loopbackHost(url.hostname)),
 			authLogin: ctx.authUser?.login ?? null,
 			action: "",
 			manifest: "",

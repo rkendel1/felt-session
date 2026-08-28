@@ -35,8 +35,9 @@ function context(
 	path: string,
 	method: "GET" | "POST",
 	body?: unknown,
+	origin = "http://100.90.80.70:3850",
 ): RouteContext {
-	const url = new URL(`http://100.90.80.70:3850/backstage${path}`);
+	const url = new URL(`${origin}/backstage${path}`);
 	return {
 		req: new Request(url, {
 			method,
@@ -270,5 +271,36 @@ describe("GitHub App manifest", () => {
 		const replay = await handleSetupRoutes(callback);
 		expect(replay?.status).toBe(400);
 		expect(existsSync(keyPath)).toBe(true);
+	});
+
+	test("returns loopback onboarding to the macOS app even when started in a browser", async () => {
+		const start = await handleSetupRoutes(
+			context("/api/setup/github/manifest", "POST", {
+				owner: "personal",
+				returnTo: "welcome",
+				desktop: false,
+			}, "http://127.0.0.1:3850"),
+		);
+		const started = (await start?.json()) as { action: string };
+		const state = new URL(started.action).searchParams.get("state");
+		const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+		const pem = privateKey.export({ format: "pem", type: "pkcs8" }).toString();
+		globalThis.fetch = (async () =>
+			Response.json({
+				slug: "open-session-browser",
+				client_id: "Iv1.browser",
+				client_secret: "client-secret-value",
+				pem,
+				owner: { login: "octocat" },
+			}, { status: 201 })) as typeof fetch;
+		const completed = await handleSetupRoutes(
+			context(
+				`/api/setup/github/manifest/callback?code=temporary-code&state=${encodeURIComponent(state!)}`,
+				"GET",
+				undefined,
+				"http://127.0.0.1:3850",
+			),
+		);
+		expect(await completed!.text()).toContain("os1://welcome?step=github");
 	});
 });
