@@ -417,8 +417,8 @@ export async function reconcileSessionKernelOwnership(
 		if (
 			!unsettled.has(state.state) ||
 			ownedSessionIds.has(state.sessionId) ||
-			await sessionIsQuarantined(state.sessionId) ||
-			await sessionTombstoneState(state.sessionId)
+			await sessionTombstoneState(state.sessionId) ||
+			await sessionIsQuarantined(state.sessionId)
 		)
 			continue;
 		await sessionKernel(state.sessionId).applyRunEvent({
