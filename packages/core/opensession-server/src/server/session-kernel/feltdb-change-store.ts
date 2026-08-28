@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { StateFirstDB } from "@feltdb/core";
+import { createFeltDB, type StateFirstDB } from "@feltdb/core";
 
 const RUN_STATES = "opensession_kernel_run_states";
 const CHANGES = "opensession_kernel_changes";
@@ -193,4 +193,21 @@ export class FeltDbKernelChangeStore {
     ) throw new Error(`FeltDB transaction ${decision.transactionId} was reused for another change`);
     return receipt.changeSeq;
   }
+}
+
+export function openFeltDbKernelChangeStore(
+  env: Record<string, string | undefined> = process.env,
+): FeltDbKernelChangeStore {
+  const url = env.OPENSESSION_FELTDB_SERVER_URL?.trim().replace(/\/$/, "");
+  const namespace = env.OPENSESSION_FELTDB_SERVER_NAMESPACE?.trim();
+  if (!url) throw new Error("Session Kernel requires OPENSESSION_FELTDB_SERVER_URL");
+  if (!namespace)
+    throw new Error("Session Kernel requires OPENSESSION_FELTDB_SERVER_NAMESPACE");
+  return new FeltDbKernelChangeStore(createFeltDB({
+    namespace,
+    server: {
+      url,
+      token: env.OPENSESSION_FELTDB_SERVER_TOKEN?.trim() ?? "",
+    },
+  }));
 }

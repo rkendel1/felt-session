@@ -157,7 +157,14 @@ self.onmessage = (
         outputBytes,
         request:
           request.t === "store"
-            ? { t: "store", method: request.method, args: request.args }
+            ? {
+                t: "store",
+                method: request.method,
+                args: request.args,
+                ...(request.transactionId
+                  ? { transactionId: request.transactionId }
+                  : {}),
+              }
             : { t: "reduce", command: request.command },
       });
       void (async () => {

@@ -17,6 +17,11 @@ import type { SessionActorReducerCommand } from "./lifecycle-protocol";
 import { isReadReducer, sessionActorReducerRoute } from "./actor-routing";
 import { READ_METHODS, sessionKernelStoreRoute } from "./store-routing";
 import { assertTranscriptActorRequest } from "./transcript-protocol";
+import { ConditionalConflictError } from "@feltdb/core";
+import {
+  openFeltDbKernelChangeStore,
+  type FeltDbKernelChangeStore,
+} from "./feltdb-change-store";
 
 class SessionQuarantinedError extends Error {
   readonly code = "session_quarantined";
@@ -64,6 +69,9 @@ function routedStoreCall(
 
 export function startSessionKernelActorWorker(): void {
   const host = new SessionKernelStoreHost();
+  let feltDbChanges: FeltDbKernelChangeStore | undefined;
+  const changeStore = (): FeltDbKernelChangeStore =>
+    (feltDbChanges ??= openFeltDbKernelChangeStore());
   function post(message: KernelActorResponse): void {
     // Internal worker telemetry is consumed by the parent service and stripped
     // before the actor response crosses the HTTP boundary.
@@ -304,7 +312,28 @@ export function startSessionKernelActorWorker(): void {
           if (quarantine)
             throw new SessionQuarantinedError(sessionId, quarantine.reason);
         }
-        result = host.call(request.method, request.args);
+        if (request.method === "appendChange") {
+          const sessionId = request.args[0];
+          const kind = request.args[1];
+          if (!request.transactionId?.trim())
+            throw new Error("FeltDB appendChange requires a logical transaction id");
+          if (typeof sessionId !== "string" || !sessionId)
+            throw new Error("FeltDB appendChange requires a session id");
+          if (typeof kind !== "string" || !kind)
+            throw new Error("FeltDB appendChange requires a change kind");
+          result = changeStore().appendChange(
+            request.transactionId,
+            sessionId,
+            kind,
+            request.args[2],
+          );
+        } else if (request.method === "changesSince") {
+          result = changeStore().changesSince(
+            request.args[0] as string,
+            Number(request.args[1]),
+            request.args[2] === undefined ? undefined : Number(request.args[2]),
+          );
+        } else result = host.call(request.method, request.args);
       }
       // Store methods remain synchronous until their domain moves to FeltDB,
       // while migrated methods return promises. Awaiting both shapes here is
@@ -319,6 +348,7 @@ export function startSessionKernelActorWorker(): void {
       let failStop = false;
       let responseCode:
         | "actor_fatal"
+        | "conditional_conflict"
         | "session_quarantined"
         | "retryable"
         | undefined;
@@ -327,7 +357,9 @@ export function startSessionKernelActorWorker(): void {
       const infrastructure = isSessionKernelInfrastructureFailure(error);
       const critical = request.t === "reduce" &&
         isCriticalSettlementCommand(request.command);
-      if (infrastructure || critical) {
+      if (error instanceof ConditionalConflictError) {
+        responseCode = "conditional_conflict";
+      } else if (infrastructure || critical) {
         if (
           !sessionId ||
           isSessionKernelCentralStoreFailure(error) ||
@@ -369,6 +401,9 @@ export function startSessionKernelActorWorker(): void {
         error: (error instanceof Error ? error.message : String(error)).slice(0, 8_000),
         ...(responseCode ? { code: responseCode } : {}),
         ...(responseSessionId ? { sessionId: responseSessionId } : {}),
+        ...(error instanceof ConditionalConflictError && error.failure
+          ? { failure: error.failure }
+          : {}),
       });
       if (failStop) queueMicrotask(() => self.close());
       return { status: -1, length: Buffer.byteLength(body), body };

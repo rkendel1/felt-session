@@ -68,6 +68,22 @@ export class SessionKernelActorError extends Error {
   }
 }
 
+export class SessionKernelConditionalConflictError extends SessionKernelActorError {
+  constructor(
+    message: string,
+    readonly failure?: {
+      predicate: string;
+      collection: string;
+      key: string;
+      expected?: number | string;
+      actual?: number | string | null;
+    },
+  ) {
+    super(message, false);
+    this.name = "SessionKernelConditionalConflictError";
+  }
+}
+
 export class SessionKernelQuarantinedError extends SessionKernelActorError {
   constructor(
     readonly sessionId: string,
@@ -206,7 +222,7 @@ export class SessionKernelActorClient {
   /** Awaited store/reduce RPC over the posted-message transport. */
   async callAsync<TResult>(
     request:
-      | { t: "store"; method: string; args: unknown[] }
+      | { t: "store"; method: string; args: unknown[]; transactionId?: string }
       | { t: "reduce"; command: SessionActorReducerCommand },
     label: string,
     large = false,
@@ -240,7 +256,7 @@ export class SessionKernelActorClient {
 
   private callAsyncOnce<TResult>(
     request:
-      | { t: "store"; method: string; args: unknown[] }
+      | { t: "store"; method: string; args: unknown[]; transactionId?: string }
       | { t: "reduce"; command: SessionActorReducerCommand },
     label: string,
     large: boolean,
@@ -275,11 +291,14 @@ export class SessionKernelActorClient {
           error?: string;
           code?: string;
           sessionId?: string;
+          failure?: SessionKernelConditionalConflictError["failure"];
         };
         if (!body.ok) {
           const message = body.error || `Session kernel ${label} failed`;
           if (body.code === "session_quarantined" && body.sessionId)
             throw new SessionKernelQuarantinedError(body.sessionId, message);
+          if (body.code === "conditional_conflict")
+            throw new SessionKernelConditionalConflictError(message, body.failure);
           const error = new SessionKernelActorError(
             message,
             body.code === "retryable",
@@ -313,6 +332,20 @@ export class SessionKernelActorClient {
         reject(failure);
       }
     });
+  }
+
+  appendChangeAsync(
+    transactionId: string,
+    sessionId: string,
+    kind: string,
+    payload?: unknown,
+  ): Promise<number> {
+    if (!transactionId.trim())
+      return Promise.reject(new Error("A logical transaction id is required"));
+    return this.callAsync<number>(
+      { t: "store", method: "appendChange", args: [sessionId, kind, payload], transactionId },
+      `appendChange ${sessionId}`,
+    );
   }
 
   decideGatewayAsync<T extends GatewayCommandRequest>(
