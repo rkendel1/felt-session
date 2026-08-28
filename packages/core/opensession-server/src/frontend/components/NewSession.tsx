@@ -643,6 +643,13 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
   const [models, setModels] = useState<ModelOption[]>([]);
   const [defaultModel, setDefaultModel] = useState("");
   const [model, setModel] = useState(""); // "" = default
+  function selectMentionAgent(nextModel: string) {
+    setModel(nextModel);
+    if (!/(?:role-architect|role-researcher|role-planner)$/.test(nextModel)) return;
+    setPermissionState("ask");
+    setExtraRepos([]);
+    if (!forceRepo) setRepo(NO_REPO);
+  }
   // The shared model settings menu carries the same choices as an existing
   // session's composer. Both values persist on the new session and apply to
   // its opening turn.
@@ -1589,6 +1596,8 @@ pendingDraftParks.delete(operation);
           handle={promptHandle}
           repo={repo}
           mcpServers={selectedMcpServers}
+		  models={models}
+          onModelChange={selectMentionAgent}
           // Ask sessions read and explain; they never touch the code. Asking
           // "what to work on" in that mode invites a prompt the session
           // cannot carry out.

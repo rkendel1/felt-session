@@ -3,6 +3,7 @@ import type { FileMention } from "./api";
 
 export type MentionSuggestionKind =
 	| NonNullable<FileMention["kind"]>
+	| "agent"
 	| "tool"
 	| "action"
 	| "emoji";
@@ -20,12 +21,14 @@ export interface MentionAction {
 	description?: string;
 	keywords?: string[];
 	icon?: React.ReactNode;
+	kind?: "action" | "agent";
 	run: () => void;
 }
 
 export type MentionCategory =
 	| "Emoji"
 	| "People"
+	| "Agents"
 	| "Tools"
 	| "Workspaces"
 	| "Sessions"
@@ -36,6 +39,7 @@ export type MentionCategory =
 const CATEGORY_ORDER: MentionCategory[] = [
 	"Emoji",
 	"People",
+	"Agents",
 	"Tools",
 	"Workspaces",
 	"Sessions",
@@ -47,6 +51,7 @@ const CATEGORY_ORDER: MentionCategory[] = [
 export function mentionCategory(item: MentionSuggestion): MentionCategory {
 	if (item.kind === "emoji") return "Emoji";
 	if (item.kind === "person") return "People";
+	if (item.kind === "agent") return "Agents";
 	if (item.kind === "tool") return "Tools";
 	if (item.kind === "workspace") return "Workspaces";
 	if (item.kind === "session") return "Sessions";
@@ -71,7 +76,7 @@ export function actionMentionSuggestions(
 		.map((action) => ({
 			display: action.label,
 			insert: action.id,
-			kind: "action",
+			kind: action.kind || "action",
 			sub: action.description,
 			action: action.run,
 			icon: action.icon,

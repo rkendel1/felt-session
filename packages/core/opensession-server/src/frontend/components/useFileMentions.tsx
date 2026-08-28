@@ -14,7 +14,7 @@ import { cn } from "../ui/cn";
 import { FLOATING_OVERLAY_LAYER } from "../ui/popup-classes";
 import { IconTile } from "./BrandTile";
 import { displayName as brandDisplayName } from "../brand-logos";
-import { IconBolt, IconFile, IconFolder, IconMessage, IconPlug, IconStack } from "./icons";
+import { IconBolt, IconFile, IconFolder, IconMessage, IconPlug, IconRobot, IconStack } from "./icons";
 import { peopleMentionMatches, usePeople } from "../lib/people";
 import { useCurrentUser } from "./UserPicker";
 import {
@@ -477,11 +477,12 @@ export function useFileMentions({ value, onChange, textareaRef, mentionFetch, pa
             const isSkill = item.kind === "skill";
             const isDir = item.kind === "dir";
             const isPerson = item.kind === "person";
+			const isAgent = item.kind === "agent";
             const isTool = item.kind === "tool";
             const isAction = item.kind === "action";
             const isEmoji = item.kind === "emoji";
             const path = item.display;
-            const slash = isWorkspace || isSession || isSkill || isPerson || isTool || isAction || isEmoji
+            const slash = isWorkspace || isSession || isSkill || isPerson || isAgent || isTool || isAction || isEmoji
               ? -1
               : path.lastIndexOf("/");
             const dir = slash >= 0 ? path.slice(0, slash + 1) : "";
@@ -516,6 +517,10 @@ export function useFileMentions({ value, onChange, textareaRef, mentionFetch, pa
                   </span>
                 ) : isPerson ? (
                   <UserAvatar name={item.display} size={20} />
+				) : isAgent ? (
+				  <span className="flex size-5 shrink-0 items-center justify-center text-dim">
+					<IconRobot size={16} />
+				  </span>
                 ) : isTool ? (
                   <IconTile name={item.insert} size={20} />
                 ) : isWorkspace ? (

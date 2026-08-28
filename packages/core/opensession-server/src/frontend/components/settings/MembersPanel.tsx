@@ -14,6 +14,8 @@ import { TeamSection } from "../SetupTeam";
 
 const AGENT_ROLES = [
 	["Architect", "Plans architecture and evaluates technical risk.", "claude"],
+	["Researcher", "Investigates questions and returns sourced findings.", "codex"],
+	["Planner", "Turns outcomes and constraints into an actionable plan.", "claude"],
 	["Coder", "Implements and tests changes with local Ollama.", "ollama"],
 	["Reviewer", "Reviews diffs independently before release.", "codex"],
 	["Tester", "Reproduces behavior and verifies edge cases.", "ollama"],
@@ -45,6 +47,10 @@ export function MembersPanel() {
 			/>
 			<TeamSection onChanged={() => {}} />
 			<SettingsGroupLabel>Agent roles</SettingsGroupLabel>
+			<p className="mb-2 text-label text-dim">
+				Type @ in a conversation or new workspace to choose one. Agent roles are
+				separate from people and do not need sign-in accounts.
+			</p>
 			<SettingCard>
 				{AGENT_ROLES.map(([name, description, icon]) => (
 					<SettingRow key={name} className="items-start gap-x-3">

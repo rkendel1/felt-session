@@ -10,6 +10,7 @@ import {
 	fetchFileMentions,
 	fetchMentionSuggestions,
 	fetchSkillMentions,
+	type ModelOption,
 } from "../lib/api";
 import { saveDraft, NEW_SESSION_DRAFT_KEY as DRAFT_KEY } from "../lib/drafts";
 import { appendDictation } from "../lib/dictation";
@@ -81,6 +82,8 @@ interface Props {
 	repo: string;
 	/** A non-empty selection narrows which connected tools "@" offers. */
 	mcpServers?: string[];
+	models: ModelOption[];
+	onModelChange: (model: string) => void;
 	placeholder: string;
 	disabled: boolean;
 	images: string[];
@@ -130,6 +133,8 @@ export function NewSessionPrompt({
 	handle,
 	repo,
 	mcpServers,
+	models,
+	onModelChange,
 	placeholder,
 	disabled,
 	images,
@@ -278,6 +283,16 @@ export function NewSessionPrompt({
 		paletteFetch: (q) =>
 			fetchMentionSuggestions(q, undefined, getCurrentUser(), mcpServers),
 		skillsFetch: (q) => fetchSkillMentions(q, undefined, repo),
+		actions: models
+			.filter((item) => item.group === "roles")
+			.map((item) => ({
+				id: item.id,
+				label: item.label,
+				description: item.description || "Start with this agent",
+				keywords: ["agent", "role"],
+				kind: "agent" as const,
+				run: () => onModelChange(item.id),
+			})),
 	});
 
 	// Emptiness rather than the text: the Create button is the only part of the

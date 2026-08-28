@@ -9,6 +9,8 @@ function field(overrides: Partial<Parameters<typeof NewSessionPrompt>[0]> = {}) 
 		valueRef: { current: "" },
 		handle: { current: null as NewSessionPromptHandle | null },
 		repo: "opensession",
+		models: [],
+		onModelChange: () => {},
 		placeholder: "What do you want to work on?",
 		disabled: false,
 		images: [],

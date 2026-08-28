@@ -57,6 +57,7 @@ import {
   IconStopSquare,
   IconPencil,
   IconTrash,
+  IconRobot,
 } from "./icons";
 import {
   composerBox,
@@ -891,6 +892,17 @@ export function Composer({
     paletteFetch,
     skillsFetch,
     actions: [
+      ...(!modelDisabled ? models : [])
+        .filter((item) => item.group === "roles")
+        .map((item) => ({
+          id: item.id,
+          label: item.label,
+          description: item.description || "Route this conversation to this agent",
+          keywords: ["agent", "role"],
+          icon: <IconRobot size={16} />,
+          kind: "agent" as const,
+          run: () => onModelChange(item.id),
+        })),
       ...(canAttach
         ? [{
             id: "add-files",

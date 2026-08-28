@@ -25,12 +25,14 @@ describe("mention palette", () => {
 			],
 			[
 				{ display: "Kent", insert: "Kent", kind: "person" },
+				{ display: "Architect", insert: "role-architect", kind: "agent" },
 				{ display: "Add files", insert: "files", kind: "action" },
 			],
 		);
 
 		expect(rows.map(mentionCategory)).toEqual([
 			"People",
+			"Agents",
 			"Tools",
 			"Workspaces",
 			"Sessions",

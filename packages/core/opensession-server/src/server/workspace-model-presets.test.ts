@@ -22,6 +22,8 @@ describe("portableWorkspacePresetRun", () => {
 		const presets = DEFAULT_WORKSPACE_MODEL_SETTINGS.presets || [];
 		expect(presets.filter((item) => item.group === "roles").map((item) => item.label)).toEqual([
 			"Architect",
+			"Researcher",
+			"Planner",
 			"Coder · Ollama",
 			"Reviewer",
 			"Tester · Ollama",
