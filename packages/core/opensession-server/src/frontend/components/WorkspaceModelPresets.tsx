@@ -36,6 +36,24 @@ const blankPreset = (): Preset => ({
 	supporting: [],
 });
 
+/** A model name alone is ambiguous when the same OpenAI model can be paid for
+ * by an API key or reached through a Codex subscription. Role assignments show
+ * the credential lane explicitly so the saved lead/support choice is clear. */
+function modelChoiceLabel(option?: ModelOption): string {
+	if (!option) return "";
+	const provider = option.id.split("/")[1] || "";
+	const lane = provider === "openai"
+		? "Codex account"
+		: provider === "openai-api"
+			? "OpenAI API"
+			: provider === "ollama"
+				? "Ollama"
+				: provider === "anthropic"
+					? "Claude account"
+					: provider;
+	return lane ? `${option.label} · ${lane}` : option.label;
+}
+
 /** The dialog's one select shape: a full-width field over the app's popup.
  *  Its four fields differ only in the list they offer. */
 function ModelSelect({
@@ -95,14 +113,14 @@ function PresetRow({
 	// The catalog's own label, so a row reads the same as the select under it.
 	// shortModelLabel is the fallback for a model the catalog no longer lists.
 	const labelFor = (model: string) =>
-		models.find((option) => option.id === model)?.label || shortModelLabel(model, models);
+		modelChoiceLabel(models.find((option) => option.id === model)) || shortModelLabel(model, models);
 	const patchSupporting = (index: number, patch: Partial<Supporting>) =>
 		onPatch({ supporting: supporting.map((member, i) => (i === index ? { ...member, ...patch } : member)) });
 	// "" is a real choice ("not set yet"), so it stays an item in the list
 	// rather than becoming the trigger's placeholder.
 	const modelItems = (prompt: string) => [
 		{ value: "", label: prompt },
-		...models.map((model) => ({ value: model.id, label: model.label })),
+		...models.map((model) => ({ value: model.id, label: modelChoiceLabel(model) })),
 	];
 	return (
 		<div>

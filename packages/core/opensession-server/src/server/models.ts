@@ -76,7 +76,7 @@ export function modelEfforts(model: string): SessionEffort[] {
       : id.slice(0, slash);
   const slug = slash === -1 ? id : id.slice(slash + 1);
 
-  if (provider === "openai" && /^gpt-5\./.test(slug)) return OPENAI_EFFORTS;
+  if ((provider === "openai" || provider === "openai-api") && /^gpt-5\./.test(slug)) return OPENAI_EFFORTS;
   if (provider === "anthropic") {
     if (slug.startsWith("claude-haiku-4-5")) return ["high", "max"];
     if (/^claude-(?:fable|opus|sonnet)-/.test(slug)) return CLAUDE_EFFORTS;

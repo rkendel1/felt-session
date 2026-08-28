@@ -354,6 +354,22 @@ describe("piDialOracleAgent (same-bridge semantics)", () => {
 });
 
 describe("buildPiThirdPartyProviderPlan", () => {
+	test("OpenAI API uses Responses without entering the Codex account lane", () => {
+		const plan = buildPiThirdPartyProviderPlan({
+			providerID: "openai-api",
+			modelID: "gpt-5.6-sol",
+			apiKey: "sk-test",
+			builtinModelIds: [],
+		});
+		if ("error" in plan) throw new Error(plan.error);
+		expect(plan.config).toMatchObject({
+			name: "OpenAI API",
+			api: "openai-responses",
+			baseUrl: "https://api.openai.com/v1",
+			apiKey: "sk-test",
+		});
+	});
+
   test("Ollama registers an arbitrary local model through its OpenAI endpoint", () => {
     const plan = buildPiThirdPartyProviderPlan({
       providerID: "ollama",

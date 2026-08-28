@@ -16,10 +16,12 @@ export function modelRoleAssignment(model: string): { icon: string; label: strin
 		: provider === "anthropic"
 			? "Claude"
 			: provider === "openai"
-				? "OpenAI"
+				? "Codex account"
+				: provider === "openai-api"
+					? "OpenAI API"
 				: provider;
 	return {
-		icon: provider === "anthropic" ? "claude" : provider === "openai" ? "codex" : provider,
+		icon: provider === "anthropic" ? "claude" : provider === "openai" || provider === "openai-api" ? "codex" : provider,
 		label: `${providerLabel} · ${modelParts.join("/") || model}`,
 	};
 }

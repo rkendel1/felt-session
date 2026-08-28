@@ -31,4 +31,23 @@ describe("model provider config", () => {
       baseUrl: "http://127.0.0.1:11434/v1",
     });
   });
+
+	test("keeps OpenAI API billing separate from Codex subscriptions", () => {
+		expect(defaultPickerModelsForProvider("openai-api")).toEqual([
+			"gpt-5.6-sol",
+			"gpt-5.6-terra",
+			"gpt-5.6-luna",
+		]);
+		const catalog = piProviderCatalog("openai-api");
+		expect(catalog).toMatchObject({
+			name: "OpenAI API",
+			api: "openai-responses",
+			baseUrl: "https://api.openai.com/v1",
+		});
+		expect(catalog?.models.map(({ id, reasoning }) => ({ id, reasoning }))).toEqual([
+			{ id: "gpt-5.6-sol", reasoning: true },
+			{ id: "gpt-5.6-terra", reasoning: true },
+			{ id: "gpt-5.6-luna", reasoning: true },
+		]);
+	});
 });

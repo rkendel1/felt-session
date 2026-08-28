@@ -27,8 +27,9 @@ import { IconDotsHorizontal, IconPlus, IconTrash } from "./icons";
 // Settings → Model providers: third-party Pi providers (xai, openrouter,
 // groq, …) — API key + optional baseURL, stored server-side (0600, returned
 // masked) — plus the model ids each one surfaces in the model picker. The
-// anthropic/openai bridges are configured under Accounts, never here; the server
-// rejects those ids.
+// anthropic/openai bridges are configured under Accounts. OpenAI API keys use
+// the deliberately separate `openai-api` id so they never route through a
+// ChatGPT subscription account.
 
 interface ProviderInfo {
 	id: string;
@@ -40,6 +41,7 @@ interface ProviderInfo {
 
 /** Common pi provider slugs, offered as datalist suggestions. */
 const COMMON_PROVIDER_IDS = [
+	"openai-api",
 	"xai",
 	"meta",
 	"openrouter",
@@ -55,6 +57,7 @@ const COMMON_PROVIDER_IDS = [
 ];
 
 const PROVIDER_MODEL_DEFAULTS: Record<string, string> = {
+	"openai-api": "gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna",
 	ollama: "qwen3-coder:latest",
 	cerebras: "gpt-oss-120b, gemma-4-31b, zai-glm-4.7",
 	wafer:
@@ -63,7 +66,7 @@ const PROVIDER_MODEL_DEFAULTS: Record<string, string> = {
 
 export function ModelProvidersPanel() {
 	const [providers, setProviders] = useState<ProviderInfo[] | null>(null);
-	const [showAdd, setShowAdd] = useState(false);
+	const [addProviderId, setAddProviderId] = useState<string | null>(null);
 
 	const load = useCallback(async () => {
 		await (async () => {
@@ -105,19 +108,25 @@ toast(e.message, { variant: "error" });
 		<>
 			<SettingsGroupLabel
 				actions={
-					<Button size="sm" icon={<IconPlus size={16} />} onClick={() => setShowAdd(true)}>
-						Add provider
-					</Button>
+					<div className="flex flex-wrap gap-2">
+						<Button size="sm" onClick={() => setAddProviderId("openai-api")}>
+							Connect OpenAI API
+						</Button>
+						<Button size="sm" icon={<IconPlus size={16} />} onClick={() => setAddProviderId("")}>
+							Add provider
+						</Button>
+					</div>
 				}
 			>
 				Your own providers
 			</SettingsGroupLabel>
 
-			{showAdd && (
+			{addProviderId !== null && (
 				<AddProviderForm
-					onClose={() => setShowAdd(false)}
+					initialId={addProviderId}
+					onClose={() => setAddProviderId(null)}
 					onSaved={() => {
-						setShowAdd(false);
+						setAddProviderId(null);
 						load();
 					}}
 				/>
@@ -197,22 +206,25 @@ toast(e.message, { variant: "error" });
 }
 
 function AddProviderForm({
+	initialId,
 	onClose,
 	onSaved,
 }: {
+	initialId?: string;
 	onClose: () => void;
 	onSaved: () => void;
 }) {
-	const [id, setId] = useState("");
+	const [id, setId] = useState(initialId || "");
 	const [apiKey, setApiKey] = useState("");
 	const [baseURL, setBaseURL] = useState("");
-	const [models, setModels] = useState("");
+	const [models, setModels] = useState(PROVIDER_MODEL_DEFAULTS[initialId || ""] || "");
 	const [saving, setSaving] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
 	const cleanId = id.trim().toLowerCase();
 	const idValid = /^[a-z0-9-]+$/.test(cleanId);
 	const isOllama = cleanId === "ollama";
+	const isOpenAiApi = cleanId === "openai-api";
 
 	async function handleSave() {
 		setSaving(true);
@@ -249,8 +261,10 @@ setError(e.message);
 		<SettingsForm>
 			<SettingsFormTitle>Add provider</SettingsFormTitle>
 			<SettingRowDescription className="-mt-2 mb-3">
-				The provider id must match pi's slug for it (xai, openrouter,
-				groq, …). Models are registered in the picker as{" "}
+				Choose <code>openai-api</code> for OpenAI API billing. The
+				<code>openai</code> provider is reserved for Codex ChatGPT accounts.
+				Other provider ids must match pi's slug (xai, openrouter, groq, …).
+				Models are registered in the picker as{" "}
 				<code>pi/&lt;provider&gt;/&lt;model&gt;</code>. List the
 				provider's own model ids, e.g. <code>grok-4</code> for xai.
 			</SettingRowDescription>
@@ -262,7 +276,7 @@ setError(e.message);
 						className={settingsInputClass}
 						value={id}
 						onChange={(e) => setId(e.target.value)}
-						placeholder="xai"
+						placeholder="openai-api"
 						list="model-provider-ids"
 					/>
 					<datalist id="model-provider-ids">
@@ -278,7 +292,7 @@ setError(e.message);
 						type="password"
 						value={apiKey}
 						onChange={(e) => setApiKey(e.target.value)}
-						placeholder={isOllama ? "Not required" : "xai-…"}
+						placeholder={isOllama ? "Not required" : isOpenAiApi ? "sk-…" : "xai-…"}
 						disabled={isOllama}
 					/>
 				</SettingsField>
@@ -290,9 +304,11 @@ setError(e.message);
 						className={settingsInputClass}
 						value={baseURL}
 						onChange={(e) => setBaseURL(e.target.value)}
-						placeholder={
-							isOllama ? "http://127.0.0.1:11434/v1" : "https://api.x.ai/v1"
-						}
+						placeholder={isOllama
+							? "http://127.0.0.1:11434/v1"
+							: isOpenAiApi
+								? "https://api.openai.com/v1"
+								: "https://api.x.ai/v1"}
 					/>
 				</SettingsField>
 				<SettingsField>

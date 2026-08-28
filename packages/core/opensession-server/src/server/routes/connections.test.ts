@@ -100,6 +100,26 @@ describe("local model providers", () => {
       },
     });
   });
+
+	test("configures OpenAI API separately from a ChatGPT account", async () => {
+		const response = await handleConnectionsRoutes(
+			context("/api/settings/model-providers/openai-api", "PUT", null, {
+				apiKey: "sk-test",
+			}),
+		);
+		expect(response?.status).toBe(200);
+		expect(await response?.json()).toMatchObject({
+			provider: {
+				id: "openai-api",
+				apiKeyMasked: "…",
+				models: [
+					"pi/openai-api/gpt-5.6-sol",
+					"pi/openai-api/gpt-5.6-terra",
+					"pi/openai-api/gpt-5.6-luna",
+				],
+			},
+		});
+	});
 });
 
 describe("FeltDB development workspace connection", () => {

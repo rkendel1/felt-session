@@ -40,6 +40,21 @@ export const CEREBRAS_PICKER_MODELS = [
  * placeholder key and exposes an OpenAI-compatible endpoint on this URL. */
 export const OLLAMA_PICKER_MODELS = ["qwen3-coder:latest"] as const;
 
+/** OpenAI API billing is separate from a Codex/ChatGPT subscription. Keep it
+ * under its own provider id so selecting an API model can never silently pick
+ * a ChatGPT account from the Codex pool. */
+export const OPENAI_API_PICKER_MODELS = [
+  "gpt-5.6-sol",
+  "gpt-5.6-terra",
+  "gpt-5.6-luna",
+] as const;
+
+const OPENAI_API_PRICES: Record<(typeof OPENAI_API_PICKER_MODELS)[number], { input: number; output: number }> = {
+	"gpt-5.6-sol": { input: 4, output: 20 },
+	"gpt-5.6-terra": { input: 2, output: 12 },
+	"gpt-5.6-luna": { input: 0.2, output: 1.2 },
+};
+
 /** OpenRouter published Ox Alpha before Pi's bundled models.dev snapshot knew
  * about it. Keep the transient free model usable at its advertised limits
  * while the upstream catalog catches up. */
@@ -164,6 +179,7 @@ export function waferModelName(model: string): string {
 
 export function defaultPickerModelsForProvider(id: string): readonly string[] {
   if (id === "ollama") return OLLAMA_PICKER_MODELS;
+  if (id === "openai-api") return OPENAI_API_PICKER_MODELS;
   if (id === "cerebras") return CEREBRAS_PICKER_MODELS;
   if (id === "wafer") return WAFER_PICKER_MODELS;
   return [];
@@ -174,7 +190,7 @@ export function defaultPickerModelsForProvider(id: string): readonly string[] {
  * ahead of Pi's bundled models.dev snapshot (Ox Alpha on OpenRouter). */
 export interface PiProviderCatalog {
   name: string;
-  api: "openai-completions";
+  api: "openai-completions" | "openai-responses";
   baseUrl: string;
   compat?: {
     supportsDeveloperRole?: boolean;
@@ -195,6 +211,23 @@ export interface PiProviderCatalog {
 }
 
 export function piProviderCatalog(id: string): PiProviderCatalog | undefined {
+	if (id === "openai-api") {
+		return {
+			name: "OpenAI API",
+			api: "openai-responses",
+			baseUrl: "https://api.openai.com/v1",
+			models: OPENAI_API_PICKER_MODELS.map((model) => ({
+				id: model,
+				name: model,
+				reasoning: true,
+				thinkingLevelMap: {},
+				input: ["text", "image"],
+				cost: { ...OPENAI_API_PRICES[model], cacheRead: 0, cacheWrite: 0 },
+				contextWindow: 1_050_000,
+				maxTokens: 128_000,
+			})),
+		};
+	}
   if (id === "ollama") {
     return {
       name: "Ollama",
