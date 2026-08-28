@@ -1,4 +1,4 @@
-import { createPrivateKey, randomUUID } from "node:crypto";
+import { createPrivateKey, randomBytes, randomUUID } from "node:crypto";
 import { audit } from "../audit";
 import { configuredIngress } from "../config";
 import {
@@ -34,6 +34,7 @@ interface PendingManifest {
 	publicPrefix: string;
 	owner: ManifestOwner;
 	returnTo: "welcome" | "settings";
+	returnToApp: boolean;
 	authLogin: string | null;
 	action: string;
 	manifest: string;
@@ -194,10 +195,11 @@ function validateConversion(
 		typeof body.client_id === "string" ? body.client_id.trim() : "";
 	const clientSecret =
 		typeof body.client_secret === "string" ? body.client_secret.trim() : "";
-	const webhookSecret =
+	const returnedWebhookSecret =
 		typeof body.webhook_secret === "string"
 			? body.webhook_secret.trim()
 			: "";
+	const webhookSecret = returnedWebhookSecret || randomBytes(32).toString("hex");
 	const pem = typeof body.pem === "string" ? body.pem.trim() : "";
 	const ownerLogin =
 		typeof body.owner?.login === "string" ? body.owner.login.trim() : "";
@@ -205,7 +207,6 @@ function validateConversion(
 		!slug ||
 		!clientId ||
 		!clientSecret ||
-		!webhookSecret ||
 		!pem ||
 		!ownerLogin
 	) {
@@ -266,7 +267,24 @@ function callbackRedirect(
 	const target = new URL(path, pending.origin);
 	if (pending.returnTo === "welcome") target.searchParams.set("step", "github");
 	target.searchParams.set("github_manifest", result);
-	return Response.redirect(target, 303);
+	if (!pending.returnToApp) return Response.redirect(target, 303);
+	const nonce = randomUUID().replaceAll("-", "");
+	const deepLink = `os1://${pending.returnTo === "settings" ? "settings/integrations" : "welcome"}?${target.searchParams.toString()}`;
+	const body = `<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
+<title>Return to Open Session</title></head>
+<body><p>Returning to Open Session…</p>
+<p><a href="${htmlAttribute(deepLink)}">Open Open Session</a></p>
+<script nonce="${nonce}">window.location.href=${JSON.stringify(deepLink)};</script>
+</body></html>`;
+	return new Response(body, {
+		headers: {
+			"Content-Type": "text/html; charset=utf-8",
+			"Cache-Control": "no-store",
+			"Content-Security-Policy": `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'none'; base-uri 'none'; frame-ancestors 'none'`,
+			"Referrer-Policy": "no-referrer",
+		},
+	});
 }
 
 export async function handleSetupGithubManifestRoutes(
@@ -294,6 +312,7 @@ export async function handleSetupGithubManifestRoutes(
 			owner?: unknown;
 			organization?: unknown;
 			returnTo?: unknown;
+			desktop?: unknown;
 		} | null;
 		let owner: ManifestOwner;
 		try {
@@ -323,6 +342,7 @@ export async function handleSetupGithubManifestRoutes(
 			publicPrefix,
 			owner,
 			returnTo: body?.returnTo === "settings" ? "settings" : "welcome",
+			returnToApp: body?.desktop === true,
 			authLogin: ctx.authUser?.login ?? null,
 			action: "",
 			manifest: "",

@@ -125,6 +125,7 @@ describe("GitHub App manifest", () => {
 			context("/api/setup/github/manifest", "POST", {
 				owner: "personal",
 				returnTo: "welcome",
+				desktop: true,
 			}),
 		);
 		expect(start?.status).toBe(200);
@@ -168,7 +169,6 @@ describe("GitHub App manifest", () => {
 					slug: "open-session-personal",
 					client_id: "Iv1.personal",
 					client_secret: "client-secret-value",
-					webhook_secret: "webhook-secret-value",
 					pem,
 					owner: { login: "octocat" },
 				},
@@ -182,10 +182,10 @@ describe("GitHub App manifest", () => {
 				"GET",
 			),
 		);
-		expect(completed?.status).toBe(303);
-		expect(completed?.headers.get("location")).toBe(
-			"http://100.90.80.70:3850/backstage/welcome?step=github&github_manifest=created",
-		);
+		expect(completed?.status).toBe(200);
+		const completedHtml = await completed!.text();
+		expect(completedHtml).toContain("os1://welcome?step=github");
+		expect(completedHtml).toContain("github_manifest=created");
 
 		const config = JSON.parse(readFileSync(configPath, "utf8"));
 		expect(config.integrations.github).toMatchObject({
@@ -194,6 +194,9 @@ describe("GitHub App manifest", () => {
 			authOnConnect: true,
 		});
 		expect(config.integrations.github.appOrg).toBeUndefined();
+		expect(readFileSync(envPath, "utf8")).toMatch(
+			/GITHUB_WEBHOOK_SECRET=[a-f0-9]{64}/,
+		);
 		// The sign-in gate stays open until device flow returns the account that
 		// can be rostered and receive the new session.
 		expect(config.integrations.github.userPrAuth).toBeUndefined();

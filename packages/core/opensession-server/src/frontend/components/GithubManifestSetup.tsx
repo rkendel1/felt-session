@@ -200,6 +200,7 @@ export function GithubManifestSetup({
 					json: {
 						owner,
 						returnTo,
+						desktop: window.os1?.desktop === true,
 						...(owner === "organization"
 							? { organization: installationOwner.trim() }
 							: {}),
