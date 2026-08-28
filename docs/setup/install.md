@@ -228,6 +228,11 @@ cd opensession && bun install
 bun run setup
 ```
 
+On macOS this opens the desktop app's self-host setup. It configures the local
+server, installs and starts its per-user LaunchAgent, then connects the app.
+Use `bun run setup:terminal` when a terminal-only setup is preferable. Other
+platforms continue to use the terminal wizard directly.
+
 This manual path does not install model CLIs. Install Claude Code with
 `curl -fsSL https://claude.ai/install.sh | bash`; add Codex with
 `curl -fsSL https://chatgpt.com/codex/install.sh | sh` if you will use the

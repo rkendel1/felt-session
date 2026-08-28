@@ -12,6 +12,19 @@
         flex-direction: column;
         align-items: center;
       }
+      #local-form {
+        width: min(520px, calc(100vw - 48px));
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: 1fr 120px;
+        gap: 0 10px;
+        width: 100%;
+      }
+      .grid .field { width: 100%; text-align: left; }
+      .wide { grid-column: 1 / -1; }
+      details { width: 100%; margin-top: 18px; color: var(--text-dim); }
+      summary { cursor: pointer; }
     </style>
   </head>
   <body>
@@ -19,6 +32,25 @@
       <img class="mark" src="mark.png" width="76" height="76" alt="" />
       <h1 id="title">Connect to your server</h1>
       <p class="message">Enter the address of the Open Session server you use.</p>
+      <form id="local-form" autocomplete="off" hidden>
+        <div class="grid">
+          <input class="field" id="product-name" aria-label="Product name" placeholder="Product name" />
+          <input class="field" id="port" type="number" aria-label="Port" placeholder="Port" />
+          <input class="field wide" id="server-url" aria-label="Server URL" placeholder="Server URL" />
+          <details class="wide">
+            <summary>Advanced settings</summary>
+            <input class="field" id="bind-address" aria-label="Bind address" placeholder="Bind address" />
+            <input class="field" id="repo-path" aria-label="Repository path" placeholder="Repository path" />
+            <input class="field" id="repo-id" aria-label="Repository id" placeholder="Repository id" />
+            <input class="field" id="repo-branch" aria-label="Default branch" placeholder="Default branch" />
+            <input class="field" id="worktrees-dir" aria-label="Worktrees directory" placeholder="Worktrees directory" />
+          </details>
+        </div>
+        <div class="actions">
+          <button class="button" id="host" type="submit">Set up this Mac</button>
+          <button class="button ghost" id="show-connect" type="button">Connect to another server</button>
+        </div>
+      </form>
       <form id="form" autocomplete="off">
         <input
           class="field"
@@ -54,6 +86,8 @@
       const anyway = document.getElementById("anyway");
       const cancel = document.getElementById("cancel");
       const status = document.getElementById("status");
+      const connectForm = document.getElementById("form");
+      const localForm = document.getElementById("local-form");
 
       field.value = params.get("url") || "";
       if (changing) {
@@ -117,7 +151,7 @@
         }
       }
 
-      document.getElementById("form").addEventListener("submit", (e) => {
+      connectForm.addEventListener("submit", (e) => {
         e.preventDefault();
         save(true);
       });
@@ -126,6 +160,72 @@
       window.addEventListener("keydown", (e) => {
         if (e.key === "Escape" && changing && !busy) server && server.cancel();
       });
+
+      function showConnect() {
+        localForm.hidden = true;
+        connectForm.hidden = false;
+        document.getElementById("title").textContent = "Connect to your server";
+        document.querySelector(".message").textContent = "Enter the address of the Open Session server you use.";
+        status.textContent = "";
+        field.focus();
+      }
+
+      async function initializeLocalSetup() {
+        const local = server && server.localSetup;
+        if (!local) return;
+        const info = await local.info();
+        if (!info.available) return;
+        const defaults = info.defaults;
+        for (const [id, key] of [
+          ["product-name", "productName"], ["port", "port"],
+          ["server-url", "publicBaseUrl"], ["bind-address", "host"],
+          ["repo-path", "repoPath"], ["repo-id", "repoId"],
+          ["repo-branch", "repoBranch"], ["worktrees-dir", "worktreesDir"],
+        ]) document.getElementById(id).value = defaults[key];
+        connectForm.hidden = true;
+        localForm.hidden = false;
+        document.getElementById("title").textContent = "Self-host Open Session";
+        document.querySelector(".message").textContent = "Configure a private server on this Mac. The app will start it for you.";
+        status.textContent = "Your data stays on this Mac unless you configure remote services.";
+        document.getElementById("product-name").focus();
+      }
+
+      document.getElementById("show-connect").addEventListener("click", showConnect);
+      localForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        if (busy || !server?.localSetup) return;
+        busy = true;
+        const hostButton = document.getElementById("host");
+        hostButton.disabled = true;
+        status.textContent = "Configuring and starting your server…";
+        const value = (id) => document.getElementById(id).value.trim();
+        const request = {
+          installService: true,
+          answers: {
+            productName: value("product-name"),
+            host: value("bind-address"),
+            port: Number(value("port")),
+            publicBaseUrl: value("server-url"),
+            repoPath: value("repo-path"),
+            repoId: value("repo-id"),
+            repoBranch: value("repo-branch"),
+            worktreesDir: value("worktrees-dir"),
+          },
+        };
+        try {
+          const result = await server.localSetup.run(request);
+          if (!result.ok) {
+            status.textContent = result.error || "Setup failed.";
+            return;
+          }
+          status.textContent = "Opening Open Session…";
+          await server.save(result.url);
+        } finally {
+          busy = false;
+          hostButton.disabled = false;
+        }
+      });
+      initializeLocalSetup();
     </script>
   </body>
 </html>

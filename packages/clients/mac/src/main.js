@@ -19,11 +19,66 @@ const {
 const path = require("node:path");
 const fs = require("node:fs");
 const crypto = require("node:crypto");
-const { execFile } = require("node:child_process");
+const { execFile, spawn } = require("node:child_process");
 const { NativeDictation } = require("./native-dictation");
 const { resumableAccountUrl } = require("./account-navigation");
 const packageConfig = require("../package.json").opensession || {};
 const nativeDictation = new NativeDictation();
+
+// Present only when `bun run setup` launched this app from a source checkout.
+// A downloaded shell never gets host mutation capabilities, and remotely
+// served content cannot call the file-page-only IPC handlers below.
+const NATIVE_SETUP_ROOT = process.env.OPENSESSION_NATIVE_SETUP_ROOT
+  ? path.resolve(process.env.OPENSESSION_NATIVE_SETUP_ROOT)
+  : null;
+const NATIVE_SETUP_BUN = process.env.OPENSESSION_NATIVE_SETUP_BUN || null;
+const NATIVE_SETUP_HOST = NATIVE_SETUP_ROOT
+  ? path.join(NATIVE_SETUP_ROOT, "scripts", "setup-app-host.ts")
+  : null;
+const NATIVE_SETUP_AVAILABLE = Boolean(
+  NATIVE_SETUP_ROOT &&
+  NATIVE_SETUP_BUN &&
+  NATIVE_SETUP_HOST &&
+  fs.existsSync(path.join(NATIVE_SETUP_ROOT, "package.json")) &&
+  fs.existsSync(NATIVE_SETUP_HOST),
+);
+
+function nativeSetupDefaults() {
+  const repoName = path.basename(NATIVE_SETUP_ROOT || "opensession");
+  return {
+    productName: "Open Session",
+    host: "127.0.0.1",
+    port: 3850,
+    publicBaseUrl: "http://127.0.0.1:3850",
+    repoId: repoName,
+    repoPath: NATIVE_SETUP_ROOT,
+    repoBranch: "main",
+    worktreesDir: path.join(app.getPath("home"), ".opensession", "worktrees"),
+  };
+}
+
+function runNativeSetup(request) {
+  return new Promise((resolve) => {
+    if (!NATIVE_SETUP_AVAILABLE) return resolve({ ok: false, error: "Local setup is unavailable." });
+    const child = spawn(NATIVE_SETUP_BUN, [NATIVE_SETUP_HOST], {
+      cwd: NATIVE_SETUP_ROOT,
+      env: { ...process.env, NO_PROMPT: "1" },
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk) => { stdout += chunk; });
+    child.stderr.on("data", (chunk) => { stderr += chunk; });
+    child.on("error", (error) => resolve({ ok: false, error: error.message }));
+    child.on("close", (code) => {
+      const output = `${stdout}\n${stderr}`.trim();
+      resolve(code === 0
+        ? { ok: true, url: request?.answers?.publicBaseUrl, output }
+        : { ok: false, error: output || `Setup exited with code ${code}.` });
+    });
+    child.stdin.end(JSON.stringify(request));
+  });
+}
 
 // AppKit can show its persistent-window crash-recovery prompt before Electron
 // finishes launching. On macOS 26 that modal can trap the browser process and
@@ -1214,7 +1269,9 @@ app.whenReady().then(async () => {
   // hang off the answer. Clearing a registration an older build left behind is
   // unconditional, since it belongs to whatever origin wrote it.
   adoptDefaultForExistingProfile();
-  const chosen = RUN_URL || readStoredServer();
+  // `bun run setup` is an explicit request to configure this Mac, even when
+  // the shell has connected to another server before.
+  const chosen = NATIVE_SETUP_AVAILABLE ? null : RUN_URL || readStoredServer();
   if (chosen) setServer(chosen);
   await session.defaultSession
     .clearStorageData({ storages: ["serviceworkers", "cachestorage"] })
@@ -1376,6 +1433,14 @@ app.whenReady().then(async () => {
   ipcMain.handle("os1:server-probe", async (e, raw) => {
     if (!fromShellPage(e)) return { ok: false };
     return resolveServer(raw);
+  });
+  ipcMain.handle("os1:native-setup-info", (e) => {
+    if (!fromShellPage(e) || !NATIVE_SETUP_AVAILABLE) return { available: false };
+    return { available: true, defaults: nativeSetupDefaults() };
+  });
+  ipcMain.handle("os1:native-setup-run", async (e, request) => {
+    if (!fromShellPage(e) || !NATIVE_SETUP_AVAILABLE) return { ok: false };
+    return runNativeSetup(request);
   });
   ipcMain.handle("os1:server-save", (e, raw) => {
     if (!fromShellPage(e)) return { ok: false };

@@ -62,6 +62,10 @@ export type OnboardOptions = {
    * operator out. Absent = today's single-user install, byte-identical.
    */
   org?: string;
+  /** Pre-collected answers from a trusted native setup surface. */
+  answers?: Answers;
+  /** Whether that surface requested the per-user service. */
+  installService?: boolean;
 };
 
 /** "Open Session" -> "OS". Falls back to the first two characters. */
@@ -264,7 +268,7 @@ export function buildConfig(a: Answers): Record<string, unknown> {
   };
 }
 
-function buildEnv(a: Answers): string {
+export function buildEnv(a: Answers): string {
   const lines = [
     "# Open Session environment and secrets.",
     "# Loaded by the systemd unit (EnvironmentFile) and by Bun for manual runs.",
@@ -349,7 +353,7 @@ export async function onboard(opts: OnboardOptions = {}): Promise<number> {
   if (opts.defaults) {
     info(dim("Using local access, a scratch repo, and no integrations."));
   }
-  const answers = collect(opts.org, opts.defaults);
+  const answers = opts.answers ?? collect(opts.org, opts.defaults);
 
   if (!opts.defaults) heading("Writing configuration");
   mkdirSync(OPENSESSION_HOME, { recursive: true });
@@ -405,7 +409,7 @@ export async function onboard(opts: OnboardOptions = {}): Promise<number> {
     const kind = service.supervisor();
     if (kind !== "none") {
       const what = kind === "launchd" ? "LaunchAgent" : "user service";
-      serviceRequested = askYesNo(
+      serviceRequested = opts.installService ?? askYesNo(
         `\n  Install and start it as a ${what} now?`,
         true,
       );

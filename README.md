@@ -88,12 +88,15 @@ contributing:
 ```sh
 git clone https://github.com/tellahq/opensession.git
 cd opensession && bun install
-bun run setup                             # interactive onboarding
+bun run setup                             # interactive macOS app setup
 ```
 
-`bun run setup` runs the interactive onboarding wizard, writes the
-configuration, and offers to install and start a user service. For unattended
-defaults, run `bun scripts/cli.ts onboard --defaults`. Run
+On macOS, `bun run setup` builds and opens the existing desktop app, where the
+self-host flow writes the configuration, installs the per-user LaunchAgent,
+starts the local server, and connects the app to it. Use `bun run
+setup:terminal` for the terminal wizard. On other platforms, `bun run setup`
+continues to open that terminal wizard. For unattended defaults, run `bun
+scripts/cli.ts onboard --defaults`. Run
 `bun scripts/cli.ts --help` for CLI commands. Options such as `--source`,
 `--dir`, `--channel`, `--tailscale`, and `--no-engine` belong to `install.sh`;
 run `bash install.sh --help` for the complete installer list. A source checkout

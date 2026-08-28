@@ -47,6 +47,10 @@ contextBridge.exposeInMainWorld("os1", {
     cancel: () => ipcRenderer.send("os1:server-cancel"),
     probe: (url) => ipcRenderer.invoke("os1:server-probe", url),
     save: (url) => ipcRenderer.invoke("os1:server-save", url),
+    localSetup: {
+      info: () => ipcRenderer.invoke("os1:native-setup-info"),
+      run: (request) => ipcRenderer.invoke("os1:native-setup-run", request),
+    },
   },
   // App auto-update (Squirrel.Mac, driven by main.js). `onState(cb)` reports
   // the current state immediately and again on every change, and returns an
