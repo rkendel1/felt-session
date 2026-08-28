@@ -258,6 +258,8 @@ function servicePath(bunDir: string): string {
   return [
     bunDir,
     join(HOME, ".local", "bin"),
+    join(HOME, ".cargo", "bin"),
+    join(HOME, "go", "bin"),
     "/opt/homebrew/bin",
     "/usr/local/sbin",
     "/usr/local/bin",
@@ -604,6 +606,8 @@ export function renderLauncher(): string {
     `# macOS shows this file's name in Login Items & Extensions; hence "OpenSession".\n` +
     `cd ${serviceWorkdir()} || exit 1\n` +
     `set -a; [ -f ${ENV_PATH} ] && . ${ENV_PATH}; set +a\n` +
+    `# rustup writes the selected Rust/Cargo toolchain into this PATH shim.\n` +
+    `[ -f "$HOME/.cargo/env" ] && . "$HOME/.cargo/env"\n` +
     `export OPENSESSION_SESSION_KERNEL_TOKEN_FILE=${USER_SESSION_KERNEL_TOKEN_PATH}\n` +
     `exec ${exec.cmd}\n`
   );

@@ -21,6 +21,8 @@ FROM ubuntu:24.04
 ARG BUN_VERSION=1.4.0
 ARG CLAUDE_VERSION=2.1.218
 ARG NODE_MAJOR=24
+ARG RUST_VERSION=1.96.0
+ARG WASM_PACK_VERSION=0.15.0
 
 # Locale parity note: the host runs a full en_US.UTF-8 locale; the image uses
 # C.UTF-8 (no `locales` package) on the assumption that nothing in the runner
@@ -49,6 +51,10 @@ RUN apt-get update \
         xz-utils \
         python3 \
         build-essential \
+        clang \
+        cmake \
+        pkg-config \
+        libssl-dev \
         ripgrep \
         direnv \
         lsof \
@@ -98,9 +104,22 @@ RUN echo '{}' > /home/ubuntu/.claude/settings.json \
     && chown ubuntu:ubuntu /home/ubuntu/.claude/settings.json
 
 ENV HOME=/home/ubuntu \
-    PATH=/home/ubuntu/.local/bin:/usr/local/bun/bin:/usr/local/bin:/usr/bin:/bin
+    PATH=/home/ubuntu/.cargo/bin:/home/ubuntu/go/bin:/home/ubuntu/.local/bin:/usr/local/bun/bin:/usr/local/bin:/usr/bin:/bin
 
 USER ubuntu
+
+# --- Rust + WebAssembly build chain ---
+# Repository setup hooks may install project dependencies, but a session must
+# not pay to bootstrap a compiler. Keep Rust, Cargo, the wasm target and
+# wasm-pack in the runner image so local and isolated coding runs have the same
+# baseline toolchain.
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+        | sh -s -- -y --profile minimal --default-toolchain "${RUST_VERSION}" \
+    && rustup target add wasm32-unknown-unknown \
+    && cargo install wasm-pack --version "${WASM_PACK_VERSION}" --locked \
+    && rustc --version \
+    && cargo --version \
+    && wasm-pack --version
 
 # --- Claude Code CLI (pinned to host version, installed at the identical host path) ---
 # The official installer drops the binary under ~/.local/share/claude and symlinks

@@ -173,9 +173,16 @@ describe.skipIf(!onServiceHost)("launchd plist", () => {
     expect(launcher).toStartWith("#!/bin/bash");
     expect(launcher).toContain(ENV_PATH);
     expect(launcher).toContain("set -a");
+    expect(launcher).toContain('"$HOME/.cargo/env"');
     expect(launcher).toMatch(
       /exec \S*bun run packages\/core\/opensession-server\/opensession\.ts/,
     );
+  });
+
+  test("makes user-installed build toolchains visible to agent runs", () => {
+    const plist = renderPlist();
+    expect(plist).toContain(`${HOME}/.cargo/bin`);
+    expect(plist).toContain(`${HOME}/go/bin`);
   });
 
   test("escapes XML so a path with & or < cannot corrupt the file", () => {

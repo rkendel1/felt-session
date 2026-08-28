@@ -14,6 +14,8 @@ session's git worktree **bind-mounted at its identical host path**.
 | `git`, `gh` | clone / status / diff / push / PR | apt latest |
 | `ripgrep` | @-mention file search | apt |
 | `python3`, `build-essential` | worktree `bun install` native deps | apt |
+| Rust, Cargo, `wasm-pack` | native and WebAssembly builds | `1.96.0` / `0.15.0` |
+| Clang, CMake, pkg-config, OpenSSL headers | native dependency build chains | apt |
 | `just`, `direnv`, `lsof` | common repo dev-server bring-up chains (in-sandbox previews) | apt / pinned release |
 | Claude Code CLI | baked at the identical host CLI path for session-resume parity | `2.1.218` (host); build FAILS on version mismatch |
 | runner bundle | `/home/ubuntu/projects/opensession`: root manifests, lockfile, patches and `tsconfig.json`; copied protocol and server packages; `scripts/workload-identity-client.ts`; installed dependencies | from lockfile |
@@ -45,7 +47,8 @@ Tags `opensession-runner:latest` and `opensession-runner:<git-sha>` from the rep
 root context. Override the name with `IMAGE=... deploy/sandbox/build.sh`.
 
 Version pins are Dockerfile `ARG`s: `BUN_VERSION`, `CLAUDE_VERSION`,
-`NODE_MAJOR`, and `JUST_VERSION`. `build.sh` supports `IMAGE=...` but does not
+`NODE_MAJOR`, `JUST_VERSION`, `RUST_VERSION`, and `WASM_PACK_VERSION`.
+`build.sh` supports `IMAGE=...` but does not
 forward command-line options. To override a pin, invoke `docker build` directly
 with `--build-arg` or change the Dockerfile default.
 
