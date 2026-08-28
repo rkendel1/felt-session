@@ -15,13 +15,14 @@ No async cache, SQLite synchronization layer, local FeltDB, or fallback was
 introduced.
 
 The local FeltDB server was subsequently evaluated as a development authority.
-Its canonical state-contract engine does implement atomic per-record version
-preconditions, so the storage engine itself is suitable. The supported
-`@feltdb/core@0.6.14` application API does not expose that capable protocol,
-however. Open Session therefore cannot begin the kernel conversion without
-either a FeltDB SDK addition or an application-specific raw HTTP client. The
-latter would create a second, private FeltDB protocol implementation in Open
-Session and is not an acceptable migration foundation.
+Its canonical state-contract engine implements atomic per-record version,
+epoch, and lease preconditions. FeltDB main now also contains a public client
+for that protocol, versioned as `@feltdb/core@0.7.0`. The package registry still
+publishes only 0.6.14, however. Open Session therefore cannot install the
+capable client reproducibly yet. A local path dependency or an
+application-specific raw HTTP client would make the deployment depend on a
+developer checkout or duplicate the FeltDB protocol, so neither is an
+acceptable migration foundation.
 
 ## Current command and transaction contract
 
@@ -102,26 +103,53 @@ passes against the 0.6.14 server engine. It proves that a stale `if_version`
 returns `PRECONDITION_FAILED`, preserves the existing record, and retains
 transaction-id idempotency.
 
-This is enough to validate the proposed server authority topology at the
-engine level. It is not yet enough for Open Session to consume it through the
-supported SDK:
+This initially validated the proposed server authority topology at the engine
+level but not through the supported SDK. FeltDB commit `a6df7db` subsequently
+added the missing public-client surface:
 
-- `StateContractClient` is built in `@feltdb/core@0.6.14`, but is not exported
-  by the package root or exports map.
-- The internal client does not expose authority credential headers.
-- The public `AtomicTransactionBuilder` cannot stage `ifVersion`.
+- declarative `db.transaction({ preconditions, operations })`;
+- `ifVersion`, `expectedEpoch`, and `expectedLeaseId` transaction guards;
+- authenticated transport through the existing `HttpDb` client;
+- structured `ConditionalConflictError` responses;
+- authority-owned version advancement and transaction replay.
+
+After rebuilding both the SDK distribution and `feltdb-server` from FeltDB
+main, the public-client real-server suite passed all seven cases:
+
+- stale `ifVersion` rejects and writes nothing;
+- a satisfied fence commits all records and advances the version;
+- a guard can constrain an ownership record without rewriting it;
+- two concurrent writers produce exactly one winner;
+- replay advances neither data nor version twice;
+- existing unconditional, `requireAbsent`, and single-record CAS behavior is
+  preserved;
+- `ifVersion` and `expectedVersion` are equivalent and conflicting spellings
+  are rejected.
+
+This test path is the required boundary:
+
+```text
+Open Session shape -> @feltdb/core -> HTTP -> feltdb-server -> durable state
+```
+
+No raw HTTP request was used by the application-side probe.
+
+The remaining prerequisite is a package release. FeltDB source declares
+`@feltdb/core@0.7.0`, while the npm registry currently ends at 0.6.14. Open
+Session must not commit a `file:../flow_db/packages/core` dependency because
+that path exists only on one development machine and cannot build from an
+immutable Open Session release.
+
+Once 0.7.0 is published, Open Session can pin that release and rerun this same
+probe from its own dependency tree before converting the first kernel
+transaction.
+
+The kernel fencing representation remains unchanged:
+
 - Epoch and lease identity are kernel fields. They can be fenced by requiring
   the observed version of the ownership record in every dependent atomic
-  transaction, but only after that record-version condition is available to
-  the public transaction API.
-
-The next safe dependency step is to expose one supported server-authority
-transaction client from `@feltdb/core` that carries authenticated reads and
-multi-record writes with per-record `ifVersion`. Both the local server and the
-eventual managed authority must implement the same request and conflict
-contract. Open Session can then convert its actor worker, store host, and
-kernel against that interface without changing application semantics between
-development and managed deployment.
+  transaction, with explicit epoch and lease guards where the existing kernel
+  contract requires them.
 
 ## Why the permitted alternatives do not work
 
