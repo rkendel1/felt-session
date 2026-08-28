@@ -70,10 +70,10 @@ export function startSessionKernelActorWorker(): void {
     self.postMessage({ ...message, workerMetrics: host.metrics() });
   }
 
-  function executeCall(
+  async function executeCall(
     request: KernelActorServiceCall["request"],
     outputBytes: number,
-  ): { status: -1 | 1 | 2; length: number; body: string } {
+  ): Promise<{ status: -1 | 1 | 2; length: number; body: string }> {
     let store = host.central;
     let requestSessionId: string | undefined;
     try {
@@ -306,6 +306,11 @@ export function startSessionKernelActorWorker(): void {
         }
         result = host.call(request.method, request.args);
       }
+      // Store methods remain synchronous until their domain moves to FeltDB,
+      // while migrated methods return promises. Awaiting both shapes here is
+      // the conversion seam: the parent mailbox does not start the next turn
+      // until this worker posts the committed result.
+      result = await result;
       const body = JSON.stringify({ ok: true, result });
       const length = Buffer.byteLength(body);
       return { status: length > outputBytes ? 2 : 1, length, body };
@@ -370,13 +375,13 @@ export function startSessionKernelActorWorker(): void {
     }
   }
 
-  function asyncCall(request: KernelActorClientCallRequest): void {
+  async function asyncCall(request: KernelActorClientCallRequest): Promise<void> {
     const retryableRead = request.t === "reduce"
       ? isReadReducer(request.command)
       : READ_METHODS.has(request.method);
     let outputBytes = 256 * 1024;
     for (;;) {
-      const result = executeCall(request, outputBytes);
+      const result = await executeCall(request, outputBytes);
       if (
         result.status === 2 && retryableRead &&
         result.length > outputBytes &&
@@ -396,7 +401,7 @@ export function startSessionKernelActorWorker(): void {
     }
   }
 
-  function serviceCall(request: KernelActorServiceCall): void {
+  async function serviceCall(request: KernelActorServiceCall): Promise<void> {
     const outputBytes = Math.floor(request.outputBytes);
     if (outputBytes <= 0 || outputBytes > SESSION_KERNEL_MAX_RESPONSE_BYTES) {
       post({ t: "error", rpcId: request.rpcId, error: "Invalid kernel actor response bound" });
@@ -405,7 +410,7 @@ export function startSessionKernelActorWorker(): void {
     const retryableRead = request.request.t === "reduce"
       ? isReadReducer(request.request.command)
       : READ_METHODS.has(request.request.method);
-    const result = executeCall(request.request, outputBytes);
+    const result = await executeCall(request.request, outputBytes);
     post({
       t: "call_result",
       rpcId: request.rpcId,
@@ -420,11 +425,11 @@ export function startSessionKernelActorWorker(): void {
   ) => {
     const request = event.data;
     if (request.t === "call") {
-      serviceCall(request);
+      void serviceCall(request);
       return;
     }
     if (request.t === "store" || request.t === "reduce") {
-      asyncCall(request);
+      void asyncCall(request);
       return;
     }
     if (request.t === "hello") {
