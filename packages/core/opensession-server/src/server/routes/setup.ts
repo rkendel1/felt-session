@@ -26,6 +26,7 @@ import { GITHUB_APP_GRANT_PERMISSIONS } from "../../shared/github-app-permission
 import { envRequired, type IntegrationSpec } from "../integrations/registry";
 import { setupAccessSnapshot } from "../setup-access";
 import { requireWorkspaceAdmin } from "../workspace-auth";
+import { BOOT_ID } from "../ws-hub";
 import type { RouteContext } from "./context";
 import { handleSetupCodestorageRoutes } from "./setup-codestorage";
 import { handleSetupGithubManifestRoutes } from "./setup-github-manifest";
@@ -759,7 +760,7 @@ export async function handleSetupRoutes(
         process.kill(process.pid, "SIGTERM");
       }, 300);
     }
-    return Response.json({ restarting: true });
+    return Response.json({ restarting: true, bootId: BOOT_ID });
   }
 
   // ── Sibling modules: /api/setup/{team*,github/repos,repos},

@@ -53,6 +53,7 @@ export function useSetupStatus(): SetupController {
 	const [restartNeeded, setRestartNeeded] = useState(false);
 	const [restartState, setRestartState] = useState<RestartState>("idle");
 	const statusRef = useRef<SetupStatus | null>(null);
+	const restartBootIdRef = useRef<string | null>(null);
 	useLayoutEffect(() => {		statusRef.current = status;
 	});
 	// Stable identity: the body only reads refs and calls setters, so the
@@ -113,8 +114,19 @@ const body = await setupRequest<SetupStatus>("/api/setup/status");
 
 	const restartServer = async (post = true) => {
 			setRestartState("working");
+			let previousBootId = restartBootIdRef.current;
 			if (post) {
-				await (async () => {
+				try {
+					const health = await fetch(`${BASE_PATH}/api/health?brief=1`, {
+						cache: "no-store",
+					});
+					if (health.ok) {
+						const body = (await health.json()) as { bootId?: string };
+						previousBootId = body.bootId || null;
+						restartBootIdRef.current = previousBootId;
+					}
+				} catch {}
+				const accepted = await (async () => {
 const res = await fetch(`${BASE_PATH}/api/setup/restart`, {
 						method: "POST",
 					});
@@ -124,30 +136,47 @@ const res = await fetch(`${BASE_PATH}/api/setup/restart`, {
 						const body = await res.json().catch(() => null);
 						setRestartState("idle");
 						toast(body?.error || "This server can't restart itself.");
-						return;
+						return false;
 					}
+					if (!res.ok) return false;
+					const body = (await res.json()) as { bootId?: string };
+					previousBootId = body.bootId || previousBootId;
+					restartBootIdRef.current = previousBootId;
+					return true;
 })().catch(async () => {
 // The connection can drop as the server goes down — that's fine,
 					// the health poll below is the real signal.
+					return true;
 });
+				if (!accepted) return;
 			}
-			const deadline = Date.now() + 30_000;
+			if (!previousBootId) {
+				setRestartState("failed");
+				return;
+			}
+			const deadline = Date.now() + 45_000;
 			await sleep(1000);
 			while (Date.now() < deadline) {
-				await (async () => {
+				const restarted = await (async () => {
 const res = await fetch(`${BASE_PATH}/api/health`, {
 						cache: "no-store",
 					});
 					if (res.ok) {
-						await refetch();
-						setRestartNeeded(false);
-						setRestartState("idle");
-						toast("Server restarted. Changes applied.");
-						return;
+						const body = (await res.json()) as { bootId?: string };
+						if (body.bootId && body.bootId !== previousBootId) {
+							await refetch();
+							restartBootIdRef.current = null;
+							setRestartNeeded(false);
+							setRestartState("idle");
+							toast("Server restarted. Changes applied.");
+							return true;
+						}
 					}
+					return false;
 })().catch(async () => {
-
+					return false;
 });
+				if (restarted) return;
 				await sleep(1000);
 			}
 			setRestartState("failed");
