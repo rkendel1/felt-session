@@ -3,9 +3,10 @@ import type {
   ExecutorGrant,
 } from "@tellahq/opensession-protocol/executor";
 import {
-  openSQLiteCommandLedger,
-  type SQLiteCommandLedger,
-} from "../../runner-executor/sqlite-ledger";
+  openCommandLedger,
+  commandLedgerBackend,
+  type OpenCommandLedger,
+} from "../../runner-executor/open-command-ledger";
 import { ExecutorFailure, type ExecutorContext } from "./contract";
 import { ExecutorBroker } from "./broker";
 import {
@@ -75,7 +76,15 @@ export interface ExecutorRuntimeOptions {
   >;
   maxGrantTtlMs?: number;
   managedEnrollmentTtlMs?: number;
-  runnerLedger?: Omit<Parameters<typeof openSQLiteCommandLedger>[0], "dbPath">;
+  runnerLedger?: {
+    backend?: "sqlite" | "feltdb";
+    busyTimeoutMs?: number;
+    capacity?: number;
+    maxRecordBytes?: number;
+    maxStringBytes?: number;
+    maxEvents?: number;
+  };
+  feltdbPath?: string;
   /** Explicit provider-client shutdown, called only after manager drain. Use a deliberate no-op when appropriate. */
   closeProviders: () => void | Promise<void>;
 }
@@ -109,7 +118,7 @@ export class ExecutorRuntime {
   readonly #managedEnrollmentTtlMs: number;
   #claims?: SqliteRunnerExecutorClaims;
   #managedStore?: SqliteExecutorStateStore;
-  #ledger?: SQLiteCommandLedger;
+  #ledger?: OpenCommandLedger;
   #manager?: ExecutorManager;
   #ingress?: ExecutorIngress;
   #started = false;
@@ -149,13 +158,16 @@ export class ExecutorRuntime {
   }
 
   async #initialize(): Promise<this> {
-    let ledger: SQLiteCommandLedger | undefined;
+    let ledger: OpenCommandLedger | undefined;
     let managedStore: SqliteExecutorStateStore | undefined;
     let claims: SqliteRunnerExecutorClaims | undefined;
     try {
-      ledger = openSQLiteCommandLedger({
-        ...this.#options.runnerLedger,
+      const backend = commandLedgerBackend(this.#options.runnerLedger?.backend);
+      ledger = openCommandLedger({
+        backend,
         dbPath: this.#options.paths.runnerLedgerDb,
+        feltdbPath: this.#options.feltdbPath,
+        ...this.#options.runnerLedger,
       });
       await ledger.recover();
       if (this.#closed) throw new Error("Executor runtime closed during start");
@@ -257,7 +269,7 @@ export class ExecutorRuntime {
     return this.#requireStarted(this.#manager);
   }
 
-  get runnerLedger(): SQLiteCommandLedger {
+  get runnerLedger(): OpenCommandLedger {
     return this.#requireStarted(this.#ledger);
   }
 
