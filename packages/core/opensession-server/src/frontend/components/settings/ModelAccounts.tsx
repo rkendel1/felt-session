@@ -1224,14 +1224,58 @@ function AddClaudeAccountForm({
 	const [name, setName] = useState("");
 	const [token, setToken] = useState("");
 	const [owner, setOwner] = useState("");
+	const [setupLogin, setSetupLogin] = useState<{
+		id: string;
+		state: "starting" | "authorizing" | "done" | "error" | "cancelled";
+		url?: string;
+		error?: string;
+		account?: ClaudeAccountInfo;
+	} | null>(null);
 	const [login, setLogin] = useState<{ id: string; url: string } | null>(null);
 	const [code, setCode] = useState("");
 	const [saving, setSaving] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const pending = useRef<{ id?: string; done: boolean }>({ done: false });
+	const setupPending = useRef<{ id?: string; done: boolean }>({ done: false });
 	useLayoutEffect(() => {
 		pending.current.id = login?.id;
+		setupPending.current.id = setupLogin?.id;
+		setupPending.current.done = setupLogin?.state === "done";
 	});
+	useEffect(
+		() => () => {
+			const { id, done } = setupPending.current;
+			if (!done && id) {
+				fetch(`${BASE_PATH}/api/claude-accounts/setup-login/${encodeURIComponent(id)}`, {
+					method: "DELETE",
+				}).catch(() => {});
+			}
+		},
+		[],
+	);
+
+	useEffect(() => {
+		if (!setupLogin?.id || ["done", "error", "cancelled"].includes(setupLogin.state)) return;
+		let cancelled = false;
+		const timer = window.setInterval(() => {
+			void fetch(`${BASE_PATH}/api/claude-accounts/setup-login/${encodeURIComponent(setupLogin.id)}`)
+				.then((res) => res.json())
+				.then((next) => {
+					if (cancelled) return;
+					setSetupLogin(next);
+					if (next.state === "done" && next.account) {
+						setAccount(next.account);
+						onAccountAdded();
+					}
+					if (next.state === "error") setError(next.error || "Claude sign-in failed.");
+				})
+				.catch(() => {});
+		}, 750);
+		return () => {
+			cancelled = true;
+			window.clearInterval(timer);
+		};
+	}, [setupLogin?.id, setupLogin?.state, onAccountAdded]);
 
 	useEffect(() => {
 		if (!account) return;
@@ -1276,6 +1320,26 @@ const res = await fetch(`${BASE_PATH}/api/claude-accounts`, {
 })().catch(async (cause: any) => {
 setError(cause.message);
 });
+		setSaving(false);
+	}
+
+	async function handleSetupLogin() {
+		setSaving(true);
+		setError(null);
+		await fetch(`${BASE_PATH}/api/claude-accounts/setup-login`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				name: name.trim(),
+				...(owner.trim() ? { owner: owner.trim() } : {}),
+			}),
+		})
+			.then(async (res) => {
+				const body = await res.json();
+				if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
+				setSetupLogin(body);
+			})
+			.catch((cause: Error) => setError(cause.message));
 		setSaving(false);
 	}
 
@@ -1371,6 +1435,8 @@ setError(cause.message);
 	}
 
 	const ready = Boolean(name.trim() && token.trim());
+	const authorizing =
+		setupLogin && !["done", "error", "cancelled"].includes(setupLogin.state);
 	return (
 		<>
 			<Modal.Header
@@ -1397,32 +1463,57 @@ setError(cause.message);
 							spellCheck={false}
 						/>
 					</Field>
-					<Field label="Setup token">
-						<Input
-							required
-							type="password"
-							autoComplete="off"
-							value={token}
-							onChange={(event) => setToken(event.target.value)}
-							placeholder="sk-ant-oat01-…"
-						/>
-					</Field>
 					<p className="m-0 text-meta leading-relaxed text-faint">
-						Run <code>claude setup-token</code> while signed into this Claude account. The
-						token powers model runs for about one year.
+						Sign in with Claude to create and store a setup token without leaving this flow.
 					</p>
 					<Field label="Owner" title="Personal sub: this person's runs use the account first, with the shared pool as backup. Shared pool: used by everyone and by automations.">
 						<OwnerSelect value={owner} onChange={setOwner} label="Owner" />
 					</Field>
+					{authorizing && (
+						<div className="flex flex-col gap-3 rounded-md bg-surface px-4 py-3">
+							<LoadingState placement="row">Waiting for Claude sign-in…</LoadingState>
+							{setupLogin.url && (
+								<Button
+									render={<a href={setupLogin.url} target="_blank" rel="noreferrer" />}
+									icon={<IconPlug size={16} />}
+								>
+									Open Claude sign-in
+								</Button>
+							)}
+						</div>
+					)}
+					<details className="text-meta text-faint">
+						<summary className="cursor-pointer">Use an existing setup token</summary>
+						<Field className="mt-3" label="Setup token">
+							<Input
+								type="password"
+								autoComplete="off"
+								value={token}
+								onChange={(event) => setToken(event.target.value)}
+								placeholder="sk-ant-oat01-…"
+							/>
+						</Field>
+					</details>
 				</div>
 
 				{error && <InlineAlert>{error}</InlineAlert>}
 
 				<Modal.Footer>
 					<Modal.Close render={<Button variant="ghost" disabled={saving}>Cancel</Button>} />
-					<Button variant="primary" type="submit" disabled={saving || !ready}>
-						{saving ? "Validating…" : "Continue"}
-					</Button>
+					{ready ? (
+						<Button variant="primary" type="submit" disabled={saving || Boolean(authorizing)}>
+							{saving ? "Validating…" : "Use setup token"}
+						</Button>
+					) : (
+						<Button
+							variant="primary"
+							type="button"
+							disabled={saving || !name.trim() || Boolean(authorizing)}
+							onClick={() => void handleSetupLogin()}
+						>
+							{authorizing ? "Waiting for sign-in…" : "Sign in with Claude"}
+						</Button>
+					)}
 				</Modal.Footer>
 			</form>
 		</>

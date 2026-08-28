@@ -26,6 +26,11 @@ import {
 	completeClaudeLogin,
 	startClaudeLogin,
 } from "../claude-oauth-login";
+import {
+	cancelClaudeSetupLogin,
+	getClaudeSetupLogin,
+	startClaudeSetupLogin,
+} from "../claude-setup-login";
 
 export async function handleAccountsRoutes(
 	ctx: RouteContext,
@@ -53,6 +58,30 @@ export async function handleAccountsRoutes(
 		);
 		if ("error" in result) return Response.json(result, { status: 400 });
 		return Response.json(result);
+	}
+
+	if (path === "/api/claude-accounts/setup-login" && req.method === "POST") {
+		const body = await req.json().catch(() => null);
+		const result = startClaudeSetupLogin(
+			typeof body?.name === "string" ? body.name : "",
+			typeof body?.owner === "string" ? body.owner : undefined,
+		);
+		if (!("id" in result)) return Response.json(result, { status: 400 });
+		return Response.json(result);
+	}
+	const claudeSetupMatch = path.match(
+		/^\/api\/claude-accounts\/setup-login\/([^/]+)$/,
+	);
+	if (claudeSetupMatch && req.method === "GET") {
+		const login = getClaudeSetupLogin(decodeURIComponent(claudeSetupMatch[1]));
+		return login
+			? Response.json(login)
+			: Response.json({ error: "Not found" }, { status: 404 });
+	}
+	if (claudeSetupMatch && req.method === "DELETE") {
+		return cancelClaudeSetupLogin(decodeURIComponent(claudeSetupMatch[1]))
+			? Response.json({ ok: true })
+			: Response.json({ error: "Not found" }, { status: 404 });
 	}
 
 	if (
