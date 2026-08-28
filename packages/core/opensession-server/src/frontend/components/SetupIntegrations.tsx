@@ -188,14 +188,17 @@ export function GithubAuthCard({
 	onboarding = false,
 	onPersonalSignIn,
 	onContentSizeChange,
+	onSetupComplete,
 }: {
 	github: SetupGithub;
 	onSaved: (updated: SetupGithub, restartRequired: boolean) => void;
 	onboarding?: boolean;
 	onPersonalSignIn?: () => void;
 	onContentSizeChange?: () => void;
+	onSetupComplete?: () => void;
 }) {
 	const state = githubAuthState(github);
+	const [setupComplete, setSetupComplete] = useState(false);
 
 	return (
 		<div className="grid px-4 phone:px-0">
@@ -209,6 +212,10 @@ export function GithubAuthCard({
 						github={github}
 						returnTo="welcome"
 						onContentSizeChange={onContentSizeChange}
+						onComplete={() => {
+							setSetupComplete(true);
+							onSetupComplete?.();
+						}}
 						connectionStatus={
 							onboarding
 								? {
@@ -219,7 +226,7 @@ export function GithubAuthCard({
 						}
 					/>
 				</SettingsSection>
-				{onboarding && github.clientIdConfigured && (
+				{onboarding && github.clientIdConfigured && setupComplete && (
 					<div className="mt-6 px-5">
 						<div className="mb-3 text-dialog-title font-semibold text-fg">
 							Sign in to GitHub

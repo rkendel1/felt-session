@@ -89,7 +89,7 @@ const github: SetupGithub = {
 function renderGithub(appSlug: string | null): string {
 	return renderToStaticMarkup(
 		<GithubAuthCard
-			github={{ ...github, appSlug }}
+			github={{ ...github, appSlug, clientIdConfigured: Boolean(appSlug) }}
 			onSaved={() => {}}
 			onboarding
 		/>,
@@ -97,19 +97,15 @@ function renderGithub(appSlug: string | null): string {
 }
 
 describe("GitHub App onboarding actions", () => {
-	test("shows clickable setup steps and disables unavailable actions", () => {
+	test("starts with one guided App creation action", () => {
 		const markup = renderGithub(null);
-		expect(markup).toContain("Create GitHub app");
-		expect(markup).toContain("Enable Device Flow");
-		expect(markup).toContain("Install GitHub app");
-		expect(markup.match(/disabled=""/g)).toHaveLength(2);
+		expect(markup).toContain("Create App in GitHub");
+		expect(markup).toContain("GitHub setup progress");
+		expect(markup).toContain("Device Flow");
+		expect(markup).toContain("Repositories");
 		expect(markup).toContain("Organization ID");
-		expect(markup).toContain("<mask");
-		expect(markup).toContain('fill="currentColor"');
-		expect(markup).toContain('aria-label="Show help for create github app"');
-		expect(markup).toContain('aria-label="Show help for enable device flow"');
-		expect(markup).toContain('aria-label="Show help for install github app"');
-		expect(markup).not.toMatch(/>\d\. /);
+		expect(markup).not.toContain("Open GitHub settings");
+		expect(markup).not.toContain("Choose repositories in GitHub");
 	});
 
 	test("links personal App settings independently from its organization installation", () => {
@@ -119,16 +115,16 @@ describe("GitHub App onboarding actions", () => {
 		);
 		expect(markup).not.toContain("/organizations/acme/settings/apps/open-session-acme");
 		expect(markup).toContain("Enable Device Flow");
-		expect(markup).toContain(
+		expect(markup).not.toContain(
 			'href="https://github.com/apps/open-session-acme/installations/new"',
 		);
-		expect(markup).toContain("Install GitHub app");
+		expect(markup).not.toContain("Choose repositories in GitHub");
 	});
 
 	test("links organization App settings only when appOrg identifies the owner", () => {
 		const markup = renderToStaticMarkup(
 			<GithubManifestSetup
-				github={{ ...github, appSlug: "open-session-acme", appOrg: "acme" }}
+				github={{ ...github, appSlug: "open-session-acme", appOrg: "acme", clientIdConfigured: true }}
 				returnTo="welcome"
 			/>,
 		);
@@ -144,7 +140,7 @@ describe("GitHub App onboarding actions", () => {
 		expect(markup).not.toContain("Client secret");
 	});
 
-	test("marks the completed App creation step green", () => {
+	test("guides Device Flow after App creation", () => {
 		const markup = renderToStaticMarkup(
 			<GithubAuthCard
 				github={{ ...github, appSlug: "open-session-acme", clientIdConfigured: true }}
@@ -153,19 +149,19 @@ describe("GitHub App onboarding actions", () => {
 			/>,
 		);
 		expect(markup).toContain('class="text-green"');
-		expect(markup).toContain("Install Open Session for GitHub");
+		expect(markup).toContain("Connect GitHub");
 		expect(markup).toContain("/mac-app-icon.png");
-		expect(markup).toContain("Sign in to GitHub");
-		expect(markup).toContain("You can also sign in to GitHub later.");
+		expect(markup).toContain("Open GitHub settings");
+		expect(markup).not.toContain("Sign in to GitHub");
 	});
 
 	test("uses the same manifest-only setup in Settings", () => {
 		const markup = renderToStaticMarkup(
 			<GithubManifestSetup github={github} returnTo="settings" />,
 		);
-		expect(markup).toContain("Create GitHub app");
-		expect(markup).toContain("Enable Device Flow");
-		expect(markup).toContain("Install GitHub app");
+		expect(markup).toContain("Create App in GitHub");
+		expect(markup).toContain("Device Flow");
+		expect(markup).toContain("Repositories");
 		expect(markup).not.toContain('type="file"');
 		expect(markup).not.toContain("Client secret");
 	});

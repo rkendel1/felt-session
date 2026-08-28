@@ -186,7 +186,7 @@ export function integrationState(i: SetupIntegration): {
 
 export function githubAuthState(g: SetupGithub): { tone: ChipTone; label: string } {
 	if (!g.appCredentialConfigured)
-		return { tone: "warn", label: "Missing App credential" };
+		return { tone: "warn", label: "Setup required" };
 	if (!g.appSlug) return { tone: "warn", label: "Missing App slug" };
 	if (g.userPrAuth && !g.clientSecretConfigured)
 		return { tone: "warn", label: "Missing client secret" };

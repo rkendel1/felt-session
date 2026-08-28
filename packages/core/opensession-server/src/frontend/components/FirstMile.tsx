@@ -378,6 +378,7 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 	const [panelSize, setPanelSize] = useState<PanelSize | null>(null);
 	const [finishing, setFinishing] = useState(false);
 	const [personalGithubVisited, setPersonalGithubVisited] = useState(false);
+	const [githubSetupComplete, setGithubSetupComplete] = useState(false);
 	const [inviteCopied, setInviteCopied] = useState(false);
 	const [theme, setTheme] = useState(effectiveTheme);
 	const rootRef = useRef<HTMLDivElement>(null);
@@ -867,6 +868,7 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 											onboarding
 											onPersonalSignIn={openPersonalGithub}
 											onContentSizeChange={resizePanelForContentChange}
+											onSetupComplete={() => setGithubSetupComplete(true)}
 										/>
 									)}
 									{step.id === "github-account" && (
@@ -958,7 +960,9 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 								variant="primary"
 								size="lg"
 								onClick={goForward}
-								disabled={finishing}
+								disabled={
+									finishing || (step.id === "github" && !githubSetupComplete)
+								}
 								className="px-4 phone:min-h-11"
 							>
 								{nextLabel ?? `Enter ${PRODUCT_NAME}`}

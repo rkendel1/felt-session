@@ -29,6 +29,8 @@ import {
 	type SetupGithub,
 } from "./setup-shared";
 
+type GuidedStage = "create" | "device" | "install" | "done";
+
 function GithubSetupStep({
 	label,
 	guide,
@@ -115,11 +117,13 @@ export function GithubManifestSetup({
 	returnTo,
 	connectionStatus,
 	onContentSizeChange,
+	onComplete,
 }: {
 	github: SetupGithub;
 	returnTo: "welcome" | "settings";
 	connectionStatus?: { tone: ChipTone; label: string };
 	onContentSizeChange?: () => void;
+	onComplete?: () => void;
 }) {
 	const initialOwner = githubAppCreateOwner(github.appCreateUrl);
 	const [owner, setOwner] = useState<GithubAppOwnerType>(
@@ -140,6 +144,13 @@ export function GithubManifestSetup({
 	});
 	const [starting, setStarting] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const storageKey = `opensession:github-guide:${github.appSlug ?? "new"}`;
+	const [stage, setStage] = useState<GuidedStage>(() => {
+		if (!github.clientIdConfigured) return "create";
+		if (typeof window === "undefined") return "device";
+		const saved = window.sessionStorage.getItem(storageKey);
+		return saved === "install" || saved === "done" ? saved : "device";
+	});
 	const installationOwner = ownerDrafts[owner];
 	const formInstallationOwner = ownerDrafts[formOwner];
 	const ownerSwitching = owner !== formOwner;
@@ -162,6 +173,16 @@ export function GithubManifestSetup({
 		typeof window === "undefined"
 			? null
 			: new URLSearchParams(window.location.search).get("github_manifest");
+
+	useEffect(() => {
+		if (stage === "done") onComplete?.();
+	}, [stage, onComplete]);
+
+	function advance(next: GuidedStage) {
+		setStage(next);
+		if (github.appSlug) window.sessionStorage.setItem(storageKey, next);
+		onContentSizeChange?.();
+	}
 
 	async function createApp() {
 		if (starting || !ownerReady) return;
@@ -227,24 +248,79 @@ export function GithubManifestSetup({
 							className="size-12 shrink-0"
 						/>
 					</div>
-					<div className="flex items-center justify-between gap-4">
+					<div className="flex items-center justify-between gap-4 phone:items-start">
 						<div className="min-w-0 text-dialog-title font-semibold text-fg">
-							Install Open Session for GitHub
+							Connect GitHub
 						</div>
-						<StateChip tone={connectionStatus.tone} label={connectionStatus.label} />
+						<StateChip
+							tone={stage === "done" ? connectionStatus.tone : "warn"}
+							label={
+								stage === "done"
+									? connectionStatus.label
+									: stage === "create"
+										? "Setup required"
+										: "Finish setup"
+							}
+						/>
 					</div>
 				</>
 			) : (
 				<div className="text-dialog-title font-semibold text-fg">
-					Install Open Session for GitHub
+					Connect GitHub
 				</div>
 			)}
-			<div
-				className={cn(
-					"flex flex-col",
-					formOwner === "organization" ? "gap-5" : "gap-2",
-				)}
+			<p className="m-0 text-supporting leading-relaxed text-dim">
+				Open Session will create a private GitHub App owned by you. Its
+				credentials stay on this Mac.
+			</p>
+			<ol
+				className="m-0 grid list-none grid-cols-3 gap-2 p-0"
+				aria-label="GitHub setup progress"
 			>
+				{(["Create", "Device Flow", "Repositories"] as const).map(
+					(label, index) => {
+						const current =
+							stage === "create"
+								? 0
+								: stage === "device"
+									? 1
+									: stage === "install"
+										? 2
+										: 3;
+						return (
+							<li
+								key={label}
+								className={cn(
+									"flex min-w-0 items-center gap-2 rounded-control bg-button px-3 py-2 text-meta text-faint phone:min-h-11 phone:px-2",
+									index === current && "text-fg",
+									index < current && "text-dim",
+								)}
+								aria-current={index === current ? "step" : undefined}
+							>
+								<IconCheckCircleFilled
+									size={18}
+									className={index < current ? "text-green" : "text-faint"}
+								/>
+								<span className="truncate">{label}</span>
+							</li>
+						);
+					},
+				)}
+			</ol>
+			{stage === "create" && (
+				<div
+					className={cn(
+						"flex flex-col rounded-xl bg-panel p-5 phone:p-4",
+						formOwner === "organization" ? "gap-5" : "gap-2",
+					)}
+				>
+				<div className="mb-2">
+					<div className="text-body font-semibold text-fg">1. Choose the App owner</div>
+					<p className="m-0 mt-1 text-supporting leading-relaxed text-dim">
+						GitHub shows the permissions before creation. Open Session fills in
+						the configuration and saves the credentials automatically.
+					</p>
+				</div>
 				<Segmented
 					label="GitHub App owner"
 					value={owner}
@@ -284,40 +360,61 @@ export function GithubManifestSetup({
 						/>
 					</label>
 				)}
-			</div>
-			<div className="flex flex-col gap-2">
 				<GithubSetupStep
-					label="Create GitHub app"
+					label={starting ? "Opening GitHub…" : "Create App in GitHub"}
 					guide={githubCreateAppGuide}
-					caption="Keep the suggested name, then create the GitHub App for your account or organization."
-					complete={github.clientIdConfigured}
-					disabled={
-						github.clientIdConfigured || !ownerReady || ownerSwitching || starting
-					}
+					caption="Review the suggested settings, then create the App. GitHub returns you here automatically."
+					disabled={!ownerReady || ownerSwitching || starting}
 					onClick={() => void createApp()}
 				/>
+				</div>
+			)}
+			{stage === "device" && (
+				<div className="flex flex-col gap-3 rounded-xl bg-panel p-5 phone:p-4">
+				<div className="text-body font-semibold text-fg">2. Enable Device Flow</div>
+				<p className="m-0 text-supporting leading-relaxed text-dim">
+					In GitHub, turn on Enable Device Flow and save the change. This lets
+					people sign in without sharing passwords or tokens.
+				</p>
+				<img src={githubDeviceFlowGuide} alt="GitHub settings showing the Enable Device Flow option" className="block h-auto w-full rounded-lg" />
 				<GithubSetupStep
-					label="Enable Device Flow"
+					label="Open GitHub settings"
 					guide={githubDeviceFlowGuide}
-					caption={
-						<>
-							Leave OAuth during installation off, then turn on Enable Device Flow.
-							Click “<strong className="font-semibold text-tooltip-fg">Save changes</strong>”
-							to finish.
-						</>
-					}
+					caption="Turn on Enable Device Flow, then click Save changes."
 					href={settingsUrl}
 				/>
+				<Button size="lg" onClick={() => advance("install")} className="w-full phone:min-h-11">Device Flow is enabled</Button>
+				</div>
+			)}
+			{stage === "install" && (
+				<div className="flex flex-col gap-3 rounded-xl bg-panel p-5 phone:p-4">
+				<div className="text-body font-semibold text-fg">3. Choose repositories</div>
+				<p className="m-0 text-supporting leading-relaxed text-dim">
+					Install your App and choose which repositories Open Session may access.
+					You can change this selection later in GitHub.
+				</p>
+				<img src={githubInstallAppGuide} alt="GitHub App repository selection" className="block h-auto w-full rounded-lg" />
 				<GithubSetupStep
-					label="Install GitHub app"
+					label="Choose repositories in GitHub"
 					guide={githubInstallAppGuide}
-					caption="Choose all repositories or select the repositories Open Session can access, then click Install."
+					caption="Choose all repositories or select individual repositories, then click Install."
 					href={installUrl}
 				/>
-			</div>
+				<Button size="lg" onClick={() => advance("done")} className="w-full phone:min-h-11">I installed the App</Button>
+				</div>
+			)}
+			{stage === "done" && (
+				<div className="flex items-start gap-3 rounded-xl bg-panel p-5 phone:p-4" role="status">
+				<IconCheckCircleFilled size={22} className="mt-0.5 shrink-0 text-green" />
+				<div>
+					<div className="text-body font-semibold text-fg">GitHub App installed</div>
+					<p className="m-0 mt-1 text-supporting leading-relaxed text-dim">Open Session can now connect to the repositories you selected.</p>
+				</div>
+				</div>
+			)}
 			{result === "created" && (
 				<SettingsHint className="m-0">
-					GitHub App created. Enable Device Flow before you install it.
+					GitHub created the App and returned its credentials to this Mac.
 				</SettingsHint>
 			)}
 			{result === "error" && (
