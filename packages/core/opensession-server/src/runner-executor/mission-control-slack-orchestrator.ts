@@ -171,10 +171,15 @@ export function createMissionControlSlackOrchestrator(
         return null;
       }
 
-      const [, targetHandle, restOfMessage] = mentionMatch;
+      const [, rawHandle, restOfMessage] = mentionMatch;
+      const targetHandle = `@${rawHandle}`; // Add @ back for storage
 
-      // Resolve agent by handle
-      const agent = await this.resolveAgentHandle(targetHandle, projectId);
+      // Resolve agent by handle - try project-scoped first, then workspace-level
+      let agent = await this.resolveAgentHandle(targetHandle, projectId);
+      if (!agent) {
+        // Try workspace-level agents if project-scoped not found
+        agent = await this.resolveAgentHandle(targetHandle);
+      }
       if (!agent) {
         return null;
       }
