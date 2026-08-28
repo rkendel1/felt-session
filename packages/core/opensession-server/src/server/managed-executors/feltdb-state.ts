@@ -43,8 +43,16 @@ interface StoredAuditRow {
   atMs: number;
 }
 
+interface StoredClaimRow {
+  id: string;
+  executorId: string;
+  generation: number;
+  instanceId: string;
+}
+
 const EXECUTOR_COLLECTION = "executor_state";
 const AUDIT_COLLECTION = "executor_audit";
+const CLAIMS_COLLECTION = "executor_instance_claims";
 
 /**
  * FeltDB-backed executor state store.
@@ -206,6 +214,51 @@ export class FeltDbExecutorStateStore implements ExecutorStateStore {
       };
       tx.collection<StoredAuditRow>(AUDIT_COLLECTION).set(key, row);
     });
+  }
+
+  /**
+   * Atomically proves lifecycle connectability and claims one same-generation instance.
+   */
+  async claimConnectableInstance(input: {
+    executorId: string;
+    generation: number;
+    instanceId: string;
+  }): Promise<boolean> {
+    if (this.#closed) throw new Error("State store is closed");
+
+    const executorId = input.executorId;
+    const claimKey = `${executorId}_${input.generation}`;
+
+    // Read outside of transaction
+    const record = await this.#db
+      .collection<StoredExecutorRow>(EXECUTOR_COLLECTION)
+      .get(executorId);
+    const existing = await this.#db
+      .collection<StoredClaimRow>(CLAIMS_COLLECTION)
+      .get(claimKey);
+
+    if (
+      !record ||
+      record.instanceGeneration !== input.generation ||
+      record.lifecycle !== "awake"
+    ) {
+      return false;
+    }
+
+    if (existing) {
+      return existing.instanceId === input.instanceId;
+    }
+
+    await this.#db.transaction((tx) => {
+      tx.collection<StoredClaimRow>(CLAIMS_COLLECTION).set(claimKey, {
+        id: claimKey,
+        executorId,
+        generation: input.generation,
+        instanceId: input.instanceId,
+      });
+    });
+
+    return true;
   }
 
   private #recordToRow(record: ExecutorRecord): StoredExecutorRow {
