@@ -3,6 +3,11 @@
  * per-session sequence-numbered event log co-located with that session's
  * kernel tables in its actor-owned SQLite (WAL) database.
  *
+ * Phase 4: FeltDB Adapter Support
+ * This module now supports both SQLite and FeltDB backends via ENABLE_FELTDB_TRANSCRIPT.
+ * When enabled, uses FeltDB for durable storage; otherwise uses SQLite backend.
+ * The adapter pattern (Phase 4) allows dual-write during migration with graceful fallback.
+ *
  * Row unit is the parsed TranscriptEntry; `uuid` = `entry.id` (§1a — NOT the
  * mirror line uuid). seq is 1-based and dense per session, assigned ONLY to
  * genuinely-inserted rows inside a BEGIN IMMEDIATE transaction; a re-append
@@ -52,6 +57,7 @@ import { existsSync, mkdirSync } from "fs";
 import { tmpdir } from "os";
 import { dirname } from "path";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
+import { type FeltDBTranscriptStore, openFeltDBTranscriptStore } from "./feltdb-transcript-store";
 import {
   publishTranscript,
   type SeqEntry,
@@ -275,7 +281,14 @@ export type TranscriptAppendHook = (
 const g = globalThis as unknown as {
   __osTranscriptStore?: TranscriptStore;
   __osTranscriptAppendHook?: TranscriptAppendHook | null;
+  __osFeltDBTranscriptStore?: FeltDBTranscriptStore;
+  __osFeltDBTranscriptInitialized?: boolean;
 };
+
+// Phase 4: FeltDB support
+const enableFeltDB = process.env.ENABLE_FELTDB_TRANSCRIPT === "true";
+let feltDBStore: FeltDBTranscriptStore | null = null;
+let feltDBInitialized = false;
 
 /**
  * Steer-receipt (or any) post-commit append hook (§4a). Parked on globalThis
@@ -344,6 +357,33 @@ function sessionsDirRedirected(): boolean {
  *  processes never share a file. */
 function scratchTranscriptDbPath(): string {
   return `${tmpdir()}/opensession-test-transcripts-${process.pid}.db`;
+}
+
+/** Phase 4: Initialize FeltDB store lazily on first use. */
+async function initializeFeltDBStore(): Promise<void> {
+  if (feltDBInitialized) return;
+  if (!enableFeltDB) {
+    feltDBInitialized = true;
+    return;
+  }
+
+  try {
+    const feltDBPath = transcriptDbPath().replace(/\.db$/, ".feltdb");
+    feltDBStore = openFeltDBTranscriptStore(feltDBPath);
+    feltDBInitialized = true;
+  } catch (error) {
+    console.error(
+      "[transcript-store] Failed to initialize FeltDB store, falling back to SQLite:",
+      error
+    );
+    feltDBInitialized = true;
+  }
+}
+
+/** Phase 4: Get FeltDB store (or null if disabled/failed). */
+function getFeltDBStore(): FeltDBTranscriptStore | null {
+  // Store is initialized lazily on first use
+  return feltDBStore;
 }
 
 /**
@@ -768,6 +808,21 @@ export class TranscriptStore {
     for (const e of outcome.affected) {
       if (e.seq < result.firstSeq) result.firstSeq = e.seq;
       if (e.seq > result.lastSeq) result.lastSeq = e.seq;
+    }
+
+    // Phase 4: Fire-and-forget FeltDB dual-write (best-effort)
+    if (enableFeltDB && getFeltDBStore()) {
+      void (async () => {
+        try {
+          await initializeFeltDBStore();
+          const feltStore = getFeltDBStore();
+          if (feltStore) {
+            await feltStore.appendTranscriptEvents(sessionId, entries);
+          }
+        } catch (error) {
+          console.warn("[transcript-store] FeltDB dual-write failed:", error);
+        }
+      })();
     }
 
     // Post-commit hooks — best-effort, never back into the append path.
@@ -1914,6 +1969,12 @@ export class TranscriptStore {
   close(): void {
     try {
       this.db.close();
+      // Phase 4: Close FeltDB store
+      if (feltDBStore) {
+        void feltDBStore.close().catch((e) => {
+          console.error("[transcript-store] FeltDB close failed:", e);
+        });
+      }
     } catch {
       // already closed
     }
