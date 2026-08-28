@@ -361,7 +361,12 @@ describe("buildPiThirdPartyProviderPlan", () => {
         supportsDeveloperRole: false,
         supportsReasoningEffort: false,
       },
-      models: [expect.objectContaining({ id: "qwen3-coder:latest" })],
+      models: [
+        expect.objectContaining({
+          id: "qwen3-coder:latest",
+          reasoning: false,
+        }),
+      ],
     });
   });
 

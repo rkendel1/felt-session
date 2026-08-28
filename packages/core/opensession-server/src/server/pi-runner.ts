@@ -307,7 +307,7 @@ export function buildPiThirdPartyProviderPlan(input: {
               {
                 id: input.modelID,
                 name: input.modelID,
-                reasoning: true,
+                reasoning: catalog?.fallbackReasoning ?? true,
                 input: ["text"] as Array<"text" | "image">,
                 cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
                 contextWindow: 131_072,

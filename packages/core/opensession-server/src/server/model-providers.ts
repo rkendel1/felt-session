@@ -180,6 +180,8 @@ export interface PiProviderCatalog {
     supportsDeveloperRole?: boolean;
     supportsReasoningEffort?: boolean;
   };
+  /** Reasoning flag used for models discovered outside this static table. */
+  fallbackReasoning?: boolean;
   models: Array<{
     id: string;
     name: string;
@@ -202,6 +204,7 @@ export function piProviderCatalog(id: string): PiProviderCatalog | undefined {
         supportsDeveloperRole: false,
         supportsReasoningEffort: false,
       },
+      fallbackReasoning: false,
       models: [],
     };
   }
