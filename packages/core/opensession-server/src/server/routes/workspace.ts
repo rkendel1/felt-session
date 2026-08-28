@@ -498,7 +498,7 @@ export async function handleWorkspaceRoutes(
 				return Response.json({ error: "invalid draft" }, { status: 400 });
 			if (parsed !== null) draft = parsed;
 		}
-		const workspace = createWorkspace({
+		const workspace = await createWorkspace({
 			name: body.name,
 			repo: body.repo,
 			color: body.color,
@@ -523,7 +523,7 @@ export async function handleWorkspaceRoutes(
 		};
 		const createdBy = requestUser(ctx, body.user) || "Anonymous";
 		if (body.externalRef?.kind && body.externalRef?.id) {
-			const { workspace, created } = resolveExternalWorkspace({
+			const { workspace, created } = await resolveExternalWorkspace({
 				ref: {
 					kind: body.externalRef.kind,
 					id: body.externalRef.id,
@@ -535,7 +535,7 @@ export async function handleWorkspaceRoutes(
 			return Response.json({ workspaceId: workspace.id, created });
 		}
 		if (body.plainThreadId) {
-			const { workspace, created } = resolvePlainWorkspace({
+			const { workspace, created } = await resolvePlainWorkspace({
 				threadId: body.plainThreadId,
 				title: body.name,
 				createdBy,
@@ -591,7 +591,7 @@ export async function handleWorkspaceRoutes(
 				return Response.json({ error: "invalid draft" }, { status: 400 });
 			draft = parsed;
 		}
-		const workspace = updateWorkspace(id, {
+		const workspace = await updateWorkspace(id, {
 			...rest,
 			...(rawDraft !== undefined ? { draft } : {}),
 		});
@@ -617,7 +617,7 @@ export async function handleWorkspaceRoutes(
 		if (failure) return failure;
 
 		// Deleting the last non-PR session may already remove the workspace.
-		const ok = deleteWorkspace(id) || !getWorkspace(id);
+		const ok = (await deleteWorkspace(id)) || !getWorkspace(id);
 		return Response.json({ ok });
 	}
 
@@ -773,7 +773,7 @@ export async function handleWorkspaceRoutes(
 				);
 				mode = "code";
 				repoId = getRepo(ws.repo).id;
-				updateWorkspace(ws.id, { worktreeDir });
+				await updateWorkspace(ws.id, { worktreeDir });
 			}
 		}
 		// A workspace-less source gets healed here: adopt the workspace that
@@ -794,7 +794,7 @@ export async function handleWorkspaceRoutes(
 				if (src.source === "opensession")
 					touchNativeSession(src.id, { workspaceId: owned.id });
 			} else if (src.source === "opensession") {
-				const ws = createWorkspace({
+				const ws = await createWorkspace({
 					name: src.title || src.branch || "Workspace",
 					repo: src.repo,
 					createdBy: requestUser(ctx, body.user) || src.startedBy || "Anonymous",
@@ -964,7 +964,7 @@ export async function handleWorkspaceRoutes(
 		if (session.workspaceId && worktreeDir && !isSharedCheckoutDir(worktreeDir)) {
 			const ws = getWorkspace(session.workspaceId);
 			if (ws && !ws.worktreeDir)
-				updateWorkspace(ws.id, { worktreeDir, branch });
+				await updateWorkspace(ws.id, { worktreeDir, branch });
 		}
 		return Response.json({ ok: true, branch, worktreeDir });
 	}

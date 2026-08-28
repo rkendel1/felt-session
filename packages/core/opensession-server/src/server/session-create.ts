@@ -2023,14 +2023,14 @@ export async function handleCreateSessionMessage(
 			: undefined;
 	if (msgPlainThreadId && !workspace) {
 		try {
-			workspace = resolvePlainWorkspace({
+			workspace = (await resolvePlainWorkspace({
 				threadId: msgPlainThreadId,
 				title:
 					typeof msg.createWorkspace?.name === "string"
 						? msg.createWorkspace.name
 						: undefined,
 				createdBy: user || "Anonymous",
-			}).workspace;
+			})).workspace;
 		} catch {}
 	}
 	// Whether this create made a brand-new workspace (vs. adding a session

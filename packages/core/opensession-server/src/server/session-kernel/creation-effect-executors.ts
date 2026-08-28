@@ -114,7 +114,7 @@ export async function executeCreationWorkspacePrepare(
   let workspace = dependencies.getWorkspace(payload.workspaceId);
   if (workspace) assertAdoptableWorkspace(workspace, item);
   else {
-    workspace = dependencies.createWorkspace({
+    workspace = await dependencies.createWorkspace({
       id: payload.workspaceId,
       key: payload.dedupeKey,
       name: payload.name,

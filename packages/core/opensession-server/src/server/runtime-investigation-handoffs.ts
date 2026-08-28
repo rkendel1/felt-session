@@ -297,7 +297,7 @@ export class RuntimeInvestigationHandoffConsumer {
 	}
 }
 
-export function createQueuedWorkspaceTask(input: Omit<QueuedRuntimeInvestigationTask, "id"> & { requestKey: string }): QueuedRuntimeInvestigationTask {
+export async function createQueuedWorkspaceTask(input: Omit<QueuedRuntimeInvestigationTask, "id"> & { requestKey: string }): Promise<QueuedRuntimeInvestigationTask> {
 	const existing = findWorkspaceByKey(input.requestKey);
 	if (existing) return {
 		id: existing.id,
@@ -306,7 +306,7 @@ export function createQueuedWorkspaceTask(input: Omit<QueuedRuntimeInvestigation
 		prompt: existing.draft?.text || input.prompt,
 	};
 	const now = new Date().toISOString();
-	const workspace = createWorkspace({
+	const workspace = await createWorkspace({
 		key: input.requestKey,
 		name: input.title,
 		repo: input.repo,

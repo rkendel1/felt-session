@@ -136,7 +136,7 @@ const NAME_BUDGET = 40;
  * named after a real git branch is untouched: the key is `<source>-<name>`
  * matched against the session's own id, which no branch name can spell.
  */
-export function settleProvisionalNames(sessions: UnifiedSession[]): void {
+export async function settleProvisionalNames(sessions: UnifiedSession[]): Promise<void> {
   let budget = NAME_BUDGET;
   for (const session of sessions) {
     if (budget <= 0) return;
@@ -149,7 +149,7 @@ export function settleProvisionalNames(sessions: UnifiedSession[]): void {
     if (session.title === name) continue;
     budget--;
     try {
-      updateWorkspace(session.workspaceId, { name: session.title });
+      await updateWorkspace(session.workspaceId, { name: session.title });
     } catch (e) {
       console.error(`[session-workspace] failed to name ${session.workspaceId}:`, e);
     }
@@ -187,7 +187,7 @@ export function ensureSessionWorkspaces(sessions: UnifiedSession[]): void {
   // A workspace already filed may still be wearing the name it was minted
   // with before its session had a title. Runs whether or not anything needs
   // filing this scan.
-  settleProvisionalNames(sessions);
+  void settleProvisionalNames(sessions);
   // Archived sessions don't render, so they don't need one until they come back:
   // the same sweep files them on the scan right after an un-archive.
   const orphans = sessions.filter(
@@ -218,7 +218,7 @@ export function ensureSessionWorkspaces(sessions: UnifiedSession[]): void {
     else groups.set(key, [session]);
   }
 
-  for (const [key, group] of groups) {
+  for (const [key, group] of groups) void (async () => {
     const dir = key.startsWith("wt:") ? key.slice(3) : null;
     group.sort((a, b) => (a.createdAt || "").localeCompare(b.createdAt || ""));
     try {
@@ -228,7 +228,7 @@ export function ensureSessionWorkspaces(sessions: UnifiedSession[]): void {
       const workspace =
         (dir ? findWorkspaceByWorktree(dir) : null) ??
         workspaceForBranch(group[0]) ??
-        createWorkspace({
+        await createWorkspace({
           name: nameFor(group, !!dir),
           repo: group[0].repo,
           createdBy: group[0].startedBy || "Anonymous",
@@ -245,5 +245,5 @@ export function ensureSessionWorkspaces(sessions: UnifiedSession[]): void {
       // A session with no workspace is still better than a failed scan.
       console.error(`[session-workspace] failed to file ${group[0]?.id}:`, e);
     }
-  }
+  })();
 }

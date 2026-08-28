@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { prKey } from "../agents/github/constants";
+import { createFeltDB } from "@feltdb/core";
 
 const scratch = mkdtempSync(join(tmpdir(), "opensession-workspace-resolve-"));
 const previousState = process.env.OPENSESSION_STATE_DIR;
@@ -25,14 +26,16 @@ writeFileSync(
 process.env.OPENSESSION_STATE_DIR = scratch;
 process.env.OPENSESSION_CONFIG = configPath;
 
-const { createWorkspace, getWorkspace } = await import("./workspaces");
+const { createWorkspace, getWorkspace, initializeManagedWorkspaces, __resetManagedWorkspacesForTest } = await import("./workspaces");
 const { resolvePrWorkspace, workspaceBacksOpenPr } = await import(
   "./workspace-resolve"
 );
 
-beforeEach(() => {
+beforeEach(async () => {
   process.env.OPENSESSION_STATE_DIR = scratch;
   process.env.OPENSESSION_CONFIG = configPath;
+  __resetManagedWorkspacesForTest();
+  await initializeManagedWorkspaces(createFeltDB({ namespace: `workspace-resolve-${crypto.randomUUID()}`, memory: true }));
 });
 
 afterAll(() => {
@@ -83,7 +86,7 @@ describe("workspaceBacksOpenPr", () => {
 describe("resolvePrWorkspace", () => {
   test("repairs a generated placeholder when the PR title arrives", async () => {
     const number = 9128;
-    const workspace = createWorkspace({
+    const workspace = await createWorkspace({
       name: `#${number}`,
       repo: repoId,
       key: `ghpr-${prKey(number, ghRepo)}`,
@@ -111,7 +114,7 @@ describe("resolvePrWorkspace", () => {
 
   test("preserves a manually chosen workspace name", async () => {
     const number = 9129;
-    const workspace = createWorkspace({
+    const workspace = await createWorkspace({
       name: "Native fallback cleanup",
       repo: repoId,
       key: `ghpr-${prKey(number, ghRepo)}`,

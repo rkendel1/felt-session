@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -7,6 +7,8 @@ import type {
 	RuntimeRequestObservation,
 	WorkspaceEventPayload,
 } from "@feltdb/core";
+import { createFeltDB } from "@feltdb/core";
+import { __resetManagedWorkspacesForTest, initializeManagedWorkspaces } from "./workspaces";
 import {
 	RUNTIME_HANDOFF_COLLECTION,
 	RuntimeInvestigationHandoffConsumer,
@@ -19,6 +21,10 @@ import {
 
 const originalStateDir = process.env.OPENSESSION_STATE_DIR;
 const stateDirs: string[] = [];
+beforeEach(async () => {
+	__resetManagedWorkspacesForTest();
+	await initializeManagedWorkspaces(createFeltDB({ namespace: `runtime-handoff-${crypto.randomUUID()}`, memory: true }));
+});
 afterEach(() => {
 	if (originalStateDir === undefined) delete process.env.OPENSESSION_STATE_DIR;
 	else process.env.OPENSESSION_STATE_DIR = originalStateDir;
@@ -182,7 +188,7 @@ describe("runtime investigation handoff validation", () => {
 });
 
 describe("RuntimeInvestigationHandoffConsumer", () => {
-	test("durably maps requestKey to one unstarted workspace task", () => {
+	test("durably maps requestKey to one unstarted workspace task", async () => {
 		const stateDir = mkdtempSync(join(tmpdir(), "runtime-handoff-"));
 		stateDirs.push(stateDir);
 		process.env.OPENSESSION_STATE_DIR = stateDir;
@@ -192,8 +198,8 @@ describe("RuntimeInvestigationHandoffConsumer", () => {
 			title: "GET /api/items · 500",
 			prompt: "Investigate canonical observation obs-1",
 		};
-		const first = createQueuedWorkspaceTask(input);
-		const second = createQueuedWorkspaceTask(input);
+		const first = await createQueuedWorkspaceTask(input);
+		const second = await createQueuedWorkspaceTask(input);
 		expect(second.id).toBe(first.id);
 		expect(second.prompt).toBe(input.prompt);
 	});

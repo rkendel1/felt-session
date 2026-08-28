@@ -22,21 +22,20 @@
  * Team-internal, no auth.
  */
 
-import { homeDir } from "./paths";
 import { canonicalRepoId, defaultRepo } from "./config";
 import {
   existsSync,
-  mkdirSync,
   readFileSync,
   readdirSync,
   rmSync,
 } from "fs";
-import { readdir, readFile } from "fs/promises";
-import { writeJsonAtomic } from "./shared/atomic-write";
 import { randomUUID } from "crypto";
 import type { AttachedRepo, ExternalRef } from "./types";
 import type { SessionEffort } from "./models";
 import { stateDir } from "./paths";
+import { managedFeltDb } from "./managed-feltdb";
+import type { StateFirstDB } from "@feltdb/core";
+import { ManagedOpenSessionState, type ManagedRecord } from "./managed-state";
 
 /** Resolved per call, not pinned at module load: statePath reads
  *  OPENSESSION_STATE_DIR at call time so tests can repoint it, and bun runs
@@ -160,10 +159,6 @@ export interface Workspace {
   draft?: WorkspaceDraft;
 }
 
-function ensureDir(): void {
-  if (!existsSync(workspacesDir())) mkdirSync(workspacesDir(), { recursive: true });
-}
-
 function fileFor(id: string): string {
   return `${workspacesDir()}/${id}.json`;
 }
@@ -193,47 +188,47 @@ function fromDisk(p: Workspace): Workspace {
 }
 
 let workspaceNameGeneration = 0;
-let workspaceListCache: {
-  dir: string;
-  generation: number;
-  workspaces: Workspace[];
-} | null = null;
+let workspaceRecords: Map<string, Workspace> | null = null;
+let workspaceSubscription: (() => void) | null = null;
+let workspaceState: ManagedOpenSessionState | null = null;
+
+function requireWorkspaceRecords(): Map<string, Workspace> {
+	if (!workspaceRecords)
+		throw new Error("Managed FeltDB workspace state has not been initialized");
+	return workspaceRecords;
+}
+
+function replaceWorkspaceRecords(records: Array<ManagedRecord<Workspace>>): void {
+	workspaceRecords = new Map(
+		records.map((record) => [record.id, fromDisk(structuredClone(record.payload))]),
+	);
+	workspaceNameGeneration++;
+}
+
+/** Load the managed workspace projection before any request can read it. The
+ * process-local map is disposable and is refreshed from the authority's event
+ * stream; every mutation awaits the managed write before changing the map. */
+export async function initializeManagedWorkspaces(db: StateFirstDB = managedFeltDb()): Promise<void> {
+	workspaceState = new ManagedOpenSessionState(db);
+	const collection = workspaceState.workspaces;
+	replaceWorkspaceRecords(await collection.all());
+	workspaceSubscription?.();
+	workspaceSubscription = collection.subscribe((records) => replaceWorkspaceRecords(records));
+}
 
 export function listWorkspaces(): Workspace[] {
-  const dir = workspacesDir();
-  if (
-    workspaceListCache?.dir === dir &&
-    workspaceListCache.generation === workspaceNameGeneration
-  ) return workspaceListCache.workspaces.slice();
-  if (!existsSync(dir)) {
-    workspaceListCache = { dir, generation: workspaceNameGeneration, workspaces: [] };
-    return [];
-  }
-  const out: Workspace[] = [];
-  for (const file of readdirSync(dir)) {
-    if (!file.endsWith(".json")) continue;
-    try {
-      const p = JSON.parse(readFileSync(`${dir}/${file}`, "utf8"));
-      // No defaults backfill here: stamping the ~3KB default modelSettings on
-      // every row multiplied the list payload by the workspace count (13 MB on
-      // this instance). Absent modelSettings means "inherit the defaults":
-      // resolve through workspaceModelSettings() at the point of use.
-      if (p && typeof p.id === "string" && typeof p.name === "string")
-        out.push(fromDisk(p));
-    } catch {}
-  }
+	const out = [...requireWorkspaceRecords().values()].map((workspace) => structuredClone(workspace));
   out.sort(
     (a, b) =>
       (a.order ?? (Date.parse(a.createdAt) || 0)) -
         (b.order ?? (Date.parse(b.createdAt) || 0)) || a.name.localeCompare(b.name),
   );
-  workspaceListCache = { dir, generation: workspaceNameGeneration, workspaces: out };
-  return out.slice();
+	return out;
 }
 
 /** Stable version for conditional workspace-list responses. */
 export function workspaceListVersion(): string {
-  return `${workspacesDir()}:${workspaceNameGeneration}`;
+	return `managed:${workspaceNameGeneration}`;
 }
 
 /**
@@ -248,58 +243,13 @@ export function workspaceListVersion(): string {
  * then maintained by the writers below, which are the only code that ever
  * writes a workspace file for a given state root.
  */
-let workspaceNameCache: {
-  dir: string;
-  names: Map<string, string>;
-} | null = null;
-let workspaceNameRefresh: Promise<void> | null = null;
-
 function workspaceNameMap(): Map<string, string> {
-  const dir = workspacesDir();
-  if (workspaceNameCache?.dir === dir) return workspaceNameCache.names;
-  workspaceNameGeneration++;
-  const names = new Map<string, string>();
-  if (existsSync(dir))
-    for (const file of readdirSync(dir)) {
-      if (!file.endsWith(".json")) continue;
-      try {
-        const p = JSON.parse(readFileSync(`${dir}/${file}`, "utf8"));
-        if (typeof p?.id === "string" && typeof p?.name === "string")
-          names.set(p.id, p.name);
-      } catch {}
-    }
-  workspaceNameCache = { dir, names };
-  return names;
+	return new Map([...requireWorkspaceRecords()].map(([id, workspace]) => [id, workspace.name]));
 }
 
 /** Build the cold workspace-name index without holding the event loop. */
 export async function warmWorkspaceNamesAsync(): Promise<void> {
-  const dir = workspacesDir();
-  while (workspaceNameCache?.dir !== dir) {
-    if (!workspaceNameRefresh) {
-      const generation = ++workspaceNameGeneration;
-      workspaceNameRefresh = (async () => {
-        const names = new Map<string, string>();
-        if (existsSync(dir)) {
-          let read = 0;
-          for (const file of await readdir(dir)) {
-            if (!file.endsWith(".json")) continue;
-            try {
-              const p = JSON.parse(await readFile(`${dir}/${file}`, "utf8"));
-              if (typeof p?.id === "string" && typeof p?.name === "string")
-                names.set(p.id, p.name);
-            } catch {}
-            if (++read % 32 === 0) await Bun.sleep(0);
-          }
-        }
-        if (workspaceNameGeneration === generation)
-          workspaceNameCache = { dir, names };
-      })().finally(() => {
-        workspaceNameRefresh = null;
-      });
-    }
-    await workspaceNameRefresh;
-  }
+	requireWorkspaceRecords();
 }
 
 /** The workspace's display name, or null when there is no such workspace. */
@@ -309,27 +259,21 @@ export function workspaceName(id: string): string | null {
 }
 
 /** The one write path for a workspace file, so the name map stays current. */
-function saveWorkspace(workspace: Workspace): Workspace {
-  const dir = workspacesDir();
-  writeJsonAtomic(`${dir}/${workspace.id}.json`, workspace);
-  workspaceNameGeneration++;
-  if (workspaceNameCache?.dir === dir)
-    workspaceNameCache.names.set(workspace.id, workspace.name);
-  return workspace;
+async function saveWorkspace(workspace: Workspace): Promise<Workspace> {
+	if (!workspaceState) throw new Error("Managed FeltDB workspace state has not been initialized");
+	await workspaceState.putWorkspace(workspace);
+	requireWorkspaceRecords().set(workspace.id, structuredClone(workspace));
+	workspaceNameGeneration++;
+	return workspace;
 }
 
 export function getWorkspace(id: string): Workspace | null {
   if (!safeId(id)) return null;
-  const f = fileFor(id);
-  if (!existsSync(f)) return null;
-	try {
-		return fromDisk(JSON.parse(readFileSync(f, "utf8")) as Workspace);
-	} catch {
-    return null;
-  }
+	const workspace = requireWorkspaceRecords().get(id);
+	return workspace ? structuredClone(workspace) : null;
 }
 
-export function createWorkspace(input: {
+export async function createWorkspace(input: {
   name: string;
   repo?: string;
   color?: string;
@@ -345,8 +289,7 @@ export function createWorkspace(input: {
   /** Reuse a caller-supplied id (e.g. migration wrapping an orphan session). */
   id?: string;
   createdAt?: string;
-}): Workspace {
-  ensureDir();
+}): Promise<Workspace> {
   const workspace: Workspace = {
     id: input.id || `ws-${randomUUID()}`,
     name: (input.name || "Untitled workspace").trim().slice(0, 120) || "Untitled workspace",
@@ -430,7 +373,7 @@ export function findWorkspaceByBranch(
  * Used to auto-group related sessions (e.g. every autofix/review/simplify session for
  * one PR) under a single workspace.
  */
-export function findOrCreateWorkspaceByKey(
+export async function findOrCreateWorkspaceByKey(
   key: string,
   input: {
     name: string;
@@ -441,8 +384,8 @@ export function findOrCreateWorkspaceByKey(
     plainThreadId?: string;
     branch?: string;
   },
-): Workspace {
-  return findWorkspaceByKey(key) || createWorkspace({ ...input, key });
+): Promise<Workspace> {
+  return findWorkspaceByKey(key) || await createWorkspace({ ...input, key });
 }
 
 /**
@@ -453,7 +396,7 @@ export function findOrCreateWorkspaceByKey(
  * permanent provenance; resolution falls back to session matching for any
  * additional PRs a workspace accrues.
  */
-export function stampWorkspaceIdentity(
+export async function stampWorkspaceIdentity(
   id: string,
   patch: {
     key?: string;
@@ -463,7 +406,7 @@ export function stampWorkspaceIdentity(
     plainThreadId?: string;
     externalRef?: ExternalRef;
   },
-): Workspace | null {
+): Promise<Workspace | null> {
   const cur = getWorkspace(id);
   if (!cur) return null;
   if (cur.key && patch.key && cur.key !== patch.key) return cur;
@@ -519,12 +462,12 @@ export function stampWorkspaceIdentity(
  *   exists, permanently demotes it to `autoName: false`, stopping the follow
  *   for life.
  */
-export function updateWorkspace(
+export async function updateWorkspace(
   id: string,
   patch: Partial<
     Pick<Workspace, "name" | "repo" | "color" | "order" | "branch" | "worktreeDir" | "attachedRepos" | "modelSettings" | "archived">
   > & { draft?: WorkspaceDraft | null },
-): Workspace | null {
+): Promise<Workspace | null> {
   const cur = getWorkspace(id);
   if (!cur) return null;
   const manualRename = patch.name !== undefined;
@@ -588,10 +531,10 @@ export function updateWorkspace(
  * for a sibling session to inherit, and a stale one would send it to the abandoned
  * checkout. Identity (key, prNumber, ticket/feed refs) is untouched.
  */
-export function restampWorkspaceWorktree(
+export async function restampWorkspaceWorktree(
   id: string,
   next: { repo: string; branch?: string; worktreeDir?: string },
-): Workspace | null {
+): Promise<Workspace | null> {
   const cur = getWorkspace(id);
   if (!cur) return null;
   const { branch: _b, worktreeDir: _w, ...rest } = cur;
@@ -608,15 +551,15 @@ export function restampWorkspaceWorktree(
  * Remove a workspace's metadata file. The caller must handle member sessions first
  * so none retain a reference to a workspace that no longer exists.
  */
-export function deleteWorkspace(id: string): boolean {
+export async function deleteWorkspace(id: string): Promise<boolean> {
   if (!safeId(id)) return false;
-  const dir = workspacesDir();
-  const f = `${dir}/${id}.json`;
-  if (!existsSync(f)) return false;
+  const records = requireWorkspaceRecords();
+  if (!records.has(id)) return false;
   try {
-    rmSync(f);
+    if (!workspaceState) throw new Error("Managed FeltDB workspace state has not been initialized");
+    await workspaceState.workspaces.delete(id);
+    records.delete(id);
     workspaceNameGeneration++;
-    if (workspaceNameCache?.dir === dir) workspaceNameCache.names.delete(id);
     // A deleted workspace's scratch dir (scratch-mode sessions — see
     // worktree.ts ensureScratchDir) goes with it; safeId() already rules
     // out anything path-escaping.
@@ -627,4 +570,29 @@ export function deleteWorkspace(id: string): boolean {
   } catch {
     return false;
   }
+}
+
+/** Read-only legacy discovery for the explicit migration command. Production
+ * reads and writes never call this function and never fall back to it. */
+export function readLegacyWorkspacesForMigration(): Workspace[] {
+  const dir = workspacesDir();
+  if (!existsSync(dir)) return [];
+  const records: Workspace[] = [];
+  for (const file of readdirSync(dir)) {
+    if (!file.endsWith(".json")) continue;
+    try {
+      const parsed = JSON.parse(readFileSync(`${dir}/${file}`, "utf8"));
+      if (parsed && typeof parsed.id === "string" && typeof parsed.name === "string")
+        records.push(fromDisk(parsed as Workspace));
+    } catch {}
+  }
+  return records;
+}
+
+export function __resetManagedWorkspacesForTest(): void {
+  workspaceSubscription?.();
+  workspaceSubscription = null;
+  workspaceRecords = null;
+  workspaceState = null;
+  workspaceNameGeneration = 0;
 }
