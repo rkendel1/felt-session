@@ -324,6 +324,10 @@ describe("single session ownership", () => {
 		expect(runtime.indexOf("await sessionTombstoneState(state.sessionId)")).toBeLessThan(
 			runtime.indexOf("await sessionIsQuarantined(state.sessionId)"),
 		);
+		const actorTranscript = read("actor-transcript.ts");
+		expect(actorTranscript).toContain(
+			"if (await sessionTombstoneState(sessionId)) continue",
+		);
 		const actor = read("session-kernel/actor-worker.ts");
 		expect(actor).toContain("const host = new SessionKernelStoreHost()");
 		expect(actor).not.toContain("const store = new SessionKernelStore()");

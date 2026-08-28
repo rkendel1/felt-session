@@ -19,8 +19,9 @@ import {
   type TranscriptRangePage,
 } from "./transcript-store";
 import {
-  actorTranscriptSessionIds,
-  sessionTranscript,
+	actorTranscriptSessionIds,
+	sessionTombstoneState,
+	sessionTranscript,
   TRANSCRIPT_ACTOR_MAX_REQUEST_BYTES,
   type TranscriptActorRequest,
   type TranscriptMutationResult,
@@ -87,9 +88,10 @@ async function reconcilePendingWake(
 export async function drainPendingTranscriptWakesForSessions(
   sessionIds: Iterable<string>,
 ): Promise<number> {
-  let drained = 0;
-  for (const sessionId of sessionIds) {
-    const pending = await callTranscript({ op: "pending_wake", sessionId });
+	let drained = 0;
+	for (const sessionId of sessionIds) {
+		if (await sessionTombstoneState(sessionId)) continue;
+		const pending = await callTranscript({ op: "pending_wake", sessionId });
     if (pending) {
       await reconcilePendingWake(sessionId, pending.cursor);
       drained++;
