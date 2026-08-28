@@ -102,6 +102,16 @@ describe("local model providers", () => {
   });
 });
 
+describe("FeltDB development workspace connection", () => {
+  test("rejects malformed pairing codes before discovery", async () => {
+    const response = await handleConnectionsRoutes(
+      context("/api/connections/feltdb", "POST", null, { pairingCode: "not-a-code" }),
+    );
+    expect(response?.status).toBe(400);
+    expect(await response?.json()).toEqual({ error: "Enter a valid FeltDB pairing code" });
+  });
+});
+
 
 describe("GitHub App key transaction", () => {
   test("restores the previous key when config persistence fails", async () => {

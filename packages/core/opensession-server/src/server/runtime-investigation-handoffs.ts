@@ -1,5 +1,6 @@
 import {
 	connectDevelopmentWorkspace,
+	resolvePairingCode,
 	type RuntimeInvestigation,
 	type RuntimeRequestObservation,
 	type WorkspaceEventPayload,
@@ -316,33 +317,72 @@ export function createQueuedWorkspaceTask(input: Omit<QueuedRuntimeInvestigation
 }
 
 let activeConnection: { disconnect(): Promise<void> } | null = null;
+let activeConsumer: RuntimeInvestigationHandoffConsumer | null = null;
+let activeWorkspaceId = "";
+let activeEndpoint = "";
 
-/** Optional boot hook. The standard FeltDB development environment variables
- * take precedence; integrations.feltdbRuntimeHandoffs provides the same
- * connection details for a long-running self-hosted service. */
-export async function startRuntimeInvestigationHandoffConsumer(): Promise<RuntimeInvestigationHandoffConsumer | null> {
-	if (activeConnection) return null;
+export interface FeltDbHandoffConnectionStatus {
+	connected: boolean;
+	configured: boolean;
+	managedByEnvironment: boolean;
+	workspaceId: string;
+	endpoint: string;
+}
+
+function configuredConnection() {
 	const config = configuredIntegration("feltdbRuntimeHandoffs");
-	const workspaceId = process.env.FELTDB_WORKSPACE_ID
-		|| process.env.VITE_FELTDB_WORKSPACE_ID
-		|| (typeof config.workspaceId === "string" ? config.workspaceId : "");
-	const endpoint = process.env.FELTDB_WORKSPACE_ENDPOINT
+	const environmentWorkspaceId = process.env.FELTDB_WORKSPACE_ID
+		|| process.env.VITE_FELTDB_WORKSPACE_ID || "";
+	const environmentEndpoint = process.env.FELTDB_WORKSPACE_ENDPOINT
 		|| process.env.FELTDB_AUTHORITY_URL
 		|| process.env.VITE_FELTDB_WORKSPACE_ENDPOINT
-		|| process.env.VITE_FELTDB_URL
-		|| (typeof config.endpoint === "string" ? config.endpoint : "");
-	const token = process.env.FELTDB_WORKSPACE_TOKEN
-		|| process.env.VITE_FELTDB_API_KEY
-		|| (typeof config.token === "string" ? config.token : "");
-	if (!workspaceId || !endpoint) return null;
+		|| process.env.VITE_FELTDB_URL || "";
+	return {
+		workspaceId: environmentWorkspaceId
+			|| (typeof config.workspaceId === "string" ? config.workspaceId : ""),
+		endpoint: environmentEndpoint
+			|| (typeof config.endpoint === "string" ? config.endpoint : ""),
+		token: process.env.FELTDB_WORKSPACE_TOKEN
+			|| process.env.VITE_FELTDB_API_KEY
+			|| (typeof config.token === "string" ? config.token : ""),
+		managedByEnvironment: !!(environmentWorkspaceId || environmentEndpoint),
+	};
+}
+
+export function runtimeInvestigationHandoffConnectionStatus(): FeltDbHandoffConnectionStatus {
+	const configured = configuredConnection();
+	return {
+		connected: !!activeConnection,
+		configured: !!(configured.workspaceId && configured.endpoint),
+		managedByEnvironment: configured.managedByEnvironment,
+		workspaceId: activeWorkspaceId || configured.workspaceId,
+		endpoint: activeEndpoint || configured.endpoint,
+	};
+}
+
+export async function stopRuntimeInvestigationHandoffConsumer(): Promise<void> {
+	activeConsumer?.stop();
+	activeConsumer = null;
+	const connection = activeConnection;
+	activeConnection = null;
+	activeWorkspaceId = "";
+	activeEndpoint = "";
+	if (connection) await connection.disconnect();
+}
+
+export async function connectRuntimeInvestigationHandoffConsumer(input: {
+	workspaceId: string;
+	endpoint: string;
+	token?: string;
+}): Promise<RuntimeInvestigationHandoffConsumer> {
+	await stopRuntimeInvestigationHandoffConsumer();
 	const connection = await connectDevelopmentWorkspace({
-		workspaceId,
-		endpoint,
+		workspaceId: input.workspaceId,
+		endpoint: input.endpoint,
 		clientId: "felt-session-runtime-handoffs",
 		clientType: "application",
-		...(token ? { auth: { token } } : {}),
+		...(input.token ? { auth: { token: input.token } } : {}),
 	});
-	activeConnection = connection;
 	const consumer = new RuntimeInvestigationHandoffConsumer({
 		workspace: connection,
 		repositoryExists: (repositoryId) => Object.hasOwn(configuredRepos(), repositoryId),
@@ -350,11 +390,35 @@ export async function startRuntimeInvestigationHandoffConsumer(): Promise<Runtim
 	});
 	try {
 		await consumer.start();
-		console.log(`[runtime-handoff] connected to FeltDB workspace ${workspaceId}`);
+		activeConnection = connection;
+		activeConsumer = consumer;
+		activeWorkspaceId = input.workspaceId;
+		activeEndpoint = input.endpoint;
+		console.log(`[runtime-handoff] connected to FeltDB workspace ${input.workspaceId}`);
 		return consumer;
 	} catch (error) {
-		activeConnection = null;
+		consumer.stop();
 		await connection.disconnect().catch(() => {});
 		throw error;
 	}
+}
+
+export async function resolveFeltDbPairingCode(
+	pairingCode: string,
+	discoveryEndpoint?: string,
+): Promise<{ workspaceId: string; endpoint: string }> {
+	const resolution = await resolvePairingCode(pairingCode, {
+		...(discoveryEndpoint ? { endpoint: discoveryEndpoint } : {}),
+	});
+	return { workspaceId: resolution.workspaceId, endpoint: resolution.endpoint };
+}
+
+/** Optional boot hook. The standard FeltDB development environment variables
+ * take precedence; integrations.feltdbRuntimeHandoffs provides the same
+ * connection details for a long-running self-hosted service. */
+export async function startRuntimeInvestigationHandoffConsumer(): Promise<RuntimeInvestigationHandoffConsumer | null> {
+	if (activeConnection) return null;
+	const { workspaceId, endpoint, token } = configuredConnection();
+	if (!workspaceId || !endpoint) return null;
+	return connectRuntimeInvestigationHandoffConsumer({ workspaceId, endpoint, token });
 }

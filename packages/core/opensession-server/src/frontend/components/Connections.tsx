@@ -39,6 +39,7 @@ import {
   IconSliders,
   IconHistory,
   IconPlus,
+	IconDatabase,
 } from "./icons";
 import { displayName } from "../brand-logos";
 import { IconTile } from "./BrandTile";
@@ -60,6 +61,15 @@ interface McpConnection {
 
 interface ConnectionsData {
   mcpServers: McpConnection[];
+	feltDb: FeltDbConnectionData;
+}
+
+interface FeltDbConnectionData {
+	connected: boolean;
+	configured: boolean;
+	managedByEnvironment: boolean;
+	workspaceId: string;
+	endpoint: string;
 }
 
 const STATUS_META: Record<McpConnection["status"], { label: string; dot: string; bad?: boolean }> = {
@@ -114,6 +124,146 @@ function ConnectionsSkeleton() {
       <SettingCardSkeleton rows={5} icon={40} label="Checking connections" />
     </>
   );
+}
+
+function FeltDbConnection({
+	connection,
+	onChanged,
+}: {
+	connection: FeltDbConnectionData;
+	onChanged: () => void;
+}) {
+	const [open, setOpen] = useState(false);
+	const [pairingCode, setPairingCode] = useState("");
+	const [discoveryEndpoint, setDiscoveryEndpoint] = useState("");
+	const [showAdvanced, setShowAdvanced] = useState(false);
+	const [saving, setSaving] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+
+	async function connect() {
+		setSaving(true);
+		setError(null);
+		const result = await fetch(`${BASE_PATH}/api/connections/feltdb`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ pairingCode, discoveryEndpoint }),
+			})
+			.then(async (response) => ({ ok: response.ok, body: await response.json() }))
+			.catch((caught) => ({ ok: false, body: { error: caught?.message } }));
+		setSaving(false);
+		if (result.ok) {
+			setOpen(false);
+			setPairingCode("");
+			onChanged();
+		} else {
+			setError(result.body.error || "Could not connect FeltDB");
+		}
+	}
+
+	async function disconnect() {
+		if (!confirm("Disconnect this FeltDB development workspace?")) return;
+		setError(null);
+		const result = await fetch(`${BASE_PATH}/api/connections/feltdb`, {
+				method: "DELETE",
+			})
+			.then(async (response) => ({ ok: response.ok, body: await response.json() }))
+			.catch((caught) => ({ ok: false, body: { error: caught?.message } }));
+		if (result.ok) {
+			onChanged();
+		} else {
+			setError(result.body.error || "Could not disconnect FeltDB");
+		}
+	}
+
+	return (
+		<>
+			<SectionHeading>Development workspace</SectionHeading>
+			{error && <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>}
+			<SettingCard>
+				<SettingRow className="items-start gap-x-3 phone:flex-col phone:items-stretch">
+					<span className="flex size-[30px] shrink-0 items-center justify-center rounded-md bg-active text-dim">
+						<IconDatabase size={20} />
+					</span>
+					<SettingRowText>
+						<SettingRowTitle>FeltDB</SettingRowTitle>
+						<SettingRowDescription className="leading-snug">
+							{connection.connected
+								? "Runtime investigations from DevTools become queued tasks here."
+								: "Connect the same development workspace used by DevTools and VS Code."}
+						</SettingRowDescription>
+						{connection.workspaceId && (
+							<div className="mt-1 break-all font-mono text-meta text-faint">
+								{connection.workspaceId}
+							</div>
+						)}
+					</SettingRowText>
+					<SettingRowControl className="flex items-center gap-3 phone:mt-2 phone:w-full phone:justify-between">
+						<StatusChip
+							label={connection.connected ? "Connected" : connection.configured ? "Unavailable" : "Not connected"}
+							dot={connection.connected ? "var(--green)" : "var(--line-strong, var(--text-faint))"}
+						/>
+						{connection.connected ? (
+							<Button variant="soft" onClick={disconnect} disabled={connection.managedByEnvironment}>
+								Disconnect
+							</Button>
+						) : (
+							<Button variant="primary" onClick={() => setOpen(true)} disabled={connection.managedByEnvironment}>
+								Connect
+							</Button>
+						)}
+					</SettingRowControl>
+				</SettingRow>
+			</SettingCard>
+
+			<Modal.Root open={open} onOpenChange={(next) => !saving && setOpen(next)}>
+				<Modal.Content widthClassName="max-w-[30rem]">
+					<Modal.Header
+						title="Connect FeltDB"
+						description="Run feltdb dev, then enter its short-lived pairing code."
+					/>
+					<div className="flex flex-col gap-4">
+						<label className="flex flex-col gap-1.5 text-supporting text-dim">
+							Pairing code
+							<input
+								className={cn(settingsInputClass, "font-mono uppercase")}
+								value={pairingCode}
+								onChange={(event) => setPairingCode(event.target.value)}
+								placeholder="FELT-XXXXXX"
+								autoCapitalize="characters"
+								autoComplete="off"
+								spellCheck={false}
+								autoFocus
+							/>
+						</label>
+						<Button variant="ghost" onClick={() => setShowAdvanced((value) => !value)}>
+							{showAdvanced ? "Hide advanced settings" : "Advanced settings"}
+						</Button>
+						{showAdvanced && (
+							<label className="flex flex-col gap-1.5 text-supporting text-dim">
+								Pairing service URL
+								<input
+									className={cn(settingsInputClass, "font-mono")}
+									value={discoveryEndpoint}
+									onChange={(event) => setDiscoveryEndpoint(event.target.value)}
+									placeholder="http://127.0.0.1:7799"
+									autoCapitalize="none"
+									autoComplete="off"
+									spellCheck={false}
+								/>
+							</label>
+						)}
+						{error && <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>}
+					</div>
+					<Modal.Footer>
+						<Button variant="soft" onClick={() => setOpen(false)} disabled={saving}>Cancel</Button>
+						<Button variant="primary" onClick={connect} disabled={saving || !pairingCode.trim()}>
+							{saving ? "Connecting…" : "Connect"}
+						</Button>
+					</Modal.Footer>
+				</Modal.Content>
+			</Modal.Root>
+		</>
+	);
 }
 
 export function Connections() {
@@ -300,6 +450,7 @@ setRemoveError(e.message);
         <ConnectionsSkeleton />
       ) : (
         <>
+					<FeltDbConnection connection={data.feltDb} onChanged={() => load(true)} />
           <SectionHeading>MCP servers: tools inside every session</SectionHeading>
           <SettingCard>
             {data.mcpServers.map((s) => {

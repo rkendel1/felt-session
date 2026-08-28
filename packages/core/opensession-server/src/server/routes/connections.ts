@@ -171,7 +171,80 @@ export async function handleConnectionsRoutes(
 			mcpServers,
 			agents: agentHealth,
 			engines: piEngineEnabled() ? ["pi"] : [],
+			feltDb: (await import("../runtime-investigation-handoffs"))
+				.runtimeInvestigationHandoffConnectionStatus(),
 		});
+	}
+
+	// ── FeltDB development workspace ──
+	if (path === "/api/connections/feltdb" && req.method === "POST") {
+		const body = await req.json().catch(() => null) as Record<string, unknown> | null;
+		const pairingCode = typeof body?.pairingCode === "string"
+			? body.pairingCode.trim().toUpperCase()
+			: "";
+		if (!/^FELT-[A-Z0-9]+$/.test(pairingCode))
+			return Response.json({ error: "Enter a valid FeltDB pairing code" }, { status: 400 });
+		const discoveryEndpoint = typeof body?.discoveryEndpoint === "string"
+			? body.discoveryEndpoint.trim()
+			: undefined;
+		try {
+			const runtime = await import("../runtime-investigation-handoffs");
+			if (runtime.runtimeInvestigationHandoffConnectionStatus().managedByEnvironment)
+				return Response.json(
+					{ error: "This FeltDB connection is managed by environment variables" },
+					{ status: 409 },
+				);
+			const resolved = await runtime.resolveFeltDbPairingCode(pairingCode, discoveryEndpoint);
+			await runtime.connectRuntimeInvestigationHandoffConsumer(resolved);
+			const { rawConfig, persistRawConfig, withConfigMutationLock } = await import(
+				"../config-mutation"
+			);
+			await withConfigMutationLock(async () => {
+				const config = rawConfig();
+				const integrations = config.integrations && typeof config.integrations === "object"
+					&& !Array.isArray(config.integrations)
+					? config.integrations as Record<string, unknown>
+					: (config.integrations = {}) as Record<string, unknown>;
+				integrations.feltdbRuntimeHandoffs = resolved;
+				persistRawConfig(config);
+			});
+			return Response.json(runtime.runtimeInvestigationHandoffConnectionStatus());
+		} catch (error: any) {
+			return Response.json(
+				{ error: error?.message || "Could not connect to the FeltDB workspace" },
+				{ status: 400 },
+			);
+		}
+	}
+
+	if (path === "/api/connections/feltdb" && req.method === "DELETE") {
+		try {
+			const runtime = await import("../runtime-investigation-handoffs");
+			if (runtime.runtimeInvestigationHandoffConnectionStatus().managedByEnvironment)
+				return Response.json(
+					{ error: "This FeltDB connection is managed by environment variables" },
+					{ status: 409 },
+				);
+			await runtime.stopRuntimeInvestigationHandoffConsumer();
+			const { rawConfig, persistRawConfig, withConfigMutationLock } = await import(
+				"../config-mutation"
+			);
+			await withConfigMutationLock(async () => {
+				const config = rawConfig();
+				const integrations = config.integrations && typeof config.integrations === "object"
+					&& !Array.isArray(config.integrations)
+					? config.integrations as Record<string, unknown>
+					: null;
+				if (integrations) delete integrations.feltdbRuntimeHandoffs;
+				persistRawConfig(config);
+			});
+			return Response.json(runtime.runtimeInvestigationHandoffConnectionStatus());
+		} catch (error: any) {
+			return Response.json(
+				{ error: error?.message || "Could not disconnect FeltDB" },
+				{ status: 400 },
+			);
+		}
 	}
 
 	if (path === "/api/connections/mcp" && req.method === "POST") {
