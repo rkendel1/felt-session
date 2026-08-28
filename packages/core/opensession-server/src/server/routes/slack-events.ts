@@ -169,8 +169,8 @@ export async function handleSlackEventsRoute(
               await sendSlackMessage(
                 slackEvent.channel,
                 getCommandHelp(),
+                slackEvent.thread_ts,
                 slackToken,
-                slackEvent.ts,
               );
             } catch (e) {
               console.warn("[slack-events] Failed to send help message:", e);
@@ -201,8 +201,8 @@ export async function handleSlackEventsRoute(
             await sendSlackMessage(
               slackEvent.channel,
               ackMessage,
+              slackEvent.thread_ts,
               slackToken,
-              slackEvent.ts,
             );
           } catch (e) {
             console.warn("[slack-events] Failed to send acknowledgement:", e);

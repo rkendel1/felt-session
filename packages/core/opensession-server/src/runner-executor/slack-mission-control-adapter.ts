@@ -43,15 +43,28 @@ class MissionControlSlackCommandHandler implements SlackCommandHandler {
   private eventSpine: EventSpine;
   private slackWorkspaceId: string;
   private nextSequence: Map<string, number> = new Map();
+  private initialized: Set<string> = new Set();
 
   constructor(eventSpine: EventSpine, slackWorkspaceId: string) {
     this.eventSpine = eventSpine;
     this.slackWorkspaceId = slackWorkspaceId;
   }
 
+  private async ensureInitialized(sessionId: string): Promise<void> {
+    if (!this.initialized.has(sessionId)) {
+      const count = await this.eventSpine.count(sessionId);
+      this.nextSequence.set(sessionId, count);
+      this.initialized.add(sessionId);
+    }
+  }
+
   async handle(command: SlackHumanCommand): Promise<void> {
     // Get the next sequence number for this session
     const sessionId = `slack-${this.slackWorkspaceId}-${command.projectId}`;
+
+    // Ensure we have the correct sequence by checking event spine
+    await this.ensureInitialized(sessionId);
+
     const sequence = this.nextSequence.get(sessionId) ?? 0;
 
     const event: SlackCommandReceivedEvent = {
@@ -88,11 +101,20 @@ class MissionControlSlackNotificationSender implements SlackNotificationSender {
   private slackClient: SlackNotificationSender;
   private slackWorkspaceId: string;
   private nextSequence: Map<string, number> = new Map();
+  private initialized: Set<string> = new Set();
 
   constructor(eventSpine: EventSpine, slackClient: SlackNotificationSender, slackWorkspaceId: string) {
     this.eventSpine = eventSpine;
     this.slackClient = slackClient;
     this.slackWorkspaceId = slackWorkspaceId;
+  }
+
+  private async ensureInitialized(sessionId: string): Promise<void> {
+    if (!this.initialized.has(sessionId)) {
+      const count = await this.eventSpine.count(sessionId);
+      this.nextSequence.set(sessionId, count);
+      this.initialized.add(sessionId);
+    }
   }
 
   async sendNotification(notification: SlackAgentNotification): Promise<void> {
@@ -101,6 +123,10 @@ class MissionControlSlackNotificationSender implements SlackNotificationSender {
 
     // Then, record it as a durable event
     const sessionId = `slack-${this.slackWorkspaceId}-${notification.projectId}`;
+
+    // Ensure we have the correct sequence by checking event spine
+    await this.ensureInitialized(sessionId);
+
     const sequence = this.nextSequence.get(sessionId) ?? 0;
 
     const event: SlackNotificationPostedEvent = {
