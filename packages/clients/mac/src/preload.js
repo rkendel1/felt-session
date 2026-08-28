@@ -21,6 +21,9 @@ contextBridge.exposeInMainWorld("os1", {
   repositories: {
     importLocal: () => ipcRenderer.invoke("os1:local-repository-import"),
   },
+  worktrees: {
+    openInVSCode: (path) => ipcRenderer.invoke("os1:worktree-open-vscode", path),
+  },
   organizations: {
     inlineAdd: true,
     list: () => ipcRenderer.invoke("os1:organizations-list"),

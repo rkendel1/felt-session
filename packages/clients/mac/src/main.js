@@ -1406,6 +1406,34 @@ app.whenReady().then(async () => {
     }
   });
 
+  ipcMain.handle("os1:worktree-open-vscode", async (e, raw) => {
+    const source = e.senderFrame?.url ?? "";
+    if (!eventWindow(e) || !inWindow(source) || typeof raw !== "string")
+      return { ok: false, error: "Not available." };
+    try {
+      const worktreesRoot = fs.realpathSync(
+        path.join(app.getPath("home"), ".opensession", "worktrees"),
+      );
+      const worktree = fs.realpathSync(raw);
+      const relative = path.relative(worktreesRoot, worktree);
+      if (!relative || relative.startsWith("..") || path.isAbsolute(relative))
+        return { ok: false, error: "That folder is not an Open Session worktree." };
+      if (!fs.existsSync(path.join(worktree, ".git")))
+        return { ok: false, error: "The session worktree is no longer available." };
+      return await new Promise((resolve) => {
+        execFile("open", ["-b", "com.microsoft.VSCode", worktree], (error) =>
+          resolve(
+            error
+              ? { ok: false, error: "Visual Studio Code is not installed." }
+              : { ok: true },
+          ),
+        );
+      });
+    } catch {
+      return { ok: false, error: "The session worktree is no longer available." };
+    }
+  });
+
   const fromActiveOrganizationPicker = (e) => {
     const source = e.senderFrame?.url ?? "";
     return !!eventWindow(e) && inActiveWindow(source);

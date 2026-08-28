@@ -11,4 +11,8 @@ test("the shell imports a user-picked Git root into managed storage", async () =
 	expect(main).toContain('root !== source');
 	expect(main).toContain('ipcMain.handle("os1:local-repository-import"');
 	expect(preload).toContain('importLocal: () => ipcRenderer.invoke("os1:local-repository-import")');
+	expect(main).toContain('ipcMain.handle("os1:worktree-open-vscode"');
+	expect(main).toContain('path.join(app.getPath("home"), ".opensession", "worktrees")');
+	expect(main).toContain('["-b", "com.microsoft.VSCode", worktree]');
+	expect(preload).toContain('openInVSCode: (path) => ipcRenderer.invoke("os1:worktree-open-vscode", path)');
 });

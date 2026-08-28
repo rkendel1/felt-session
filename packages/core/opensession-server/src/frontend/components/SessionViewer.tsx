@@ -298,6 +298,7 @@ import {
 	IconMessage,
 	IconArrowUpRight,
 	IconStack,
+	IconFolder,
 } from "./icons";
 import { SessionRelations, type RelatedSession } from "./SessionRelations";
 import {
@@ -5811,6 +5812,32 @@ export function SessionViewer({
 			</Modal.Root>
 			{!hideHeader && (() => {
 				const workspaceScopedMenu = Boolean(session.workspaceId);
+				const openWorktreeInVSCode = (
+					window as unknown as {
+						os1?: {
+							worktrees?: {
+								openInVSCode?: (path: string) => Promise<{
+									ok: boolean;
+									error?: string;
+								}>;
+							};
+						};
+					}
+				).os1?.worktrees?.openInVSCode;
+				const openInVSCodeAction =
+					session.worktreeDir && openWorktreeInVSCode ? (
+						<Menu.Item
+							onClick={() => {
+								setOverflowOpen(false);
+								void openWorktreeInVSCode(session.worktreeDir!).then((result) => {
+									if (!result.ok) toast(result.error || "Couldn't open the worktree.");
+								});
+							}}
+						>
+							<IconFolder size={20} className={MENU_ICON} />
+							<span className="grow">Open in VS Code</span>
+						</Menu.Item>
+					) : null;
 				const addToSidebarAction = (inMenu: boolean) =>
 					canAddToSidebar &&
 					(inMenu ? (
@@ -6270,6 +6297,7 @@ export function SessionViewer({
 								    conditional, so the rules between them collapse themselves
 								    rather than being predicted here (VIEWER_MENU_SEP). */}
 								{placementActions}
+								{openInVSCodeAction}
 								{isPhone && addToSidebarAction(true)}
 								{(compactHeader || isPhone) && shareAction(true)}
 								<Menu.Separator className={VIEWER_MENU_SEP} />
