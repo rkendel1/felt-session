@@ -63,6 +63,13 @@ export interface WebIdentity {
   automation?: boolean;
 }
 
+/** Whether this request supplied its web session as a bearer credential.
+ * Loopback automation must use the machine principal, while a browser on the
+ * same Mac still needs to use its human HttpOnly cookie. */
+export function webAuthUsesBearer(req: Request): boolean {
+  return req.headers.get("authorization")?.startsWith("Bearer ") === true;
+}
+
 const g = globalThis as any;
 
 function sessions(): Map<string, WebSession> {

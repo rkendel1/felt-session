@@ -72,6 +72,7 @@ import {
 	resolveWebAuth,
 	type WebIdentity,
 	webAuthRequired,
+	webAuthUsesBearer,
 } from "./src/server/web-auth";
 import { configureWebhookRoutes } from "./src/server/webhook-server";
 import { prImagePublicRoutes } from "./src/server/pr-images";
@@ -372,9 +373,15 @@ const server: import("bun").Server<WSClientData> = hotServe({
 			let reconnectRequired = false;
 			if (webAuthRequired()) {
 				authUser = resolveWebAuth(req);
-				// Server-local CDP/CLI traffic has its own machine principal. A
-				// teammate's cookie must never let automation act as that person.
-				if (hostedLoopback && authUser?.automation !== true) authUser = null;
+				// Server-local CDP/CLI bearer traffic has its own machine principal.
+				// Browser traffic also reaches a self-hosted server over loopback, so
+				// its human HttpOnly cookie remains valid.
+				if (
+					hostedLoopback &&
+					webAuthUsesBearer(req) &&
+					authUser?.automation !== true
+				)
+					authUser = null;
 				// Refused, never destroyed (githubReconnectRequired): the person
 				// re-authorizes and both halves are repaired, and if GitHub itself
 				// is the problem, turning userPrAuth off restores everyone.

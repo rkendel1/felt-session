@@ -40,6 +40,7 @@ import {
   resolveWebAuth,
   teamMemberForLogin,
   webAuthRequired,
+  webAuthUsesBearer,
 } from "./web-auth";
 
 const ENV_KEYS = [
@@ -549,6 +550,20 @@ describe("web sign-in resolution", () => {
       new Request("http://x/", { headers: { authorization: "Bearer tok-abc" } }),
     );
     expect(byBearer?.login).toBe("alice");
+    expect(
+      webAuthUsesBearer(
+        new Request("http://x/", {
+          headers: { authorization: "Bearer tok-abc" },
+        }),
+      ),
+    ).toBe(true);
+    expect(
+      webAuthUsesBearer(
+        new Request("http://x/", {
+          headers: { cookie: "opensession_auth=tok-abc" },
+        }),
+      ),
+    ).toBe(false);
     expect(resolveWebAuth(new Request("http://x/"))).toBeNull();
     expect(
       resolveWebAuth(new Request("http://x/", { headers: { cookie: "opensession_auth=wrong" } })),
