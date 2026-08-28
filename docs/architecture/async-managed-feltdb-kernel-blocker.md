@@ -1,4 +1,4 @@
-# Async Managed FeltDB kernel conversion: stop report
+# Async FeltDB kernel conversion: authority capability report
 
 Date: 2026-08-28
 
@@ -13,6 +13,15 @@ current read-decide-write transactions and fencing.
 
 No async cache, SQLite synchronization layer, local FeltDB, or fallback was
 introduced.
+
+The local FeltDB server was subsequently evaluated as a development authority.
+Its canonical state-contract engine does implement atomic per-record version
+preconditions, so the storage engine itself is suitable. The supported
+`@feltdb/core@0.6.14` application API does not expose that capable protocol,
+however. Open Session therefore cannot begin the kernel conversion without
+either a FeltDB SDK addition or an application-specific raw HTTP client. The
+latter would create a second, private FeltDB protocol implementation in Open
+Session and is not an acceptable migration foundation.
 
 ## Current command and transaction contract
 
@@ -73,6 +82,47 @@ enforce a version precondition for multi-record transactions. A separate CAS
 followed by a transaction is insufficient: ownership can change between the
 two commits, and a crash can leave only the CAS applied.
 
+## Local server authority verification
+
+FeltDB 0.6.14 has two distinct HTTP transaction contracts:
+
+- The application-facing `/transactions` route used by
+  `createFeltDB({ server })` accepts `transactionId`, multi-record operations,
+  and `requireAbsent`. Its request type has no record version, epoch, or lease
+  field. The route translates only `requireAbsent` into an atomic
+  precondition.
+- The canonical `/v1/transactions` state contract accepts `if_version` on
+  update and delete operations. `execute_transaction` resolves the persisted
+  record version, stages that version as an `AtomicPrecondition`, and submits
+  the preconditions and all mutations to one `apply_atomic_transaction` call.
+
+The focused FeltDB test
+`state_contract::tests::stale_record_precondition_is_structured_and_identity_is_idempotent`
+passes against the 0.6.14 server engine. It proves that a stale `if_version`
+returns `PRECONDITION_FAILED`, preserves the existing record, and retains
+transaction-id idempotency.
+
+This is enough to validate the proposed server authority topology at the
+engine level. It is not yet enough for Open Session to consume it through the
+supported SDK:
+
+- `StateContractClient` is built in `@feltdb/core@0.6.14`, but is not exported
+  by the package root or exports map.
+- The internal client does not expose authority credential headers.
+- The public `AtomicTransactionBuilder` cannot stage `ifVersion`.
+- Epoch and lease identity are kernel fields. They can be fenced by requiring
+  the observed version of the ownership record in every dependent atomic
+  transaction, but only after that record-version condition is available to
+  the public transaction API.
+
+The next safe dependency step is to expose one supported server-authority
+transaction client from `@feltdb/core` that carries authenticated reads and
+multi-record writes with per-record `ifVersion`. Both the local server and the
+eventual managed authority must implement the same request and conflict
+contract. Open Session can then convert its actor worker, store host, and
+kernel against that interface without changing application semantics between
+development and managed deployment.
+
 ## Why the permitted alternatives do not work
 
 - Packing all kernel state into one CAS record would combine unbounded
@@ -106,7 +156,9 @@ one commit, or apply nothing. A retry with the same transaction ID must return
 the original result. A stale version, epoch, or lease must return a structured
 conflict without committing any staged record.
 
-With that primitive, the existing actor mailbox can remain the serialization
-boundary and the worker, store host, and reducers can be converted coherently
-to async calls. Without it, implementing the conversion would weaken current
-kernel atomicity and ownership fencing, which the request explicitly forbids.
+With that primitive available through the supported SDK, the existing actor
+mailbox can remain the serialization boundary and the worker, store host, and
+reducers can be converted coherently to async calls. Without it, implementing
+the conversion would weaken current kernel atomicity and ownership fencing,
+or force Open Session to own a duplicate raw FeltDB protocol client. Both
+outcomes violate the requested persistence boundary.
