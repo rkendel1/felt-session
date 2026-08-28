@@ -10,6 +10,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { __setGithubAppKeyPathForTest } from "../github-app";
+import { GITHUB_APP_GRANT_PERMISSIONS } from "../../shared/github-app-permissions";
 import {
 	__resetGithubManifestStatesForTest,
 	buildGithubAppManifest,
@@ -93,10 +94,14 @@ describe("GitHub App manifest", () => {
 		});
 		expect(manifest).toMatchObject({
 			name: "Open Session Test",
+			description: "Private GitHub access for this Open Session server.",
 			url: "http://100.90.80.70:3850",
 			redirect_url:
 				"http://100.90.80.70:3850/backstage/api/setup/github/manifest/callback",
+			callback_urls: ["http://100.90.80.70:3850/backstage/"],
+			request_oauth_on_install: false,
 			public: false,
+			default_permissions: GITHUB_APP_GRANT_PERMISSIONS,
 			default_events: GITHUB_APP_MANIFEST_EVENTS,
 		});
 		expect(manifest.hook_attributes).toEqual({
@@ -125,11 +130,32 @@ describe("GitHub App manifest", () => {
 			}),
 		);
 		expect(start?.status).toBe(200);
-		const started = (await start?.json()) as { action: string };
+		const started = (await start?.json()) as {
+			action: string;
+			launchUrl: string;
+		};
 		const action = new URL(started.action);
 		expect(action.pathname).toBe("/settings/apps/new");
 		const state = action.searchParams.get("state");
 		expect(state).toBeTruthy();
+		expect(started.launchUrl).toContain(
+			"/backstage/api/setup/github/manifest/launch?state=",
+		);
+		const launch = await handleSetupRoutes(
+			context(
+				`/api/setup/github/manifest/launch?state=${encodeURIComponent(state!)}`,
+				"GET",
+			),
+		);
+		expect(launch?.status).toBe(200);
+		expect(launch?.headers.get("content-security-policy")).toContain(
+			"form-action https://github.com",
+		);
+		const launchHtml = await launch!.text();
+		expect(launchHtml).toContain('method="post"');
+		expect(launchHtml).toContain('name="manifest"');
+		expect(launchHtml).toContain("http://100.90.80.70:3850");
+		expect(launchHtml).toContain("default_permissions");
 
 		const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
 		const pem = privateKey.export({ format: "pem", type: "pkcs8" }).toString();

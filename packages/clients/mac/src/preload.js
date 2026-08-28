@@ -15,6 +15,9 @@ contextBridge.exposeInMainWorld("os1", {
   // window stays where it is, so the click routed the app to the right session
   // behind whatever the person was actually looking at.
   focusWindow: () => ipcRenderer.send("os1:focus-window"),
+  external: {
+    open: (url) => ipcRenderer.invoke("os1:open-external", url),
+  },
   organizations: {
     inlineAdd: true,
     list: () => ipcRenderer.invoke("os1:organizations-list"),

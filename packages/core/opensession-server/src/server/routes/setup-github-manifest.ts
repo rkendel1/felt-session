@@ -35,6 +35,8 @@ interface PendingManifest {
 	owner: ManifestOwner;
 	returnTo: "welcome" | "settings";
 	authLogin: string | null;
+	action: string;
+	manifest: string;
 	used: boolean;
 }
 
@@ -106,8 +108,11 @@ export function buildGithubAppManifest(input: {
 		name:
 			input.appName ||
 			`Open Session (${Math.random().toString(36).slice(2, 6)})`,
+		description: "Private GitHub access for this Open Session server.",
 		url: input.origin,
 		redirect_url: manifestCallbackUrl(input.origin, input.publicPrefix),
+		callback_urls: [`${input.origin}${input.publicPrefix}/`],
+		request_oauth_on_install: false,
 		public: false,
 		default_permissions: GITHUB_APP_GRANT_PERMISSIONS,
 		default_events: GITHUB_APP_MANIFEST_EVENTS,
@@ -119,6 +124,35 @@ export function buildGithubAppManifest(input: {
 			active: Boolean(ingressUrl),
 		},
 	};
+}
+
+function htmlAttribute(value: string): string {
+	return value
+		.replaceAll("&", "&amp;")
+		.replaceAll('"', "&quot;")
+		.replaceAll("<", "&lt;")
+		.replaceAll(">", "&gt;");
+}
+
+function manifestLaunchPage(pending: PendingManifest): Response {
+	const nonce = randomUUID().replaceAll("-", "");
+	const body = `<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
+<title>Opening GitHub</title></head>
+<body><p>Opening GitHub App setup…</p>
+<form id="github-app-manifest" method="post" action="${htmlAttribute(pending.action)}">
+<input type="hidden" name="manifest" value="${htmlAttribute(pending.manifest)}">
+<button type="submit">Continue to GitHub</button></form>
+<script nonce="${nonce}">document.getElementById("github-app-manifest").submit();</script>
+</body></html>`;
+	return new Response(body, {
+		headers: {
+			"Content-Type": "text/html; charset=utf-8",
+			"Cache-Control": "no-store",
+			"Content-Security-Policy": `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'none'; form-action https://github.com; base-uri 'none'; frame-ancestors 'none'`,
+			"Referrer-Policy": "no-referrer",
+		},
+	});
 }
 
 function integrationSection(
@@ -287,25 +321,45 @@ export async function handleSetupGithubManifestRoutes(
 			owner,
 			returnTo: body?.returnTo === "settings" ? "settings" : "welcome",
 			authLogin: ctx.authUser?.login ?? null,
+			action: "",
+			manifest: "",
 			used: false,
 		};
-		pendingManifests().set(state, pending);
 		const base =
 			owner.type === "organization"
 				? `https://github.com/organizations/${encodeURIComponent(owner.login)}/settings/apps/new`
 				: "https://github.com/settings/apps/new";
 		const action = new URL(base);
 		action.searchParams.set("state", state);
+		pending.action = action.toString();
+		pending.manifest = JSON.stringify(
+			buildGithubAppManifest({
+				origin: url.origin,
+				publicPrefix,
+				ingressUrl: configuredIngress().publicBaseUrl,
+			}),
+		);
+		pendingManifests().set(state, pending);
 		return Response.json({
-			action: action.toString(),
-			manifest: JSON.stringify(
-				buildGithubAppManifest({
-					origin: url.origin,
-					publicPrefix,
-					ingressUrl: configuredIngress().publicBaseUrl,
-				}),
-			),
+			action: pending.action,
+			manifest: pending.manifest,
+			launchUrl: `${url.origin}${publicPrefix}/api/setup/github/manifest/launch?state=${encodeURIComponent(state)}`,
 		});
+	}
+
+	if (path === "/api/setup/github/manifest/launch" && req.method === "GET") {
+		prunePendingManifests();
+		const pending = pendingManifests().get(url.searchParams.get("state") || "");
+		if (
+			!pending ||
+			pending.used ||
+			pending.authLogin !== (ctx.authUser?.login ?? null)
+		) {
+			return new Response("This GitHub App setup link is missing or expired.", {
+				status: 400,
+			});
+		}
+		return manifestLaunchPage(pending);
 	}
 
 	if (

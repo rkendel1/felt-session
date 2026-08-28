@@ -1320,6 +1320,15 @@ app.whenReady().then(async () => {
     else showWindow(target);
   });
 
+  ipcMain.handle("os1:open-external", (e, raw) => {
+    if (!inWindow(e.senderFrame?.url ?? "") || typeof raw !== "string") return false;
+    let url;
+    try { url = new URL(raw); } catch { return false; }
+    if (url.protocol !== "http:" && url.protocol !== "https:") return false;
+    openExternal(url.toString());
+    return true;
+  });
+
   const fromActiveOrganizationPicker = (e) => {
     const source = e.senderFrame?.url ?? "";
     return !!eventWindow(e) && inActiveWindow(source);

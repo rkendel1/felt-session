@@ -189,7 +189,11 @@ export function GithubManifestSetup({
 		setStarting(true);
 		setError(null);
 		try {
-			const body = await setupRequest<{ action: string; manifest: string }>(
+			const body = await setupRequest<{
+				action: string;
+				manifest: string;
+				launchUrl: string;
+			}>(
 				"/api/setup/github/manifest",
 				{
 					method: "POST",
@@ -208,20 +212,26 @@ export function GithubManifestSetup({
 				setStarting(false);
 				return;
 			}
-			const form = document.createElement("form");
-			form.method = "post";
-			form.action = action;
-			form.hidden = true;
-			const manifest = document.createElement("input");
-			manifest.type = "hidden";
-			manifest.name = "manifest";
-			manifest.value = body.manifest;
-			form.append(manifest);
-			document.body.append(form);
 			if (returnTo === "welcome") {
 				window.sessionStorage.setItem("opensession:first-mile-step", "github");
 			}
-			form.submit();
+			const external = window.os1?.external as
+				| { open?: (url: string) => Promise<boolean> }
+				| undefined;
+			if (external?.open) {
+				const opened = await external.open(body.launchUrl);
+				if (!opened) {
+					setError("Could not open GitHub in your browser");
+					setStarting(false);
+				}
+				return;
+			}
+			const launchWindow = window.open(body.launchUrl, "_blank", "noopener,noreferrer");
+			if (!launchWindow) {
+				setError("Allow pop-ups to continue in GitHub");
+				setStarting(false);
+			}
+			return;
 		} catch (cause) {
 			setError(
 				cause instanceof Error ? cause.message : "Could not start GitHub App setup",
