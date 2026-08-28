@@ -245,6 +245,17 @@ export function githubAppInstallUrl(): string | null {
   return slug ? `https://github.com/apps/${slug}/installations/new` : null;
 }
 
+/** Owner-specific settings page for the configured App. GitHub requires the
+ * operator to enable Device Flow there; manifests cannot set that option. */
+export function githubAppSettingsUrl(): string | null {
+  const { slug } = githubAppIdentity();
+  if (!slug) return null;
+  const org = githubAppOrg();
+  return org
+    ? `https://github.com/organizations/${encodeURIComponent(org)}/settings/apps/${encodeURIComponent(slug)}`
+    : `https://github.com/settings/apps/${encodeURIComponent(slug)}`;
+}
+
 function readStore(): Store {
   try {
     const raw = JSON.parse(readFileSync(storePath(), "utf-8"));

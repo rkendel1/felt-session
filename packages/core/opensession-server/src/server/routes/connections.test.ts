@@ -160,7 +160,12 @@ describe("GitHub connect gating", () => {
           publicBaseUrl: "https://ingress.os.example.test",
           exposure: "custom",
         },
-        integrations: { github: { oauthClientId: "cfg-client-id" } },
+        integrations: {
+          github: {
+            oauthClientId: "cfg-client-id",
+            appSlug: "open-session-test",
+          },
+        },
       }),
     );
     process.env.OPENSESSION_CONFIG = path;
@@ -172,6 +177,9 @@ describe("GitHub connect gating", () => {
     // userPrAuth is off, so a client id alone must not flip the sign-in gate.
     expect(body.webAuthRequired).toBe(false);
     expect(body.appConfigSource).toBe("config");
+    expect(body.appSettingsUrl).toBe(
+      "https://github.com/settings/apps/open-session-test",
+    );
     expect(body.webhookBaseUrl).toBe("https://ingress.os.example.test");
   });
 });

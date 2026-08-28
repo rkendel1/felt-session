@@ -641,6 +641,7 @@ export async function handleConnectionsRoutes(
 			githubConnectAvailable,
 			githubAppConfigSource,
 			githubAppInstallUrl,
+			githubAppSettingsUrl,
 			githubAppOrg,
 			githubAuthOnConnect,
 			soleGithubLogin,
@@ -666,6 +667,7 @@ export async function handleConnectionsRoutes(
 			appConfigSource: githubAppConfigSource(),
 			webAuthRequired: !simpleMode,
 			appInstallUrl: githubAppInstallUrl(),
+			appSettingsUrl: githubAppSettingsUrl(),
 			webhookBaseUrl: configuredIngress().publicBaseUrl,
 			// Captured install/app-setup intent, so the wizard can prefill the org
 			// owner and show it is finishing sign-in setup. Inert until a connect

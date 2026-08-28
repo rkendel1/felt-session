@@ -454,6 +454,8 @@ interface GithubAuthData {
   webAuthRequired: boolean;
   /** github.com/apps/<slug>/installations/new, or null until the app slug ships. */
   appInstallUrl: string | null;
+  /** Owner-specific App settings page used to recover disabled Device Flow. */
+  appSettingsUrl: string | null;
   /** Current public ingress origin. Empty means callbacks remain private-only. */
   webhookBaseUrl: string;
   /** Captured install/app-setup intent: the org the App is owned by, so the
@@ -1310,10 +1312,24 @@ setError(e.message);
   if (!data.webAuthRequired) {
     const account = data.accounts[0];
     const connected = !!account;
+    const deviceFlowDisabled = error?.includes("Device Flow enabled") === true;
+    const appSettingsUrl = data.appSettingsUrl;
     return (
       <>
         {showHeading && <SectionHeading>GitHub</SectionHeading>}
-        {error && <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>}
+        {error && (
+          <InlineAlert
+            onDismiss={() => setError(null)}
+            onRetry={
+              deviceFlowDisabled && appSettingsUrl
+                ? () => window.open(appSettingsUrl, "_blank", "noopener,noreferrer")
+                : undefined
+            }
+            retryLabel="Enable Device Flow"
+          >
+            {error}
+          </InlineAlert>
+        )}
         <SettingCard className={cardClassName}>
           <SettingRow className="items-start gap-x-3">
             {connected ? (
