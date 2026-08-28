@@ -46,19 +46,34 @@ export type ManagedMigrationReceipt = {
 };
 
 async function putPayload<T>(
+	db: StateFirstDB,
+	collectionName: string,
 	collection: Collection<ManagedRecord<T>>,
 	id: string,
 	payload: T,
 ): Promise<"migrated" | "already_present" | "updated"> {
 	const now = Date.now();
-	const inserted = await collection.putIfAbsent(id, { id, payload, updatedAt: now });
-	if (inserted.inserted) return "migrated";
-	const current = inserted.value as ManagedRecord<T>;
-	if (JSON.stringify(current.payload) === JSON.stringify(payload)) return "already_present";
-	if (!Number.isInteger(current.__version)) {
-		await collection.update(id, { payload, updatedAt: now });
-		return "updated";
+	let current = await collection.get(id);
+	if (!current) {
+		try {
+			await db.transaction((tx) => {
+				tx.collection<ManagedRecord<T>>(collectionName).set(
+					id,
+					{ id, payload, updatedAt: now },
+					{ requireAbsent: true },
+				);
+			}, { transactionId: `opensession-create:${collectionName}:${id}:${crypto.randomUUID()}` });
+			return "migrated";
+		} catch (error) {
+			// A lost success response and a competing creator are both resolved by
+			// reading the authority. If no record exists, this was a real failure.
+			current = await collection.get(id);
+			if (!current) throw error;
+		}
 	}
+	if (JSON.stringify(current.payload) === JSON.stringify(payload)) return "already_present";
+	if (!Number.isInteger(current.__version))
+		throw new Error(`Managed record ${id} has no authority version`);
 	let observed = current;
 	for (let attempt = 0; attempt < 5; attempt++) {
 		const version = observed.__version;
@@ -88,19 +103,19 @@ export class ManagedOpenSessionState {
 	}
 
 	putSession(session: UnifiedSession) {
-		return putPayload(this.sessions, session.id, session);
+		return putPayload(this.db, MANAGED_COLLECTIONS.sessions, this.sessions, session.id, session);
 	}
 
 	putWorkspace(workspace: Workspace) {
-		return putPayload(this.workspaces, workspace.id, workspace);
+		return putPayload(this.db, MANAGED_COLLECTIONS.workspaces, this.workspaces, workspace.id, workspace);
 	}
 
 	putWorktree(worktree: ManagedWorktree) {
-		return putPayload(this.worktrees, worktree.id, worktree);
+		return putPayload(this.db, MANAGED_COLLECTIONS.worktrees, this.worktrees, worktree.id, worktree);
 	}
 
 	putSearchRecord(record: SearchRecord) {
-		return putPayload(this.search, record.id, record);
+		return putPayload(this.db, MANAGED_COLLECTIONS.search, this.search, record.id, record);
 	}
 
 	async listSessions(): Promise<UnifiedSession[]> {
