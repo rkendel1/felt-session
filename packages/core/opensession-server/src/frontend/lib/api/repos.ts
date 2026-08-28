@@ -202,13 +202,26 @@ export async function registerRepoApi(input: {
 	url?: string;
 	path?: string;
 }): Promise<RepoInfo> {
-	const repo = await request<RepoInfo>("/repos", {
+	const body = input.path
+		? { source: "local", path: input.path }
+		: input.url
+			? { fullName: githubFullName(input.url) }
+			: input;
+	const repo = await request<RepoInfo>("/setup/repos", {
 		method: "POST",
-		body: input,
+		body,
 		label: "Failed to add repository",
 	});
 	notifyReposChanged();
 	return repo;
+}
+
+function githubFullName(value: string): string {
+	const trimmed = value.trim().replace(/\.git$/, "");
+	const match = trimmed.match(
+		/^(?:https?:\/\/github\.com\/|git@github\.com:)?([\w.-]+\/[\w.-]+)\/?$/i,
+	);
+	return match?.[1] ?? trimmed;
 }
 
 export interface AttachedRepo {
