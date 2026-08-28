@@ -492,7 +492,13 @@ export async function handleConnectionsRoutes(
 				)
 			: undefined;
 		try {
-			setModelProvider(id, { apiKey, baseURL });
+			setModelProvider(id, {
+				apiKey: id === "ollama" && !apiKey ? "ollama" : apiKey,
+				baseURL:
+					id === "ollama" && !baseURL
+						? "http://127.0.0.1:11434/v1"
+						: baseURL,
+			});
 			const pickerModels = readModelProviderConfig()?.pickerModels || [];
 			const providerModels =
 				models ??

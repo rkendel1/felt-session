@@ -344,6 +344,27 @@ describe("piDialOracleAgent (same-bridge semantics)", () => {
 });
 
 describe("buildPiThirdPartyProviderPlan", () => {
+  test("Ollama registers an arbitrary local model through its OpenAI endpoint", () => {
+    const plan = buildPiThirdPartyProviderPlan({
+      providerID: "ollama",
+      modelID: "qwen3-coder:latest",
+      apiKey: "ollama",
+      builtinModelIds: [],
+    });
+    if ("error" in plan) throw new Error(plan.error);
+    expect(plan.config).toMatchObject({
+      apiKey: "ollama",
+      name: "Ollama",
+      api: "openai-completions",
+      baseUrl: "http://127.0.0.1:11434/v1",
+      compat: {
+        supportsDeveloperRole: false,
+        supportsReasoningEffort: false,
+      },
+      models: [expect.objectContaining({ id: "qwen3-coder:latest" })],
+    });
+  });
+
   test("wafer registers as a generic OpenAI-compatible provider with our catalog", () => {
     const plan = buildPiThirdPartyProviderPlan({
       providerID: "wafer",

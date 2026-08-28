@@ -1,6 +1,25 @@
 import { BASE_PATH } from "../../lib/base";
-import { SettingsHeader, SettingsPanel } from "../../ui/settings";
+import {
+	SettingCard,
+	SettingRow,
+	SettingRowDescription,
+	SettingRowText,
+	SettingRowTitle,
+	SettingsGroupLabel,
+	SettingsHeader,
+	SettingsPanel,
+} from "../../ui/settings";
+import { IconTile } from "../BrandTile";
 import { TeamSection } from "../SetupTeam";
+
+const AGENT_ROLES = [
+	["Architect", "Plans architecture and evaluates technical risk.", "claude"],
+	["Coder", "Implements and tests changes with local Ollama.", "ollama"],
+	["Reviewer", "Reviews diffs independently before release.", "codex"],
+	["Tester", "Reproduces behavior and verifies edge cases.", "ollama"],
+	["Release", "Verifies and promotes tested revisions.", "codex"],
+	["GitHub agent", "Handles issues, pull requests, reviews, and checks.", "github"],
+] as const;
 
 // Workspace → Members: the identity table, on a page of its own. Commit
 // attribution, `allowedUsers` scoping and GitHub sign-in all resolve through
@@ -25,6 +44,18 @@ export function MembersPanel() {
 				}
 			/>
 			<TeamSection onChanged={() => {}} />
+			<SettingsGroupLabel>Agent roles</SettingsGroupLabel>
+			<SettingCard>
+				{AGENT_ROLES.map(([name, description, icon]) => (
+					<SettingRow key={name} className="items-start gap-x-3">
+						<IconTile name={icon} size={28} />
+						<SettingRowText>
+							<SettingRowTitle>{name}</SettingRowTitle>
+							<SettingRowDescription>{description}</SettingRowDescription>
+						</SettingRowText>
+					</SettingRow>
+				))}
+			</SettingCard>
 		</SettingsPanel>
 	);
 }

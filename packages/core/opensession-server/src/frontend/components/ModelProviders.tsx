@@ -51,9 +51,11 @@ const COMMON_PROVIDER_IDS = [
 	"wafer",
 	"fireworks",
 	"together",
+	"ollama",
 ];
 
 const PROVIDER_MODEL_DEFAULTS: Record<string, string> = {
+	ollama: "qwen3-coder:latest",
 	cerebras: "gpt-oss-120b, gemma-4-31b, zai-glm-4.7",
 	wafer:
 		"deepseek-v4-flash-0731-fast, glm-5.2, glm5.2-fast, glm-5.1, kimi-k3, kimi-k3-fast, kimi-k2.6",
@@ -210,6 +212,7 @@ function AddProviderForm({
 
 	const cleanId = id.trim().toLowerCase();
 	const idValid = /^[a-z0-9-]+$/.test(cleanId);
+	const isOllama = cleanId === "ollama";
 
 	async function handleSave() {
 		setSaving(true);
@@ -275,7 +278,8 @@ setError(e.message);
 						type="password"
 						value={apiKey}
 						onChange={(e) => setApiKey(e.target.value)}
-						placeholder="xai-…"
+						placeholder={isOllama ? "Not required" : "xai-…"}
+						disabled={isOllama}
 					/>
 				</SettingsField>
 			</SettingsFormRow>
@@ -286,7 +290,9 @@ setError(e.message);
 						className={settingsInputClass}
 						value={baseURL}
 						onChange={(e) => setBaseURL(e.target.value)}
-						placeholder="https://api.x.ai/v1"
+						placeholder={
+							isOllama ? "http://127.0.0.1:11434/v1" : "https://api.x.ai/v1"
+						}
 					/>
 				</SettingsField>
 				<SettingsField>
@@ -311,7 +317,7 @@ setError(e.message);
 				<Button
 					variant="primary"
 					onClick={handleSave}
-					disabled={saving || !cleanId || !idValid || !apiKey.trim()}
+					disabled={saving || !cleanId || !idValid || (!isOllama && !apiKey.trim())}
 				>
 					{saving ? "Saving…" : "Save provider"}
 				</Button>

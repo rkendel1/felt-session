@@ -319,6 +319,7 @@ export function buildPiThirdPartyProviderPlan(input: {
     config: {
       apiKey: input.apiKey,
       ...(catalog ? { name: catalog.name, api: catalog.api } : {}),
+      ...(catalog?.compat ? { compat: catalog.compat } : {}),
       ...(input.baseURL
         ? { baseUrl: input.baseURL }
         : catalog

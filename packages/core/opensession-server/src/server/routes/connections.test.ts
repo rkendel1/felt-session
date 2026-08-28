@@ -23,6 +23,7 @@ const ENV_KEYS = [
   "OPENSESSION_GITHUB_APP_KEY",
   "OPENSESSION_GITHUB_AUTH_STORE",
   "OPENSESSION_WEB_SESSIONS_STORE",
+  "OPENSESSION_MODEL_PROVIDERS_CONFIG",
 ] as const;
 const saved: Record<string, string | undefined> = {};
 for (const k of ENV_KEYS) saved[k] = process.env[k];
@@ -36,6 +37,7 @@ beforeEach(() => {
   process.env.OPENSESSION_CONFIG = join(dir, "config.json");
   process.env.OPENSESSION_GITHUB_AUTH_STORE = join(dir, "github-auth.json");
   process.env.OPENSESSION_WEB_SESSIONS_STORE = join(dir, "web-sessions.json");
+  process.env.OPENSESSION_MODEL_PROVIDERS_CONFIG = join(dir, "model-providers.json");
   __setGithubAppKeyPathForTest(join(dir, "github-app.pem"));
 });
 
@@ -83,6 +85,22 @@ function context(
 }
 
 const DEVICE = "/api/connections/github/device";
+
+describe("local model providers", () => {
+  test("configures Ollama without asking for a meaningless API key", async () => {
+    const response = await handleConnectionsRoutes(
+      context("/api/settings/model-providers/ollama", "PUT", null, {}),
+    );
+    expect(response?.status).toBe(200);
+    expect(await response?.json()).toMatchObject({
+      provider: {
+        id: "ollama",
+        baseURL: "http://127.0.0.1:11434/v1",
+        models: ["pi/ollama/qwen3-coder:latest"],
+      },
+    });
+  });
+});
 
 
 describe("GitHub App key transaction", () => {

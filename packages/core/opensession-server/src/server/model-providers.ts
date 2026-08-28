@@ -36,6 +36,10 @@ export const CEREBRAS_PICKER_MODELS = [
   "zai-glm-4.7",
 ] as const;
 
+/** Useful local coding model discovered by the macOS setup. Ollama accepts a
+ * placeholder key and exposes an OpenAI-compatible endpoint on this URL. */
+export const OLLAMA_PICKER_MODELS = ["qwen3-coder:latest"] as const;
+
 /** OpenRouter published Ox Alpha before Pi's bundled models.dev snapshot knew
  * about it. Keep the transient free model usable at its advertised limits
  * while the upstream catalog catches up. */
@@ -159,6 +163,7 @@ export function waferModelName(model: string): string {
 }
 
 export function defaultPickerModelsForProvider(id: string): readonly string[] {
+  if (id === "ollama") return OLLAMA_PICKER_MODELS;
   if (id === "cerebras") return CEREBRAS_PICKER_MODELS;
   if (id === "wafer") return WAFER_PICKER_MODELS;
   return [];
@@ -171,6 +176,10 @@ export interface PiProviderCatalog {
   name: string;
   api: "openai-completions";
   baseUrl: string;
+  compat?: {
+    supportsDeveloperRole?: boolean;
+    supportsReasoningEffort?: boolean;
+  };
   models: Array<{
     id: string;
     name: string;
@@ -184,6 +193,18 @@ export interface PiProviderCatalog {
 }
 
 export function piProviderCatalog(id: string): PiProviderCatalog | undefined {
+  if (id === "ollama") {
+    return {
+      name: "Ollama",
+      api: "openai-completions",
+      baseUrl: "http://127.0.0.1:11434/v1",
+      compat: {
+        supportsDeveloperRole: false,
+        supportsReasoningEffort: false,
+      },
+      models: [],
+    };
+  }
   if (id === "openrouter") {
     return {
       name: "OpenRouter",

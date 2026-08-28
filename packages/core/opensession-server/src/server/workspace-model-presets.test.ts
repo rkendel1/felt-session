@@ -3,6 +3,7 @@ import {
 	portableWorkspacePresetRun,
 	type ResolvedWorkspaceModelPreset,
 } from "./workspace-model-presets";
+import { DEFAULT_WORKSPACE_MODEL_SETTINGS } from "./workspaces";
 
 function preset(
 	overrides: Partial<ResolvedWorkspaceModelPreset> = {},
@@ -17,6 +18,21 @@ function preset(
 }
 
 describe("portableWorkspacePresetRun", () => {
+	test("ships every standard role with Ollama as the coding model", () => {
+		const presets = DEFAULT_WORKSPACE_MODEL_SETTINGS.presets || [];
+		expect(presets.filter((item) => item.group === "roles").map((item) => item.label)).toEqual([
+			"Architect",
+			"Coder · Ollama",
+			"Reviewer",
+			"Tester · Ollama",
+			"Release",
+			"GitHub agent",
+		]);
+		expect(presets.find((item) => item.id === "role-coder")?.lead.model).toBe(
+			"pi/ollama/qwen3-coder:latest",
+		);
+	});
+
 	test("carries matching built-in preset wiring across a detached boundary", () => {
 		expect(
 			portableWorkspacePresetRun(
