@@ -208,19 +208,21 @@ export function openDurableWorktreeRegistry(path: string): DurableWorktreeRegist
     },
 
     async deleteWorktree(worktreeId: string): Promise<void> {
+      // Get files and changes before transaction
+      const files = await db
+        .collection<StoredWorktreeFileRow>(FILES_COLLECTION)
+        .find({ worktreeId });
+      const changes = await db
+        .collection<StoredWorktreeChangesRow>(CHANGES_COLLECTION)
+        .find({ worktreeId });
+
       await db.transaction((tx) => {
         tx.collection(WORKTREES_COLLECTION).delete(worktreeId);
         // Clean up related files and changes
-        const files = await db
-          .collection<StoredWorktreeFileRow>(FILES_COLLECTION)
-          .find({ worktreeId });
         for (const file of files) {
           tx.collection(FILES_COLLECTION).delete(file.id);
         }
 
-        const changes = await db
-          .collection<StoredWorktreeChangesRow>(CHANGES_COLLECTION)
-          .find({ worktreeId });
         for (const change of changes) {
           tx.collection(CHANGES_COLLECTION).delete(change.id);
         }
@@ -231,11 +233,13 @@ export function openDurableWorktreeRegistry(path: string): DurableWorktreeRegist
       worktreeId: string,
       files: WorktreeFile[],
     ): Promise<void> {
+      // Get existing files before transaction
+      const existing = await db
+        .collection<StoredWorktreeFileRow>(FILES_COLLECTION)
+        .find({ worktreeId });
+
       await db.transaction((tx) => {
         // Clear existing files for this worktree
-        const existing = db
-          .collection<StoredWorktreeFileRow>(FILES_COLLECTION)
-          .find({ worktreeId });
         for (const file of existing) {
           tx.collection(FILES_COLLECTION).delete(file.id);
         }
