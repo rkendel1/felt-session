@@ -2,6 +2,14 @@ import { describe, expect, test } from "bun:test";
 import { onboardingResponseCompleted } from "./useOnboarding";
 
 describe("onboarding response compatibility", () => {
+	test("yields an unauthenticated native app to the sign-in gate", async () => {
+		expect(
+			await onboardingResponseCompleted(
+				Response.json({ error: "Sign in required" }, { status: 401 }),
+			),
+		).toBe(true);
+	});
+
 	test("treats a missing GET route as a completed legacy instance", async () => {
 		expect(
 			await onboardingResponseCompleted(

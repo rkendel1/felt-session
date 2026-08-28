@@ -7,6 +7,12 @@ export async function onboardingResponseCompleted(
 	response: Response,
 	missingIsComplete = false,
 ): Promise<boolean> {
+	// This hook mounts inside UserGate but starts in the same render. When GitHub
+	// auth is enabled, a fresh native profile has no cookie yet and this protected
+	// request returns 401 before UserGate's public status request can show sign-in.
+	// Yield the page to UserGate; its user-changed event refetches the real flag
+	// immediately after authentication.
+	if (response.status === 401) return true;
 	// During a source upgrade the frontend can hot-rebuild before the server is
 	// restarted with this route. That server predates the first-run flag, so it
 	// has the same semantics as a config with no flag: already onboarded.
