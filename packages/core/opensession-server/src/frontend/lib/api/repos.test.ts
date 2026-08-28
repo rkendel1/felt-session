@@ -53,3 +53,33 @@ test("normalizes a GitHub clone URL for the setup route", async () => {
 
 	expect(body).toEqual({ fullName: "rkendel1/flow_db" });
 });
+
+test("resolves an already-registered GitHub clone URL", async () => {
+	let calls = 0;
+	globalThis.fetch = (async () => {
+		calls++;
+		if (calls === 1) {
+			return Response.json(
+				{ error: "GitHub repository is already registered: rkendel1/flow_db" },
+				{ status: 409 },
+			);
+		}
+		return Response.json({
+			repos: [
+				{
+					id: "flow_db",
+					ghRepo: "rkendel1/flow_db",
+					defaultBranch: "main",
+					sharedCheckout: false,
+				},
+			],
+		});
+	}) as typeof fetch;
+
+	const repo = await registerRepoApi({
+		url: "https://github.com/rkendel1/flow_db.git",
+	});
+
+	expect(repo.id).toBe("flow_db");
+	expect(calls).toBe(2);
+});

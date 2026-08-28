@@ -202,15 +202,24 @@ export async function registerRepoApi(input: {
 	url?: string;
 	path?: string;
 }): Promise<RepoInfo> {
+	const githubRepo = input.url ? githubFullName(input.url) : undefined;
 	const body = input.path
 		? { source: "local", path: input.path }
-		: input.url
-			? { fullName: githubFullName(input.url) }
+		: githubRepo
+			? { fullName: githubRepo }
 			: input;
 	const repo = await request<RepoInfo>("/setup/repos", {
 		method: "POST",
 		body,
 		label: "Failed to add repository",
+	}).catch(async (error) => {
+		if (!(error instanceof ApiError) || error.status !== 409 || !githubRepo)
+			throw error;
+		const existing = (await fetchRepos()).find(
+			(repo) => repo.ghRepo?.toLowerCase() === githubRepo.toLowerCase(),
+		);
+		if (!existing) throw error;
+		return existing;
 	});
 	notifyReposChanged();
 	return repo;
