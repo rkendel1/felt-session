@@ -320,6 +320,8 @@ describe("single session ownership", () => {
 		expect(queueRestore).toBeLessThan(
 			entry.indexOf("reconcileSessionKernelOwnership(", queueRestore),
 		);
+		const runtime = read("session-kernel/runtime.ts");
+		expect(runtime).toContain("await sessionTombstoneState(state.sessionId)");
 		const actor = read("session-kernel/actor-worker.ts");
 		expect(actor).toContain("const host = new SessionKernelStoreHost()");
 		expect(actor).not.toContain("const store = new SessionKernelStore()");

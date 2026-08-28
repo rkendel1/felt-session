@@ -7,6 +7,7 @@ import {
 	maintainSessionKernel,
 	sessionIsQuarantined,
 	sessionRunStateProjections,
+	sessionTombstoneState,
 	sessionTimer,
 	sessionTimerSnapshot,
 } from "./kernel";
@@ -416,7 +417,8 @@ export async function reconcileSessionKernelOwnership(
 		if (
 			!unsettled.has(state.state) ||
 			ownedSessionIds.has(state.sessionId) ||
-			await sessionIsQuarantined(state.sessionId)
+			await sessionIsQuarantined(state.sessionId) ||
+			await sessionTombstoneState(state.sessionId)
 		)
 			continue;
 		await sessionKernel(state.sessionId).applyRunEvent({
