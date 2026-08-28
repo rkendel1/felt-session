@@ -113,7 +113,7 @@ async function importLocalRepository(targetWindow) {
   }
 
   // LaunchAgents cannot read Desktop, Documents or Downloads reliably under
-  // macOS privacy controls. Copy the user-approved checkout into app-managed
+  // macOS privacy controls. Clone the user-approved checkout into app-managed
   // storage so background sessions retain access after the picker grant ends.
   const importsRoot = path.join(app.getPath("home"), ".opensession", "imports");
   fs.mkdirSync(importsRoot, { recursive: true });
