@@ -4,7 +4,6 @@ import type {
 } from "@tellahq/opensession-protocol/executor";
 import {
   openCommandLedger,
-  commandLedgerBackend,
   type OpenCommandLedger,
 } from "../../runner-executor/open-command-ledger";
 import { ExecutorFailure, type ExecutorContext } from "./contract";
@@ -77,8 +76,6 @@ export interface ExecutorRuntimeOptions {
   maxGrantTtlMs?: number;
   managedEnrollmentTtlMs?: number;
   runnerLedger?: {
-    backend?: "sqlite" | "feltdb";
-    busyTimeoutMs?: number;
     capacity?: number;
     maxRecordBytes?: number;
     maxStringBytes?: number;
@@ -162,9 +159,7 @@ export class ExecutorRuntime {
     let managedStore: SqliteExecutorStateStore | undefined;
     let claims: SqliteRunnerExecutorClaims | undefined;
     try {
-      const backend = commandLedgerBackend(this.#options.runnerLedger?.backend);
       ledger = openCommandLedger({
-        backend,
         dbPath: this.#options.paths.runnerLedgerDb,
         feltdbPath: this.#options.feltdbPath,
         ...this.#options.runnerLedger,

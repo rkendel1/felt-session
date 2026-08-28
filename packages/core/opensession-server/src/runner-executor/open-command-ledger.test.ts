@@ -3,7 +3,6 @@ import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  commandLedgerBackend,
   openCommandLedger,
   type OpenCommandLedger,
 } from "./open-command-ledger";
@@ -48,17 +47,9 @@ const receipt = {
 };
 
 describe("openCommandLedger", () => {
-  test("defaults to sqlite so this phase changes no behavior", async () => {
+  test("opens the feltdb backend using the provided path", async () => {
     const path = dbPath();
     const ledger = open({ dbPath: path });
-    await ledger.claim(identity, receipt);
-    expect(existsSync(path)).toBe(true);
-    expect(existsSync(`${path}.feltdb`)).toBe(false);
-  });
-
-  test("opens the feltdb backend beside the sqlite path", async () => {
-    const path = dbPath();
-    const ledger = open({ backend: "feltdb", dbPath: path });
     await ledger.claim(identity, receipt);
     expect(existsSync(`${path}.feltdb`)).toBe(true);
     expect(existsSync(path)).toBe(false);
@@ -71,22 +62,11 @@ describe("openCommandLedger", () => {
     const path = dbPath();
     const explicit = join(dbPath(), "..", "elsewhere");
     const ledger = open({
-      backend: "feltdb",
       dbPath: path,
       feltdbPath: explicit,
     });
     await ledger.claim(identity, receipt);
     expect(existsSync(explicit)).toBe(true);
     expect(existsSync(`${path}.feltdb`)).toBe(false);
-  });
-
-  test("resolves configured backend names and rejects unknown ones", () => {
-    expect(commandLedgerBackend(undefined)).toBe("sqlite");
-    expect(commandLedgerBackend("")).toBe("sqlite");
-    expect(commandLedgerBackend("sqlite")).toBe("sqlite");
-    expect(commandLedgerBackend("feltdb")).toBe("feltdb");
-    expect(() => commandLedgerBackend("postgres")).toThrow(
-      "unknown command ledger backend postgres",
-    );
   });
 });
