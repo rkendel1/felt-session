@@ -68,18 +68,37 @@ export function ModelProvidersPanel() {
 	const [providers, setProviders] = useState<ProviderInfo[] | null>(null);
 	const [addProviderId, setAddProviderId] = useState<string | null>(null);
 
-	const load = useCallback(async () => {
+	const load = useCallback(async (discoverOllama = false) => {
 		await (async () => {
-const res = await fetch(`${BASE_PATH}/api/settings/model-providers`);
+			if (discoverOllama) {
+				await fetch(`${BASE_PATH}/api/settings/model-providers/ollama/discover`, {
+					method: "POST",
+				}).catch(() => null);
+			}
+			const res = await fetch(`${BASE_PATH}/api/settings/model-providers`);
 			if (res.ok) setProviders((await res.json()).providers);
-})().catch(async () => {
+		})().catch(async () => {
 
 });
 	}, []);
 
 	useEffect(() => {
-		load();
+		load(true);
 	}, [load]);
+
+	async function refreshOllamaModels() {
+		await (async () => {
+			const response = await fetch(`${BASE_PATH}/api/settings/model-providers/ollama/discover`, {
+				method: "POST",
+			});
+			const body = await response.json();
+			if (!response.ok) throw new Error(body.error || "Could not discover Ollama models");
+			toast(`Discovered ${body.models.length} Ollama model${body.models.length === 1 ? "" : "s"}`);
+			load(false);
+		})().catch(async (error: any) => {
+			toast(error.message, { variant: "error" });
+		});
+	}
 
 	async function handleRemove(p: ProviderInfo) {
 		if (
@@ -170,6 +189,12 @@ toast(e.message, { variant: "error" });
 								)}
 							</SettingRowText>
 							<SettingRowControl>
+								<div className="flex items-center gap-2">
+									{p.id === "ollama" && (
+										<Button size="sm" onClick={refreshOllamaModels}>
+											Discover models
+										</Button>
+									)}
 								<Menu.Root>
 									<Menu.Trigger
 										className={rowMenuTriggerClasses}
@@ -187,6 +212,7 @@ toast(e.message, { variant: "error" });
 										</Menu.Item>
 									</Menu.Popup>
 								</Menu.Root>
+								</div>
 							</SettingRowControl>
 						</SettingRow>
 					))

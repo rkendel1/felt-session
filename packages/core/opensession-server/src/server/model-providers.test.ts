@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   defaultPickerModelsForProvider,
+	discoverOllamaModels,
   normalizeModelProviderConfig,
   piProviderCatalog,
 } from "./model-providers";
@@ -49,5 +50,24 @@ describe("model provider config", () => {
 			{ id: "gpt-5.6-terra", reasoning: true },
 			{ id: "gpt-5.6-luna", reasoning: true },
 		]);
+	});
+
+	test("discovers every installed Ollama model from the native inventory", async () => {
+		let requested = "";
+		const fetchImpl = (async (input: RequestInfo | URL) => {
+			requested = String(input);
+			return Response.json({
+				models: [
+					{ name: "qwen3-coder:latest" },
+					{ model: "deepseek-r1:14b" },
+					{ name: "qwen3-coder:latest" },
+				],
+			});
+		}) as unknown as typeof fetch;
+		expect(await discoverOllamaModels("http://127.0.0.1:11434/v1", fetchImpl)).toEqual([
+			"qwen3-coder:latest",
+			"deepseek-r1:14b",
+		]);
+		expect(requested).toBe("http://127.0.0.1:11434/api/tags");
 	});
 });

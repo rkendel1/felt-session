@@ -508,6 +508,45 @@ export function removePickerModel(id: string): string[] {
   return list;
 }
 
+/** Replace one provider's picker entries in one atomic config write. */
+export function replacePickerModelsForProvider(id: string, models: readonly string[]): string[] {
+	if (!PROVIDER_ID_RE.test(id)) throw new Error(`Invalid provider id "${id}"`);
+	const raw = readRawModelProviderConfig();
+	const prefix = `pi/${id}/`;
+	const retained = rawPickerModels(raw).filter((model) => !model.startsWith(prefix));
+	const discovered = models
+		.map((model) => model.trim())
+		.filter(Boolean)
+		.map((model) => `${prefix}${model}`);
+	raw.pickerModels = [...retained, ...new Set(discovered)];
+	writeRawModelProviderConfig(raw);
+	return raw.pickerModels as string[];
+}
+
+/** Query Ollama's native inventory endpoint. The configured OpenAI-compatible
+ * base normally ends in /v1; model discovery lives at /api/tags on the same
+ * authority. No client-supplied URL reaches this fetch. */
+export async function discoverOllamaModels(
+	baseURL: string,
+	fetchImpl: typeof fetch = fetch,
+): Promise<string[]> {
+	const url = new URL(baseURL || "http://127.0.0.1:11434/v1");
+	url.pathname = "/api/tags";
+	url.search = "";
+	url.hash = "";
+	const response = await fetchImpl(url, { signal: AbortSignal.timeout(4_000) });
+	if (!response.ok) throw new Error(`Ollama model discovery returned ${response.status}`);
+	const body = await response.json() as { models?: Array<{ name?: unknown; model?: unknown }> };
+	const models = Array.isArray(body.models)
+		? body.models
+			.map((entry) => typeof entry.model === "string" ? entry.model : typeof entry.name === "string" ? entry.name : "")
+			.map((model) => model.trim())
+			.filter(Boolean)
+		: [];
+	if (!models.length) throw new Error("Ollama did not report any installed models");
+	return [...new Set(models)];
+}
+
 /** Masked display form of a stored key ("sk-x…wxyz") — the full value never
  *  leaves the server. */
 export function maskProviderKey(key: string | undefined): string {

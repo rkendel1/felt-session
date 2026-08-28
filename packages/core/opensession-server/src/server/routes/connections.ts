@@ -10,7 +10,7 @@ import type { RouteContext } from "./context";
 import { getAgents } from "../agents-registry";
 import { addMcpServer, getConnections, readMcpConfig, removeMcpServer, setMcpAllowedUsers } from "../connections";
 import { refreshPickerModels } from "../models";
-import { BRIDGE_PROVIDER_IDS, PROVIDER_ID_RE, addPickerModel, defaultPickerModelsForProvider, maskProviderKey, modelProviders, readModelProviderConfig, removeModelProvider, removePickerModel, setModelProvider } from "../model-providers";
+import { BRIDGE_PROVIDER_IDS, PROVIDER_ID_RE, addPickerModel, defaultPickerModelsForProvider, discoverOllamaModels, maskProviderKey, modelProviders, readModelProviderConfig, removeModelProvider, removePickerModel, replacePickerModelsForProvider, setModelProvider } from "../model-providers";
 import { isPiModelId, piEngineEnabled, readPiEngineConfig, setPiEnabled, setPiPickerModels } from "../pi-config";
 
 /** Navigate `integrations.github` in a raw parsed config object so the App
@@ -524,6 +524,30 @@ export async function handleConnectionsRoutes(
 			})),
 			pickerModels,
 		});
+	}
+
+	if (
+		path === "/api/settings/model-providers/ollama/discover" &&
+		req.method === "POST"
+	) {
+		const provider = modelProviders().ollama;
+		if (!provider)
+			return Response.json({ error: "Configure Ollama first" }, { status: 404 });
+		try {
+			const models = await discoverOllamaModels(
+				provider.baseURL || "http://127.0.0.1:11434/v1",
+			);
+			const pickerModels = replacePickerModelsForProvider("ollama", models);
+			refreshPickerModels();
+			return Response.json({
+				models: pickerModels.filter((model) => model.startsWith("pi/ollama/")),
+			});
+		} catch (error: any) {
+			return Response.json(
+				{ error: error?.message || "Could not discover Ollama models" },
+				{ status: 502 },
+			);
+		}
 	}
 
 	const modelProviderMatch = path.match(
