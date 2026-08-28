@@ -86,7 +86,7 @@ afterEach(() => {
 });
 
 describe("GitHub App manifest", () => {
-	test("creates a private-only registration with an inactive webhook", () => {
+	test("creates a private-only registration without an unreachable webhook", () => {
 		const manifest = buildGithubAppManifest({
 			origin: "http://100.90.80.70:3850",
 			publicPrefix: "/backstage",
@@ -102,12 +102,9 @@ describe("GitHub App manifest", () => {
 			request_oauth_on_install: false,
 			public: false,
 			default_permissions: GITHUB_APP_GRANT_PERMISSIONS,
-			default_events: GITHUB_APP_MANIFEST_EVENTS,
 		});
-		expect(manifest.hook_attributes).toEqual({
-			url: "http://100.90.80.70:3850/backstage/github/webhook",
-			active: false,
-		});
+		expect(manifest).not.toHaveProperty("default_events");
+		expect(manifest).not.toHaveProperty("hook_attributes");
 	});
 
 	test("includes the dedicated callback endpoint when public ingress exists", () => {
@@ -120,6 +117,7 @@ describe("GitHub App manifest", () => {
 			url: "https://ingress.example.test/github/webhook",
 			active: true,
 		});
+		expect(manifest.default_events).toEqual(GITHUB_APP_MANIFEST_EVENTS);
 	});
 
 	test("a personal App waits for the verified connection before enabling sign-in", async () => {

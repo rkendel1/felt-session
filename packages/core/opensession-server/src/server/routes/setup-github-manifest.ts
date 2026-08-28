@@ -103,7 +103,6 @@ export function buildGithubAppManifest(input: {
 	ingressUrl?: string;
 }): Record<string, unknown> {
 	const ingressUrl = input.ingressUrl?.trim().replace(/\/+$/, "") || "";
-	const hookBaseUrl = ingressUrl || `${input.origin}${input.publicPrefix}`;
 	return {
 		name:
 			input.appName ||
@@ -115,14 +114,18 @@ export function buildGithubAppManifest(input: {
 		request_oauth_on_install: false,
 		public: false,
 		default_permissions: GITHUB_APP_GRANT_PERMISSIONS,
-		default_events: GITHUB_APP_MANIFEST_EVENTS,
-		// GitHub rejects a manifest with subscribed events and no hook URL. A
-		// private instance still supplies its own valid URL, but leaves delivery
-		// inactive until public ingress is configured in Settings.
-		hook_attributes: {
-			url: `${hookBaseUrl}/github/webhook`,
-			active: Boolean(ingressUrl),
-		},
+		// GitHub rejects loopback webhook URLs even when delivery is inactive.
+		// Local-only instances create the App without webhook configuration;
+		// Domains can add a reachable HTTPS endpoint later.
+		...(ingressUrl
+			? {
+					default_events: GITHUB_APP_MANIFEST_EVENTS,
+					hook_attributes: {
+						url: `${ingressUrl}/github/webhook`,
+						active: true,
+					},
+				}
+			: {}),
 	};
 }
 

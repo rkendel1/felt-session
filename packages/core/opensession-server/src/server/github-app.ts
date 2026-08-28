@@ -250,9 +250,8 @@ export function githubAppConfigured(): boolean {
 }
 
 /** Point the App-level webhook at the public callback gateway after ingress is
- * configured. The manifest already granted the event subscriptions and stored
- * this shared secret; authenticating as the App lets Domains connect the URL
- * later without sending the operator back through GitHub's settings UI. */
+ * configured. The manifest conversion stored the shared secret; authenticating
+ * as the App lets Domains connect the URL later. */
 export async function updateGithubAppWebhook(
   publicOrigin: string,
   secret: string,
