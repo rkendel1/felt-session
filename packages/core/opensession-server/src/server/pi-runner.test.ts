@@ -30,6 +30,7 @@ import {
   makeGuardedToolOps,
   makePiBashTool,
   parsePiModel,
+  providerToolProtocolInstruction,
   PI_STATE_DIR,
   PI_STEER_TOOL_SKIP,
   piDialOracleAgent,
@@ -47,6 +48,15 @@ import {
 import type { PiBashAuditEvent } from "./pi-runner";
 import { __setCodexAccountsPathForTest } from "./codex-accounts";
 import type { ResolvedWorkspaceModelPreset } from "./workspace-model-presets";
+
+describe("providerToolProtocolInstruction", () => {
+  test("keeps Ollama tool calls in the API channel", () => {
+    expect(providerToolProtocolInstruction("ollama")).toContain(
+      "Never print tool-call XML",
+    );
+    expect(providerToolProtocolInstruction("openai")).toBe("");
+  });
+});
 
 describe("acceptSteerOnce", () => {
   test("records only successful acceptance and deduplicates retries", () => {

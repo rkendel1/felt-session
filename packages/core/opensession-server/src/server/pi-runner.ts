@@ -135,6 +135,15 @@ const g = globalThis as any;
 const PROVIDER = "pi" as const;
 export const PI_MODEL_PREFIX = "pi/";
 
+/** Local models occasionally print their learned tool syntax as ordinary
+ * assistant text instead of using the API tool-call channel. Ollama honors
+ * this explicit protocol reminder and returns a real `tool_calls` response. */
+export function providerToolProtocolInstruction(providerID: string): string {
+  return providerID === "ollama"
+    ? "Use tools through the API tool-call channel. Never print tool-call XML or markup as text."
+    : "";
+}
+
 /** Fresh authority for an unattended GitHub code run. Host recovery resolves
  * the selected service credential from the registered cwd; remote runners can
  * consume only the private run-scoped file projected by their launcher. */
@@ -2087,7 +2096,9 @@ async function* runPiAttempt(
         }),
       }),
       systemPromptOverride: (base) =>
-        base ? `${base}\n\n${instructions}` : instructions,
+        [base, instructions, providerToolProtocolInstruction(parsed.providerID)]
+          .filter(Boolean)
+          .join("\n\n"),
     });
     await loader.reload();
 

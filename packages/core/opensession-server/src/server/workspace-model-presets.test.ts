@@ -33,6 +33,11 @@ describe("portableWorkspacePresetRun", () => {
 		expect(presets.find((item) => item.id === "role-coder")?.lead.model).toBe(
 			"pi/ollama/qwen3-coder:latest",
 		);
+		expect(
+			presets
+				.filter((item) => item.group === "roles")
+				.every((item) => item.lead.model === "pi/ollama/qwen3-coder:latest"),
+		).toBe(true);
 	});
 
 	test("carries matching built-in preset wiring across a detached boundary", () => {
