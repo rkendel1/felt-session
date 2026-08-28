@@ -11,7 +11,7 @@
         "@daytonaio/sdk": "0.201.0",
         "@earendil-works/pi-ai": "0.84.3",
         "@earendil-works/pi-coding-agent": "^0.84.3",
-        "@feltdb/core": "0.6.13",
+        "@feltdb/core": "^0.6.13",
         "@lezer/common": "^1.5.2",
         "@lezer/highlight": "^1.2.3",
         "@lezer/rust": "^1.0.2",
