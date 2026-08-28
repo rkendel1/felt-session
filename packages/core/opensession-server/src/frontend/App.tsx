@@ -5559,8 +5559,16 @@ console.error("Delete workspace failed:", e);
 								};
 								confirmRunningClose(s, () => void archive());
 							}}
-							onArchiveWorkspace={(sessions, openNext) => {
+							onArchiveWorkspace={(workspace, sessions, openNext) => {
 								const archive = async () => {
+									if (workspace && sessions.length === 0) {
+										openNext?.();
+										await updateWorkspaceApi(workspace.id, { archived: true });
+										refreshWorkspaces();
+										if (route.view === "workspace" && route.id === workspace.id)
+											goBack();
+										return;
+									}
 									const openSessionId =
 										route.view === "session" &&
 										sessions.some((c) => c.id === route.id)

@@ -562,6 +562,7 @@ export interface UnifiedSession {
 export interface Workspace {
 	id: string;
 	name: string;
+	archived?: boolean;
 	repo?: string;
 	color?: string;
 	createdBy: string;

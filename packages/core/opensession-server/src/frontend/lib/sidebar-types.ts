@@ -127,6 +127,7 @@ export interface Props {
 	 * order as the row the person archived.
 	 */
 	onArchiveWorkspace: (
+		workspace: Workspace | undefined,
 		sessions: UnifiedSession[],
 		openNext: OpenNextSidebarItem | null,
 	) => void;

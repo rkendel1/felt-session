@@ -101,6 +101,13 @@ describe("stampWorkspaceIdentity", () => {
 // title a sidebar row after a workspace's old name (or after a workspace that
 // no longer exists) until the server restarted.
 describe("workspaceName", () => {
+	test("persists an archive state without requiring a session", () => {
+		const ws = createWorkspace({ name: "Empty workspace", createdBy: "Kent" });
+		expect(updateWorkspace(ws.id, { archived: true })?.archived).toBe(true);
+		expect(getWorkspace(ws.id)?.archived).toBe(true);
+		expect(updateWorkspace(ws.id, { archived: false })?.archived).toBe(false);
+	});
+
 	test("follows create, rename and delete", () => {
 		const ws = createWorkspace({ name: "Add sound effects", createdBy: "Kent" });
 		expect(workspaceName(ws.id)).toBe("Add sound effects");

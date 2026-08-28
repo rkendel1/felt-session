@@ -118,6 +118,7 @@ export async function updateWorkspaceApi(
 		/** null clears the swatch color. */
 		color?: string | null;
 		order?: number;
+		archived?: boolean;
 		modelSettings?: Workspace["modelSettings"];
 		/** null clears the draft. */
 		draft?: Workspace["draft"] | null;

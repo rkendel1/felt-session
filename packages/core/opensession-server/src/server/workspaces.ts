@@ -113,6 +113,8 @@ export function workspaceModelSettings(workspace?: Workspace | null): WorkspaceM
 export interface Workspace {
   id: string;
   name: string;
+  /** Manually removed from the active workspace list, independent of sessions. */
+  archived?: boolean;
   /** Default repo for new sessions created in this workspace (repo id). */
   repo?: string;
   /** Optional swatch key for the sidebar dot (see tab-colors). */
@@ -518,7 +520,7 @@ export function stampWorkspaceIdentity(
 export function updateWorkspace(
   id: string,
   patch: Partial<
-    Pick<Workspace, "name" | "repo" | "color" | "order" | "branch" | "worktreeDir" | "attachedRepos" | "modelSettings">
+    Pick<Workspace, "name" | "repo" | "color" | "order" | "branch" | "worktreeDir" | "attachedRepos" | "modelSettings" | "archived">
   > & { draft?: WorkspaceDraft | null },
 ): Workspace | null {
   const cur = getWorkspace(id);
@@ -566,6 +568,7 @@ export function updateWorkspace(
       : {}),
     ...(patch.color !== undefined ? { color: patch.color } : {}),
     ...(patch.order !== undefined ? { order: patch.order } : {}),
+    ...(patch.archived !== undefined ? { archived: patch.archived } : {}),
     ...(patch.branch !== undefined ? { branch: patch.branch } : {}),
     ...(patch.worktreeDir !== undefined ? { worktreeDir: patch.worktreeDir } : {}),
     ...(patch.attachedRepos !== undefined ? { attachedRepos: patch.attachedRepos } : {}),

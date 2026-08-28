@@ -168,6 +168,7 @@ import {
 	IconFeed,
 	IconPeople,
 	IconPullRequest,
+	IconDotsHorizontal,
 } from "./icons";
 import { Button } from "../ui/button";
 import { useConfirm } from "../ui/confirm";
@@ -500,7 +501,7 @@ function WorkspaceContextMenu({
 			label: "Archive",
 			onClick: () => onArchive(row, menu.source),
 		});
-	} else if (workspace) {
+	} else if (workspace?.draft) {
 		entries.push({ kind: "sep" });
 		entries.push({
 			kind: "item",
@@ -508,6 +509,14 @@ function WorkspaceContextMenu({
 			danger: true,
 			label: "Delete draft",
 			onClick: () => onDeleteDraft(workspace),
+		});
+	} else if (workspace && row) {
+		entries.push({ kind: "sep" });
+		entries.push({
+			kind: "item",
+			icon: <IconArchive size={20} />,
+			label: "Archive",
+			onClick: () => onArchive(row, menu.source),
 		});
 	}
 	return (
@@ -2246,6 +2255,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		current: HTMLButtonElement | null = null,
 	) {
 		onArchiveWorkspace(
+			row.workspace ?? undefined,
 			row.sessions,
 			openNextSidebarItem(`workspace:${row.key}`, current),
 		);
@@ -3616,6 +3626,57 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								<IconTrash size={19} />
 							</span>
 						</Tooltip>
+					) : row.workspace ? (
+						<>
+							<Tooltip label="Workspace actions">
+								<span
+									role="button"
+									tabIndex={0}
+									className={cn(SIDEBAR_WS_ACTION, "text-faint hover:text-fg")}
+									aria-label="Workspace actions"
+									onClick={(e) => {
+										e.stopPropagation();
+										const source = e.currentTarget.closest<HTMLButtonElement>(
+											"button[data-sidebar-row]",
+										);
+										if (!source) return;
+										const rect = e.currentTarget.getBoundingClientRect();
+										setWorkspaceMenu({
+											id: row.workspace?.id ?? row.key,
+											x: rect.right,
+											y: rect.bottom,
+											source,
+										});
+									}}
+									onKeyDown={(e) => {
+										if (e.key === "Enter" || e.key === " ")
+											e.currentTarget.click();
+									}}
+								>
+									<IconDotsHorizontal size={19} />
+								</span>
+							</Tooltip>
+							<Tooltip label="Archive workspace">
+								<span
+									role="button"
+									tabIndex={0}
+									className={cn(SIDEBAR_WS_ACTION, "text-faint hover:text-fg")}
+									aria-label="Archive workspace"
+									onClick={(e) => {
+										e.stopPropagation();
+										archiveWorkspaceWithNext(row);
+									}}
+									onKeyDown={(e) => {
+										if (e.key === "Enter" || e.key === " ") {
+											e.stopPropagation();
+											archiveWorkspaceWithNext(row);
+										}
+									}}
+								>
+									<IconArchive size={19} />
+								</span>
+							</Tooltip>
+						</>
 					) : null}
 				</span>
 				</button>

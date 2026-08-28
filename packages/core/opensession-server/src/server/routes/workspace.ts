@@ -456,9 +456,10 @@ export async function handleWorkspaceRoutes(
 			const openPrs = getOpenPrs();
 			workspaces = workspaces.filter(
 				(workspace) =>
-					activeWorkspaceIds.has(workspace.id) ||
-					!!workspace.draft ||
-					workspaceBacksOpenPr(workspace, openPrs, defaultRepo().id),
+					!workspace.archived &&
+					(activeWorkspaceIds.has(workspace.id) ||
+						!!workspace.draft ||
+						workspaceBacksOpenPr(workspace, openPrs, defaultRepo().id)),
 			);
 		}
 		return conditionalJsonResponse(req, {
@@ -573,6 +574,7 @@ export async function handleWorkspaceRoutes(
 			repo?: string;
 			color?: string;
 			order?: number;
+			archived?: boolean;
 			modelSettings?: WorkspaceModelSettings;
 			draft?: unknown;
 		};
