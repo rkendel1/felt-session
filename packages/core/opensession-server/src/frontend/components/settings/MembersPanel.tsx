@@ -1,4 +1,9 @@
+import { useState } from "react";
+import { defaultWorkspaceModelSettings } from "../../lib/api";
+import { modelRoleAssignment, ROLE_DESCRIPTIONS } from "../../lib/agent-roles";
 import { BASE_PATH } from "../../lib/base";
+import type { Workspace } from "../../lib/types";
+import { Button } from "../../ui/button";
 import {
 	SettingCard,
 	SettingRow,
@@ -11,23 +16,18 @@ import {
 } from "../../ui/settings";
 import { IconTile } from "../BrandTile";
 import { TeamSection } from "../SetupTeam";
-
-const AGENT_ROLES = [
-	["Architect", "Plans architecture and evaluates technical risk.", "claude"],
-	["Researcher", "Investigates questions and returns sourced findings.", "codex"],
-	["Planner", "Turns outcomes and constraints into an actionable plan.", "claude"],
-	["Coder", "Implements and tests changes with local Ollama.", "ollama"],
-	["Reviewer", "Reviews diffs independently before release.", "codex"],
-	["Tester", "Reproduces behavior and verifies edge cases.", "ollama"],
-	["Release", "Verifies and promotes tested revisions.", "codex"],
-	["GitHub agent", "Handles issues, pull requests, reviews, and checks.", "github"],
-] as const;
+import { WorkspaceModelPresets } from "../WorkspaceModelPresets";
 
 // Workspace → Members: the identity table, on a page of its own. Commit
 // attribution, `allowedUsers` scoping and GitHub sign-in all resolve through
 // it, so it long outlives the Setup wizard step that first fills it in.
 
-export function MembersPanel() {
+export function MembersPanel({ workspace }: { workspace?: Workspace }) {
+	const [configureRoles, setConfigureRoles] = useState(false);
+	const presets = workspace?.modelSettings?.presets
+		|| defaultWorkspaceModelSettings()?.presets
+		|| [];
+	const roles = presets.filter((preset) => preset.group === "roles");
 	return (
 		<SettingsPanel>
 			<SettingsHeader
@@ -48,20 +48,37 @@ export function MembersPanel() {
 			<TeamSection onChanged={() => {}} />
 			<SettingsGroupLabel>Agent roles</SettingsGroupLabel>
 			<p className="mb-2 text-label text-dim">
-				Type @ in a conversation or new workspace to choose one. Agent roles are
-				separate from people and do not need sign-in accounts.
+				Type @ in a conversation or new workspace to choose one. Assign each role
+				to any model available through your configured providers.
 			</p>
 			<SettingCard>
-				{AGENT_ROLES.map(([name, description, icon]) => (
-					<SettingRow key={name} className="items-start gap-x-3">
-						<IconTile name={icon} size={28} />
-						<SettingRowText>
-							<SettingRowTitle>{name}</SettingRowTitle>
-							<SettingRowDescription>{description}</SettingRowDescription>
-						</SettingRowText>
-					</SettingRow>
-				))}
+				{roles.map((role) => {
+					const assignment = modelRoleAssignment(role.lead.model);
+					return (
+						<SettingRow key={role.id} className="items-start gap-x-3">
+							<IconTile name={assignment.icon} size={28} />
+							<SettingRowText>
+								<SettingRowTitle>{role.label}</SettingRowTitle>
+								<SettingRowDescription>
+									{ROLE_DESCRIPTIONS[role.id] || role.instructions || "Workspace agent role."}
+									<span className="mt-0.5 block text-fg-muted">{assignment.label}</span>
+								</SettingRowDescription>
+							</SettingRowText>
+						</SettingRow>
+					);
+				})}
 			</SettingCard>
+			<Button className="w-fit" disabled={!workspace} onClick={() => setConfigureRoles(true)}>
+				Configure roles
+			</Button>
+			{workspace && (
+				<WorkspaceModelPresets
+					workspace={workspace}
+					open={configureRoles}
+					onOpenChange={setConfigureRoles}
+					onSaved={() => window.dispatchEvent(new Event("opensession:workspaces-changed"))}
+				/>
+			)}
 		</SettingsPanel>
 	);
 }

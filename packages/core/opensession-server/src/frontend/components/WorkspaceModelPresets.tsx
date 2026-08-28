@@ -317,8 +317,8 @@ setSaving(false);
 		<Modal.Root open={open} onOpenChange={onOpenChange}>
 			<Modal.Content widthClassName="max-w-[42rem]">
 				<Modal.Header
-					title="Model presets"
-					description="A lead model, the supporting models it can delegate to, and how to use them. Sessions in this workspace pick one from the model menu."
+					title="Agent roles and model presets"
+					description="Choose which configured provider and model runs each role in this workspace. Presets can also delegate to supporting models."
 				/>
 				<div className="flex flex-col gap-2.5">
 					{presets.length > 0 ? (
@@ -370,10 +370,10 @@ export function WorkspaceModelPresetSettings({ workspace }: { workspace?: Worksp
 			<SettingCard>
 				<SettingRow>
 					<SettingRowText>
-						<SettingRowTitle>Model presets</SettingRowTitle>
+						<SettingRowTitle>Agent roles and model presets</SettingRowTitle>
 						<SettingRowDescription>
 							{workspace
-								? "Lead and supporting models that sessions here can pick."
+								? "Assign workspace roles and other presets to configured models."
 								: "Open a workspace to set up its model presets."}
 						</SettingRowDescription>
 					</SettingRowText>

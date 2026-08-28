@@ -237,7 +237,7 @@ function SectionPanel({
 				<SetupPanel onOpenOnboarding={onOpenOnboarding} />
 			)}
 			{section === "repos" && <ReposPanel />}
-			{section === "members" && <MembersPanel />}
+			{section === "members" && <MembersPanel workspace={workspace} />}
 			{section === "authentication" && <AuthenticationPanel />}
 			{section === "library" && <LibraryPanel />}
 			{section === "integrations" && <IntegrationsPanel />}
