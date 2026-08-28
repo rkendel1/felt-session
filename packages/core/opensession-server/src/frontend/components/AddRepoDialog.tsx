@@ -73,20 +73,20 @@ setAdding(false);
 		if (!nativeLocal || adding) return;
 		setAdding(true);
 		setError(null);
-		try {
-			const imported = await nativeLocal.importLocal();
+		await nativeLocal.importLocal().then(async (imported) => {
 			if (imported.canceled) return;
 			if (!imported.ok || !imported.path) {
-				throw new Error(imported.error || "Couldn't import that repository.");
+				setError(imported.error || "Couldn't import that repository.");
+				return;
 			}
 			const repo = await registerRepoApi({ path: imported.path });
 			onAdded(repo);
 			onOpenChange(false);
-		} catch (cause) {
+		}).catch(async (cause) => {
 			setError(cause instanceof Error ? cause.message : String(cause));
-		} finally {
+		}).finally(async () => {
 			setAdding(false);
-		}
+		});
 	}
 
 	return (
