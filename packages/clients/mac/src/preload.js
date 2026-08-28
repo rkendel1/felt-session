@@ -18,6 +18,9 @@ contextBridge.exposeInMainWorld("os1", {
   external: {
     open: (url) => ipcRenderer.invoke("os1:open-external", url),
   },
+  repositories: {
+    importLocal: () => ipcRenderer.invoke("os1:local-repository-import"),
+  },
   organizations: {
     inlineAdd: true,
     list: () => ipcRenderer.invoke("os1:organizations-list"),

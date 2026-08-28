@@ -80,6 +80,69 @@ function runNativeSetup(request) {
   });
 }
 
+function gitTopLevel(candidate) {
+  return new Promise((resolve, reject) => {
+    execFile("git", ["-C", candidate, "rev-parse", "--show-toplevel"], (error, stdout) => {
+      if (error) reject(new Error("Choose a folder containing a Git repository."));
+      else resolve(path.resolve(stdout.trim()));
+    });
+  });
+}
+
+function gitOutput(args) {
+  return new Promise((resolve, reject) => {
+    execFile("git", args, (error, stdout) => {
+      if (error) reject(error);
+      else resolve(stdout.trim());
+    });
+  });
+}
+
+async function importLocalRepository(targetWindow) {
+  const picked = await dialog.showOpenDialog(targetWindow, {
+    title: "Choose a Git repository",
+    buttonLabel: "Import repository",
+    properties: ["openDirectory"],
+  });
+  if (picked.canceled || !picked.filePaths[0]) return { ok: false, canceled: true };
+
+  const source = path.resolve(picked.filePaths[0]);
+  const root = await gitTopLevel(source);
+  if (root !== source) {
+    return { ok: false, error: "Choose the repository's top-level folder." };
+  }
+
+  // LaunchAgents cannot read Desktop, Documents or Downloads reliably under
+  // macOS privacy controls. Copy the user-approved checkout into app-managed
+  // storage so background sessions retain access after the picker grant ends.
+  const importsRoot = path.join(app.getPath("home"), ".opensession", "imports");
+  fs.mkdirSync(importsRoot, { recursive: true });
+  const stem = path.basename(source).replace(/[^a-zA-Z0-9._-]+/g, "-") || "repository";
+  const destination = path.join(
+    importsRoot,
+    `${stem}-${Date.now()}-${crypto.randomBytes(3).toString("hex")}`,
+  );
+  try {
+    const origin = await gitOutput(["-C", source, "remote", "get-url", "origin"])
+      .catch(() => "");
+    // A local clone carries committed source, not large ignored build outputs.
+    // Git hard-links local objects on the same volume, so even a large history
+    // imports quickly without remaining dependent on the protected source path.
+    await gitOutput(["clone", "--local", "--", source, destination]);
+    if (origin) {
+      await gitOutput(["-C", destination, "remote", "set-url", "origin", origin]);
+    }
+    await gitTopLevel(destination);
+    return { ok: true, path: destination };
+  } catch (error) {
+    fs.rmSync(destination, { recursive: true, force: true });
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "Couldn't import that repository.",
+    };
+  }
+}
+
 // AppKit can show its persistent-window crash-recovery prompt before Electron
 // finishes launching. On macOS 26 that modal can trap the browser process and
 // leave the app in a startup crash loop. Open Session restores its own window bounds, so
@@ -1327,6 +1390,20 @@ app.whenReady().then(async () => {
     if (url.protocol !== "http:" && url.protocol !== "https:") return false;
     openExternal(url.toString());
     return true;
+  });
+
+  ipcMain.handle("os1:local-repository-import", async (e) => {
+    const source = e.senderFrame?.url ?? "";
+    const target = eventWindow(e);
+    if (!target || !inWindow(source)) return { ok: false, error: "Not available." };
+    try {
+      return await importLocalRepository(target);
+    } catch (error) {
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : "Couldn't import that repository.",
+      };
+    }
   });
 
   const fromActiveOrganizationPicker = (e) => {

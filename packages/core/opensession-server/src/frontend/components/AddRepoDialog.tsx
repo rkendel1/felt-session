@@ -7,6 +7,23 @@ import { fieldClasses } from "../ui/input";
 
 type AddMode = "clone" | "path";
 
+type LocalRepositoryBridge = {
+	importLocal: () => Promise<{
+		ok: boolean;
+		path?: string;
+		canceled?: boolean;
+		error?: string;
+	}>;
+};
+
+function localRepositoryBridge(): LocalRepositoryBridge | undefined {
+	return (
+		window as unknown as {
+			os1?: { repositories?: LocalRepositoryBridge };
+		}
+	).os1?.repositories;
+}
+
 export function AddRepoDialog({
 	open,
 	onOpenChange,
@@ -23,6 +40,7 @@ export function AddRepoDialog({
 	const [error, setError] = useState<string | null>(null);
 	const inputRef = useRef<HTMLInputElement>(null);
 	const value = mode === "clone" ? cloneUrl : folderPath;
+	const nativeLocal = localRepositoryBridge();
 
 	useEffect(() => {
 		if (!open) return;
@@ -49,6 +67,26 @@ setError(cause instanceof Error ? cause.message : String(cause));
 }).finally(async () => {
 setAdding(false);
 });
+	}
+
+	async function chooseLocalFolder() {
+		if (!nativeLocal || adding) return;
+		setAdding(true);
+		setError(null);
+		try {
+			const imported = await nativeLocal.importLocal();
+			if (imported.canceled) return;
+			if (!imported.ok || !imported.path) {
+				throw new Error(imported.error || "Couldn't import that repository.");
+			}
+			const repo = await registerRepoApi({ path: imported.path });
+			onAdded(repo);
+			onOpenChange(false);
+		} catch (cause) {
+			setError(cause instanceof Error ? cause.message : String(cause));
+		} finally {
+			setAdding(false);
+		}
 	}
 
 	return (
@@ -90,6 +128,22 @@ setAdding(false);
 				</Segmented>
 
 				<form className="flex flex-col gap-3" onSubmit={submit}>
+					{mode === "path" && nativeLocal ? (
+						<div className="flex flex-col gap-3">
+							<p className="m-0 text-supporting leading-relaxed text-dim">
+								Choose the repository folder. Open Session imports a lightweight managed clone of its committed code so background sessions can access it.
+							</p>
+							<Button
+								variant="primary"
+								type="button"
+								className="min-h-11 w-full"
+								onClick={() => void chooseLocalFolder()}
+								disabled={adding}
+							>
+								{adding ? "Importing…" : "Choose folder…"}
+							</Button>
+						</div>
+					) : (
 					<label className="flex flex-col gap-1.5 text-sm font-medium text-fg">
 						{mode === "clone" ? "Git clone URL" : "Absolute folder path"}
 						<input
@@ -119,6 +173,7 @@ setAdding(false);
 							spellCheck={false}
 						/>
 					</label>
+					)}
 
 					{error && (
 						<div
@@ -138,13 +193,13 @@ setAdding(false);
 						>
 							Cancel
 						</Button>
-						<Button variant="primary" type="submit" disabled={!value.trim() || adding}>
+						{!(mode === "path" && nativeLocal) && <Button variant="primary" type="submit" disabled={!value.trim() || adding}>
 							{adding
 								? mode === "clone"
 									? "Cloning..."
 									: "Adding..."
 								: "Add repository"}
-						</Button>
+						</Button>}
 					</Modal.Footer>
 				</form>
 			</Modal.Content>
