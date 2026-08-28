@@ -50,3 +50,26 @@ The package capability is therefore not the blocking boundary. The required
 work is converting Open Session's synchronous local owners to asynchronous
 managed transactions while preserving actor admission, fencing, recovery, and
 bounded-work invariants.
+
+## Blocking boundary found during cutover
+
+The session kernel cannot be safely redirected by changing a database
+constructor. `session-kernel/store.ts` is a 6,013-line synchronous SQLite
+transaction engine. `actor-worker.ts` executes a complete command turn
+synchronously and serializes its result immediately; `store-host.ts` also
+performs synchronous placement, quarantine, wake-index, outbox, timer, and
+transcript decisions. Managed FeltDB collection operations and authority
+transactions are asynchronous.
+
+Two tempting shortcuts are invalid:
+
+- asynchronously flushing an in-memory kernel snapshot would make the process
+  cache authoritative across the durability gap;
+- retaining SQLite below a managed projection would leave SQLite canonical and
+  create the prohibited ongoing synchronization architecture.
+
+The safe seam is the existing serialized actor mailbox, but the worker turn,
+kernel reducers, store host, and store API must become asynchronous together.
+Until that conversion and an idempotent verified migration of every central
+and per-session decision record are complete, the strongest acceptance test
+cannot pass. The SQLite files must not be deleted or described as migrated.

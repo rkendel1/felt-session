@@ -1,12 +1,12 @@
 import {
-	connectDevelopmentWorkspace,
 	resolvePairingCode,
 	type RuntimeInvestigation,
 	type RuntimeRequestObservation,
 	type WorkspaceEventPayload,
 } from "@feltdb/core";
-import { configuredIntegration, configuredRepos } from "./config";
+import { configuredRepos } from "./config";
 import { createWorkspace, findWorkspaceByKey } from "./workspaces";
+import { managedFeltDb, managedFeltDbConfig, managedFeltDbStatus } from "./managed-feltdb";
 
 export const RUNTIME_HANDOFF_COLLECTION = "runtime_investigation_handoffs";
 const RUNTIME_INVESTIGATION_COLLECTION = "runtime_investigation";
@@ -316,10 +316,8 @@ export async function createQueuedWorkspaceTask(input: Omit<QueuedRuntimeInvesti
 	return { id: workspace.id, repo: input.repo, title: workspace.name, prompt: workspace.draft!.text };
 }
 
-let activeConnection: { disconnect(): Promise<void> } | null = null;
 let activeConsumer: RuntimeInvestigationHandoffConsumer | null = null;
 let activeWorkspaceId = "";
-let activeEndpoint = "";
 
 export interface FeltDbHandoffConnectionStatus {
 	connected: boolean;
@@ -330,44 +328,57 @@ export interface FeltDbHandoffConnectionStatus {
 }
 
 function configuredConnection() {
-	const config = configuredIntegration("feltdbRuntimeHandoffs");
-	const environmentWorkspaceId = process.env.FELTDB_WORKSPACE_ID
+	const managed = managedFeltDbStatus();
+	const environmentWorkspaceId = process.env.OPENSESSION_FELTDB_WORKSPACE_ID
+		|| process.env.FELTDB_WORKSPACE_ID
 		|| process.env.VITE_FELTDB_WORKSPACE_ID || "";
-	const environmentEndpoint = process.env.FELTDB_WORKSPACE_ENDPOINT
-		|| process.env.FELTDB_AUTHORITY_URL
-		|| process.env.VITE_FELTDB_WORKSPACE_ENDPOINT
-		|| process.env.VITE_FELTDB_URL || "";
 	return {
-		workspaceId: environmentWorkspaceId
-			|| (typeof config.workspaceId === "string" ? config.workspaceId : ""),
-		endpoint: environmentEndpoint
-			|| (typeof config.endpoint === "string" ? config.endpoint : ""),
-		token: process.env.FELTDB_WORKSPACE_TOKEN
-			|| process.env.VITE_FELTDB_API_KEY
-			|| (typeof config.token === "string" ? config.token : ""),
-		managedByEnvironment: !!(environmentWorkspaceId || environmentEndpoint),
+		workspaceId: environmentWorkspaceId,
+		endpoint: managed.url || "",
+		managedByEnvironment: true,
+	};
+}
+
+function managedWorkspace(workspaceId: string): RuntimeHandoffWorkspace {
+	const db = managedFeltDb();
+	return {
+		workspaceId,
+		async query<T>(collection: string): Promise<T[]> {
+			return db.collection<T>(collection).all();
+		},
+		async get<T>(collection: string, entityId: string): Promise<T | null> {
+			return db.collection<T>(collection).get(entityId);
+		},
+		async update<T extends object>(collection: string, entityId: string, updates: Partial<T>): Promise<void> {
+			await db.collection<T>(collection).update(entityId, updates);
+		},
+		subscribe<T>(collection: string, handler: (event: WorkspaceEventPayload<T>) => void): () => void {
+			return db.collection<T>(collection).subscribe((items) => {
+			for (const item of items) {
+				const record = item as T & { entityId?: unknown };
+				const entityId = typeof record.entityId === "string" ? record.entityId : "";
+				if (entityId) handler({ entityId, value: item } as WorkspaceEventPayload<T>);
+			}
+			});
+		},
 	};
 }
 
 export function runtimeInvestigationHandoffConnectionStatus(): FeltDbHandoffConnectionStatus {
 	const configured = configuredConnection();
 	return {
-		connected: !!activeConnection,
+		connected: !!activeConsumer,
 		configured: !!(configured.workspaceId && configured.endpoint),
 		managedByEnvironment: configured.managedByEnvironment,
 		workspaceId: activeWorkspaceId || configured.workspaceId,
-		endpoint: activeEndpoint || configured.endpoint,
+		endpoint: configured.endpoint,
 	};
 }
 
 export async function stopRuntimeInvestigationHandoffConsumer(): Promise<void> {
 	activeConsumer?.stop();
 	activeConsumer = null;
-	const connection = activeConnection;
-	activeConnection = null;
 	activeWorkspaceId = "";
-	activeEndpoint = "";
-	if (connection) await connection.disconnect();
 }
 
 export async function connectRuntimeInvestigationHandoffConsumer(input: {
@@ -376,29 +387,22 @@ export async function connectRuntimeInvestigationHandoffConsumer(input: {
 	token?: string;
 }): Promise<RuntimeInvestigationHandoffConsumer> {
 	await stopRuntimeInvestigationHandoffConsumer();
-	const connection = await connectDevelopmentWorkspace({
-		workspaceId: input.workspaceId,
-		endpoint: input.endpoint,
-		clientId: "felt-session-runtime-handoffs",
-		clientType: "application",
-		...(input.token ? { auth: { token: input.token } } : {}),
-	});
+	const managed = managedFeltDbConfig();
+	if (input.endpoint.replace(/\/$/, "") !== managed.url)
+		throw new Error("Pairing resolved a different FeltDB authority than Open Session");
 	const consumer = new RuntimeInvestigationHandoffConsumer({
-		workspace: connection,
+		workspace: managedWorkspace(input.workspaceId),
 		repositoryExists: (repositoryId) => Object.hasOwn(configuredRepos(), repositoryId),
 		createQueuedTask: createQueuedWorkspaceTask,
 	});
 	try {
 		await consumer.start();
-		activeConnection = connection;
 		activeConsumer = consumer;
 		activeWorkspaceId = input.workspaceId;
-		activeEndpoint = input.endpoint;
 		console.log(`[runtime-handoff] connected to FeltDB workspace ${input.workspaceId}`);
 		return consumer;
 	} catch (error) {
 		consumer.stop();
-		await connection.disconnect().catch(() => {});
 		throw error;
 	}
 }
@@ -417,8 +421,8 @@ export async function resolveFeltDbPairingCode(
  * take precedence; integrations.feltdbRuntimeHandoffs provides the same
  * connection details for a long-running self-hosted service. */
 export async function startRuntimeInvestigationHandoffConsumer(): Promise<RuntimeInvestigationHandoffConsumer | null> {
-	if (activeConnection) return null;
-	const { workspaceId, endpoint, token } = configuredConnection();
+	if (activeConsumer) return null;
+	const { workspaceId, endpoint } = configuredConnection();
 	if (!workspaceId || !endpoint) return null;
-	return connectRuntimeInvestigationHandoffConsumer({ workspaceId, endpoint, token });
+	return connectRuntimeInvestigationHandoffConsumer({ workspaceId, endpoint });
 }

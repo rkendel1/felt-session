@@ -18,6 +18,8 @@ import { startTodoReminderTicker } from "./src/server/todos";
 import { startGeneratedTitleSweep } from "./src/server/generated-titles";
 import { startLiveActivitySync } from "./src/server/live-activities";
 import { startRuntimeInvestigationHandoffConsumer } from "./src/server/runtime-investigation-handoffs";
+import { initializeManagedFeltDb } from "./src/server/managed-feltdb";
+import { initializeManagedWorkspaces } from "./src/server/workspaces";
 import {
 	drainPendingTranscriptWakeBatch,
 	drainPendingTranscriptWakesAfter,
@@ -142,6 +144,16 @@ function isLoopbackHostname(hostname: string): boolean {
 	}
 }
 
+const g = globalThis as any;
+
+// Establish and verify the canonical authority before binding listeners or
+// opening any legacy store. Missing or unreachable managed configuration is a
+// startup failure; there is deliberately no local fallback.
+if (!g.__opensessionBooted) {
+	const db = await initializeManagedFeltDb();
+	await initializeManagedWorkspaces(db);
+}
+
 // Listeners the server owns. Deliberately started HERE and not as module side
 // effects: interactive-mcp.ts used to bind both at import, so any script, test
 // or one-off bun process reaching that import chain took the live server's
@@ -168,8 +180,6 @@ mkdirSync(SESSIONS_DIR, { recursive: true });
 // Long-lived agent *loop code* still needs a real restart — but that's now
 // graceful (see SIGTERM handler below). A plain `bun run` (no --hot) just runs
 // each branch once, exactly as before.
-const g = globalThis as any;
-
 // The actor owns the writable kernel store before any gateway projection hydrates.
 if (!g.__opensessionBooted) await startSessionKernelActor();
 
