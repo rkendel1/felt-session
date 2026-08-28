@@ -57,6 +57,7 @@ import {
   IconMessage,
   IconStack,
   IconNewBranch,
+  IconPlus,
   IconX,
 } from "./icons";
 import type { WSClientMessage, WSServerMessage } from "../lib/types";
@@ -96,6 +97,7 @@ import { askSurface } from "../lib/tinted-surface";
 import { toast } from "../ui/toast";
 import { cn } from "../ui/cn";
 import { PhoneTopBar, PhoneTopBarAction } from "../ui/top-bar";
+import { AddRepoDialog } from "./AddRepoDialog";
 import {
 	paletteIconBtn,
 	paletteIconBtnOn,
@@ -168,6 +170,7 @@ interface RepoOption {
 }
 
 const LAST_REPO_KEY = "opensession-new-session-repo";
+const ADD_REPO = "__add_repository__";
 
 /* ── Palette chrome ───────────────────────────────────────────────────────
    Every class is written out in full: Tailwind scans source TEXT, so a name
@@ -546,6 +549,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
   const [repos, setRepos] = useState<RepoOption[]>(() =>
     repoOptions(cachedRepos()),
   );
+  const [addRepoOpen, setAddRepoOpen] = useState(false);
   const [configuredDefaultRepo, setConfiguredDefaultRepo] = useState(() => {
     const seeded = repoOptions(cachedRepos());
     return seeded.length ? resolveDefaultRepo(seeded) : "";
@@ -1414,7 +1418,7 @@ pendingDraftParks.delete(operation);
         <div className={MOBILE_PICKER}>
           <PaletteSelect
             className={cn(TRIGGER_STRONG, MOBILE_TRIGGER)}
-            title="Project"
+            title="Repository"
             value={repo}
             options={[
               ...repos.map((p) => ({
@@ -1434,8 +1438,18 @@ pendingDraftParks.delete(operation);
                 icon: <IconMessage size={20} />,
                 singleOnly: true,
               },
+              {
+                value: ADD_REPO,
+                label: "Add repository or local folder…",
+                icon: <IconPlus size={20} />,
+                singleOnly: true,
+              },
             ]}
             onChange={(nextRepo) => {
+              if (nextRepo === ADD_REPO) {
+                setAddRepoOpen(true);
+                return;
+              }
               setRepo(nextRepo);
               // A plain pick is "work here", not "and here too": it replaces
               // the whole selection, which is what it did before any of this.
@@ -1460,7 +1474,7 @@ pendingDraftParks.delete(operation);
             // A feed workspace is repo-less by construction (its subject is a
             // a feed item, not a checkout), so its create doesn't offer one.
             disabled={busy || forceMode === "scratch"}
-            ariaLabel="Project"
+            ariaLabel="Repository"
             isPhone={isPhone}
           >
             {repo === NO_REPO ? (
@@ -1487,6 +1501,19 @@ pendingDraftParks.delete(operation);
               <IconChevronDown className={CHEVRON} size={22} />
             )}
           </PaletteSelect>
+          <AddRepoDialog
+            open={addRepoOpen}
+            onOpenChange={setAddRepoOpen}
+            onAdded={(added) => {
+              const option = repoOptions([added])[0];
+              setRepos((current) => [
+                ...current.filter((item) => item.id !== option.id),
+                option,
+              ]);
+              setRepo(option.id);
+              setExtraRepos([]);
+            }}
+          />
         </div>
         {phoneBar && (
           <button

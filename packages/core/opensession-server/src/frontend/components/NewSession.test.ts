@@ -172,6 +172,16 @@ test("the phone composer keeps its buttons concentric with the sheet corner", as
   expect(source).toContain("phone:px-[18px] phone:pb-3 phone:pt-[18px]");
 });
 
+test("repository selection can register a clone or local folder in place", async () => {
+  const source = await Bun.file(new URL("./NewSession.tsx", import.meta.url)).text();
+
+  expect(source).toContain('title="Repository"');
+  expect(source).toContain('ariaLabel="Repository"');
+  expect(source).toContain('label: "Add repository or local folder…"');
+  expect(source).toContain("<AddRepoDialog");
+  expect(source).toContain("setRepo(option.id)");
+});
+
 test("a parked draft keeps the composer copy and carries its attachments", async () => {
   const source = await Bun.file(new URL("./NewSession.tsx", import.meta.url)).text();
   const parkStart = source.indexOf("async function parkDraftOnExit()");
