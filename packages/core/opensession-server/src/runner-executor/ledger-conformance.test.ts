@@ -1,9 +1,8 @@
 /**
- * One contract, three stores.
+ * One contract, two stores.
  *
  * Everything here is expressed purely against DurableCommandLedger, so each
- * case runs unchanged on the in-memory reference, the SQLite ledger, and the
- * FeltDB ledger. A backend that drifts from the contract fails here rather than
+ * case runs unchanged on the in-memory reference and the FeltDB ledger. A backend that drifts from the contract fails here rather than
  * in the dual-write phase, where a divergence would look like data loss.
  */
 import { afterEach, describe, expect, test } from "bun:test";
@@ -18,7 +17,6 @@ import {
   type LedgerCommandIdentity,
   type LedgerScope,
 } from "./ledger";
-import { openSQLiteCommandLedger } from "./sqlite-ledger";
 import { openFeltDbCommandLedger } from "./feltdb-ledger";
 
 const roots: string[] = [];
@@ -45,17 +43,6 @@ const backends: Backend[] = [
   {
     name: "InMemoryCommandLedger",
     open: (options) => new InMemoryCommandLedger(options?.capacity ?? 100_000),
-  },
-  {
-    name: "SQLiteCommandLedger",
-    open: (options) => {
-      const ledger = openSQLiteCommandLedger({
-        dbPath: join(root("conformance-sqlite-"), "private", "ledger.sqlite"),
-        ...options,
-      });
-      closers.push(() => ledger.close());
-      return ledger;
-    },
   },
   {
     name: "FeltDbCommandLedger",

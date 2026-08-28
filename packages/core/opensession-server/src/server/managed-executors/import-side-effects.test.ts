@@ -8,10 +8,8 @@ const MODULES = [
   "packages/core/opensession-server/src/server/managed-executors/provider.ts",
   "packages/core/opensession-server/src/server/managed-executors/registry.ts",
   "packages/core/opensession-server/src/server/managed-executors/state.ts",
-  "packages/core/opensession-server/src/server/managed-executors/sqlite-state.ts",
   "packages/core/opensession-server/src/runner-executor/agent.ts",
   "packages/core/opensession-server/src/server/executors/runtime.ts",
-  "packages/core/opensession-server/src/server/executors/sqlite-claims.ts",
 ];
 
 test("Executor lifecycle and composition modules are import-inert", async () => {

@@ -3,6 +3,11 @@
  * entries that survive a process restart are interrupted runs, which
  * agent-runner.resumeInterruptedRuns resumes on boot. All engines journal
  * through these functions.
+ *
+ * Phase 2: FeltDB Adapter
+ * This module now supports both JSON and FeltDB backends via ENABLE_FELTDB_RUN_RECORDS.
+ * When enabled, uses FeltDB for durable storage; otherwise uses JSON file backend.
+ * The in-memory activeRunAliases cache is kept for hot-path checks in both cases.
  */
 import type { McpScope } from "./runner-shared";
 import { existsSync, readFileSync } from "fs";
@@ -11,6 +16,8 @@ import { } from "./paths";
 import { transitionRunState } from "./run-state";
 import { sessionDelivery, sessionTurn, sessionTurnSnapshot } from "./session-kernel/kernel";
 import { writeJsonAtomic } from "./shared/atomic-write";
+import { openRunRecordStore } from "./run-record-store";
+import type { RunRecordStore } from "./run-record-store";
 
 // Overridable so a detached run host (src/runner-host/host.ts) journals to its
 // own per-host file instead of read-modify-writing the shared journal from
@@ -18,6 +25,12 @@ import { writeJsonAtomic } from "./shared/atomic-write";
 let ACTIVE_RUNS_PATH =
   process.env.OPENSESSION_RUN_JOURNAL ||
   `${OPENSESSION_SESSIONS_DIR}/active-runs.json`;
+
+// FeltDB backend support (Phase 2)
+let store: RunRecordStore | null = null;
+const enableFeltDB = process.env.ENABLE_FELTDB_RUN_RECORDS === "true";
+let feltDBInitialized = false;
+
 let activeRunAliases = new Set<string>();
 let activeRunAliasesInitialized = false;
 let onJournalSet:
@@ -30,6 +43,45 @@ export function setJournalSetListener(
 	listener: ((record: ActiveRunRecord) => void | Promise<void>) | undefined,
 ): void {
 	onJournalSet = listener;
+}
+
+/**
+ * Initialize the FeltDB store (Phase 2).
+ * Called lazily on first use to ensure directory structure is in place.
+ */
+async function initializeFeltDBStore(): Promise<void> {
+	if (feltDBInitialized) return;
+	if (!enableFeltDB) {
+		feltDBInitialized = true;
+		return;
+	}
+	
+	try {
+		const feltDBPath = ACTIVE_RUNS_PATH.replace(/\.json$/, ".feltdb");
+		store = openRunRecordStore(feltDBPath);
+		feltDBInitialized = true;
+	} catch (e) {
+		console.error("[runner] Failed to initialize FeltDB store, falling back to JSON:", e);
+		feltDBInitialized = true;
+	}
+}
+
+/**
+ * Close the FeltDB store gracefully.
+ */
+export async function closeRunRecordStore(): Promise<void> {
+	if (store) {
+		await store.close();
+		store = null;
+	}
+}
+
+/**
+ * Get the current FeltDB store instance (or null if using JSON backend).
+ */
+function getStore(): RunRecordStore | null {
+	// Store is initialized lazily on first use
+	return store;
 }
 
 function syncActiveRunAliases(journal: Record<string, ActiveRunRecord>): void {
@@ -56,6 +108,8 @@ export function __setActiveRunsPathForTest(path: string): string {
   ACTIVE_RUNS_PATH = path;
   activeRunAliases.clear();
   activeRunAliasesInitialized = false;
+  store = null;
+  feltDBInitialized = false;
   return prev;
 }
 
@@ -152,6 +206,63 @@ function writeRunJournal(journal: Record<string, ActiveRunRecord>): void {
 }
 
 /**
+ * Async read from FeltDB or JSON backend (Phase 2).
+ * Initializes the FeltDB store if needed.
+ */
+async function readRunJournalAsync(): Promise<Record<string, ActiveRunRecord>> {
+  if (!enableFeltDB) {
+    return readRunJournal();
+  }
+
+  await initializeFeltDBStore();
+  if (!store) {
+    // Fallback to JSON if FeltDB initialization failed
+    return readRunJournal();
+  }
+
+  try {
+    const runs = await store.getAllRuns();
+    const journal: Record<string, ActiveRunRecord> = {};
+    for (const run of runs) {
+      journal[run.runKey] = run;
+    }
+    syncActiveRunAliases(journal);
+    return journal;
+  } catch (e) {
+    console.error("[runner] Failed to read from FeltDB, falling back to JSON:", e);
+    return readRunJournal();
+  }
+}
+
+/**
+ * Async write to FeltDB or JSON backend (Phase 2).
+ * Initializes the FeltDB store if needed.
+ */
+async function writeRunJournalAsync(journal: Record<string, ActiveRunRecord>): Promise<void> {
+  // Always sync to JSON for backward compat
+  writeRunJournal(journal);
+
+  if (!enableFeltDB) {
+    return;
+  }
+
+  await initializeFeltDBStore();
+  if (!store) {
+    // If FeltDB is not available, we've already written to JSON
+    return;
+  }
+
+  try {
+    // Write all records to FeltDB
+    for (const run of Object.values(journal)) {
+      await store.recordRun(run);
+    }
+  } catch (e) {
+    console.error("[runner] Failed to write to FeltDB:", e);
+  }
+}
+
+/**
  * The journal payload the engine runners write at their two journal points —
  * the pre-engine early write and the engine-id upgrade write. The fields every
  * site copies identically out of the runner's opts (RunAgentOpts) come from
@@ -229,7 +340,7 @@ export async function journalSet(
   record: ActiveRunRecord,
   transition: JournalRunStateTransition = transitionRunState,
 ): Promise<void> {
-  const journal = readRunJournal();
+  const journal = await readRunJournalAsync();
   const prior = journal[record.runKey];
   const rejournal = !!prior;
   journal[record.runKey] = {
@@ -242,7 +353,7 @@ export async function journalSet(
     resumeAttempts: prior ? prior.resumeAttempts : record.resumeAttempts,
     lastResumeAt: prior ? prior.lastResumeAt : record.lastResumeAt,
   };
-  writeRunJournal(journal);
+  await writeRunJournalAsync(journal);
   try {
     await onJournalSet?.(journal[record.runKey] || record);
   } catch (e) {
@@ -274,10 +385,10 @@ export interface QuarantinedRun {
 /** Move rejected recovery records out of the live journal in one atomic pair
  * of writes. They remain inspectable beside active-runs.json instead of being
  * silently deleted; `notify` is consumed by agent-runner to settle the owning
- * session visibly when no newer duplicate will continue it. */
-export function journalQuarantine(entries: QuarantinedRun[]): void {
+ * session visibly when no newer duplicate will continue it. (Phase 2: async for FeltDB) */
+export async function journalQuarantine(entries: QuarantinedRun[]): Promise<void> {
   if (!entries.length) return;
-  const journal = readRunJournal();
+  const journal = await readRunJournalAsync();
   const quarantinePath = ACTIVE_RUNS_PATH.replace(/\.json$/, "") + ".quarantine.json";
   let quarantine: Record<string, ActiveRunRecord & {
     quarantinedAt: string;
@@ -290,9 +401,14 @@ export function journalQuarantine(entries: QuarantinedRun[]): void {
   } catch {}
   const quarantinedAt = new Date().toISOString();
   let changed = false;
+  
+  // Collect runs to delete from FeltDB
+  const runsToDelete: string[] = [];
+  
   for (const [index, entry] of entries.entries()) {
     if (journal[entry.run.runKey]) {
       delete journal[entry.run.runKey];
+      runsToDelete.push(entry.run.runKey);
       changed = true;
     }
     quarantine[`${quarantinedAt}:${index}:${entry.run.runKey}`] = {
@@ -302,8 +418,20 @@ export function journalQuarantine(entries: QuarantinedRun[]): void {
     };
   }
   if (!changed) return;
+  
   writeJsonAtomic(quarantinePath, quarantine);
-  writeRunJournal(journal);
+  await writeRunJournalAsync(journal);
+  
+  // Delete from FeltDB if enabled
+  if (enableFeltDB && store) {
+    for (const runKey of runsToDelete) {
+      try {
+        await store.clearRun(runKey);
+      } catch (e) {
+        console.error(`[runner] Failed to delete quarantined run ${runKey} from FeltDB:`, e);
+      }
+    }
+  }
 }
 
 /** Persist the recovery lineage immediately before a queued recovery task
@@ -324,6 +452,28 @@ export function journalStartRecovery(record: ActiveRunRecord): ActiveRunRecord {
   };
   journal[record.runKey] = prepared;
   writeRunJournal(journal);
+  const { claimedAt: _claimed, ...returned } = prepared;
+  return returned;
+}
+
+/**
+ * Async version of journalStartRecovery for FeltDB support (Phase 2).
+ */
+export async function journalStartRecoveryAsync(record: ActiveRunRecord): Promise<ActiveRunRecord> {
+  const journal = await readRunJournalAsync();
+  const current = journal[record.runKey] || record;
+  const now = new Date().toISOString();
+  const prepared: ActiveRunRecord = {
+    ...current,
+    ...record,
+    firstJournaledAt:
+      record.firstJournaledAt || current.firstJournaledAt || current.startedAt || record.startedAt,
+    resumeAttempts: Math.max(record.resumeAttempts ?? 0, current.resumeAttempts ?? 0) + 1,
+    lastResumeAt: now,
+    claimedAt: current.claimedAt,
+  };
+  journal[record.runKey] = prepared;
+  await writeRunJournalAsync(journal);
   const { claimedAt: _claimed, ...returned } = prepared;
   return returned;
 }
@@ -351,6 +501,32 @@ export function journalMarkRecoveryAttached(record: ActiveRunRecord): ActiveRunR
   };
   journal[record.runKey] = attached;
   writeRunJournal(journal);
+  const { claimedAt: _claimed, ...returned } = attached;
+  return returned;
+}
+
+/**
+ * Async version of journalMarkRecoveryAttached for FeltDB support (Phase 2).
+ */
+export async function journalMarkRecoveryAttachedAsync(record: ActiveRunRecord): Promise<ActiveRunRecord | undefined> {
+  const journal = await readRunJournalAsync();
+  const current = journal[record.runKey];
+  if (!current) return undefined;
+  const expectedLineage = record.firstJournaledAt || record.startedAt;
+  const currentLineage = current.firstJournaledAt || current.startedAt;
+  if (
+    expectedLineage !== currentLineage ||
+    current.osSessionId !== record.osSessionId
+  ) {
+    return undefined;
+  }
+  const attached: ActiveRunRecord = {
+    ...current,
+    resumeAttempts: 0,
+    lastResumeAt: undefined,
+  };
+  journal[record.runKey] = attached;
+  await writeRunJournalAsync(journal);
   const { claimedAt: _claimed, ...returned } = attached;
   return returned;
 }
@@ -432,6 +608,27 @@ export function journalClear(runKey: string): void {
   }
 }
 
+/**
+ * Async version of journalClear for FeltDB support (Phase 2).
+ * Clears a run from both JSON and FeltDB backends.
+ */
+export async function journalClearAsync(runKey: string): Promise<void> {
+  const journal = await readRunJournalAsync();
+  if (runKey in journal) {
+    delete journal[runKey];
+    await writeRunJournalAsync(journal);
+    
+    // Clear from FeltDB if enabled
+    if (enableFeltDB && store) {
+      try {
+        await store.clearRun(runKey);
+      } catch (e) {
+        console.error(`[runner] Failed to clear run ${runKey} from FeltDB:`, e);
+      }
+    }
+  }
+}
+
 /** Clear only the journal entry that still belongs to this recovery lineage.
  * A replacement human turn may reuse the engine session id as its runKey; an
  * old queued recovery must never delete that newer record when it wakes. */
@@ -452,9 +649,49 @@ export function journalClearIfLineage(record: ActiveRunRecord): boolean {
   return true;
 }
 
+/**
+ * Async version of journalClearIfLineage for FeltDB support (Phase 2).
+ * Clears a run from both JSON and FeltDB backends based on lineage.
+ */
+export async function journalClearIfLineageAsync(record: ActiveRunRecord): Promise<boolean> {
+  const journal = await readRunJournalAsync();
+  const current = journal[record.runKey];
+  if (!current) return false;
+  const expectedLineage = record.firstJournaledAt || record.startedAt;
+  const currentLineage = current.firstJournaledAt || current.startedAt;
+  if (
+    expectedLineage !== currentLineage ||
+    current.osSessionId !== record.osSessionId
+  ) {
+    return false;
+  }
+  delete journal[record.runKey];
+  await writeRunJournalAsync(journal);
+  
+  // Clear from FeltDB if enabled
+  if (enableFeltDB && store) {
+    try {
+      await store.clearRunIfLineage(record);
+    } catch (e) {
+      console.error(`[runner] Failed to clear lineage ${record.runKey} from FeltDB:`, e);
+    }
+  }
+  
+  return true;
+}
+
 /** Snapshot of the runs currently journaled as in-flight (does not clear). */
 export function activeRunRecords(): ActiveRunRecord[] {
   return Object.values(readRunJournal());
+}
+
+/**
+ * Async version of activeRunRecords for FeltDB support (Phase 2).
+ * Reads all active run records from FeltDB if enabled.
+ */
+export async function activeRunRecordsAsync(): Promise<ActiveRunRecord[]> {
+  const journal = await readRunJournalAsync();
+  return Object.values(journal);
 }
 
 /** Hot-path journal ownership check. Writes and normal journal snapshots keep
@@ -501,14 +738,14 @@ const takenRunKeys: Set<string> = ((globalThis as any).__runJournalTakenKeys ??=
  * (2026-07-27 13:47:45: SIGTERM 18s after boot, 7 taken runs evaporated with
  * the old wipe-on-take) hands the same runs to the next boot instead of
  * losing them. Returned records have claimedAt stripped so a reattach's
- * re-record doesn't persist a stale claim.
+ * re-record doesn't persist a stale claim. (Phase 2: async for FeltDB)
  */
 export async function takeInterruptedRuns(
   seedRecords: ActiveRunRecord[] = [],
   shouldTake: (record: ActiveRunRecord) => boolean | Promise<boolean> = () => true,
   transition: JournalRunStateTransition = transitionRunState,
 ): Promise<ActiveRunRecord[]> {
-  const journal = readRunJournal();
+  const journal = await readRunJournalAsync();
   // A graceful-shutdown snapshot can retain a detached local host after its
   // shared record disappeared during process teardown. Fold those records
   // into the same atomic boot claim without journalSet(): journalSet denotes a
@@ -536,7 +773,18 @@ export async function takeInterruptedRuns(
       takenRunKeys.add(r.runKey);
       journal[r.runKey] = { ...r, claimedAt: now };
     }
-    writeRunJournal(journal);
+    await writeRunJournalAsync(journal);
+    
+    // Claim runs in FeltDB if enabled
+    if (enableFeltDB && store) {
+      for (const r of entries) {
+        try {
+          await store.claimRun(r.runKey, now);
+        } catch (e) {
+          console.error(`[runner] Failed to claim run ${r.runKey} in FeltDB:`, e);
+        }
+      }
+    }
   }
   for (const r of entries) {
     if (r.osSessionId)

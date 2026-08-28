@@ -437,7 +437,7 @@ export async function runGithubAgent(opts: GithubRunOpts): Promise<GithubRunResu
 
     let events: AsyncIterable<StreamEvent>;
     if (recoveredRun) {
-      recoveredRun = journalStartRecovery(recoveredRun);
+      recoveredRun = await journalStartRecovery(recoveredRun);
       engineSessionId = recoveredRun.claudeSessionId || engineSessionId;
       const reattached = await resumeLocalHostRun(recoveredRun, {});
       if (reattached === "uncertain") {

@@ -4,7 +4,6 @@ import type {
 } from "@tellahq/opensession-protocol/executor";
 import {
   openCommandLedger,
-  commandLedgerBackend,
   type OpenCommandLedger,
 } from "../../runner-executor/open-command-ledger";
 import { ExecutorFailure, type ExecutorContext } from "./contract";
@@ -20,7 +19,7 @@ import {
   type ExecutorIngressOptions,
 } from "./ingress";
 import { RemoteExecutorRegistry } from "./remote-registry";
-import { SqliteRunnerExecutorClaims } from "./sqlite-claims";
+import { FeltDbRunnerExecutorClaims } from "./feltdb-claims";
 import { ExecutorEnrollmentAuthority } from "../managed-executors/enrollment";
 import {
   ExecutorManager,
@@ -28,7 +27,7 @@ import {
 } from "../managed-executors/manager";
 import type { ExecutorProvider } from "../managed-executors/provider";
 import { ExecutorProviderRegistry } from "../managed-executors/registry";
-import { SqliteExecutorStateStore } from "../managed-executors/sqlite-state";
+import { FeltDbExecutorStateStore } from "../managed-executors/feltdb-state";
 import type { ExecutorRecord } from "../managed-executors/state";
 
 export interface ExecutorRuntimePaths {
@@ -77,8 +76,6 @@ export interface ExecutorRuntimeOptions {
   maxGrantTtlMs?: number;
   managedEnrollmentTtlMs?: number;
   runnerLedger?: {
-    backend?: "sqlite" | "feltdb";
-    busyTimeoutMs?: number;
     capacity?: number;
     maxRecordBytes?: number;
     maxStringBytes?: number;
@@ -116,8 +113,8 @@ export class ExecutorRuntime {
   readonly #issuedByExecutor = new Map<string, Map<ExecutorGrant, number>>();
   readonly #maxGrantTtlMs: number;
   readonly #managedEnrollmentTtlMs: number;
-  #claims?: SqliteRunnerExecutorClaims;
-  #managedStore?: SqliteExecutorStateStore;
+  #claims?: FeltDbRunnerExecutorClaims;
+  #managedStore?: FeltDbExecutorStateStore;
   #ledger?: OpenCommandLedger;
   #manager?: ExecutorManager;
   #ingress?: ExecutorIngress;
@@ -159,22 +156,20 @@ export class ExecutorRuntime {
 
   async #initialize(): Promise<this> {
     let ledger: OpenCommandLedger | undefined;
-    let managedStore: SqliteExecutorStateStore | undefined;
-    let claims: SqliteRunnerExecutorClaims | undefined;
+    let managedStore: FeltDbExecutorStateStore | undefined;
+    let claims: FeltDbRunnerExecutorClaims | undefined;
     try {
-      const backend = commandLedgerBackend(this.#options.runnerLedger?.backend);
       ledger = openCommandLedger({
-        backend,
         dbPath: this.#options.paths.runnerLedgerDb,
         feltdbPath: this.#options.feltdbPath,
         ...this.#options.runnerLedger,
       });
       await ledger.recover();
       if (this.#closed) throw new Error("Executor runtime closed during start");
-      managedStore = new SqliteExecutorStateStore(
+      managedStore = new FeltDbExecutorStateStore(
         this.#options.paths.managedStateDb,
       );
-      claims = new SqliteRunnerExecutorClaims(
+      claims = new FeltDbRunnerExecutorClaims(
         this.#options.paths.instanceClaimsDb,
       );
 
@@ -189,7 +184,7 @@ export class ExecutorRuntime {
             "Executor generation was revoked",
           );
           this.#revokeExecutorGrants("managed", input.executorId);
-          this.#enrollment.revokeThrough(
+          await this.#enrollment.revokeThrough(
             input.executorId,
             input.throughGeneration,
           );
@@ -285,9 +280,12 @@ export class ExecutorRuntime {
   }
 
   /** Durable unpair/disable seam. Boot must call this before retiring a generation. */
-  revokeRunnerAuthority(runnerId: string, throughGeneration: number): void {
+  async revokeRunnerAuthority(
+    runnerId: string,
+    throughGeneration: number,
+  ): Promise<void> {
     const claims = this.#requireStarted(this.#claims);
-    claims.revokeThrough(runnerId, throughGeneration);
+    await claims.revokeThrough(runnerId, throughGeneration);
     this.registry.disconnect(runnerId, "Runner Executor authority was revoked");
     this.#revokeExecutorGrants("runner", runnerId);
   }
@@ -318,9 +316,9 @@ export class ExecutorRuntime {
         this.#issuedByExecutor.clear();
         this.#executionGrants.revokeAll();
         this.brokerGrants.revokeAll();
-        this.#claims?.close();
-        this.#managedStore?.close();
-        this.#ledger?.close();
+        await Promise.resolve(this.#claims?.close());
+        await Promise.resolve(this.#managedStore?.close());
+        await Promise.resolve(this.#ledger?.close());
         this.#started = false;
       }
     })();

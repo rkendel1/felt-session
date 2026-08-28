@@ -4,7 +4,7 @@
  *
  * Proves the vertical slice: create session → create command → execute
  * command → persist result → restart owner → recover command → continue
- * session with PERSISTENCE_BACKEND=feltdb.
+ * session with FeltDB as the sole durable authority.
  */
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -12,7 +12,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   openCommandLedger,
-  commandLedgerBackend,
   type OpenCommandLedger,
 } from "./open-command-ledger";
 import {
@@ -58,7 +57,6 @@ describe("FeltDB Runtime Integration", () => {
     // Vertical slice: create session → create command
     {
       const ledger = openLedger({
-        backend: "feltdb",
         dbPath: path,
       });
 
@@ -120,7 +118,6 @@ describe("FeltDB Runtime Integration", () => {
     // Restart owner → recover command → continue session
     {
       const ledger = openLedger({
-        backend: "feltdb",
         dbPath: path,
       });
 
@@ -156,7 +153,6 @@ describe("FeltDB Runtime Integration", () => {
     // Create idempotent command (with idempotencyKey)
     {
       const ledger = openLedger({
-        backend: "feltdb",
         dbPath: path,
       });
 
@@ -201,7 +197,6 @@ describe("FeltDB Runtime Integration", () => {
     // After restart, duplicate claims should return existing command
     {
       const ledger = openLedger({
-        backend: "feltdb",
         dbPath: path,
       });
 
@@ -254,7 +249,6 @@ describe("FeltDB Runtime Integration", () => {
     // Create a command that fails
     {
       const ledger = openLedger({
-        backend: "feltdb",
         dbPath: path,
       });
 
@@ -291,7 +285,6 @@ describe("FeltDB Runtime Integration", () => {
     // After restart, failed command should still be recoverable
     {
       const ledger = openLedger({
-        backend: "feltdb",
         dbPath: path,
       });
 
@@ -310,18 +303,6 @@ describe("FeltDB Runtime Integration", () => {
     }
   });
 
-  test("FeltDB backend is selectable via environment-like configuration", () => {
-    const path = dbPath();
-
-    // Simulate PERSISTENCE_BACKEND=feltdb environment variable
-    const backend = commandLedgerBackend("feltdb");
-    expect(backend).toBe("feltdb");
-
-    // Default to sqlite when not specified
-    const defaultBackend = commandLedgerBackend(undefined);
-    expect(defaultBackend).toBe("sqlite");
-  });
-
   test("proves FeltDB remains source of truth after multiple restarts", async () => {
     const path = dbPath();
     const scope: LedgerScope = {
@@ -337,7 +318,6 @@ describe("FeltDB Runtime Integration", () => {
     // Create three commands
     {
       const ledger = openLedger({
-        backend: "feltdb",
         dbPath: path,
       });
 
@@ -376,7 +356,6 @@ describe("FeltDB Runtime Integration", () => {
     // First restart - verify all commands are present
     {
       const ledger = openLedger({
-        backend: "feltdb",
         dbPath: path,
       });
 
@@ -398,7 +377,6 @@ describe("FeltDB Runtime Integration", () => {
     // Second restart - verify data integrity is preserved
     {
       const ledger = openLedger({
-        backend: "feltdb",
         dbPath: path,
       });
 

@@ -1556,7 +1556,7 @@ export async function resumeInterruptedRuns(
   // claim so resumeLocalHostRun owns them synchronously and the generic
   // drained-session wake cannot start a second host for the same turn.
   const { interrupted, quarantined } = sanitizeInterruptedRuns(taken);
-  journalQuarantine(quarantined);
+  await journalQuarantine(quarantined);
   for (const entry of quarantined) {
     if (!entry.notify || !entry.run.osSessionId) continue;
     await reportRecoveryFailure(entry.run, recoveryQuarantineMessage(entry));
@@ -1616,7 +1616,7 @@ export async function resumeInterruptedRuns(
         let terminalSeen = false;
         try {
           if (await checkpointStoppedRecovery(run)) return;
-          Object.assign(run, journalStartRecovery(run));
+          Object.assign(run, await journalStartRecovery(run));
           const events = await (await import("./runner-session")).resumeRunnerRun(run, {
             onAskUser: run.osSessionId ? askHandlerFor?.(run.osSessionId) : undefined,
           });
@@ -1695,7 +1695,7 @@ export async function resumeInterruptedRuns(
         };
         try {
           if (await checkpointStoppedRecovery(run)) return;
-          Object.assign(run, journalStartRecovery(run));
+          Object.assign(run, await journalStartRecovery(run));
           const resume = isDocker
             ? (await import("./sandbox/docker")).resumeDockerSandboxRun
             : (await import("./sandbox/adapters/bootstrap")).resumeRemoteSandboxRun;
@@ -1764,7 +1764,7 @@ export async function resumeInterruptedRuns(
         let terminalSeen = false;
         try {
           if (await checkpointStoppedRecovery(run)) return;
-          Object.assign(run, journalStartRecovery(run));
+          Object.assign(run, await journalStartRecovery(run));
           if (run.osSessionId && !await durableCancelOwnsRecovery(run))
             await transitionRunState(run.osSessionId, "reattach_start", { run_key: run.runKey });
           const resumeLocalHost =
@@ -1913,7 +1913,7 @@ export async function resumeInterruptedRuns(
         let terminalSeen = false;
         try {
           if (await checkpointStoppedRecovery(run)) return;
-          Object.assign(run, journalStartRecovery(run));
+          Object.assign(run, await journalStartRecovery(run));
           if (run.osSessionId)
             await transitionRunState(run.osSessionId, "resume_reprompt", {
               run_key: run.runKey,
@@ -1992,7 +1992,7 @@ export async function resumeInterruptedRuns(
       let recoverySettled = false;
       try {
         if (await checkpointStoppedRecovery(run)) return;
-        Object.assign(run, journalStartRecovery(run));
+        Object.assign(run, await journalStartRecovery(run));
         let repairingRecoveredResult = false;
         console.log(
           repairingRecoveredResult
