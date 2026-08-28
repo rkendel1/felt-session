@@ -3,6 +3,8 @@
 # node_modules is rebuilt inside the image via `bun install --frozen-lockfile`.
 .git
 node_modules
+**/node_modules
+**/node_modules/**
 .frontend-dist
 
 # Secrets / local config — must never be baked into an image.
