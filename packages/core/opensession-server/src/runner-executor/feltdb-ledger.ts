@@ -1,21 +1,18 @@
 /**
  * FeltDB-backed DurableCommandLedger.
  *
- * The FeltDB half of the storage adapter pair described in
- * adrs/feltdb-native-durable-substrate.md. It implements exactly the contract
- * SQLiteCommandLedger implements, against the same shared record codec, so the
- * two are interchangeable behind DurableCommandLedger and can be compared
- * record-for-record during the dual-write phase.
+ * FeltDB is the sole durable command ledger authority. This implementation
+ * described in adrs/feltdb-native-durable-substrate.md provides Mission Control's
+ * complete runtime persistence layer.
  *
- * Layout — three collections, mirroring the SQLite schema:
+ * Layout — three collections:
  *   runner_command_ledger   keyed by receiptId; the validated record lives in
  *                           `payload`, with the fields queries filter on
  *                           denormalized alongside it.
- *   runner_command_index    keyed by a digest of the command key. This is the
- *                           SQLite UNIQUE(scope, kind, key) constraint made
- *                           explicit: FeltDB has no multi-column uniqueness, so
- *                           the claim stages this record with `requireAbsent`
- *                           and lets the commit reject a double claim.
+ *   runner_command_index    keyed by a digest of the command key. This implements
+ *                           uniqueness constraints: FeltDB has no multi-column
+ *                           uniqueness, so the claim stages this record with
+ *                           `requireAbsent` and lets the commit reject a double claim.
  *   runner_retired_scopes   keyed by a digest of the scope key.
  *
  * No secondary indexes are declared. FeltDB answers `find` from the same
@@ -32,9 +29,8 @@
  * Durability comes from FeltDB's atomic transactions: every mutation that
  * touches more than one record commits as one durable snapshot, so a crash
  * leaves the whole transaction applied or none of it. Reads that decide a write
- * run under an in-process lock, matching InMemoryCommandLedger — the file
- * runtime does not serialize concurrent writers across processes, so this
- * ledger, like the SQLite one, expects a single owning process.
+ * run under an in-process lock — the file runtime does not serialize concurrent
+ * writers across processes, so this ledger expects a single owning process.
  */
 import { createFeltDB, getTelemetryClient } from "@feltdb/core";
 import type { ExecutorReceipt } from "@tellahq/opensession-protocol/executor";

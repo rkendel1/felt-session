@@ -1,11 +1,11 @@
 /**
- * Storage-agnostic ledger record codec and validation.
+ * Ledger record codec and validation.
  *
- * Extracted from sqlite-ledger.ts so every DurableCommandLedger backend
- * validates identically: a record rejected by one store is rejected by all of
- * them, and a record read back from any store has been through the same checks
- * as when it was written. The rules here describe LedgerRecord itself, so they
- * carry no assumptions about how a backend lays records out on disk.
+ * Provides encoding and validation for DurableCommandLedger records.
+ * A record rejected by this validator is rejected by all backends, and
+ * a record read back from storage has been through the same checks as when
+ * it was written. The rules here describe LedgerRecord itself and carry
+ * no assumptions about how a backend lays records out on disk.
  */
 import {
   decodeExecutorOperation,
