@@ -258,7 +258,6 @@ function servicePath(bunDir: string): string {
   return [
     bunDir,
     join(HOME, ".local", "bin"),
-    join(HOME, ".cargo", "bin"),
     join(HOME, "go", "bin"),
     "/opt/homebrew/bin",
     "/usr/local/sbin",

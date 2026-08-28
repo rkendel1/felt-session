@@ -181,7 +181,6 @@ describe.skipIf(!onServiceHost)("launchd plist", () => {
 
   test("makes user-installed build toolchains visible to agent runs", () => {
     const plist = renderPlist();
-    expect(plist).toContain(`${HOME}/.cargo/bin`);
     expect(plist).toContain(`${HOME}/go/bin`);
   });
 
