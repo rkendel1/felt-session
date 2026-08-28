@@ -352,6 +352,14 @@ export async function gitPushApi(sessionId: string, repo?: string) {
 	);
 }
 
+/** Push a clean committed branch and create a GitHub pull request. */
+export async function publishPrApi(sessionId: string, repo?: string) {
+	return request<{ ok: true; url: string; number: number }>(
+		`/sessions/${encodeURIComponent(sessionId)}/publish-pr`,
+		{ method: "POST", body: repo ? { repo } : {} },
+	);
+}
+
 /** Update the session checkout. The branch's own upstream is pulled
  * fast-forward-only; `fromBase` merges origin/<default branch>. */
 export async function gitPullApi(

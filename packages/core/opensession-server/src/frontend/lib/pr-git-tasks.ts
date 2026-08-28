@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { getCurrentUser } from "../components/UserPicker";
-import { gitPushApi } from "./api";
+import { gitPushApi, publishPrApi } from "./api";
 import { commitPrompt } from "./commit-prompt";
 import { deriveStatus } from "./pr-status-derive";
 import type { GitStatusInfo, PrDetails } from "./types";
@@ -97,6 +97,7 @@ export function useGitTaskRunner({
   onRefresh: () => Promise<void> | void;
 }) {
   const [pushing, setPushing] = useState(false);
+	const [publishing, setPublishing] = useState(false);
   const [prompted, setPrompted] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -123,6 +124,16 @@ export function useGitTaskRunner({
       });
   }
 
+	async function publishPr() {
+		if (publishing) return;
+		setPublishing(true);
+		setError(null);
+		await publishPrApi(sessionId, repo)
+			.then(() => onRefresh())
+			.catch((e: any) => setError(e.message || "Couldn’t create the pull request"))
+			.finally(() => setPublishing(false));
+	}
+
   function run(task: GitTask) {
     if (task.run === "push") void push();
     else promptSession(task.run.label, task.run.prompt);
@@ -133,5 +144,5 @@ export function useGitTaskRunner({
     return task.run === "push" || !!send;
   }
 
-  return { run, runnable, promptSession, pushing, prompted, error };
+  return { run, runnable, promptSession, push, publishPr, pushing, publishing, prompted, error };
 }

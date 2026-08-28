@@ -33,6 +33,7 @@ import {
   fetchPrFile,
   setPrFileViewed,
   fetchGitStatus,
+	publishPrApi,
   fetchReviewGuide,
   fetchWorktreeFile,
   saveWorktreeFile,
@@ -443,9 +444,8 @@ export function PrPanel({
   const [closing, setClosing] = useState(false);
   const [confirmClose, setConfirmClose] = useState(false);
   const [closeError, setCloseError] = useState<string | null>(null);
-  // The branch has no PR yet and the bar's Create PR action has been asked for.
-  // The agent does the work, so this only confirms the ask briefly while the PR
-  // itself is still being created.
+  // The branch has no PR yet and the server is publishing it. The server only
+  // returns success after both Git and GitHub confirm the operation.
   const [prRequested, setPrRequested] = useState(false);
   useEffect(() => {
     if (!prRequested) return;
@@ -1524,17 +1524,18 @@ toast(e.message || "Couldn't unlink the PR");
     // The branch's own changes are the review here, so they lead. Opening the
     // PR is the one action this state offers, and it sits in the bar rather
     // than inside a card below the diff.
-    const createPr = () => {
-      if (!send || !sessionId) return;
-      send({
-        type: "prompt",
-        sessionId,
-        user: getCurrentUser(),
-        content:
-          "Commit any remaining work, push the branch, and open a PR for it.",
-      });
+    const createPr = async () => {
+      if (!sessionId || prRequested) return;
       setPrRequested(true);
-      toast(`Asked ${AGENT_NAME} to open a pull request`);
+      await publishPrApi(sessionId, active?.repo)
+        .then(async (result) => {
+          toast(`Pull request #${result.number} created`);
+          await load(true);
+        })
+        .catch((error) => {
+          toast(error instanceof Error ? error.message : "Couldn’t create the pull request");
+        });
+      setPrRequested(false);
     };
     return (
       <div
@@ -1546,16 +1547,16 @@ toast(e.message || "Couldn't unlink the PR");
             {targetPicker}
             {/* Opening the PR is what this state is for, so its action leads
                 before the shared diff controls. */}
-            {showWorktreeDiff && !!send && (
+            {showWorktreeDiff && (
               <Button
                 variant="primary"
                 size="sm"
                 className="phone:min-h-11"
                 icon={<IconPullRequest size={20} />}
                 disabled={prRequested}
-                onClick={createPr}
+                onClick={() => void createPr()}
               >
-                {prRequested ? "Opening…" : "Create PR"}
+                {prRequested ? "Publishing…" : "Create PR"}
               </Button>
             )}
             {linkable && (

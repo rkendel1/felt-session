@@ -116,17 +116,13 @@ export function GitStatusRows({
       key: "no-pr",
       label: "No pull request",
       tone: "muted",
-      action: send && (
+      action: (
         <button
           className={GIT_ACTION}
-          onClick={() =>
-            runner.promptSession(
-              "create a PR",
-              "Commit any remaining work, push the branch, and open a PR for it.",
-            )
-          }
+          onClick={() => void runner.publishPr()}
+		  disabled={runner.publishing}
         >
-          Create PR
+		  {runner.publishing ? "Publishing…" : "Create PR"}
         </button>
       ),
     });

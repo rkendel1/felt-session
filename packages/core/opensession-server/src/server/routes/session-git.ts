@@ -18,7 +18,7 @@ import { getGitStatus, gitPull, gitPush } from "../git-status";
 import { imageContentType, imageHeaders } from "../image-mime";
 import { workspaceExecFor } from "../sandbox";
 import { findSessionAsync } from "../session-cache";
-import { resolveWorktreeTarget } from "../session-repos";
+import { resolvePrTarget, resolveWorktreeTarget } from "../session-repos";
 import { sessionTouchedPaths } from "../session-touched";
 import { getRepo, isSharedCheckoutDir, sessionRepoId } from "../worktree";
 import { defaultRepo } from "../config";
@@ -26,6 +26,8 @@ import { $ } from "bun";
 import { existsSync } from "fs";
 import { resolve } from "path";
 import { githubMutationCredential } from "./github-credential";
+import { githubCredentialRequiredResponse } from "./github-credential";
+import { resolveGithubCredential } from "../github-auth";
 
 function isDiffGroupFile(file: unknown): file is DiffGroupFile {
 	if (typeof file !== "object" || file === null) return false;
@@ -428,6 +430,101 @@ export async function handleSessionGitRoutes(
 		);
 		if ("error" in result) return Response.json(result, { status: 502 });
 		return Response.json(result);
+	}
+
+	// Publish a clean, committed branch and create its pull request. This is a
+	// server-owned transaction rather than an agent prompt: success means Git
+	// accepted the push and GitHub returned a real PR URL.
+	if (
+		path.match(/^\/api\/sessions\/(.+)\/publish-pr$/) &&
+		req.method === "POST"
+	) {
+		const sessionId = decodeURIComponent(
+			path.match(/^\/api\/sessions\/(.+)\/publish-pr$/)![1],
+		);
+		const session = await findSessionAsync(sessionId);
+		if (!session)
+			return Response.json({ error: "Session not found" }, { status: 404 });
+		const body = await req.json().catch(() => ({}));
+		const repoId = typeof body?.repo === "string" ? body.repo : null;
+		const target = resolveWorktreeTarget(session, repoId);
+		const prTarget = resolvePrTarget(session, repoId);
+		if (!target?.reachable || !prTarget)
+			return Response.json({ error: "Session has no publishable worktree" }, { status: 400 });
+		const repo = getRepo(target.repoId);
+		if (repo.host === "codestorage")
+			return Response.json({ error: "This repository does not use pull requests" }, { status: 400 });
+		if (isSharedCheckoutDir(target.dir) || prTarget.branch === target.defaultBranch)
+			return Response.json({ error: "The default branch cannot be published as a pull request" }, { status: 409 });
+		const exec = target.primary ? await workspaceExecFor(session, target.dir) : undefined;
+		const status = await getGitStatus(target.dir, target.defaultBranch, exec);
+		if (status.uncommittedFiles > 0)
+			return Response.json(
+				{ error: `${status.uncommittedFiles} uncommitted file${status.uncommittedFiles === 1 ? " remains" : "s remain"}. Commit them before creating the pull request.` },
+				{ status: 409 },
+			);
+		if (status.ahead < 1 && !status.hasUpstream)
+			return Response.json({ error: "This branch has no committed changes to publish" }, { status: 409 });
+		const selected = githubMutationCredential(ctx);
+		if (!selected) return githubCredentialRequiredResponse();
+		let credential;
+		try {
+			credential = await resolveGithubCredential(selected, { write: true });
+		} catch (error) {
+			return Response.json(
+				{ error: error instanceof Error ? error.message : "GitHub credential unavailable" },
+				{ status: 403 },
+			);
+		}
+		const pushed = await gitPush(target.dir, prTarget.branch, exec, credential.env);
+		if ("error" in pushed) return Response.json(pushed, { status: 502 });
+		const base = target.primary && session.stackedOn?.branch
+			? session.stackedOn.branch
+			: target.defaultBranch;
+		const apiUrl = `https://api.github.com/repos/${prTarget.ghRepo}/pulls`;
+		const headers = {
+			Accept: "application/vnd.github+json",
+			Authorization: `Bearer ${credential.env.GH_TOKEN || credential.env.GITHUB_TOKEN || ""}`,
+			"Content-Type": "application/json",
+			"X-GitHub-Api-Version": "2022-11-28",
+		};
+		const owner = prTarget.ghRepo.split("/")[0];
+		const findPublishedPr = async () => {
+			const response = await fetch(
+				`${apiUrl}?state=open&head=${encodeURIComponent(`${owner}:${prTarget.branch}`)}`,
+				{ headers },
+			);
+			if (!response.ok) return null;
+			const rows = await response.json().catch(() => []);
+			const match = Array.isArray(rows) ? rows[0] : null;
+			return typeof match?.html_url === "string" ? match : null;
+		};
+		const existing = await findPublishedPr();
+		if (existing)
+			return Response.json({ ok: true, url: existing.html_url, number: existing.number });
+		const created = await fetch(apiUrl, {
+			method: "POST",
+			headers,
+			body: JSON.stringify({
+				title: (session.title || prTarget.branch).slice(0, 240),
+				head: prTarget.branch,
+				base,
+				body: `Created from Open Session ${session.id}.`,
+			}),
+		});
+		const payload = await created.json().catch(() => ({}));
+		if (!created.ok || typeof payload?.html_url !== "string") {
+			// A lost first response or a double click can race another successful
+			// create. Re-read GitHub before reporting failure so retries are safe.
+			const raced = await findPublishedPr();
+			if (raced)
+				return Response.json({ ok: true, url: raced.html_url, number: raced.number });
+			return Response.json(
+				{ error: String(payload?.message || "GitHub did not create the pull request").slice(0, 300) },
+				{ status: created.status >= 400 ? created.status : 502 },
+			);
+		}
+		return Response.json({ ok: true, url: payload.html_url, number: payload.number });
 	}
 
 	// Update the session's checkout — the Pull/Update action in the status
