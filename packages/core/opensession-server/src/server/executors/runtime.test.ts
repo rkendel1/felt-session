@@ -188,7 +188,7 @@ describe("ExecutorRuntime", () => {
         providersClosed++;
       },
     });
-    expect(existsSync(join(root, "runner-ledger.sqlite"))).toBe(false);
+    expect(existsSync(join(root, "runner-ledger.sqlite.feltdb"))).toBe(false);
     expect(() => runtime.ingress).toThrow("not started");
     const [firstStart, secondStart] = await Promise.all([
       runtime.start(),
@@ -196,7 +196,7 @@ describe("ExecutorRuntime", () => {
     ]);
     expect(firstStart).toBe(runtime);
     expect(secondStart).toBe(runtime);
-    expect(existsSync(join(root, "runner-ledger.sqlite"))).toBe(true);
+    expect(existsSync(join(root, "runner-ledger.sqlite.feltdb"))).toBe(true);
     expect(await runtime.start()).toBe(runtime);
     const firstClose = runtime.close();
     expect(runtime.close()).toBe(firstClose);

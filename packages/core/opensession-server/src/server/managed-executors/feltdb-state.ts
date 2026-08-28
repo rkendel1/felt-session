@@ -72,21 +72,6 @@ export class FeltDbExecutorStateStore implements ExecutorStateStore {
       path,
       namespace: "executor-state",
     });
-
-    // Initialize session index
-    this.#initializeSessionIndex();
-  }
-
-  private async #initializeSessionIndex(): Promise<void> {
-    this.#db.transaction((tx) => {
-      const collection = tx.collection<StoredExecutorRow>(EXECUTOR_COLLECTION);
-      // Scan all records to build session index
-      // In a real implementation, we'd use a more efficient query mechanism
-      const records = collection.find?.() || [];
-      for (const record of records) {
-        this.#sessionIndex.set(record.sessionId, record.executorId);
-      }
-    });
   }
 
   async getByExecutorId(
