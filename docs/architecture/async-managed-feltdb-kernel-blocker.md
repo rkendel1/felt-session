@@ -140,9 +140,42 @@ Session must not commit a `file:../flow_db/packages/core` dependency because
 that path exists only on one development machine and cannot build from an
 immutable Open Session release.
 
-Once 0.7.0 is published, Open Session can pin that release and rerun this same
-probe from its own dependency tree before converting the first kernel
-transaction.
+Open Session pinned the published 0.7.0 release and reran this same probe from
+its own dependency tree before converting the first kernel transaction.
+
+### Open Session 0.7.0 creation probe
+
+After 0.7.0 was published, Open Session pinned it and repeated the first
+kernel transaction through the installed package and a real local server. The
+existing-record fence behaves correctly, but creating the first versioned
+kernel state record exposes a remaining authority gap:
+
+1. A transaction guarded with `requireAbsent` atomically creates the state,
+   change, and replay receipt, but the created state has no `__version`.
+2. The next append cannot fence that state because there is no observed
+   authority version.
+3. Replacing the creation guard with `ifVersion: 0` is refused with a structured
+   `PRECONDITION_FAILED` conflict whose predicate is `missing`.
+
+The kernel cannot work around this by writing `__version: 1` in application
+data. FeltDB owns version advancement, and accepting a client-manufactured
+version would make the fencing proof circular. It also cannot create the state
+in a separate call before writing the first change, because a crash between
+those calls would split the existing atomic state-plus-change boundary.
+
+The required FeltDB behavior is:
+
+```text
+atomic transaction
+  precondition: record is absent (or ifVersion = 0)
+  operations: create state + create change + create replay receipt
+  result: state.__version = 1
+```
+
+Until a published FeltDB release provides that authority-owned initial version
+inside the same atomic transaction, the first complete kernel transaction
+cannot be migrated without violating the version-fencing or atomicity
+requirements.
 
 The kernel fencing representation remains unchanged:
 
