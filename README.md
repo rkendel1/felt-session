@@ -93,7 +93,8 @@ bun run setup                             # interactive macOS app setup
 
 On macOS, `bun run setup` builds and opens the existing desktop app, where the
 self-host flow writes the configuration, installs the per-user LaunchAgent,
-starts the local server, and connects the app to it. Use `bun run
+creates its runtime checkout under `~/.opensession/src` so macOS permits
+background access, starts the local server, and connects the app to it. Use `bun run
 setup:terminal` for the terminal wizard. On other platforms, `bun run setup`
 continues to open that terminal wizard. For unattended defaults, run `bun
 scripts/cli.ts onboard --defaults`. Run

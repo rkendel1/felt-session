@@ -52,7 +52,8 @@ bun run setup
 
 This prepares the existing desktop app and opens its local self-host flow. The
 form writes the same server configuration as CLI onboarding, installs and
-starts the per-user LaunchAgent, waits for the server to answer, and connects
+starts the per-user LaunchAgent from a managed `~/.opensession/src` checkout
+(Desktop and Documents are unavailable to background LaunchAgents), waits for the server to answer, and connects
 the app to it. The host-write bridge exists only for an app launched by this
 source-checkout command; downloaded builds and remotely served pages cannot
 invoke it. `bun run setup:terminal` keeps the terminal wizard available.

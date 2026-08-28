@@ -66,6 +66,9 @@ export type OnboardOptions = {
   answers?: Answers;
   /** Whether that surface requested the per-user service. */
   installService?: boolean;
+  /** Treat a service that never becomes healthy as a setup failure. */
+  requireHealthy?: boolean;
+  healthTimeoutMs?: number;
 };
 
 /** "Open Session" -> "OS". Falls back to the first two characters. */
@@ -460,7 +463,11 @@ export async function onboard(opts: OnboardOptions = {}): Promise<number> {
   if (serviceUp) {
     // The URL is the deliverable of an install; wait for it to actually answer
     // rather than printing an address that 404s for the next thirty seconds.
-    const healthy = await service.waitHealthy(answers.publicBaseUrl);
+    const healthy = await service.waitHealthy(answers.publicBaseUrl, opts.healthTimeoutMs);
+    if (!healthy && opts.requireHealthy) {
+      warn("the service was installed but did not become healthy", "run `opensession logs`");
+      return 2;
+    }
     if (healthy) info(`1. ${bold(`open ${answers.publicBaseUrl}`)}`);
     else info(`1. ${bold(`open ${answers.publicBaseUrl}`)}   ${dim("(still starting; `opensession logs` if it does not come up)")}`);
     info(`2. ${bold("opensession doctor")}     check everything is wired up`);

@@ -13,8 +13,8 @@ import type { RouteContext } from "./context";
 import {
   parseSlackCommand,
   getCommandHelp,
-} from "../runner-executor/slack-command-parser";
-import { sendSlackMessage } from "../agents/slack/slack-api";
+} from "../../runner-executor/slack-command-parser";
+import { sendSlackMessage } from "../../agents/slack/slack-api";
 
 /**
  * Slack Events API payload structure.

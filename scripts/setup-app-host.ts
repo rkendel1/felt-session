@@ -39,8 +39,13 @@ try {
   process.env.NO_PROMPT = "1";
   process.exitCode = await onboard({
     answers,
-    force: false,
+    // Clicking the native confirmation is explicit replacement intent. This
+    // also repairs a setup that wrote config but whose service never started.
+    // onboard backs up both existing files before replacing them.
+    force: true,
     installService: request.installService !== false,
+    requireHealthy: true,
+    healthTimeoutMs: 30_000,
   });
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));
