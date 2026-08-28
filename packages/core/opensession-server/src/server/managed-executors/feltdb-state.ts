@@ -56,7 +56,7 @@ const CLAIMS_COLLECTION = "executor_instance_claims";
 
 /**
  * FeltDB-backed executor state store.
- * Implements the same interface as SqliteExecutorStateStore.
+ * Durably tracks the lifecycle and state of managed executors.
  */
 export class FeltDbExecutorStateStore implements ExecutorStateStore {
   readonly #db: ReturnType<typeof createFeltDB>;

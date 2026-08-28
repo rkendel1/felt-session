@@ -156,8 +156,8 @@ export class ExecutorRuntime {
 
   async #initialize(): Promise<this> {
     let ledger: OpenCommandLedger | undefined;
-    let managedStore: SqliteExecutorStateStore | undefined;
-    let claims: SqliteRunnerExecutorClaims | undefined;
+    let managedStore: FeltDbExecutorStateStore | undefined;
+    let claims: FeltDbRunnerExecutorClaims | undefined;
     try {
       ledger = openCommandLedger({
         dbPath: this.#options.paths.runnerLedgerDb,
