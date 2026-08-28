@@ -192,6 +192,30 @@ export interface HumanDecisionEvent extends MissionControlEvent {
   };
 }
 
+/** Slack command received from a human. */
+export interface SlackCommandReceivedEvent extends MissionControlEvent {
+  kind: "slack.command.received";
+  slackUserId: string;
+  slackUserName: string;
+  slackChannelId: string;
+  slackChannelName: string;
+  slackMessageTimestamp: string;
+  command: string;
+  args: string[];
+  rawMessage: string;
+  slackThreadTs?: string;
+}
+
+/** Slack notification posted by an agent. */
+export interface SlackNotificationPostedEvent extends MissionControlEvent {
+  kind: "slack.notification.posted";
+  agentId: string;
+  slackChannelId: string;
+  slackMessageTimestamp: string;
+  message: string;
+  slackThreadTs?: string;
+}
+
 export type AnyMissionControlEvent =
   | SessionCreatedEvent
   | TaskCreatedEvent
@@ -209,7 +233,9 @@ export type AnyMissionControlEvent =
   | TestCompletedEvent
   | TaskBlockedEvent
   | TaskCompletedEvent
-  | HumanDecisionEvent;
+  | HumanDecisionEvent
+  | SlackCommandReceivedEvent
+  | SlackNotificationPostedEvent;
 
 /** Event spine: append-only log of all session events. */
 export interface EventSpine {
