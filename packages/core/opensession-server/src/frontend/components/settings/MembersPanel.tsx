@@ -27,7 +27,6 @@ export function MembersPanel({ workspace }: { workspace?: Workspace }) {
 	const presets = workspace?.modelSettings?.presets
 		|| defaultWorkspaceModelSettings()?.presets
 		|| [];
-	const roles = presets.filter((preset) => preset.group === "roles");
 	return (
 		<SettingsPanel>
 			<SettingsHeader
@@ -46,13 +45,13 @@ export function MembersPanel({ workspace }: { workspace?: Workspace }) {
 				}
 			/>
 			<TeamSection onChanged={() => {}} />
-			<SettingsGroupLabel>Agent roles</SettingsGroupLabel>
+			<SettingsGroupLabel>Agent roles and presets</SettingsGroupLabel>
 			<p className="mb-2 text-label text-dim">
-				Type @ in a conversation or new workspace to choose one. Assign each role
+				Type @ in a conversation or new workspace to choose one. Assign each entry
 				to any model available through your configured providers.
 			</p>
 			<SettingCard>
-				{roles.map((role) => {
+				{presets.map((role) => {
 					const assignment = modelRoleAssignment(role.lead.model);
 					return (
 						<SettingRow key={role.id} className="items-start gap-x-3">
