@@ -68,7 +68,10 @@ FeltDB is designed as an embedded database:
 - Data stays on-machine
 - Self-hosted design matches felt-session's values
 
-**Conclusion**: FeltDB's embedded nature is perfect for local-first.
+**Conclusion**: FeltDB's embedded nature suits local-first, with one caveat
+found in Phase 2: constructing a database posts an adoption event to
+feltdb.com. It is opt-out via `FELTDB_TELEMETRY`, and adapters must default it
+off rather than inherit it.
 
 ### 3. Concurrency Model (FeltDB ✓)
 
@@ -78,7 +81,11 @@ FeltDB supports:
 - Optimistic locking with version vectors
 - Session-level partitioning (sessions don't interfere)
 
-**Conclusion**: FeltDB's concurrency primitives handle felt-session's workload.
+**Conclusion**: FeltDB's concurrency primitives handle felt-session's workload,
+with one correction found in Phase 2: the embedded file runtime does not
+serialize writers across processes, so a single owning process is still
+required, exactly as it is for SQLite. Version-vector locking is not what this
+runtime provides.
 
 ### 4. Query Capability (FeltDB ✓)
 
@@ -186,11 +193,19 @@ Single unified store provides:
 - Document recovery semantics
 - Produce migration plan
 
-### Phase 2: Adapter Pattern (Next PR)
-- Create DurableStore interface
-- Implement SQLiteStore adapter (wrap existing code)
-- Implement InMemoryStore (testing)
-- No behavior changes, all tests pass
+### Phase 2: Adapter Pattern (✓ delivered, for the command ledger)
+- `DurableCommandLedger` already existed and needed no new interface
+- Shared record codec extracted so every backend validates identically
+- `FeltDbCommandLedger` implemented on `@feltdb/core@0.6.13`
+- One conformance suite runs against in-memory, SQLite, and FeltDB
+- Backend factory added, still defaulting to SQLite: no behavior changed
+
+Scope note: this covered the executor command ledger only. Sessions, events,
+and timers live in the per-session kernel stores and the run journal, and have
+no adapter yet. See "Phase 2 as delivered" in
+`docs/architecture/feltdb-migration-plan.md`, which also records six ways
+`@feltdb/core@0.6.13` differs from what this ADR assumed — including that the
+file runtime does not serialize writers across processes.
 
 ### Phase 3: Dual-Write Validation (Later PR)
 - Implement FeltDB integration
@@ -366,7 +381,7 @@ None currently, but this ADR informs:
 | Indexed queries | ✓ | Query engine with indexes |
 | Crash recovery | ✓ | Durable write-through semantics |
 | Deduplication | ✓ | Document IDs + uniqueness constraints |
-| Multi-machine (future) | ✓ | FeltDB supports replication (opt-in) |
+| Multi-machine (future) | ✗ | The file runtime takes no cross-process write lock and publishes by whole-snapshot rename; concurrent writers lose data (`FileJsDb.freshness()`) |
 
 ### Not Required (Won't Use)
 

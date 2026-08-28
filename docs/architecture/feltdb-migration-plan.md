@@ -149,6 +149,81 @@ Filesystem
 
 **Risk**: Low (wrapping existing code, no logic changes)
 
+#### Phase 2 as delivered
+
+Phase 2 landed against the **command ledger**, not against a new `DurableStore`
+type. The seam this plan asks for already existed: `runner-executor/ledger.ts`
+defines `DurableCommandLedger`, `InMemoryCommandLedger` is its reference
+implementation, and `SQLiteCommandLedger` is the durable one. Adding a third
+implementation was therefore the whole of the work, and no caller changed.
+
+What landed:
+
+- `runner-executor/ledger-codec.ts` — the record validation and JSON codec,
+  lifted out of `sqlite-ledger.ts` unchanged. It only ever described
+  `LedgerRecord`, never SQLite rows, so both backends now validate through one
+  copy and a record rejected by one is rejected by the other.
+- `runner-executor/feltdb-ledger.ts` — `FeltDbCommandLedger`, on
+  `@feltdb/core@0.6.13`.
+- `runner-executor/ledger-conformance.test.ts` — fourteen scenarios written
+  against `DurableCommandLedger` alone, run against all three implementations.
+- `runner-executor/open-command-ledger.ts` — the backend switch. It defaults to
+  SQLite, so this phase changes no behavior.
+
+`executors/runtime.ts` still calls `openSQLiteCommandLedger` directly. Pointing
+it at the factory is Phase 3's first step, where a dual-write wrapper is the
+thing worth wiring in.
+
+##### How the FeltDB ledger maps onto the schema
+
+| SQLite | FeltDB |
+|---|---|
+| `runner_command_ledger` row | record in the same-named collection, validated payload plus the fields queries filter on |
+| `UNIQUE(scope, kind, key)` | a `runner_command_index` record staged with `requireAbsent` |
+| `runner_retired_scopes` row | record keyed by a digest of the scope key |
+| `BEGIN IMMEDIATE` … `COMMIT` | `db.transaction()`, one durable snapshot |
+| `ordinal` from `MAX(ordinal) + 1` | `db.allocateSequence()`, durable across reopen |
+
+##### Findings that change Phase 3
+
+Six things about `@feltdb/core@0.6.13` differ from what the assessment assumed.
+Each was confirmed against the package, not read off its README.
+
+1. **`admitOperation` and `transitionOperation` are not on the database
+   handle.** They exist on the raw `FileJsDb` class but are not surfaced by
+   `createFeltDB`, so the operation-admission lifecycle the ADR leans on is not
+   reachable through the supported API. The ledger gets exactly-once identity
+   from `requireAbsent` instead.
+2. **Records written in a transaction carry no `__version`.** `updateIfVersion`
+   therefore cannot check a record a transaction wrote, and CAS and
+   transactional writes cannot be mixed. The ledger serializes
+   read-decide-write with an in-process lock, as `InMemoryCommandLedger` does.
+3. **The file runtime does not serialize writers across processes.** FeltDB
+   says so itself, in the comment on `FileJsDb.freshness()`: writes take no
+   cross-process lock and publication is a whole-snapshot rename, so two
+   processes writing one directory lose data. The ADR's "optimistic locking
+   with version vectors" does not describe this runtime. Single-owner-process
+   remains a requirement, exactly as it is for SQLite.
+4. **`allocateSequence` is file-runtime only.** The memory backend rejects it,
+   so an in-memory FeltDB is not a drop-in for tests. The conformance suite uses
+   `InMemoryCommandLedger` for that instead.
+5. **`runtime()` misreports the file backend** as `storage: "memory"`,
+   `persistent: false`, `durable: false`. Data does survive close and reopen —
+   there are tests for it — so the flags cannot be used to decide whether a
+   store is durable.
+6. **Constructing a database posts to `feltdb.com`.** `createFeltDB` emits an
+   adoption event and schedules a timer to flush more. The ledger defaults
+   `FELTDB_TELEMETRY=0` before the first database exists and leaves an explicit
+   operator setting alone. Phase 3 should keep that off in any dual-write path;
+   a storage layer opening an outbound connection is not something
+   `docs/security-model.md` contemplates.
+
+Finding 3 is the one that matters most for sequencing. Whatever else FeltDB
+offers, it does not remove the single-writer constraint, so the "multi-machine
+scenarios" the ADR lists under positive consequences are not something this
+runtime delivers today.
+
+
 #### Phase 3: Dual-Write Validation (No Read Change Yet)
 
 **Goal**: Parallel write to both SQLite and FeltDB, validate consistency.

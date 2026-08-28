@@ -11,6 +11,7 @@
         "@daytonaio/sdk": "0.201.0",
         "@earendil-works/pi-ai": "0.84.3",
         "@earendil-works/pi-coding-agent": "^0.84.3",
+        "@feltdb/core": "0.6.13",
         "@lezer/common": "^1.5.2",
         "@lezer/highlight": "^1.2.3",
         "@lezer/rust": "^1.0.2",
@@ -289,6 +290,8 @@
     "@earendil-works/pi-tui": ["@earendil-works/pi-tui@0.84.3", "", { "dependencies": { "get-east-asian-width": "1.6.0", "marked": "18.0.5" } }, "sha512-fS6OEQKEEALnKa6Uw8LcgZZ+9CWck7f3MQSCETQp6leUgIFwMEDtKmOUnL9nsYm+RIPmy7OmplVxYRbV6hiaFg=="],
 
     "@emnapi/runtime": ["@emnapi/runtime@1.11.3", "", { "dependencies": { "tslib": "^2.4.0" } }, "sha512-Xz4Tpyki7XyrpbUK1jR1AhdAdaXyhhY4lZ3neLodmhpuWfy2PAQN5B46sAiU4liOXGLkHypn/qU+jvfWSCYYLA=="],
+
+    "@feltdb/core": ["@feltdb/core@0.6.13", "", { "peerDependencies": { "react": "^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0", "react-dom": "^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0", "react-router-dom": "^7.0.0" }, "optionalPeers": ["react", "react-dom", "react-router-dom"], "bin": { "feltdb": "bin/feltdb.js", "create-feltdb": "bin/create-feltdb.js" } }, "sha512-NR/gy3pzMZQ34bIkUwAjPNk6/HLvm3FxFAt9a2yB/ojw2eHmKfwuY31riWXcoBf8nXGu0qFrO7byKq45Mz+umQ=="],
 
     "@floating-ui/core": ["@floating-ui/core@1.7.5", "", { "dependencies": { "@floating-ui/utils": "^0.2.11" } }, "sha512-1Ih4WTWyw0+lKyFMcBHGbb5U5FtuHJuujoyyr5zTaWS5EYMeT6Jb2AuDeftsCsEuchO+mM2ij5+q9crhydzLhQ=="],
 
