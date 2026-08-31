@@ -1,6 +1,0 @@
-{
-  "namespace": "open-session",
-  "runtime": "managed",
-  "storage": "managed",
-  "distributed": true
-}
