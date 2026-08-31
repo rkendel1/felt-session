@@ -2,9 +2,11 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
+import { createFeltDB } from "@feltdb/core";
 import type { UnifiedSession } from "../../server/types";
 import {
   claimShippedChangeAnnouncement,
+  initializeManagedShippedChangeAnnouncements,
   selectShippedVisualChange,
   settleShippedChangeAnnouncement,
 	shippedChangeAnnouncementKey,
@@ -137,20 +139,18 @@ describe("shipped change announcement receipts", () => {
 		expect(shippedChangeAnnouncementKey("tellahq/example", 12, "C1", "Shipped", ["a.png", "b.png"])).not.toBe(original);
 	});
 
-  test("deduplicates a sent merge and releases failed claims", () => {
-    const root = mkdtempSync(join(tmpdir(), "shipped-change-state-"));
-    scratch.push(root);
-    const statePath = join(root, "state.json");
+  test("deduplicates a sent merge and releases failed claims", async () => {
+    await initializeManagedShippedChangeAnnouncements(createFeltDB({ namespace: crypto.randomUUID(), memory: true }));
     const key = "tellahq/example#12@abc";
-    const claim = claimShippedChangeAnnouncement(key, statePath, 1_000);
+    const claim = await claimShippedChangeAnnouncement(key, 1_000);
     expect(claim).toBeString();
-    expect(claimShippedChangeAnnouncement(key, statePath, 1_001)).toBeNull();
-    settleShippedChangeAnnouncement(key, claim!, true, "session-1", statePath);
-    expect(claimShippedChangeAnnouncement(key, statePath, 2_000)).toBeNull();
+    expect(await claimShippedChangeAnnouncement(key, 1_001)).toBeNull();
+    await settleShippedChangeAnnouncement(key, claim!, true, "session-1");
+    expect(await claimShippedChangeAnnouncement(key, 2_000)).toBeNull();
 
     const retryKey = "tellahq/example#13@def";
-    const failed = claimShippedChangeAnnouncement(retryKey, statePath, 3_000)!;
-    settleShippedChangeAnnouncement(retryKey, failed, false, undefined, statePath);
-    expect(claimShippedChangeAnnouncement(retryKey, statePath, 3_001)).toBeString();
+    const failed = (await claimShippedChangeAnnouncement(retryKey, 3_000))!;
+    await settleShippedChangeAnnouncement(retryKey, failed, false);
+    expect(await claimShippedChangeAnnouncement(retryKey, 3_001)).toBeString();
   });
 });

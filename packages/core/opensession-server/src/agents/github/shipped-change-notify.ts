@@ -4,19 +4,22 @@
  * route calls this only after a teammate clicks Share to Slack.
  */
 import {
-  mkdirSync,
+  existsSync,
+  readdirSync,
   readFileSync,
   realpathSync,
-  rmSync,
+  rmdirSync,
   statSync,
-  writeFileSync,
+  unlinkSync,
 } from "fs";
-import { dirname, relative, resolve } from "path";
+import { basename, relative, resolve } from "path";
+import { tmpdir } from "node:os";
 import { createHash } from "crypto";
+import type { StateFirstDB } from "@feltdb/core";
 import { configuredIntegration } from "../../server/config";
 import { audit } from "../../server/audit";
 import { stateDir } from "../../server/paths";
-import { writeJsonAtomic } from "../../server/shared/atomic-write";
+import { managedFeltDb } from "../../server/managed-feltdb";
 import { UPLOADS_DIR } from "../../server/uploads";
 import { homeDir } from "../../server/paths";
 import type { UnifiedSession } from "../../server/types";
@@ -40,72 +43,94 @@ export interface ShippedChangeChannel {
 }
 
 const ANNOUNCEMENT_STATE_ROOT = `${stateDir("github")}/shipped-visual-changes`;
+const ANNOUNCEMENT_COLLECTION = "opensession_github_shipped_change_receipts";
+const ANNOUNCEMENT_MIGRATION = "github-shipped-change-receipts-json-to-managed-feltdb-v1";
 const MAX_SCREENSHOT_BYTES = 20 * 1024 * 1024;
 const SCREENSHOT_EXTS = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp"]);
 
 interface AnnouncementReceipt {
+  id: string;
+  __version?: number;
   status: "pending" | "sent";
   claimId: string;
   at: string;
   sessionId?: string;
 }
 
-function announcementReceiptPath(key: string, root: string): string {
-  const digest = createHash("sha256").update(key).digest("hex");
-  return `${root}/${digest}.json`;
-}
+let announcementDb: StateFirstDB | undefined;
+const announcementId = (key: string) => `shipped_change_${createHash("sha256").update(key).digest("hex")}`;
 
-function readAnnouncementReceipt(path: string): AnnouncementReceipt | null {
-  try {
-    const value = JSON.parse(readFileSync(path, "utf8"));
-    return value && typeof value === "object" ? value : null;
-  } catch {
-    return null;
+export async function initializeManagedShippedChangeAnnouncements(
+  db: StateFirstDB = announcementDb ?? managedFeltDb(),
+): Promise<void> {
+  announcementDb = db;
+  const migrations = db.collection<{ id: string }>("opensession_migrations");
+  if (await migrations.get(ANNOUNCEMENT_MIGRATION)) return;
+  if (existsSync(ANNOUNCEMENT_STATE_ROOT)) {
+    for (const name of readdirSync(ANNOUNCEMENT_STATE_ROOT)) {
+      if (!name.endsWith(".json")) continue;
+      const path = `${ANNOUNCEMENT_STATE_ROOT}/${name}`;
+      let legacy: Omit<AnnouncementReceipt, "id">;
+      try {
+        legacy = JSON.parse(readFileSync(path, "utf8"));
+      } catch {
+        legacy = { status: "pending", claimId: "legacy-corrupt", at: new Date(0).toISOString() };
+      }
+      const digest = basename(name, ".json");
+      const id = `shipped_change_${digest}`;
+      await db.transaction((tx) => {
+        tx.collection<AnnouncementReceipt>(ANNOUNCEMENT_COLLECTION).set(id, { ...legacy, id });
+      }, { transactionId: `opensession:shipped-change:migrate:${id}` });
+      unlinkSync(path);
+    }
+    try { rmdirSync(ANNOUNCEMENT_STATE_ROOT); } catch {}
   }
+  await db.transaction((tx) => {
+    tx.collection("opensession_migrations").set(ANNOUNCEMENT_MIGRATION, { id: ANNOUNCEMENT_MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
+  }, { transactionId: `opensession:migration:${ANNOUNCEMENT_MIGRATION}` });
 }
 
-export function claimShippedChangeAnnouncement(
+export async function claimShippedChangeAnnouncement(
   key: string,
-  root = ANNOUNCEMENT_STATE_ROOT,
   now = Date.now(),
-): string | null {
+): Promise<string | null> {
+  const db = announcementDb ?? managedFeltDb();
   const claimId = crypto.randomUUID();
-  const receiptPath = announcementReceiptPath(key, root);
-  mkdirSync(dirname(receiptPath), { recursive: true });
+  const id = announcementId(key);
   try {
-    writeFileSync(
-      receiptPath,
-      JSON.stringify({ status: "pending", claimId, at: new Date(now).toISOString() }),
-      { flag: "wx" },
-    );
-  } catch (error: any) {
-    if (error?.code !== "EEXIST") throw error;
-    // Fail closed after a process crash rather than risk posting the same merge
-    // twice. Ordinary upload failures remove their receipt in settle().
+    await db.transaction((tx) => {
+      tx.collection<AnnouncementReceipt>(ANNOUNCEMENT_COLLECTION).set(id, {
+        id, status: "pending", claimId, at: new Date(now).toISOString(),
+      }, { requireAbsent: true });
+    }, { transactionId: `opensession:shipped-change:claim:${id}:${claimId}` });
+  } catch (error) {
+    if (!await db.collection<AnnouncementReceipt>(ANNOUNCEMENT_COLLECTION).get(id)) throw error;
     return null;
   }
   return claimId;
 }
 
-export function settleShippedChangeAnnouncement(
+export async function settleShippedChangeAnnouncement(
   key: string,
   claimId: string,
   sent: boolean,
   sessionId?: string,
-  root = ANNOUNCEMENT_STATE_ROOT,
-): void {
-  const receiptPath = announcementReceiptPath(key, root);
-  const receipt = readAnnouncementReceipt(receiptPath);
-  if (receipt?.claimId !== claimId) return;
-  if (sent) {
-    writeJsonAtomic(receiptPath, {
-      status: "sent",
-      claimId,
-      at: new Date().toISOString(),
-      sessionId,
-    });
-  } else {
-    rmSync(receiptPath, { force: true });
+): Promise<void> {
+  const db = announcementDb ?? managedFeltDb();
+  const id = announcementId(key);
+  const receipt = await db.collection<AnnouncementReceipt>(ANNOUNCEMENT_COLLECTION).get(id);
+  if (receipt?.claimId !== claimId || !Number.isSafeInteger(receipt.__version)) return;
+  try {
+    await db.transaction((tx) => {
+      const collection = tx.collection<AnnouncementReceipt>(ANNOUNCEMENT_COLLECTION);
+      if (sent) collection.set(id, {
+        id, status: "sent", claimId, at: new Date().toISOString(), sessionId,
+      }, { ifVersion: receipt.__version });
+      else collection.delete(id, { ifVersion: receipt.__version });
+    }, { transactionId: `opensession:shipped-change:settle:${id}:${claimId}:${sent}` });
+  } catch (error) {
+    const current = await db.collection<AnnouncementReceipt>(ANNOUNCEMENT_COLLECTION).get(id);
+    if (current?.claimId === claimId && (sent ? current.status !== "sent" : current)) throw error;
   }
 }
 
@@ -113,11 +138,16 @@ export function settleShippedChangeAnnouncement(
  * Drop a receipt so the same update can be shared again. Undo removes the
  * message from Slack, so the claim that stopped a second send is stale.
  */
-export function forgetShippedChangeAnnouncement(
+export async function forgetShippedChangeAnnouncement(
   key: string,
-  root = ANNOUNCEMENT_STATE_ROOT,
-): void {
-  rmSync(announcementReceiptPath(key, root), { force: true });
+): Promise<void> {
+  const db = announcementDb ?? managedFeltDb();
+  const id = announcementId(key);
+  const receipt = await db.collection<AnnouncementReceipt>(ANNOUNCEMENT_COLLECTION).get(id);
+  if (!receipt || !Number.isSafeInteger(receipt.__version)) return;
+  await db.transaction((tx) => {
+    tx.collection<AnnouncementReceipt>(ANNOUNCEMENT_COLLECTION).delete(id, { ifVersion: receipt.__version });
+  }, { transactionId: `opensession:shipped-change:forget:${id}:${receipt.__version}` });
 }
 
 export function validWalkthroughScreenshot(
@@ -142,7 +172,8 @@ export function validWalkthroughScreenshot(
 export function validFeaturedScreenshot(path: string): boolean {
 	try {
 		const candidate = realpathSync(path);
-		const scoped = candidate.startsWith("/tmp/") || candidate.startsWith(`${homeDir()}/`);
+		const tempRoot = realpathSync(tmpdir());
+		const scoped = candidate.startsWith(`${tempRoot}/`) || candidate.startsWith(`${homeDir()}/`);
 		if (!scoped) return false;
 		const dot = candidate.lastIndexOf(".");
 		if (dot < 0 || !SCREENSHOT_EXTS.has(candidate.slice(dot).toLowerCase())) return false;
@@ -268,7 +299,7 @@ export async function shareShippedVisualChange(opts: {
     comment,
     visual?.screenshots || [],
   );
-  const claimId = claimShippedChangeAnnouncement(announcementKey);
+  const claimId = await claimShippedChangeAnnouncement(announcementKey);
   if (!claimId) return { status: "already_shared" };
   let permalink: string | undefined;
   let ts: string | undefined;
@@ -285,14 +316,14 @@ export async function shareShippedVisualChange(opts: {
       ts = typeof posted.ts === "string" ? posted.ts : undefined;
     }
     permalink = ts ? await slackPermalink(channel, ts, opts.slackToken) : undefined;
-    settleShippedChangeAnnouncement(
+    await settleShippedChangeAnnouncement(
       announcementKey,
       claimId,
       true,
       opts.session.id,
     );
   } catch (error) {
-    settleShippedChangeAnnouncement(announcementKey, claimId, false);
+    await settleShippedChangeAnnouncement(announcementKey, claimId, false);
     throw error;
   }
   audit({

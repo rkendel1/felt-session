@@ -30,6 +30,7 @@ import { migrateLegacySettlementsToSnoozes } from "./src/server/snoozes";
 import { loadGithubDeliveries as initializeManagedGithubDeliveries } from "./src/agents/github/webhook-deliveries";
 import { initializeManagedGithubPendingDeploys } from "./src/agents/github/session-notify";
 import { initializeManagedGithubConflictIntents } from "./src/agents/github/pr-conflict";
+import { initializeManagedShippedChangeAnnouncements } from "./src/agents/github/shipped-change-notify";
 import { startLiveActivitySync } from "./src/server/live-activities";
 import { startRuntimeInvestigationHandoffConsumer } from "./src/server/runtime-investigation-handoffs";
 import { initializeManagedFeltDb } from "./src/server/managed-feltdb";
@@ -183,6 +184,7 @@ if (!g.__opensessionBooted) {
 	await initializeManagedGithubDeliveries(db);
 	await initializeManagedGithubPendingDeploys(db);
 	await initializeManagedGithubConflictIntents(db);
+	await initializeManagedShippedChangeAnnouncements(db);
 }
 
 // Listeners the server owns. Deliberately started HERE and not as module side
