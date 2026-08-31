@@ -1,17 +1,9 @@
 /** Web Push authorities backed exclusively by managed FeltDB. */
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, unlinkSync } from "node:fs";
 import type { StateFirstDB } from "@feltdb/core";
 import webpush from "web-push";
 import { configuredIntegration } from "./config";
 import { managedFeltDb } from "./managed-feltdb";
-import { stateDir } from "./paths";
-
-const PUSH_DIR = stateDir("push");
-const VAPID_PATH = `${PUSH_DIR}/vapid.json`;
-const SUBS_PATH = `${PUSH_DIR}/subscriptions.json`;
-const SENT_DEDUPE_PATH = `${PUSH_DIR}/sent-dedupe.json`;
-const MIGRATION = "push-json-to-managed-feltdb-v1";
 const VAPID_COLLECTION = "opensession_push_vapid";
 const SUBS_COLLECTION = "opensession_push_subscriptions";
 const DEDUPE_COLLECTION = "opensession_push_dedupe";
@@ -38,47 +30,8 @@ const sentDedupe = new Map<string, StoredDedupe>();
 const recordId = (prefix: string, value: string) =>
   `${prefix}_${createHash("sha256").update(value).digest("hex")}`;
 
-function readLegacy<T>(path: string, fallback: T): T {
-  try { return existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : fallback; }
-  catch { return fallback; }
-}
-
 export async function initializeManagedPush(db: StateFirstDB = authority ?? managedFeltDb()): Promise<void> {
   authority = db;
-  if (!await db.collection<{ id: string }>("opensession_migrations").get(MIGRATION)) {
-    const oldVapid = readLegacy<Partial<VapidKeys>>(VAPID_PATH, {});
-    if (oldVapid.publicKey && oldVapid.privateKey && !await db.collection(VAPID_COLLECTION).get("default")) await db.transaction((tx) => {
-      tx.collection<StoredVapid>(VAPID_COLLECTION).set("default", {
-        id: "default", publicKey: oldVapid.publicKey!, privateKey: oldVapid.privateKey!,
-      }, { requireAbsent: true });
-    }, { transactionId: "opensession:push:migrate:vapid" });
-
-    const oldSubs = readLegacy<{ subscriptions?: PushSubscriptionRecord[] }>(SUBS_PATH, {});
-    for (const subscription of oldSubs.subscriptions ?? []) {
-      if (!subscription.endpoint || !subscription.user || !subscription.keys?.p256dh || !subscription.keys?.auth) continue;
-      const id = recordId("push_subscription", subscription.endpoint);
-      await db.transaction((tx) => {
-        tx.collection<StoredSubscription>(SUBS_COLLECTION).set(id, { ...subscription, id, __version: 1 });
-      }, { transactionId: `opensession:push:migrate:subscription:${id}` });
-    }
-
-    const oldDedupe = readLegacy<Record<string, string>>(SENT_DEDUPE_PATH, {});
-    for (const [key, timestamp] of Object.entries(oldDedupe)) {
-      const sentAt = Date.parse(timestamp);
-      if (!Number.isFinite(sentAt)) continue;
-      const id = recordId("push_dedupe", key);
-      await db.transaction((tx) => {
-        tx.collection<StoredDedupe>(DEDUPE_COLLECTION).set(id, { id, key, sentAt, __version: 1 });
-      }, { transactionId: `opensession:push:migrate:dedupe:${id}` });
-    }
-    await db.transaction((tx) => {
-      tx.collection("opensession_migrations").set(MIGRATION, { id: MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
-    }, { transactionId: `opensession:migration:${MIGRATION}` });
-  }
-  // A crash after the migration receipt commits but before cleanup must not
-  // leave a second, stale authority behind on the next boot.
-  for (const path of [VAPID_PATH, SUBS_PATH, SENT_DEDUPE_PATH]) if (existsSync(path)) unlinkSync(path);
-
   let storedVapid = await db.collection<StoredVapid>(VAPID_COLLECTION).get("default");
   if (!storedVapid) {
     const generated = webpush.generateVAPIDKeys();
