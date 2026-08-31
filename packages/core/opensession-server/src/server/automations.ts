@@ -5,7 +5,7 @@
  */
 import { randomUUIDv7 } from "bun";
 import { OPENSESSION_SESSIONS_DIR , newSessionId} from "./paths";
-import { mkdirSync, readdirSync, readFileSync, unlinkSync, existsSync } from "fs";
+import { mkdirSync, readdirSync, readFileSync, unlinkSync, existsSync, rmSync } from "fs";
 import { join } from "path";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import {
@@ -80,6 +80,8 @@ import {
   type AutomationOutput,
 } from "./automation-outputs";
 import { automationIntentAlreadySettled } from "./automation-intent-recovery";
+import type { StateFirstDB } from "@feltdb/core";
+import { managedFeltDb } from "./managed-feltdb";
 
 const AUTOMATIONS_DIR = stateDir("automations");
 const SESSIONS_DIR = OPENSESSION_SESSIONS_DIR;
@@ -1031,7 +1033,7 @@ function settleRun(id: string, sessionId: string, patch: Pick<AutomationRun, "st
  * this hook stay as they are — this settles runs the sweep actually drove
  * to an end, it does not rewrite history.
  */
-export function settleResumedAutomationRun(sessionId: string, error: string | null): boolean {
+export async function settleResumedAutomationRun(sessionId: string, error: string | null): Promise<boolean> {
   for (const automation of listAutomations()) {
     const run = (automation.runs || []).find((r) => r.sessionId === sessionId);
     if (!run || run.status !== "running") continue;
@@ -1040,7 +1042,7 @@ export function settleResumedAutomationRun(sessionId: string, error: string | nu
       error: error || undefined,
       durationMs: Math.max(0, Date.now() - new Date(run.at).getTime()),
     });
-    const completedIntent = clearAutomationIntent(sessionId);
+    const completedIntent = await clearAutomationIntent(sessionId);
     if (completedIntent?.deleteAutomationAfterRun)
       void deleteAutomation(automation.id).catch((error) =>
         console.error(`[automations] Failed to delete ${automation.id}:`, error));
@@ -1121,75 +1123,106 @@ type PendingAutomationIntent = {
   deleteAutomationAfterRun?: boolean;
   terminalAt?: string;
   terminalError?: string;
+  __version?: number;
 };
 
 const automationIntentDir = join(OPENSESSION_SESSIONS_DIR, "automation-intents");
-const automationIntentPath = (sessionId: string) =>
-  join(automationIntentDir, `${sessionId.replace(/[^a-zA-Z0-9._-]/g, "_")}.json`);
+const AUTOMATION_INTENTS_COLLECTION = "opensession_automation_intents";
+const AUTOMATION_INTENTS_MIGRATION = "automation-intent-files-to-managed-feltdb-v1";
+let automationIntentsDb: StateFirstDB | undefined;
+const automationIntents = new Map<string, PendingAutomationIntent>();
 
-function persistAutomationIntent(intent: PendingAutomationIntent): void {
-  mkdirSync(automationIntentDir, { recursive: true, mode: 0o700 });
-  const path = automationIntentPath(intent.sessionId);
-  if (existsSync(path)) {
-    const existing = JSON.parse(readFileSync(path, "utf8")) as PendingAutomationIntent;
+export async function initializeManagedAutomationIntents(
+  db: StateFirstDB = automationIntentsDb ?? managedFeltDb(),
+): Promise<void> {
+  automationIntentsDb = db;
+  const migrations = db.collection<{ id: string }>("opensession_migrations");
+  if (!await migrations.get(AUTOMATION_INTENTS_MIGRATION)) {
+    const legacy: PendingAutomationIntent[] = [];
+    if (existsSync(automationIntentDir)) for (const entry of readdirSync(automationIntentDir)) {
+      if (entry.endsWith(".json")) legacy.push(JSON.parse(readFileSync(join(automationIntentDir, entry), "utf8")));
+    }
+    await db.transaction((tx) => {
+      for (const intent of legacy) tx.collection<PendingAutomationIntent>(AUTOMATION_INTENTS_COLLECTION)
+        .set(intent.sessionId, intent, { requireAbsent: true });
+      tx.collection("opensession_migrations").set(AUTOMATION_INTENTS_MIGRATION,
+        { id: AUTOMATION_INTENTS_MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
+    }, { transactionId: `opensession:migration:${AUTOMATION_INTENTS_MIGRATION}` });
+  }
+  if (existsSync(automationIntentDir)) rmSync(automationIntentDir, { recursive: true, force: true });
+  automationIntents.clear();
+  for (const intent of await db.collection<PendingAutomationIntent>(AUTOMATION_INTENTS_COLLECTION).all())
+    automationIntents.set(intent.sessionId, intent);
+}
+
+async function persistAutomationIntent(intent: PendingAutomationIntent): Promise<void> {
+  const existing = automationIntents.get(intent.sessionId);
+  if (existing) {
     const identity = ({
       acceptedAt: _acceptedAt,
       terminalAt: _terminalAt,
       terminalError: _terminalError,
+      __version: _version,
       ...value
     }: PendingAutomationIntent) => JSON.stringify(value);
     if (identity(existing) !== identity(intent))
       throw new Error(`Automation intent ${intent.sessionId} changed identity`);
     return;
   }
-  writeJsonAtomic(path, intent, true, 0o600);
+  const db = automationIntentsDb ?? managedFeltDb();
+  await db.transaction((tx) => {
+    tx.collection<PendingAutomationIntent>(AUTOMATION_INTENTS_COLLECTION)
+      .set(intent.sessionId, intent, { requireAbsent: true });
+  }, { transactionId: `opensession:automation-intent:${intent.sessionId}:create` });
+  const saved = await db.collection<PendingAutomationIntent>(AUTOMATION_INTENTS_COLLECTION).get(intent.sessionId);
+  if (!saved) throw new Error(`Automation intent ${intent.sessionId} disappeared after create`);
+  automationIntents.set(intent.sessionId, saved);
 }
 
-function recordAutomationIntentTerminal(
+async function recordAutomationIntentTerminal(
   sessionId: string,
   error?: string,
-): void {
-  const path = automationIntentPath(sessionId);
-  const intent = JSON.parse(readFileSync(path, "utf8")) as PendingAutomationIntent;
-  writeJsonAtomic(
-    path,
-    {
+): Promise<void> {
+  const intent = automationIntents.get(sessionId);
+  if (!intent) throw new Error(`Automation intent ${sessionId} is unavailable`);
+  const next = {
       ...intent,
       terminalAt: new Date().toISOString(),
       terminalError: error,
-    },
-    true,
-    0o600,
-  );
+  };
+  const db = automationIntentsDb ?? managedFeltDb();
+  await db.transaction((tx) => {
+    tx.collection<PendingAutomationIntent>(AUTOMATION_INTENTS_COLLECTION)
+      .set(sessionId, next, { ifVersion: intent.__version });
+  }, { transactionId: `opensession:automation-intent:${sessionId}:terminal` });
+  const saved = await db.collection<PendingAutomationIntent>(AUTOMATION_INTENTS_COLLECTION).get(sessionId);
+  if (!saved) throw new Error(`Automation intent ${sessionId} disappeared after terminal update`);
+  automationIntents.set(sessionId, saved);
 }
 
-function clearAutomationIntent(sessionId: string): PendingAutomationIntent | undefined {
-  const path = automationIntentPath(sessionId);
-  try {
-    const intent = JSON.parse(readFileSync(path, "utf8")) as PendingAutomationIntent;
-    unlinkSync(path);
-    return intent;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    return undefined;
-  }
+async function clearAutomationIntent(sessionId: string): Promise<PendingAutomationIntent | undefined> {
+  const intent = automationIntents.get(sessionId);
+  if (!intent) return undefined;
+  const db = automationIntentsDb ?? managedFeltDb();
+  await db.transaction((tx) => {
+    tx.collection<PendingAutomationIntent>(AUTOMATION_INTENTS_COLLECTION)
+      .delete(sessionId, { ifVersion: intent.__version });
+  }, { transactionId: `opensession:automation-intent:${sessionId}:clear` });
+  automationIntents.delete(sessionId);
+  return intent;
 }
 
 function hasAutomationIntent(sessionId: string): boolean {
-  return existsSync(automationIntentPath(sessionId));
+  return automationIntents.has(sessionId);
 }
 
-export function resumePendingAutomationRuns(
+export async function resumePendingAutomationRuns(
   onSessionCreated?: (sessionId: string) => void,
-): number {
-  if (isShuttingDown() || !existsSync(automationIntentDir)) return 0;
+): Promise<number> {
+  if (isShuttingDown()) return 0;
   let resumed = 0;
-  for (const entry of readdirSync(automationIntentDir)) {
-    if (!entry.endsWith(".json")) continue;
+  for (const intent of automationIntents.values()) {
     try {
-      const intent = JSON.parse(
-        readFileSync(join(automationIntentDir, entry), "utf8"),
-      ) as PendingAutomationIntent;
       if (
         intent.version !== 1 ||
         !intent.automationId ||
@@ -1199,7 +1232,7 @@ export function resumePendingAutomationRuns(
       const automation = getAutomation(intent.automationId);
       if (!automation) throw new Error(`automation ${intent.automationId} is unavailable`);
       if (automationIntentAlreadySettled(intent.sessionId, automation.runs || [])) {
-        const completedIntent = clearAutomationIntent(intent.sessionId);
+        const completedIntent = await clearAutomationIntent(intent.sessionId);
         if (completedIntent?.deleteAutomationAfterRun)
           void deleteAutomation(automation.id).catch((error) =>
             console.error(`[automations] Failed to delete ${automation.id}:`, error));
@@ -1212,7 +1245,7 @@ export function resumePendingAutomationRuns(
           error: intent.terminalError,
           durationMs: Math.max(0, Date.parse(intent.terminalAt) - Date.parse(intent.acceptedAt)),
         });
-        const completedIntent = clearAutomationIntent(intent.sessionId);
+        const completedIntent = await clearAutomationIntent(intent.sessionId);
         if (completedIntent?.deleteAutomationAfterRun)
           void deleteAutomation(automation.id).catch((error) =>
             console.error(`[automations] Failed to delete ${automation.id}:`, error));
@@ -1241,11 +1274,12 @@ export function resumePendingAutomationRuns(
         acceptedAt: intent.acceptedAt,
         deleteAutomationAfterRun: intent.deleteAutomationAfterRun,
       }).finally(() => {
-        if (!isShuttingDown()) resumePendingAutomationRuns(onSessionCreated);
+        if (!isShuttingDown()) void resumePendingAutomationRuns(onSessionCreated).catch((error) =>
+          console.error("[automations] Intent resume retry failed:", error));
       });
       resumed++;
     } catch (error) {
-      console.error(`[automations] Pending intent ${entry} could not resume:`, error);
+      console.error(`[automations] Pending intent ${intent.sessionId} could not resume:`, error);
     }
   }
   return resumed;
@@ -1284,7 +1318,7 @@ export async function runAutomation(
   }
   const bksId = options?.osSessionId || newSessionId();
   const acceptedAt = options?.acceptedAt || new Date().toISOString();
-  persistAutomationIntent({
+  await persistAutomationIntent({
     version: 1,
     automationId: automation.id,
     sessionId: bksId,
@@ -1715,13 +1749,13 @@ export async function runAutomation(
       await preparedInputs.commit();
     }
 
-    recordAutomationIntentTerminal(bksId, errorMsg || undefined);
+    await recordAutomationIntentTerminal(bksId, errorMsg || undefined);
     settleRun(automation.id, bksId, {
       status: errorMsg ? "error" : "ok",
       error: errorMsg || undefined,
       durationMs: Date.now() - startedAt.getTime(),
     });
-    const completedIntent = clearAutomationIntent(bksId);
+    const completedIntent = await clearAutomationIntent(bksId);
     if (completedIntent?.deleteAutomationAfterRun)
       await deleteAutomation(automation.id);
     console.log(
@@ -1863,7 +1897,7 @@ export function startScheduler(onSessionCreated?: (sessionId: string) => void): 
       // One-off runs (reminders / "do this again later"): fire once at/after the
       // target instant, then delete. We persist a "consumed" copy (runOnceAt
       // cleared, disabled) BEFORE firing so a long-running or crashed run can
-      // never double-fire on a later tick; the file is deleted once it settles.
+      // never double-fire on a later tick; the record is deleted once it settles.
       if (automation.runOnceAt) {
         if (Date.parse(automation.runOnceAt) <= now.getTime()) {
           saveAutomation({ ...automation, runOnceAt: undefined, enabled: false });

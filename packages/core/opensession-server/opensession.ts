@@ -12,6 +12,7 @@ import { initializeManagedAccountHealth, startAccountHealthMonitor } from "./src
 import { initializeManagedGithubLimits } from "./src/server/github-limit";
 import { initializeManagedAutomationInputs } from "./src/server/automation-inputs";
 import { initializeManagedAutomationOutputs } from "./src/server/automation-outputs";
+import { initializeManagedAutomationIntents } from "./src/server/automations";
 import { startAnalyticsPrewarm } from "./src/server/analytics";
 import { startDiskGc } from "./src/server/disk-gc";
 import { startWorktreeReaper } from "./src/server/worktree-reaper";
@@ -208,6 +209,7 @@ if (!g.__opensessionBooted) {
 	await initializeManagedGithubLimits(db);
 	await initializeManagedAutomationInputs(db);
 	await initializeManagedAutomationOutputs(db);
+	await initializeManagedAutomationIntents(db);
 	await initializeManagedWorkspaces(db);
 	await initializeManagedTodos(db);
 	await initializeManagedSlackSessions(db);
@@ -808,7 +810,7 @@ if (!g.__opensessionBooted) {
 	// Cron-scheduled automations + internal event bus (agents → automations)
 	const onAutomationSession = () => invalidateSessionsCache();
 	setEventSessionCallback(onAutomationSession);
-	const resumedAutomationIntents = resumePendingAutomationRuns(onAutomationSession);
+	const resumedAutomationIntents = await resumePendingAutomationRuns(onAutomationSession);
 	if (resumedAutomationIntents)
 		console.log(`[automations] Resumed ${resumedAutomationIntents} pre-launch intent(s)`);
 	startScheduler(onAutomationSession);
@@ -969,7 +971,7 @@ if (!g.__opensessionBooted) {
 					}
 					// The in-process settleRun died with the restart — close the
 					// automation ledger entry here or it stays "running" forever.
-					settleResumedAutomationRun(
+					await settleResumedAutomationRun(
 						bksSessionId,
 						failed
 							? terminalEvent.content ||
