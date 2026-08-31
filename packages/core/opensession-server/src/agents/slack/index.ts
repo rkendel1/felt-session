@@ -95,7 +95,6 @@ const SLACK_BOT_TOKEN = process.env.SLACK_BOT_TOKEN;
 const SLACK_SIGNING_SECRET = process.env.SLACK_SIGNING_SECRET || "";
 
 const slackEventInbox = new SlackEventInbox(
-  `${SESSION_DIR}/event-inbox.json`,
   {
     handleDirectMessage: handleMessageEvent,
     handleMention: handleMentionEvent,

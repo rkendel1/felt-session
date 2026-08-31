@@ -1,13 +1,10 @@
 /** Durable Slack event intake. Events commit to managed FeltDB before the
  * webhook acknowledges them, and completion remains as a dedupe receipt. */
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, unlinkSync } from "node:fs";
 import type { StateFirstDB } from "@feltdb/core";
 import { managedFeltDb } from "../../server/managed-feltdb";
 
 const COLLECTION = "opensession_slack_event_inbox";
-const MIGRATIONS = "opensession_migrations";
-const MIGRATION_ID = "slack-event-inbox-json-to-managed-feltdb-v1";
 
 export type SlackEventInboxKind = "direct_message" | "mention";
 export interface SlackEventInboxRecord {
@@ -56,7 +53,6 @@ export class SlackEventInbox {
   private retryTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(
-    private readonly legacyStorePath: string,
     private readonly deps: SlackEventInboxDependencies,
     private readonly options: SlackEventInboxOptions = {},
   ) {
@@ -125,20 +121,6 @@ export class SlackEventInbox {
   private ensureLoaded(): Promise<void> { return (this.loadPromise ??= this.load()); }
   private async load(): Promise<void> {
     const db = this.db();
-    if (!await db.collection<{ id: string }>(MIGRATIONS).get(MIGRATION_ID)) {
-      if (existsSync(this.legacyStorePath)) {
-        const parsed = JSON.parse(readFileSync(this.legacyStorePath, "utf8"));
-        if (!Array.isArray(parsed)) throw new Error("Failed to load Slack event inbox: expected array");
-        for (const value of parsed) await this.importLegacy(value);
-      }
-      await db.transaction((tx) => {
-        tx.collection(MIGRATIONS).set(MIGRATION_ID, {
-          id: MIGRATION_ID, completedAt: Date.now(),
-        }, { requireAbsent: true });
-      }, { transactionId: `opensession:migration:${MIGRATION_ID}` });
-      if (existsSync(this.legacyStorePath)) unlinkSync(this.legacyStorePath);
-    } else if (existsSync(this.legacyStorePath)) unlinkSync(this.legacyStorePath);
-
     if (db.runtime().runtime !== "remote") {
       for (const record of await db.collection<StoredRecord>(COLLECTION).all()) {
         if (record.status === "pending") this.rememberLoaded(record);
@@ -164,27 +146,6 @@ export class SlackEventInbox {
       throw new Error("Managed Slack event inbox contains an invalid record");
     this.records.set(record.eventId, record);
   }
-  private async importLegacy(value: unknown): Promise<void> {
-    const legacy = value as Partial<SlackEventInboxRecord>;
-    if (typeof legacy.id !== "string" ||
-      (legacy.kind !== "direct_message" && legacy.kind !== "mention") ||
-      !legacy.event || typeof legacy.receivedAt !== "string")
-      throw new Error("Failed to load Slack event inbox: invalid record");
-    const key = recordId(legacy.id);
-    const stored: StoredRecord = {
-      ...(legacy as SlackEventInboxRecord), id: key, eventId: legacy.id,
-      attempts: Number.isFinite(legacy.attempts) ? Number(legacy.attempts) : 0,
-      status: "pending", updatedAt: Date.now(),
-    };
-    try {
-      await this.db().transaction((tx) => {
-        tx.collection<StoredRecord>(COLLECTION).set(key, stored, { requireAbsent: true });
-      }, { transactionId: `opensession:slack-event:migrate:${key}` });
-    } catch (error) {
-      if (!await this.db().collection(COLLECTION).get(key)) throw error;
-    }
-  }
-
   private kick(): void {
     if (!this.started) return;
     void this.drain().catch((error) => {

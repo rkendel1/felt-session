@@ -33,7 +33,7 @@ async function records(db: StateFirstDB) {
 describe("SlackEventInbox", () => {
   test("persists a mention before processing starts", async () => {
     const state = setup();
-    const inbox = new SlackEventInbox("/missing", state.deps, { db: state.db });
+    const inbox = new SlackEventInbox(state.deps, { db: state.db });
     expect(await inbox.enqueue("mention", event())).toBe("enqueued");
     expect(state.handled).toEqual([]);
     expect(await records(state.db)).toMatchObject([{ status: "pending", attempts: 0 }]);
@@ -45,9 +45,9 @@ describe("SlackEventInbox", () => {
 
   test("replays an unfinished event in a new process", async () => {
     const state = setup();
-    const first = new SlackEventInbox("/missing", state.deps, { db: state.db });
+    const first = new SlackEventInbox(state.deps, { db: state.db });
     await first.enqueue("mention", event());
-    const replay = new SlackEventInbox("/missing", state.deps, { db: state.db });
+    const replay = new SlackEventInbox(state.deps, { db: state.db });
     await replay.start();
     expect(state.handled).toEqual(["mention:1787752607.643009"]);
     expect(replay.pendingCount()).toBe(0);
@@ -55,7 +55,7 @@ describe("SlackEventInbox", () => {
 
   test("keeps a failed event durable for a later retry", async () => {
     const state = setup({ handleMention: async () => { throw new Error("classifier unavailable"); } });
-    const first = new SlackEventInbox("/missing", state.deps, {
+    const first = new SlackEventInbox(state.deps, {
       db: state.db, retryDelayMs: 60_000,
     });
     await first.enqueue("mention", event());
@@ -65,7 +65,7 @@ describe("SlackEventInbox", () => {
       status: "pending", attempts: 1, lastError: "classifier unavailable",
     }]);
     const recovered: string[] = [];
-    const replay = new SlackEventInbox("/missing", {
+    const replay = new SlackEventInbox({
       ...state.deps,
       handleMention: async (value) => { recovered.push(value.ts); },
     }, { db: state.db });
@@ -76,7 +76,7 @@ describe("SlackEventInbox", () => {
 
   test("deduplicates pending and completed provider retries", async () => {
     const state = setup();
-    const inbox = new SlackEventInbox("/missing", state.deps, { db: state.db });
+    const inbox = new SlackEventInbox(state.deps, { db: state.db });
     expect(await inbox.enqueue("direct_message", event("1.1"))).toBe("enqueued");
     expect(await inbox.enqueue("direct_message", event("1.1"))).toBe("pending");
     await inbox.start();
@@ -85,10 +85,10 @@ describe("SlackEventInbox", () => {
 
   test("cleans up a stale pending record already marked processed", async () => {
     const state = setup();
-    const first = new SlackEventInbox("/missing", state.deps, { db: state.db });
+    const first = new SlackEventInbox(state.deps, { db: state.db });
     await first.enqueue("mention", event());
     state.processed.add("C0A77HH0XPT-1787752607.643009");
-    const replay = new SlackEventInbox("/missing", state.deps, { db: state.db });
+    const replay = new SlackEventInbox(state.deps, { db: state.db });
     await replay.start();
     expect(state.handled).toEqual([]);
     expect(await records(state.db)).toMatchObject([{ status: "completed" }]);
