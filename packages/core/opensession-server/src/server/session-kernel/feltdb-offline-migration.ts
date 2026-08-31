@@ -194,6 +194,22 @@ export function encodeKernelSessionMigration(
         record: value.record,
         updatedAt: Number(row.updated_at),
       };
+      else if (plan.table === "session_kernel_turn") value = {
+        schemaVersion: 1,
+        sessionId,
+        revision: Number(row.revision),
+        ...(row.cancel === null ? {} : { cancel: value.cancel }),
+        updatedAt: Number(row.updated_at),
+      };
+      else if (plan.table === "session_kernel_turn_projections") value = {
+        schemaVersion: 1,
+        sessionId,
+        projectionId: String(row.projection_id),
+        generation: Number(row.generation),
+        phase: String(row.phase),
+        ...(value.payload as Record<string, unknown>),
+        updatedAt: Number(row.updated_at),
+      };
       else if (plan.table === "session_kernel_timers") value = {
         schemaVersion: 1,
         recordId: id,
