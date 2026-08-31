@@ -283,8 +283,7 @@ type TranscriptSessionRef = Pick<UnifiedSession, "transcriptPath"> & {
   id?: string;
 };
 
-/** Full UI transcript, preferring the owned store and falling back to an
- * external engine transcript file while legacy imports finish. */
+/** Explicit legacy transcript reader used only by migration paths. */
 export function mergedSessionTranscript(
   session: TranscriptSessionRef,
 ): TranscriptEntry[] {
@@ -295,15 +294,10 @@ export async function mergedSessionTranscriptAsync(
   session: TranscriptSessionRef,
 ): Promise<TranscriptEntry[]> {
   if (session.id && !session.id.startsWith("plain-")) {
-    try {
-      const served = await v2StoreTranscript(session.id, session);
-      if (served) return served;
-    } catch (error) {
-      console.warn(
-        `[sessions] transcript store read failed for ${session.id}:`,
-        error instanceof Error ? error.message : error,
-      );
-    }
+    const served = await v2StoreTranscript(session.id, session);
+    if (served === null)
+      throw new Error(`Session ${session.id} has no managed FeltDB transcript import`);
+    return served;
   }
   return session.transcriptPath
     ? await parseTranscriptAsync(session.transcriptPath)
@@ -379,41 +373,13 @@ export async function v2TranscriptHasDrift(
   return !(info?.watermark != null && totalSize <= info.watermark);
 }
 
-/**
- * §8 store-serve decision: entries from the store when imported and
- * drift-free; null → caller falls back to legacy; on drift this re-imports
- * (idempotent upserts) and returns the legacy merge for this call directly.
- */
+/** Managed transcript read. A missing import is an explicit migration error. */
 async function v2StoreTranscript(
   sessionId: string,
-  session: TranscriptSessionRef
+  _session: TranscriptSessionRef
 ): Promise<TranscriptEntry[] | null> {
   if (await transcript.needsImport(sessionId)) return null;
-  if (!await v2TranscriptHasDrift(transcript, sessionId, session))
-    return v2ReadAll(sessionId);
-  // Drift (§8): re-import (upserts keep original seqs, making this safe to
-  // repeat) and serve legacy for THIS call. Watermark = candidate-set size
-  // measured BEFORE the legacy parse — lines appended during the parse then
-  // read as growth next time instead of being silently covered.
-  const totalSize = v2MirrorFiles(session).reduce((sum, f) => sum + f.size, 0);
-  const legacy = session.transcriptPath ? parseTranscript(session.transcriptPath) : [];
-  const importInfo = await transcript.getImportInfo(sessionId);
-  void importLegacyTranscript(
-    sessionId,
-    legacy,
-    importInfo?.src || "merged",
-    totalSize
-  ).then(() => {
-    // The full re-import restored every entry the store had missed. Release
-    // the failure marker only after actor completion.
-    clearTranscriptStoreDegraded(sessionId);
-  }).catch((error) => {
-    console.warn(
-      `[sessions] transcript v2 drift re-import failed for ${sessionId}:`,
-      error instanceof Error ? error.message : error
-    );
-  });
-  return legacy;
+  return v2ReadAll(sessionId);
 }
 
 /**
