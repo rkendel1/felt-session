@@ -1372,7 +1372,7 @@ async function removeSessionArtifacts(session: UnifiedSession): Promise<void> {
       break;
     }
   }
-  removeIndexedSession(session.id);
+  await removeIndexedSession(session.id);
   // Nobody's unsent draft should outlive the session it was typed into.
   await purgeDraftsForSessions([session.id, ...(session.aliasIds || [])]);
   // Neither should its scratch dir (session-scratch.ts). Best-effort and

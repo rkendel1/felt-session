@@ -83,7 +83,7 @@ export async function setArchived(
   reason: ArchiveReason = "manual",
 ): Promise<void> {
   await registry.set(id, archived ? { at: new Date().toISOString(), reason } : undefined);
-  setIndexedSessionArchived(id, archived, archived ? reason : undefined);
+  await setIndexedSessionArchived(id, archived, archived ? reason : undefined);
   // Archived work shouldn't stay pinned (for anyone) — it would resurface in
   // the Pinned band on unarchive. Callers that know more keys (alias ids, the
   // workspace pin) drop those on top of this.
@@ -110,7 +110,7 @@ export async function archiveOlderThan(sessions: UnifiedSession[], days: number)
 
   if (archived > 0) {
     for (const session of justArchived)
-      setIndexedSessionArchived(session.id, true, "idle");
+      await setIndexedSessionArchived(session.id, true, "idle");
     // Registry is written, so isArchivedId now reflects this batch — drop the
     // stale session/alias pins and any workspace pin whose last session just went.
     await unpinArchivedSessions(justArchived, sessions);

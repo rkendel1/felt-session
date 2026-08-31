@@ -9,11 +9,13 @@
  */
 
 import { Database } from "bun:sqlite";
-import { chmodSync, existsSync, mkdirSync } from "fs";
+import type { StateFirstDB } from "@feltdb/core";
+import { chmodSync, existsSync, mkdirSync, unlinkSync } from "fs";
 import { dirname } from "path";
 import { statePath } from "./paths";
 import { shareWorkspacePrRefs } from "./session-pr-target";
 import type { UnifiedSession } from "./types";
+import { ManagedSessionListStore } from "./managed-session-list-store";
 
 export type SessionListSlice = "include" | "exclude" | "only";
 
@@ -217,6 +219,12 @@ export class SessionListStore {
 		return Number(row?.n || 0);
 	}
 
+	migrationSnapshot(): { sessions: UnifiedSession[]; coverage: SessionListSlice[] } {
+		const sessions = decodeRows(this.db.query("SELECT payload FROM session_list").all() as StoredRow[]);
+		const coverage = (["include", "exclude", "only"] as SessionListSlice[]).filter((slice) => this.hasCoverage(slice));
+		return { sessions, coverage };
+	}
+
 	list(slice: SessionListSlice = "include"): UnifiedSession[] {
 		const where =
 			slice === "include" ? "" : slice === "only" ? "WHERE archived = 1" : "WHERE archived = 0";
@@ -313,19 +321,42 @@ export class SessionListStore {
 }
 
 const g = globalThis as typeof globalThis & {
-	__osSessionListStore?: SessionListStore;
+	__osSessionListStore?: SessionListStore | ManagedSessionListStore;
 };
 
-export function sessionListStore(): SessionListStore {
-	return (g.__osSessionListStore ??= new SessionListStore(
-		statePath(".opensession-session-list.db"),
-	));
+export function sessionListStore(): SessionListStore | ManagedSessionListStore {
+	if (!g.__osSessionListStore) throw new Error("Managed session list has not been initialized");
+	return g.__osSessionListStore;
+}
+
+const LIST_PATH = statePath(".opensession-session-list.db");
+const LIST_MIGRATION = "session-list-sqlite-to-managed-feltdb-v1";
+
+export async function initializeManagedSessionList(db: StateFirstDB): Promise<void> {
+	const store = new ManagedSessionListStore(db);
+	await store.initialize();
+	if (!await db.collection<{ id: string }>("opensession_migrations").get(LIST_MIGRATION)) {
+		if (existsSync(LIST_PATH)) {
+			const legacy = new SessionListStore(LIST_PATH);
+			try {
+				const snapshot = legacy.migrationSnapshot();
+				await store.upsertMany(snapshot.sessions);
+				for (const slice of snapshot.coverage) await store.markCovered(slice);
+			} finally { legacy.close(); }
+		}
+		await db.transaction((tx) => {
+			tx.collection("opensession_migrations").set(LIST_MIGRATION,
+				{ id: LIST_MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
+		}, { transactionId: `opensession:migration:${LIST_MIGRATION}` });
+	}
+	for (const path of [LIST_PATH, `${LIST_PATH}-wal`, `${LIST_PATH}-shm`]) if (existsSync(path)) unlinkSync(path);
+	g.__osSessionListStore = store;
 }
 
 /** Swap the process-wide store without opening the default state DB. */
 export function __setSessionListStoreForTest(
-	store: SessionListStore | undefined,
-): SessionListStore | undefined {
+	store: SessionListStore | ManagedSessionListStore | undefined,
+): SessionListStore | ManagedSessionListStore | undefined {
 	const previous = g.__osSessionListStore;
 	if (store) g.__osSessionListStore = store;
 	else delete g.__osSessionListStore;
@@ -363,31 +394,31 @@ export function indexedActiveWorkspaceIds(): string[] | null {
 	return store.hasCoverage("exclude") ? store.activeWorkspaceIds() : null;
 }
 
-export function upsertIndexedSession(session: UnifiedSession): void {
-	sessionListStore().upsert(session);
+export async function upsertIndexedSession(session: UnifiedSession): Promise<void> {
+	await sessionListStore().upsert(session);
 }
 
-export function upsertIndexedSessions(
+export async function upsertIndexedSessions(
 	sessions: UnifiedSession[],
 	slice?: SessionListSlice,
-): void {
+): Promise<void> {
 	const store = sessionListStore();
-	if (sessions.length) store.upsertMany(sessions);
-	if (slice) store.markCovered(slice);
+	if (sessions.length) await store.upsertMany(sessions);
+	if (slice) await store.markCovered(slice);
 }
 
-export function rebuildSessionListIndex(sessions: UnifiedSession[]): void {
-	sessionListStore().replaceAll(sessions);
+export async function rebuildSessionListIndex(sessions: UnifiedSession[]): Promise<void> {
+	await sessionListStore().replaceAll(sessions);
 }
 
-export function removeIndexedSession(id: string): void {
-	sessionListStore().remove(id);
+export async function removeIndexedSession(id: string): Promise<void> {
+	await sessionListStore().remove(id);
 }
 
-export function setIndexedSessionArchived(
+export async function setIndexedSessionArchived(
 	id: string,
 	archived: boolean,
 	reason?: string,
-): void {
-	sessionListStore().setArchived(id, archived, reason);
+): Promise<void> {
+	await sessionListStore().setArchived(id, archived, reason);
 }

@@ -50,7 +50,14 @@ export class ManagedSessionSearchStore {
 	}
 
 	async upsertMany(records: SearchRecord[]): Promise<void> {
-		for (const record of records) await this.upsert(record);
+		for (let index = 0; index < records.length; index += 100) {
+			const chunk = records.slice(index, index + 100);
+			await this.db.transaction((tx) => {
+				const collection = tx.collection<SearchRecord>(COLLECTION);
+				for (const record of chunk) collection.set(documentId(record.id), record);
+			}, { transactionId: `opensession:session-search:upsert-many:${crypto.randomUUID()}` });
+			for (const record of chunk) this.records.set(record.id, structuredClone(record));
+		}
 	}
 
 	async remove(id: string): Promise<void> {

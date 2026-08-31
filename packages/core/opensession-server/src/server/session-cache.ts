@@ -270,8 +270,8 @@ export async function getCachedSessionsAsync(
 		const generation = ++sessionsCacheGenerations[slice];
 		const startingCache = sessionsCaches[slice];
 		sessionsRefreshes[slice] = getAllSessionsAsync(slice)
-			.then((data) => {
-				upsertIndexedSessions(data, slice);
+			.then(async (data) => {
+				await upsertIndexedSessions(data, slice);
 				const current = sessionsCaches[slice];
 				if (
 					sessionsCacheGenerations[slice] === generation ||
@@ -592,7 +592,7 @@ export function updateSessionFile(
 		const indexed = readNativeSessionListRow(sessionId);
 		if (indexed) {
 			enrichSessionRuntime([indexed]);
-			upsertIndexedSession(indexed);
+			await upsertIndexedSession(indexed);
 		}
 		invalidateSessionsCache();
       physicalFinished = true;
