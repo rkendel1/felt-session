@@ -1,4 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
+import { createFeltDB } from "@feltdb/core";
 import { createHmac } from "crypto";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
@@ -32,8 +33,8 @@ if (!isIsolatedChild) {
   process.env.ENABLE_SLACK_AGENT = "false";
 
   const { handleGithubWebhook } = await import("./webhook-intake");
-  const { githubDeliveriesStore, loadGithubDeliveries } = await import("./webhook-deliveries");
-  const { writeJsonAtomic } = await import("../../server/shared/atomic-write");
+  const { loadGithubDeliveries, markGithubDeliveryProcessed } = await import("./webhook-deliveries");
+  await loadGithubDeliveries(createFeltDB({ namespace: crypto.randomUUID(), memory: true }));
 
   afterAll(() => {
     if (previousStateDir === undefined) delete process.env.OPENSESSION_STATE_DIR;
@@ -75,12 +76,7 @@ if (!isIsolatedChild) {
     test("returns a duplicate response for a persisted signed delivery without dispatching", async () => {
       const body = JSON.stringify({ action: "opened" });
       const deliveryId = "persisted-duplicate";
-      writeJsonAtomic(
-        githubDeliveriesStore(),
-        [[deliveryId, Date.now() + 60_000]],
-        false,
-      );
-      loadGithubDeliveries(true);
+      await markGithubDeliveryProcessed(deliveryId);
 
       const response = await handleGithubWebhook(new Request("http://localhost/github/webhook", {
         method: "POST",

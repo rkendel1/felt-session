@@ -1,27 +1,24 @@
-/**
- * Replay protection for GitHub webhook deliveries.
- *
- * Keep the historical Slack-store path so upgrading a GitHub-only deployment
- * retains delivery IDs that were accepted before webhook ownership moved here.
- */
-import { existsSync, readFileSync } from "fs";
+import { createHash } from "node:crypto";
+import { existsSync, readFileSync, unlinkSync } from "node:fs";
+import type { StateFirstDB } from "@feltdb/core";
+import { managedFeltDb } from "../../server/managed-feltdb";
 import { statePath } from "../../server/paths";
-import { writeJsonAtomic } from "../../server/shared/atomic-write";
 
 export function githubDeliveriesStore(): string {
   return statePath(".slack-sessions/github-deliveries.json");
 }
 const GITHUB_DELIVERY_TTL_MS = 24 * 60 * 60 * 1000;
 const MAX_GITHUB_DELIVERIES = 500;
-const githubDeliveryExpiry: Map<string, number> = ((globalThis as any).__githubDeliveryExpiry ??=
-  new Map<string, number>());
-let githubDeliveriesLoaded = false;
+const COLLECTION = "opensession_github_deliveries";
+const MIGRATION = "github-deliveries-json-to-managed-feltdb-v1";
+type DeliveryRecord = { id: string; deliveryId: string; expiresAt: number; acceptedAt: number };
+const githubDeliveryExpiry: Map<string, number> = ((globalThis as any).__githubDeliveryExpiry ??= new Map());
+let deliveryDb: StateFirstDB | undefined;
+const recordId = (id: string) => `github_delivery_${createHash("sha256").update(id).digest("hex")}`;
 
 function pruneGithubDeliveries(now = Date.now()): void {
-  for (const [id, expiresAt] of githubDeliveryExpiry) {
+  for (const [id, expiresAt] of githubDeliveryExpiry)
     if (expiresAt <= now) githubDeliveryExpiry.delete(id);
-  }
-  // Map iteration is insertion ordered, so evict the oldest delivery first.
   while (githubDeliveryExpiry.size > MAX_GITHUB_DELIVERIES) {
     const oldest = githubDeliveryExpiry.keys().next().value;
     if (oldest === undefined) break;
@@ -29,68 +26,81 @@ function pruneGithubDeliveries(now = Date.now()): void {
   }
 }
 
-function persistGithubDeliveries(): void {
-  try {
-    writeJsonAtomic(githubDeliveriesStore(), [...githubDeliveryExpiry], false);
-  } catch (e) {
-    console.error("[github] Failed to persist webhook deliveries:", e);
-  }
-}
-
-/**
- * Restore replay protection once per module lifetime. Checks and writes call
- * this lazily so a webhook accepted before agent startup cannot bypass replay
- * protection. A hot reload safely rehydrates from the atomically persisted file.
- */
-export function loadGithubDeliveries(force = false): void {
-  if (githubDeliveriesLoaded && !force) return;
-  githubDeliveriesLoaded = true;
-  githubDeliveryExpiry.clear();
-  try {
-    const store = githubDeliveriesStore();
-    if (existsSync(store)) {
-      const entries = JSON.parse(readFileSync(store, "utf-8")) as [string, number][];
-      const now = Date.now();
-      for (const [id, expiresAt] of entries) {
-        if (typeof id === "string" && Number.isFinite(expiresAt) && expiresAt > now) {
-          githubDeliveryExpiry.set(id, expiresAt);
-        }
-      }
-      pruneGithubDeliveries(now);
-      persistGithubDeliveries();
+export async function loadGithubDeliveries(
+  db: StateFirstDB = deliveryDb ?? managedFeltDb(),
+): Promise<void> {
+  deliveryDb = db;
+  const migrations = db.collection<{ id: string }>("opensession_migrations");
+  if (!await migrations.get(MIGRATION)) {
+    let entries: [string, number][] = [];
+    try {
+      if (existsSync(githubDeliveriesStore())) entries = JSON.parse(readFileSync(githubDeliveriesStore(), "utf8"));
+    } catch {}
+    for (const [deliveryId, expiresAt] of entries) {
+      if (typeof deliveryId !== "string" || !Number.isFinite(expiresAt)) continue;
+      const id = recordId(deliveryId);
+      await db.transaction((tx) => {
+        tx.collection<DeliveryRecord>(COLLECTION).set(id, {
+          id, deliveryId, expiresAt, acceptedAt: expiresAt - GITHUB_DELIVERY_TTL_MS,
+        });
+      }, { transactionId: `opensession:github-delivery:migrate:${id}` });
     }
-  } catch (e) {
-    console.error("[github] Failed to load webhook deliveries:", e);
+    await db.transaction((tx) => {
+      tx.collection("opensession_migrations").set(MIGRATION, { id: MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
+    }, { transactionId: `opensession:migration:${MIGRATION}` });
+    if (existsSync(githubDeliveriesStore())) unlinkSync(githubDeliveriesStore());
   }
+  const now = Date.now();
+  const loaded = db.runtime().runtime === "remote" ? await queryDeliveries(db, now) :
+    (await db.collection<DeliveryRecord>(COLLECTION).all()).filter((record) => record.expiresAt > now);
+  githubDeliveryExpiry.clear();
+  for (const record of loaded.sort((a, b) => a.acceptedAt - b.acceptedAt))
+    githubDeliveryExpiry.set(record.deliveryId, record.expiresAt);
+  pruneGithubDeliveries(now);
 }
 
-/** True if this signed GitHub delivery was already accepted within its TTL. */
+async function queryDeliveries(db: StateFirstDB, now: number): Promise<DeliveryRecord[]> {
+  const loaded: DeliveryRecord[] = [];
+  let cursor: string | undefined;
+  do {
+    const page = await db.query<DeliveryRecord>({
+      collection: COLLECTION,
+      where: [{ field: "expiresAt", gt: now }],
+      orderBy: [{ field: "expiresAt", direction: "asc" }],
+      limit: 500,
+      ...(cursor ? { cursor } : {}),
+    });
+    loaded.push(...page.records);
+    cursor = page.exhausted ? undefined : page.nextCursor;
+    if (!page.exhausted && !cursor) throw new Error("FeltDB GitHub delivery cursor is missing");
+  } while (cursor);
+  return loaded;
+}
+
 export function isGithubDeliveryProcessed(id: string): boolean {
-  loadGithubDeliveries();
   const expiresAt = githubDeliveryExpiry.get(id);
   if (expiresAt === undefined) return false;
   if (expiresAt <= Date.now()) {
     githubDeliveryExpiry.delete(id);
-    persistGithubDeliveries();
     return false;
   }
   return true;
 }
 
-/** Record a signed GitHub delivery before dispatching its side effects. */
-export function markGithubDeliveryProcessed(id: string): void {
-  loadGithubDeliveries();
-  githubDeliveryExpiry.set(id, Date.now() + GITHUB_DELIVERY_TTL_MS);
+export async function markGithubDeliveryProcessed(id: string): Promise<void> {
+  const db = deliveryDb ?? managedFeltDb();
+  const acceptedAt = Date.now();
+  const expiresAt = acceptedAt + GITHUB_DELIVERY_TTL_MS;
+  const key = recordId(id);
+  await db.transaction((tx) => {
+    tx.collection<DeliveryRecord>(COLLECTION).set(key, {
+      id: key, deliveryId: id, expiresAt, acceptedAt,
+    });
+  }, { transactionId: `opensession:github-delivery:${key}` });
+  githubDeliveryExpiry.set(id, expiresAt);
   pruneGithubDeliveries();
-  persistGithubDeliveries();
 }
 
 let githubWebhooksReceived = 0;
-
-export function incrementGithubWebhooks(): void {
-  githubWebhooksReceived++;
-}
-
-export function githubWebhookCount(): number {
-  return githubWebhooksReceived;
-}
+export function incrementGithubWebhooks(): void { githubWebhooksReceived++; }
+export function githubWebhookCount(): number { return githubWebhooksReceived; }

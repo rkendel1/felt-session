@@ -348,12 +348,9 @@ export class GithubAgent implements AgentModule {
   }
 
   async startup(): Promise<void> {
-    // Eagerly restore webhook replay protection. The webhook server binds
-    // earlier in boot, so the delivery read/write paths also restore the store
-    // lazily on first touch; this keeps it warm when no delivery arrives. A
-    // GitHub-only install has no Slack startup to warm it, so this agent loads
-    // the store itself.
-    loadGithubDeliveries();
+    // Core boot restores replay protection before binding the webhook server.
+    // Reload here as well for standalone agent hosts.
+    await loadGithubDeliveries();
     if (!githubConfigured()) {
       console.warn("[github] GitHub App identity is incomplete — review/fix/simplify can't post; agent idle");
     } else if (!(await githubToken())) {
@@ -362,7 +359,6 @@ export class GithubAgent implements AgentModule {
     if (!GITHUB_WEBHOOK_SECRET) {
       console.warn("[github] GITHUB_WEBHOOK_SECRET unset — PR webhooks won't be verified");
     }
-    loadGithubDeliveries();
     if (this.onSessionInvalidate) setGithubSessionInvalidate(this.onSessionInvalidate);
     ensureReviewAutomation();
     ensureDocsSyncAutomation();

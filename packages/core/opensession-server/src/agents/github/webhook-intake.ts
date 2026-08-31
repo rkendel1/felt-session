@@ -56,7 +56,7 @@ export async function handleGithubWebhook(req: Request): Promise<Response> {
       console.log(`[github] Duplicate GitHub delivery ${deliveryId} - skipping`);
       return Response.json({ ok: true, duplicate: true });
     }
-    markGithubDeliveryProcessed(deliveryId);
+    await markGithubDeliveryProcessed(deliveryId);
   }
 
   incrementGithubWebhooks();
