@@ -1,10 +1,12 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { createFeltDB } from "@feltdb/core";
 import { mkdtempSync, rmSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import { parseJsonlLines } from "./jsonl-parser";
 import {
   __setEngineSessionMapPathForTest,
+  initializeManagedEngineSessionOwners,
   recordEngineSessionOwner,
   sessionForEngineId,
   transcriptLineAssistantText,
@@ -25,10 +27,11 @@ afterEach(() => {
 });
 
 describe("transcript persistence", () => {
-  test("persists engine-session ownership", () => {
+  test("persists engine-session ownership", async () => {
     dir = mkdtempSync(join(tmpdir(), "engine-session-map-"));
     previous = __setEngineSessionMapPathForTest(join(dir, "map.json"));
-    recordEngineSessionOwner("engine-1", "session-1");
+    await initializeManagedEngineSessionOwners(createFeltDB({ namespace: crypto.randomUUID(), memory: true }));
+    await recordEngineSessionOwner("engine-1", "session-1");
     expect(sessionForEngineId("engine-1")).toBe("session-1");
   });
 

@@ -171,7 +171,7 @@ export function makeFakeEngine(
     // event: every later store write resolves the owning session through it.
     const unifiedId = bks || opts.transcriptSessionId;
     if (options.persistTranscript && unifiedId)
-      recordEngineSessionOwner(engineSessionId, unifiedId);
+      await recordEngineSessionOwner(engineSessionId, unifiedId);
     const runKey = bks ? opts.startToken || `fake-${bks}` : null;
     if (runKey) {
       await journalSet({

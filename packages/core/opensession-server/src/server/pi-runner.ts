@@ -2204,7 +2204,7 @@ async function* runPiAttempt(
 
     // Map pi→unified BEFORE any engine-keyed append (the W1 import-first gate
     // resolves through this map; unmapped appends are dropped + degraded).
-    if (unifiedSessionId) recordEngineSessionOwner(piSessionId, unifiedSessionId);
+    if (unifiedSessionId) await recordEngineSessionOwner(piSessionId, unifiedSessionId);
 
     // Journal upgrade: the record now carries the engine id (still no
     // serverKey — boot must take the continuation re-prompt path).

@@ -45,7 +45,7 @@ const g = globalThis as { __osDemoState?: DemoState };
 function offerDemoAsk(state: DemoState): void {
   const sessionId = DEMO_ASK_SESSION_ID;
   const questions = demoAskQuestions() as AskQuestionInput[];
-  recordEngineSessionOwner(DEMO_ASK_ENGINE_SESSION_ID, sessionId);
+  void recordEngineSessionOwner(DEMO_ASK_ENGINE_SESSION_ID, sessionId);
   offerAskCard(sessionId, questions, async (answers) => {
     try {
       if (answers) {

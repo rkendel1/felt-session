@@ -63,7 +63,7 @@ export async function startDemoReplayer(): Promise<void> {
 
   // Fresh session: skip the legacy-import gate up front so the first append
   // never tries to merge nonexistent history.
-  recordEngineSessionOwner(ocId, sessionId);
+  await recordEngineSessionOwner(ocId, sessionId);
   if (await transcript.needsImport(sessionId)) {
     await importLegacyTranscript(sessionId, [], "live-only", null);
   }

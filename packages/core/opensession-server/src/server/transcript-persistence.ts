@@ -1,7 +1,8 @@
 /** Transcript entry builders and the single-writer owned-store bridge. */
-import { existsSync, readFileSync } from "fs";
+import { existsSync, readFileSync, unlinkSync } from "node:fs";
+import type { StateFirstDB } from "@feltdb/core";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
-import { writeJsonAtomic } from "./shared/atomic-write";
+import { managedFeltDb } from "./managed-feltdb";
 import type { TranscriptEntry } from "./types";
 import type { AnsweredAskData } from "@tellahq/opensession-protocol/notices";
 import type { ImageInput } from "./run-events";
@@ -19,6 +20,10 @@ interface OwnerMapState {
   warned: Set<string>;
 }
 
+const OWNER_COLLECTION = "opensession_engine_session_owners";
+const OWNER_MIGRATION = "engine-session-map-json-to-managed-feltdb-v1";
+let ownerDb: StateFirstDB | undefined;
+
 const ownerState: OwnerMapState = ((globalThis as Record<string, unknown> & {
   __osEngineSessionOwners?: OwnerMapState;
 }).__osEngineSessionOwners ??= {
@@ -28,23 +33,30 @@ const ownerState: OwnerMapState = ((globalThis as Record<string, unknown> & {
 });
 
 function ownerMap(): Map<string, string> {
-  if (ownerState.loaded) return ownerState.map;
-  ownerState.loaded = true;
-  try {
-    if (existsSync(ENGINE_SESSION_MAP_PATH)) {
-      const parsed = JSON.parse(readFileSync(ENGINE_SESSION_MAP_PATH, "utf8"));
-      if (parsed && typeof parsed === "object") {
-        for (const [engineId, sessionId] of Object.entries(parsed)) {
-          if (typeof sessionId === "string" && sessionId) {
-            ownerState.map.set(engineId, sessionId);
-          }
-        }
-      }
-    }
-  } catch (error) {
-    console.warn("[transcript] engine-session map read failed:", error);
-  }
   return ownerState.map;
+}
+
+export async function initializeManagedEngineSessionOwners(db: StateFirstDB = ownerDb ?? managedFeltDb()): Promise<void> {
+  ownerDb = db;
+  if (!await db.collection<{ id: string }>("opensession_migrations").get(OWNER_MIGRATION)) {
+    let legacy: Record<string, unknown> = {};
+    try { if (existsSync(ENGINE_SESSION_MAP_PATH)) legacy = JSON.parse(readFileSync(ENGINE_SESSION_MAP_PATH, "utf8")); } catch {}
+    for (const [engineId, sessionId] of Object.entries(legacy)) {
+      if (typeof sessionId !== "string" || !sessionId) continue;
+      await db.transaction((tx) => {
+        tx.collection(OWNER_COLLECTION).set(engineId, { engineId, sessionId });
+      }, { transactionId: `opensession:engine-owner:migrate:${engineId}` });
+    }
+    await db.transaction((tx) => {
+      tx.collection("opensession_migrations").set(OWNER_MIGRATION,
+        { id: OWNER_MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
+    }, { transactionId: `opensession:migration:${OWNER_MIGRATION}` });
+  }
+  if (existsSync(ENGINE_SESSION_MAP_PATH)) unlinkSync(ENGINE_SESSION_MAP_PATH);
+  ownerState.map.clear();
+  for (const record of await db.collection<{ engineId: string; sessionId: string }>(OWNER_COLLECTION).all())
+    ownerState.map.set(record.engineId, record.sessionId);
+  ownerState.loaded = true;
 }
 
 export function __setEngineSessionMapPathForTest(path: string): string {
@@ -58,10 +70,10 @@ export function __setEngineSessionMapPathForTest(path: string): string {
 
 const OWNER_MAP_MAX_ENTRIES = 10_000;
 
-export function recordEngineSessionOwner(
+export async function recordEngineSessionOwner(
   engineSessionId: string,
   sessionId: string,
-): void {
+): Promise<void> {
   if (!engineSessionId || !sessionId) return;
   try {
     const map = ownerMap();
@@ -72,7 +84,10 @@ export function recordEngineSessionOwner(
       if (!oldest || oldest === engineSessionId) break;
       map.delete(oldest);
     }
-    writeJsonAtomic(ENGINE_SESSION_MAP_PATH, Object.fromEntries(map));
+    const db = ownerDb ?? managedFeltDb();
+    await db.transaction((tx) => {
+      tx.collection(OWNER_COLLECTION).set(engineSessionId, { engineId: engineSessionId, sessionId });
+    }, { transactionId: `opensession:engine-owner:put:${engineSessionId}:${crypto.randomUUID()}` });
   } catch (error) {
     console.warn("[transcript] engine-session map write failed:", error);
   }
@@ -427,7 +442,7 @@ export async function applyForwardedTranscriptStrict(
   if (!sessionId || !lines.length)
     throw new Error("Invalid forwarded transcript projection");
   if (engineSessionId && engineSessionId !== sessionId)
-    recordEngineSessionOwner(engineSessionId, sessionId);
+    await recordEngineSessionOwner(engineSessionId, sessionId);
   const entries = parseJsonlLines(lines.map((line) => JSON.stringify(line)));
   if (entries.length) await appendTranscriptEvents(sessionId, entries);
 }
@@ -444,7 +459,7 @@ export async function applyForwardedTranscript(
       if (entries.length) await appendTranscriptEvents(sessionId, entries);
       return;
     }
-    recordEngineSessionOwner(engineSessionId, sessionId);
+    await recordEngineSessionOwner(engineSessionId, sessionId);
     await appendTranscriptEntries(engineSessionId, lines);
   } catch (error) {
     warnFailureOnce(sessionId, `[transcript] forwarded append failed for ${sessionId}`, error);

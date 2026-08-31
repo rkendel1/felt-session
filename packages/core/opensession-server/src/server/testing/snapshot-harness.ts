@@ -269,7 +269,7 @@ export async function loadSnapshotHarness(): Promise<SnapshotHarness> {
         "merged",
         null,
       );
-      transcriptPersistence.recordEngineSessionOwner(engineSessionId, owner.id);
+      await transcriptPersistence.recordEngineSessionOwner(engineSessionId, owner.id);
       return transcriptStore.transcriptStore().dbPath;
     },
     async withMemory(scopes, fn) {
