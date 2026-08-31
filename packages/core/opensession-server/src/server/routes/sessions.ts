@@ -10,7 +10,7 @@ import {
 	executeArchiveOverrideProjection,
 	executeSessionProjection,
 } from "../session-projection-executor";
-import { transcriptSearchWorkerArgv } from "../../runner-host/exe";
+import { searchManagedTranscripts } from "../managed-transcript-search";
 import { requestUser, type RouteContext } from "./context";
 import {
 	cancelAgentRunAndWait,
@@ -694,89 +694,6 @@ export function archivedIndexRow(
  * when nothing matches, which we treat as "no hits", not an error. Chunked so a
  * very long file list can't overflow the argv limit.
  */
-type StoredTranscriptSearchExhaustion =
-	| "sessions"
-	| "rows"
-	| "time"
-	| "matches"
-	| "error"
-	| null;
-
-interface StoredTranscriptSearchResult {
-	matches: Array<{ id: string; snippet: string }>;
-	searchedSessions: number;
-	candidateRows: number;
-	exhausted: StoredTranscriptSearchExhaustion;
-}
-
-/** Global search uses bounded read-only handles in a child process. It never
- * queues synchronous SQLite scans through authoritative actor mailboxes. */
-async function searchStoredTranscripts(
-	query: string,
-	sessionIds: string[],
-	signal?: AbortSignal,
-): Promise<StoredTranscriptSearchResult> {
-	if (sessionIds.length === 0)
-		return { matches: [], searchedSessions: 0, candidateRows: 0, exhausted: null };
-	const proc = Bun.spawn(
-		transcriptSearchWorkerArgv(
-			process.execPath,
-			`${import.meta.dir}/../transcript-search-worker.ts`,
-		),
-		{ stdin: "pipe", stdout: "pipe", stderr: "pipe", timeout: 6_000 },
-	);
-	const abort = () => proc.kill();
-	if (signal?.aborted) abort();
-	signal?.addEventListener("abort", abort, { once: true });
-	proc.stdin.write(JSON.stringify({
-		query,
-		sessionIds,
-		maxMatches: 50,
-		maxSessions: 250,
-		maxRows: 6_000,
-		maxMs: 5_000,
-	}));
-	proc.stdin.end();
-	try {
-		const [output, error, code] = await Promise.all([
-			new Response(proc.stdout).text(),
-			new Response(proc.stderr).text(),
-			proc.exited,
-		]);
-		if (code !== 0 || signal?.aborted) {
-			if (!signal?.aborted)
-				console.warn(`[transcript-search] worker failed: ${error.trim().slice(0, 300)}`);
-			return {
-				matches: [],
-				searchedSessions: 0,
-				candidateRows: 0,
-				exhausted: "error",
-			};
-		}
-		const parsed = JSON.parse(output) as StoredTranscriptSearchResult;
-		const exhausted = ["sessions", "rows", "time", "matches"].includes(
-			String(parsed.exhausted),
-		)
-			? parsed.exhausted
-			: null;
-		return {
-			matches: Array.isArray(parsed.matches) ? parsed.matches.slice(0, 50) : [],
-			searchedSessions: Number(parsed.searchedSessions) || 0,
-			candidateRows: Number(parsed.candidateRows) || 0,
-			exhausted,
-		};
-	} catch {
-		return {
-			matches: [],
-			searchedSessions: 0,
-			candidateRows: 0,
-			exhausted: "error",
-		};
-	} finally {
-		signal?.removeEventListener("abort", abort);
-	}
-}
-
 async function ripgrepFiles(
 	query: string,
 	files: string[]
@@ -1408,9 +1325,8 @@ export async function handleSessionsRoutes(
 
 	// Full-text search across session transcripts (the ⌘K palette's
 	// "search in conversations"). Owned sessions live in transcript v2 and no
-	// longer have mirror files, so their bounded rows are searched in a
-	// read-only child process. The most recent 1,000 sessions cover interactive
-	// recall without turning each keystroke into a scan of the 6+ GB database;
+	// longer have mirror files, so their bounded rows are searched directly in
+	// managed FeltDB. The most recent 1,000 sessions cover interactive recall;
 	// `truncated` keeps that ceiling explicit for a future FTS cutover. Legacy
 	// transcripts retain the ripgrep pre-pass and clean-snippet validation.
 	if (path === "/api/sessions/search" && req.method === "GET") {
@@ -1426,7 +1342,7 @@ export async function handleSessionsRoutes(
 			)
 			.slice(0, 1_000)
 			.map((session) => session.id);
-		const stored = await searchStoredTranscripts(q, recentIds, req.signal);
+		const stored = await searchManagedTranscripts(q, recentIds, req.signal);
 		const matches = stored.matches.slice(0, 50);
 		const matchedIds = new Set(matches.map((match) => match.id));
 

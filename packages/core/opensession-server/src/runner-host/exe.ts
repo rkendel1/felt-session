@@ -8,7 +8,7 @@
  *     the executable itself (not `bun`) and there is no `.ts` tree to `run`.
  *     The same executable re-invokes itself with a subcommand instead, such as
  *     `opensession runner-host <spec>`, `opensession mcp-proxy`, or
- *     `opensession transcript-search-worker`. src/main.ts is the front
+ *     `opensession runner-host`. src/main.ts is the front
  *     controller that dispatches those subcommands.
  *
  * The spawn sites build their argv through the helpers here so one detection
@@ -52,13 +52,6 @@ export function mcpProxyArgv(bun: string, entry: string, opts: { smol?: boolean 
 	return isCompiledBinary()
 		? [process.execPath, "mcp-proxy"]
 		: [bun, ...(opts.smol ? ["--smol"] : []), "run", entry];
-}
-
-/** argv to run the read-only transcript search worker. */
-export function transcriptSearchWorkerArgv(bun: string, entry: string): string[] {
-	return isCompiledBinary()
-		? [process.execPath, "transcript-search-worker"]
-		: [bun, entry];
 }
 
 /**

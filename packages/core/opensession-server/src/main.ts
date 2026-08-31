@@ -4,7 +4,7 @@
  * `bun build --compile` produces one `opensession` binary from THIS entry. The
  * same binary plays five roles that run as separate processes from source
  * (`opensession.ts`, `scripts/cli.ts`, `src/runner-host/host.ts`,
- * `src/runner-host/mcp-proxy.ts`, `src/server/transcript-search-worker.ts`). A
+ * `src/runner-host/mcp-proxy.ts`). A
  * compiled process has no `bun`/`.ts` tree to re-exec, so it re-invokes itself
  * with a leading subcommand instead. The spawn
  * sites emit those subcommands via src/runner-host/exe.ts; this file routes
@@ -20,8 +20,6 @@
  *   opensession mcp-proxy           → mcp-proxy.ts (config from env)
  *   opensession executor            → executor/main.ts (fixed launch policy)
  *   opensession session-kernel-service → session-kernel-service.ts
- *   opensession transcript-search-worker
- *                                    → transcript-search-worker.ts (JSON via stdio)
  *   opensession server              → opensession.ts (the HTTP/WS server)
  *   opensession <anything else>     → scripts/cli.ts (onboard, start, doctor, …)
  *
@@ -80,16 +78,6 @@ if (sub === "runner-host") {
   process.argv.splice(2, 1);
   const { runSessionKernelService } = await import("./session-kernel-service");
   await runSessionKernelService();
-} else if (sub === "transcript-search-worker") {
-  process.argv.splice(2, 1);
-  const { runTranscriptSearchWorker } =
-    await import("./server/transcript-search-worker");
-  try {
-    await runTranscriptSearchWorker();
-  } catch (error) {
-    console.error(error instanceof Error ? error.message : String(error));
-    process.exitCode = 1;
-  }
 } else if (sub === "server") {
   process.argv.splice(2, 1);
   // Surface a boot failure with a clear origin: a compiled binary's otherwise

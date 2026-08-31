@@ -33,7 +33,7 @@ another host. `--os` and `--arch` select `bun-<os>-<arch>` and fetch sharp's
 optional packages for that target. The Worker sidecars are bundled JavaScript
 and are platform-neutral.
 
-## One binary, seven process roles
+## One binary, six process roles
 
 A compiled install has no `bun`/`.ts` tree to re-exec, so
 `packages/core/opensession-server/src/main.ts` dispatches a leading subcommand
@@ -46,7 +46,6 @@ to these source entrypoints:
 | `opensession mcp-proxy` | stdio↔RPC MCP proxy | `packages/core/opensession-server/src/runner-host/mcp-proxy.ts` |
 | `opensession executor` | supervised executor launcher | `packages/core/opensession-server/src/executor/main.ts` |
 | `opensession session-kernel-service` | supervised session-kernel service | `packages/core/opensession-server/src/session-kernel-service.ts` |
-| `opensession transcript-search-worker` | read-only transcript search worker | `packages/core/opensession-server/src/server/transcript-search-worker.ts` |
 | `opensession <anything else>` | CLI (`onboard`, `start`, `doctor`, …) | `scripts/cli.ts` |
 
 `packages/core/opensession-server/src/runner-host/exe.ts` supplies compiled and
@@ -126,10 +125,6 @@ install/service/update, non-sandbox turns) works and is not listed here.
   sandbox re-exec sites run `bun run <host-entry>` inside a container that
   carries its own bun + checkout. Non-sandbox / local runs work (the dispatcher
   self-execs the binary for `runner-host` and `mcp-proxy`).
-- **Stored transcript search.** The sessions route launches the TypeScript
-  worker path directly instead of using the compiled
-  `transcript-search-worker` subcommand, so compiled installs currently return
-  no stored-transcript matches.
 - **Features that spawn a `scripts/*.ts` helper by path.** A few paths resolve
   a helper script through `import.meta.dir` (which is `/$bunfs` in the binary),
   so the file is not on disk for the spawned process: PR-checks
