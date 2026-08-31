@@ -36,6 +36,7 @@ import { FeltDbDeliveryStore } from "./feltdb-delivery-store";
 import { FeltDbReducerStore } from "./feltdb-reducer-store";
 import { FeltDbTimerExecutionStore, FeltDbTimerStore } from "./feltdb-timer-store";
 import { FeltDbTurnStore } from "./feltdb-turn-store";
+import { FeltDbOutboxStore } from "./feltdb-outbox-store";
 
 class SessionQuarantinedError extends Error {
   readonly code = "session_quarantined";
@@ -90,6 +91,8 @@ export function startSessionKernelActorWorker(): void {
   let feltDbRuns: FeltDbRunStore | undefined;
   let feltDbCreation: FeltDbCreationStore | undefined;
   let feltDbReducers: FeltDbReducerStore | undefined;
+  let feltDbTimers: FeltDbTimerStore | undefined;
+  let feltDbOutbox: FeltDbOutboxStore | undefined;
   const changeStore = (): FeltDbKernelChangeStore =>
     (feltDbChanges ??= openFeltDbKernelChangeStore());
   const decisionStore = (): FeltDbSessionDecisionStore =>
@@ -105,7 +108,7 @@ export function startSessionKernelActorWorker(): void {
   const reducerStore = (): FeltDbReducerStore =>
     (feltDbReducers ??= (() => {
       const commands = new FeltDbCommandStore(decisionStore());
-      const timers = new FeltDbTimerStore(decisionStore());
+      const timers = timerStore();
       return new FeltDbReducerStore(
         new FeltDbAskStore(decisionStore()),
         new FeltDbDeliveryStore(decisionStore()),
@@ -114,8 +117,14 @@ export function startSessionKernelActorWorker(): void {
         new FeltDbTimerExecutionStore(timers, commands),
         new FeltDbTurnStore(decisionStore()),
         runStore(),
+        outboxStore(),
+        decisionStore(),
       );
     })());
+  const timerStore = (): FeltDbTimerStore =>
+    (feltDbTimers ??= new FeltDbTimerStore(decisionStore()));
+  const outboxStore = (): FeltDbOutboxStore =>
+    (feltDbOutbox ??= new FeltDbOutboxStore(decisionStore()));
   function post(message: KernelActorResponse): void {
     // Internal worker telemetry is consumed by the parent service and stripped
     // before the actor response crosses the HTTP boundary.
@@ -139,7 +148,7 @@ export function startSessionKernelActorWorker(): void {
         const managedKind = command.kind === "transcript" ||
           command.kind === "run_event" || command.kind === "creation_event" ||
           (["ask", "delivery", "gateway", "timer", "turn"].includes(command.kind) &&
-            !!sessionId);
+            !!sessionId) || command.kind === "core";
         const managedHead = managedKind && sessionId &&
             process.env.OPENSESSION_FELTDB_SERVER_URL
           ? await decisionStore().head(sessionId)
@@ -290,7 +299,8 @@ export function startSessionKernelActorWorker(): void {
           else result = store.failGatewayCommand(gateway);
         } else if (command.kind === "core") {
           const core = command.request;
-          if (core.op === "enqueue_effect")
+          if (managedHead) result = reducerStore().core(command.commandId, core);
+          else if (core.op === "enqueue_effect")
             result = store.enqueueOutbox(
               core.sessionId,
               core.kind,
@@ -326,7 +336,7 @@ export function startSessionKernelActorWorker(): void {
           } else if (core.op === "clear")
             result = store.clearSession(core.sessionId);
           else result = store.tombstoneSession(core.sessionId);
-          if (core.op === "clear" || core.op === "tombstone")
+          if (!managedHead && (core.op === "clear" || core.op === "tombstone"))
             host.refreshSessionProjections(core.sessionId);
         } else if (command.kind === "turn") {
           const turn = command.request;
@@ -536,6 +546,36 @@ export function startSessionKernelActorWorker(): void {
     });
   }
 
+  async function managedRuntimeWork(request: Extract<KernelActorAsyncRequest, { t: "runtime_work" }>) {
+    const legacy = host.runtimeWork(
+      request.now,
+      request.timerKinds,
+      request.effectKinds,
+      request.limit,
+    );
+    if (!process.env.OPENSESSION_FELTDB_SERVER_URL) return legacy;
+    const sessionIds = [...new Set([
+      ...legacy.timers.map((timer) => timer.sessionId),
+      ...legacy.outbox.map((item) => item.sessionId),
+    ])];
+    const managed = new Map(await Promise.all(sessionIds.map(async (sessionId) =>
+      [sessionId, !!(await decisionStore().head(sessionId))] as const)));
+    const [timers, outbox] = await Promise.all([
+      timerStore().due(request.now, request.limit * 2),
+      outboxStore().due(request.now, request.limit * 2),
+    ]);
+    return {
+      timers: [
+        ...legacy.timers.filter((timer) => !managed.get(timer.sessionId)),
+        ...timers.filter((timer) => request.timerKinds.includes(timer.kind)),
+      ].slice(0, request.limit),
+      outbox: [
+        ...legacy.outbox.filter((item) => !managed.get(item.sessionId)),
+        ...outbox.filter((item) => request.effectKinds.includes(item.kind)),
+      ].slice(0, request.limit),
+    };
+  }
+
   self.onmessage = (
     event: MessageEvent<KernelActorAsyncRequest | KernelActorClientCallRequest | KernelActorServiceCall>,
   ) => {
@@ -580,15 +620,16 @@ export function startSessionKernelActorWorker(): void {
         const pending = host.maintain();
         post({ t: "maintain_result", rpcId: request.rpcId, pending });
       } else if (request.t === "runtime_work") {
-        post({
+        void managedRuntimeWork(request).then((work) => post({
           t: "runtime_work_result",
           rpcId: request.rpcId,
-          ...host.runtimeWork(
-            request.now,
-            request.timerKinds,
-            request.effectKinds,
-            request.limit,
-          ),
+          ...work,
+        })).catch((error) => {
+          post({
+            t: "error",
+            rpcId: request.rpcId,
+            error: error instanceof Error ? error.message : String(error),
+          });
         });
       }
     } catch (error) {

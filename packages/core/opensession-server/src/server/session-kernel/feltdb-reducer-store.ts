@@ -10,6 +10,9 @@ import type { TurnActorRequest } from "./turn-protocol";
 import { FeltDbTimerExecutionStore, FeltDbTimerStore } from "./feltdb-timer-store";
 import { FeltDbTurnStore } from "./feltdb-turn-store";
 import { FeltDbRunStore } from "./feltdb-run-store";
+import type { CoreActorRequest } from "./core-protocol";
+import { FeltDbOutboxStore } from "./feltdb-outbox-store";
+import { FeltDbSessionDecisionStore } from "./feltdb-decision-store";
 
 function mayRecover(record: { status: string; replaySafe: boolean; retryable?: boolean; error?: string }) {
   return record.status === "processing" ||
@@ -29,7 +32,45 @@ export class FeltDbReducerStore {
     private readonly timerExecutions: FeltDbTimerExecutionStore,
     private readonly turns: FeltDbTurnStore,
     private readonly runs: FeltDbRunStore,
+    private readonly outbox: FeltDbOutboxStore,
+    private readonly decisions: FeltDbSessionDecisionStore,
   ) {}
+
+  async core(commandId: string, request: CoreActorRequest): Promise<unknown> {
+    if (request.op === "enqueue_effect")
+      return this.outbox.enqueue(
+        commandId, request.sessionId, request.kind, request.payload, request.effectKey,
+      );
+    if (request.op === "ack_outbox")
+      return this.outbox.acknowledge(
+        commandId, request.sessionId, request.recordId ?? String(request.id),
+      );
+    if (request.op === "defer_outbox")
+      return this.outbox.defer(
+        commandId, request.sessionId, request.recordId ?? String(request.id),
+      );
+    if (request.op === "fail_outbox")
+      return this.outbox.fail(
+        commandId,
+        request.sessionId,
+        request.recordId ?? String(request.id),
+        request.error,
+        request.maxAttempts,
+      );
+    const head = await this.decisions.head(request.sessionId);
+    if (!head) throw new Error(`Session ${request.sessionId} has no FeltDB authority`);
+    const input = {
+      transactionId: `opensession:kernel:${request.op}:${request.sessionId}:${commandId}`,
+      operationId: commandId,
+      inputHash: createHash("sha256").update(`${request.op}:${request.sessionId}`).digest("hex"),
+      observedHead: head,
+    };
+    if (request.op === "clear") {
+      await this.decisions.clearSession(input);
+      return;
+    }
+    return this.decisions.tombstoneSession(input);
+  }
 
   async ask(commandId: string, request: Exclude<AskActorRequest, { op: "entries" | "clear" }>) {
     if (request.op === "snapshot") return this.asks.snapshot(request.sessionId);
@@ -285,3 +326,4 @@ export class FeltDbReducerStore {
     return request.result;
   }
 }
+import { createHash } from "node:crypto";

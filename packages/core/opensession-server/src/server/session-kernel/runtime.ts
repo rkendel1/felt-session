@@ -115,8 +115,8 @@ type RuntimeState = {
 	nextMaintenanceAt?: number;
 	maintenancePending?: boolean;
 	activeTimers?: Set<string>;
-	activeOutbox?: Set<number>;
-	activeOpeningOutbox?: Set<number>;
+	activeOutbox?: Set<string>;
+	activeOpeningOutbox?: Set<string>;
 	lastRuntimePollErrorAt?: number;
 };
 
@@ -263,8 +263,9 @@ export async function drainSessionKernelRuntime(): Promise<void> {
 				item.kind === openingKind
 					? OPENING_OUTBOX_CONCURRENCY
 					: OUTBOX_CONCURRENCY;
-			if (active.size >= admissionLimit || active.has(item.id)) continue;
-			active.add(item.id);
+			const activeId = item.recordId ?? String(item.id);
+			if (active.size >= admissionLimit || active.has(activeId)) continue;
+			active.add(activeId);
 			void executeSessionEffect(item)
 				.then(async (executed) => {
 					if (!executed) return;
@@ -272,6 +273,7 @@ export async function drainSessionKernelRuntime(): Promise<void> {
 						await sessionCoreAsync({
 							op: "ack_outbox",
 							id: item.id,
+							recordId: item.recordId,
 							sessionId: item.sessionId,
 						});
 					} catch (settlementError) {
@@ -298,7 +300,8 @@ export async function drainSessionKernelRuntime(): Promise<void> {
 						if (error instanceof SessionEffectDeferredError) {
 							await sessionCoreAsync({
 							op: "defer_outbox",
-							id: item.id,
+								id: item.id,
+								recordId: item.recordId,
 							sessionId: item.sessionId,
 						});
 							return;
@@ -308,6 +311,7 @@ export async function drainSessionKernelRuntime(): Promise<void> {
 						const settled = await sessionCoreAsync({
 							op: "fail_outbox",
 							id: item.id,
+							recordId: item.recordId,
 							sessionId: item.sessionId,
 							error: message,
 							maxAttempts:
@@ -337,7 +341,7 @@ export async function drainSessionKernelRuntime(): Promise<void> {
 						);
 					}
 				})
-				.finally(() => active.delete(item.id));
+				.finally(() => active.delete(activeId));
 		}
 		passivateIdleSessionKernels();
 		const maintenanceNow = Date.now();

@@ -588,7 +588,7 @@ export class SessionKernel {
 		kind: K,
 		payload: SessionActorEffectFor<K>["payload"],
 		effectKey: string = crypto.randomUUID(),
-	): Promise<number> {
+	): Promise<number | string> {
 		this.touch();
     return sessionCore({
       op: "enqueue_effect",

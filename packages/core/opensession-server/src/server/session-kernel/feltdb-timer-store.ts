@@ -74,7 +74,11 @@ export class FeltDbTimerStore {
   }
 
   async due(now = Date.now(), limit = 100): Promise<DurableTimer[]> {
-    return (await this.decisions.dueTimers(now, limit)).map(durable);
+    const records = await this.decisions.dueTimers(now, Math.min(500, limit * 4));
+    const heads = await Promise.all(records.map((record) => this.decisions.head(record.sessionId)));
+    return records.filter((record, index) =>
+      heads[index]?.decisionEpoch === record.decisionEpoch
+    ).slice(0, limit).map(durable);
   }
 
   async schedule(

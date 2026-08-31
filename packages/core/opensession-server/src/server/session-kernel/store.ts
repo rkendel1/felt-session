@@ -143,6 +143,7 @@ export type DurableTurnOutcomeProjection = {
 
 export interface DurableOutboxItem {
 	id: number;
+	recordId?: string;
 	effectId: string;
 	effectKey: string;
 	sessionId: string;

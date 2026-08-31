@@ -1,9 +1,11 @@
 import { createHash } from "node:crypto";
 import {
   FeltDbSessionDecisionStore,
+  kernelRecordId,
   type SessionKernelOutboxRecord,
   type VersionedSessionKernelOutboxRecord,
 } from "./feltdb-decision-store";
+import type { DurableOutboxItem } from "./store";
 
 function digest(value: unknown): string {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
@@ -38,8 +40,52 @@ export function nextFeltDbOutboxFailure(
 export class FeltDbOutboxStore {
   constructor(private readonly decisions: FeltDbSessionDecisionStore) {}
 
-  due(now = Date.now(), limit = 100): Promise<SessionKernelOutboxRecord[]> {
-    return this.decisions.dueOutbox(now, limit);
+  async due(now = Date.now(), limit = 100): Promise<DurableOutboxItem[]> {
+    const records = await this.decisions.dueOutbox(now, Math.min(500, limit * 4));
+    const heads = await Promise.all(records.map((record) => this.decisions.head(record.sessionId)));
+    return records.flatMap((record, index) => {
+      if (heads[index]?.decisionEpoch !== record.decisionEpoch) return [];
+      return [{
+        id: 0,
+        recordId: record.recordId,
+        effectId: record.effectId,
+        effectKey: record.effectKey,
+        sessionId: record.sessionId,
+        kind: record.kind,
+        payload: record.payload,
+        attempts: record.attempts,
+        nextAttemptAt: record.nextAttemptAt,
+        ...(record.lastError === undefined ? {} : { lastError: record.lastError }),
+        ...(record.deadLetteredAt === undefined ? {} : { deadLetteredAt: record.deadLetteredAt }),
+        createdAt: record.createdAt,
+      }];
+    }).slice(0, limit);
+  }
+
+  async enqueue(
+    commandId: string,
+    sessionId: string,
+    kind: string,
+    payload: unknown,
+    effectKey: string,
+    now = Date.now(),
+  ): Promise<string> {
+    const head = await this.decisions.head(sessionId);
+    if (!head) throw new Error(`Session ${sessionId} has no FeltDB authority`);
+    const effectId = `${sessionId}:${kind}:${effectKey}`;
+    const recordId = kernelRecordId("effect", `${sessionId}:${head.decisionEpoch}:${effectId}`);
+    return this.decisions.commitDecision({
+      transactionId: `opensession:kernel:outbox:enqueue:${sessionId}:${commandId}`,
+      operationId: commandId,
+      operationKind: "outbox_enqueue",
+      inputHash: digest({ sessionId, kind, payload, effectKey }),
+      observedHead: head,
+      changeKind: "outbox_enqueued",
+      changePayload: { kind, effectKey },
+      effects: [{ kind, payload, effectKey }],
+      result: recordId,
+      now,
+    });
   }
 
   async acknowledge(commandId: string, sessionId: string, recordId: string): Promise<void> {
