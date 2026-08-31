@@ -36,26 +36,38 @@ export interface MissionControlSlackAdapterConfig {
   slackWorkspaceId: string;
 }
 
+class SlackEventSequence {
+  private readonly next = new Map<string, number>();
+  private readonly tails = new Map<string, Promise<void>>();
+
+  constructor(private readonly eventSpine: EventSpine) {}
+
+  allocate(sessionId: string): Promise<number> {
+    const previous = this.tails.get(sessionId) ?? Promise.resolve();
+    let resolveValue!: (value: number) => void;
+    const value = new Promise<number>((resolve) => { resolveValue = resolve; });
+    const current = previous.then(async () => {
+      const sequence = this.next.get(sessionId) ?? await this.eventSpine.count(sessionId);
+      this.next.set(sessionId, sequence + 1);
+      resolveValue(sequence);
+    });
+    this.tails.set(sessionId, current);
+    return value;
+  }
+}
+
 /**
  * Implementation of SlackCommandHandler that persists commands as events.
  */
 class MissionControlSlackCommandHandler implements SlackCommandHandler {
   private eventSpine: EventSpine;
   private slackWorkspaceId: string;
-  private nextSequence: Map<string, number> = new Map();
-  private initialized: Set<string> = new Set();
+  private sequence: SlackEventSequence;
 
-  constructor(eventSpine: EventSpine, slackWorkspaceId: string) {
+  constructor(eventSpine: EventSpine, slackWorkspaceId: string, sequence: SlackEventSequence) {
     this.eventSpine = eventSpine;
     this.slackWorkspaceId = slackWorkspaceId;
-  }
-
-  private async ensureInitialized(sessionId: string): Promise<void> {
-    if (!this.initialized.has(sessionId)) {
-      const count = await this.eventSpine.count(sessionId);
-      this.nextSequence.set(sessionId, count);
-      this.initialized.add(sessionId);
-    }
+    this.sequence = sequence;
   }
 
   async handle(command: SlackHumanCommand): Promise<void> {
@@ -63,9 +75,7 @@ class MissionControlSlackCommandHandler implements SlackCommandHandler {
     const sessionId = `slack-${this.slackWorkspaceId}-${command.projectId}`;
 
     // Ensure we have the correct sequence by checking event spine
-    await this.ensureInitialized(sessionId);
-
-    const sequence = this.nextSequence.get(sessionId) ?? 0;
+    const sequence = await this.sequence.allocate(sessionId);
 
     const event: SlackCommandReceivedEvent = {
       kind: "slack.command.received",
@@ -86,10 +96,7 @@ class MissionControlSlackCommandHandler implements SlackCommandHandler {
     };
 
     // Record the event durably
-    const recordedId = await this.eventSpine.record(event);
-
-    // Update sequence for next event
-    this.nextSequence.set(sessionId, recordedId.eventSequence + 1);
+    await this.eventSpine.record(event);
   }
 }
 
@@ -100,21 +107,13 @@ class MissionControlSlackNotificationSender implements SlackNotificationSender {
   private eventSpine: EventSpine;
   private slackClient: SlackNotificationSender;
   private slackWorkspaceId: string;
-  private nextSequence: Map<string, number> = new Map();
-  private initialized: Set<string> = new Set();
+  private sequence: SlackEventSequence;
 
-  constructor(eventSpine: EventSpine, slackClient: SlackNotificationSender, slackWorkspaceId: string) {
+  constructor(eventSpine: EventSpine, slackClient: SlackNotificationSender, slackWorkspaceId: string, sequence: SlackEventSequence) {
     this.eventSpine = eventSpine;
     this.slackClient = slackClient;
     this.slackWorkspaceId = slackWorkspaceId;
-  }
-
-  private async ensureInitialized(sessionId: string): Promise<void> {
-    if (!this.initialized.has(sessionId)) {
-      const count = await this.eventSpine.count(sessionId);
-      this.nextSequence.set(sessionId, count);
-      this.initialized.add(sessionId);
-    }
+    this.sequence = sequence;
   }
 
   async sendNotification(notification: SlackAgentNotification): Promise<void> {
@@ -125,9 +124,7 @@ class MissionControlSlackNotificationSender implements SlackNotificationSender {
     const sessionId = `slack-${this.slackWorkspaceId}-${notification.projectId}`;
 
     // Ensure we have the correct sequence by checking event spine
-    await this.ensureInitialized(sessionId);
-
-    const sequence = this.nextSequence.get(sessionId) ?? 0;
+    const sequence = await this.sequence.allocate(sessionId);
 
     const event: SlackNotificationPostedEvent = {
       kind: "slack.notification.posted",
@@ -145,8 +142,6 @@ class MissionControlSlackNotificationSender implements SlackNotificationSender {
 
     await this.eventSpine.record(event);
 
-    // Update sequence for next event
-    this.nextSequence.set(sessionId, sequence + 1);
   }
 }
 
@@ -159,12 +154,14 @@ export function createMissionControlSlackAdapter(
   handler: SlackCommandHandler;
   notificationSender: SlackNotificationSender;
 } {
+  const sequence = new SlackEventSequence(config.eventSpine);
   return {
-    handler: new MissionControlSlackCommandHandler(config.eventSpine, config.slackWorkspaceId),
+    handler: new MissionControlSlackCommandHandler(config.eventSpine, config.slackWorkspaceId, sequence),
     notificationSender: new MissionControlSlackNotificationSender(
       config.eventSpine,
       config.slackClient,
       config.slackWorkspaceId,
+      sequence,
     ),
   };
 }
