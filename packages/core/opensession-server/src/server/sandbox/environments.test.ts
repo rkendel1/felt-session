@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { createFeltDB } from "@feltdb/core";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
+import { mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { REPOS } from "../worktree";
@@ -10,6 +10,7 @@ import {
   updateSandboxConnection,
 } from "./connections";
 import {
+  initializeManagedSandboxEnvironments,
   invalidateSandboxEnvironmentsForRepo,
   listSandboxEnvironments,
   prepareSandboxEnvironment,
@@ -18,6 +19,7 @@ import { initializeManagedWorkspaceSecrets } from "../workspace-secrets";
 import { initializeManagedSandboxConnections } from "./connections";
 
 let scratch = "";
+let db: ReturnType<typeof createFeltDB>;
 const previous: Record<string, string | undefined> = {};
 const keys = [
   "OPENSESSION_SANDBOX_CONFIG",
@@ -31,9 +33,10 @@ beforeEach(async () => {
   process.env.OPENSESSION_SANDBOX_CONFIG = join(scratch, "sandbox.json");
   process.env.OPENSESSION_WORKSPACE_SECRETS_STORE = join(scratch, "secrets.json");
   process.env.OPENSESSION_SANDBOX_ENVIRONMENTS_STORE = join(scratch, "environments.json");
-  const db = createFeltDB({ namespace: crypto.randomUUID(), memory: true });
+  db = createFeltDB({ namespace: crypto.randomUUID(), memory: true });
   await initializeManagedWorkspaceSecrets(db);
   await initializeManagedSandboxConnections(db);
+  await initializeManagedSandboxEnvironments(db);
 });
 
 afterEach(() => {
@@ -116,9 +119,17 @@ describe("sandbox project environments", () => {
         })),
       }),
     );
+    db = createFeltDB({ namespace: crypto.randomUUID(), memory: true });
+    await initializeManagedSandboxEnvironments(db);
     await invalidateSandboxEnvironmentsForRepo(repo);
-    const stored = JSON.parse(readFileSync(path, "utf-8"));
-    expect(stored.environments).toHaveLength(4);
-    expect(stored.environments.every((environment: any) => environment.state === "stale")).toBe(true);
+    const stored = await db.collection<{
+      repo: string;
+      provider: string;
+      state: string;
+    }>("opensession_sandbox_environments").all();
+    const reusable = stored.filter((environment) =>
+      environment.repo === repo && ["daytona", "box", "modal", "microvm"].includes(environment.provider));
+    expect(reusable).toHaveLength(4);
+    expect(reusable.every((environment) => environment.state === "stale")).toBe(true);
   });
 });

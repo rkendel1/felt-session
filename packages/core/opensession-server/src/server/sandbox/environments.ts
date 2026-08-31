@@ -1,8 +1,9 @@
 /** Persistent per-repository sandbox environment readiness. */
 
-import { existsSync, readFileSync, statSync } from "fs";
+import { existsSync, readFileSync, statSync, unlinkSync } from "node:fs";
+import type { StateFirstDB } from "@feltdb/core";
+import { managedFeltDb } from "../managed-feltdb";
 import { stateDir } from "../paths";
-import { writeJsonAtomic } from "../shared/atomic-write";
 import { REPOS } from "../worktree";
 import {
   sandboxConnectionReady,
@@ -25,6 +26,10 @@ import { listSandboxOperations, startSandboxOperation } from "./operations";
 const invalidationTimers: Map<string, ReturnType<typeof setTimeout>> =
   ((globalThis as any).__sandboxEnvironmentInvalidationTimers ??= new Map());
 const PROVIDER_QUOTA_RETRY_MS = 60 * 60_000;
+const COLLECTION = "opensession_sandbox_environments";
+const MIGRATION = "sandbox-environments-json-to-managed-feltdb-v1";
+let environmentsDb: StateFirstDB | undefined;
+let environments: SandboxEnvironment[] = [];
 
 export interface SandboxEnvironment {
   repo: string;
@@ -51,21 +56,49 @@ function storePath(): string {
 }
 
 function readStored(): SandboxEnvironment[] {
-  try {
-    const raw = JSON.parse(readFileSync(storePath(), "utf-8")) as StoredEnvironments;
-    return Array.isArray(raw?.environments) ? raw.environments : [];
-  } catch {
-    return [];
-  }
+  return structuredClone(environments);
 }
 
-function writeEnvironment(environment: SandboxEnvironment): void {
+function environmentId(environment: Pick<SandboxEnvironment, "repo" | "provider">): string {
+  return Buffer.from(`${environment.provider}\n${environment.repo}`).toString("base64url");
+}
+
+async function writeEnvironment(environment: SandboxEnvironment): Promise<void> {
   const all = readStored().filter(
     (candidate) =>
       candidate.repo !== environment.repo || candidate.provider !== environment.provider,
   );
   all.push(environment);
-  writeJsonAtomic(storePath(), { version: 1, environments: all } satisfies StoredEnvironments);
+  environments = all;
+  const record = structuredClone(environment);
+  const db = environmentsDb ?? managedFeltDb();
+  await db.transaction((tx) => {
+    tx.collection<SandboxEnvironment>(COLLECTION).set(environmentId(record), record);
+  }, { transactionId: `opensession:sandbox-environment:put:${crypto.randomUUID()}` });
+}
+
+export async function initializeManagedSandboxEnvironments(
+  db: StateFirstDB = environmentsDb ?? managedFeltDb(),
+): Promise<void> {
+  environmentsDb = db;
+  if (!await db.collection<{ id: string }>("opensession_migrations").get(MIGRATION)) {
+    let legacy: SandboxEnvironment[] = [];
+    try {
+      if (existsSync(storePath())) {
+        const parsed = JSON.parse(readFileSync(storePath(), "utf8")) as StoredEnvironments;
+        if (Array.isArray(parsed?.environments)) legacy = parsed.environments;
+      }
+    } catch {}
+    for (const environment of legacy) await db.transaction((tx) => {
+      tx.collection<SandboxEnvironment>(COLLECTION).set(environmentId(environment), environment);
+    }, { transactionId: `opensession:sandbox-environment:migrate:${environmentId(environment)}` });
+    await db.transaction((tx) => {
+      tx.collection("opensession_migrations").set(MIGRATION,
+        { id: MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
+    }, { transactionId: `opensession:migration:${MIGRATION}` });
+  }
+  if (existsSync(storePath())) unlinkSync(storePath());
+  environments = await db.collection<SandboxEnvironment>(COLLECTION).all();
 }
 
 function storedEnvironment(
@@ -303,7 +336,7 @@ export async function invalidateSandboxEnvironmentsForRepo(repo: string): Promis
     // minutes-long cold-start gap without improving source freshness.
     if (provider === "daytona" || provider === "box" || provider === "modal") {
       const current = await derivedEnvironment(repo, provider);
-      writeEnvironment(current.state === "ready" ? current : {
+      await writeEnvironment(current.state === "ready" ? current : {
         repo,
         provider,
         state: "stale",
@@ -319,7 +352,7 @@ export async function invalidateSandboxEnvironmentsForRepo(repo: string): Promis
     await removeTemplate(repo, provider).catch((error) => {
       console.warn(`[sandbox:${provider}] failed to delete stale template for ${repo}:`, error);
     });
-    writeEnvironment({
+    await writeEnvironment({
       repo,
       provider,
       state: "stale",
@@ -360,7 +393,7 @@ export async function prepareSandboxEnvironment(
     throw Object.assign(new Error(`${provider} is not Ready`), { code: "CONNECTION_NOT_READY" });
   }
   if (provider === "docker") {
-    writeEnvironment({
+    await writeEnvironment({
       repo,
       provider,
       state: "ready",
@@ -380,7 +413,7 @@ export async function prepareSandboxEnvironment(
     await removeTemplate(repo, provider);
   }
   const now = new Date().toISOString();
-  writeEnvironment({
+  await writeEnvironment({
     repo,
     provider,
     state: "preparing",
@@ -422,7 +455,7 @@ export async function prepareSandboxEnvironment(
             code: "TEMPLATE_VERIFY_FAILED",
           });
         }
-        writeEnvironment(derived);
+        await writeEnvironment(derived);
         return;
       }
       if (requested.state === "failed" || entry?.state === "failed") {
@@ -470,7 +503,7 @@ export async function prepareSandboxEnvironment(
         : {}),
       ...(settings ? { settings } : {}),
     };
-    writeEnvironment(failure);
+    await writeEnvironment(failure);
     throw Object.assign(new Error(failure.failureSummary), { code });
   }
 }
@@ -533,14 +566,14 @@ function maintainSandboxEnvironments(): void {
         void derivedEnvironment(environment.repo, environment.provider).then(writeEnvironment);
         continue;
       }
-      scheduleSandboxEnvironment(environment.repo, environment.provider, {
+      void scheduleSandboxEnvironment(environment.repo, environment.provider, {
         refresh: true,
         user: "image-registry-refresh",
         settings: environment.settings,
       });
       continue;
     }
-    scheduleSandboxEnvironment(environment.repo, environment.provider, {
+    void scheduleSandboxEnvironment(environment.repo, environment.provider, {
       rebuild: true,
       user: "template-maintenance",
       settings: environment.settings,

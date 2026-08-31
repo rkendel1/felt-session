@@ -47,6 +47,7 @@ import { initializeManagedMcpOauth } from "./src/server/mcp-oauth";
 import { initializeManagedWorkspaceSecrets } from "./src/server/workspace-secrets";
 import { initializeManagedSandboxConnections } from "./src/server/sandbox/connections";
 import { initializeManagedSandboxOperations } from "./src/server/sandbox/operations";
+import { initializeManagedSandboxEnvironments } from "./src/server/sandbox/environments";
 import { startLiveActivitySync } from "./src/server/live-activities";
 import { initializeManagedLiveActivities } from "./src/server/live-activities";
 import { initializeManagedSandboxPortals } from "./src/server/sandbox-portals";
@@ -222,6 +223,7 @@ if (!g.__opensessionBooted) {
 	await initializeManagedWorkspaceSecrets(db);
 	await initializeManagedSandboxConnections(db);
 	await initializeManagedSandboxOperations(db);
+	await initializeManagedSandboxEnvironments(db);
 	await initializeManagedPrivateAppDomain(db);
 	await initializeManagedModelProviders(db);
 	await initializeManagedPiConfig(db);
