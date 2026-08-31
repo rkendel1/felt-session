@@ -91,6 +91,9 @@ export function startSessionKernelActorWorker(): void {
   let feltDbAgentHost: FeltDbAgentHostStore | undefined;
   let feltDbRuns: FeltDbRunStore | undefined;
   let feltDbCreation: FeltDbCreationStore | undefined;
+  let feltDbAsks: FeltDbAskStore | undefined;
+  let feltDbDeliveries: FeltDbDeliveryStore | undefined;
+  let feltDbTurns: FeltDbTurnStore | undefined;
   let feltDbReducers: FeltDbReducerStore | undefined;
   let feltDbTimers: FeltDbTimerStore | undefined;
   let feltDbOutbox: FeltDbOutboxStore | undefined;
@@ -106,17 +109,23 @@ export function startSessionKernelActorWorker(): void {
     (feltDbRuns ??= new FeltDbRunStore(decisionStore()));
   const creationStore = (): FeltDbCreationStore =>
     (feltDbCreation ??= new FeltDbCreationStore(decisionStore()));
+  const askStore = (): FeltDbAskStore =>
+    (feltDbAsks ??= new FeltDbAskStore(decisionStore()));
+  const deliveryStore = (): FeltDbDeliveryStore =>
+    (feltDbDeliveries ??= new FeltDbDeliveryStore(decisionStore()));
+  const turnStore = (): FeltDbTurnStore =>
+    (feltDbTurns ??= new FeltDbTurnStore(decisionStore()));
   const reducerStore = (): FeltDbReducerStore =>
     (feltDbReducers ??= (() => {
       const commands = new FeltDbCommandStore(decisionStore());
       const timers = timerStore();
       return new FeltDbReducerStore(
-        new FeltDbAskStore(decisionStore()),
-        new FeltDbDeliveryStore(decisionStore()),
+        askStore(),
+        deliveryStore(),
         commands,
         timers,
         new FeltDbTimerExecutionStore(timers, commands),
-        new FeltDbTurnStore(decisionStore()),
+        turnStore(),
         runStore(),
         outboxStore(),
         decisionStore(),
@@ -441,6 +450,12 @@ export function startSessionKernelActorWorker(): void {
           result = creationStore().creationState(sessionId!);
         else if (managedHead && request.method === "runState")
           result = runStore().runState(sessionId!);
+        else if (managedHead && request.method === "askSnapshot")
+          result = askStore().snapshot(sessionId!);
+        else if (managedHead && request.method === "deliverySnapshot")
+          result = deliveryStore().snapshot(sessionId!);
+        else if (managedHead && request.method === "turnSnapshot")
+          result = turnStore().snapshot(sessionId!);
         else if (managedHead && request.method === "changesSince")
           result = decisionStore().changesSince(
             sessionId!,
@@ -495,6 +510,10 @@ export function startSessionKernelActorWorker(): void {
             request.args[0] as string,
             Number(request.args[1]),
             request.args[2] === undefined ? undefined : Number(request.args[2]),
+          );
+        } else if (managedHead) {
+          throw new Error(
+            `Managed FeltDB session ${sessionId} does not implement compatibility store method ${request.method}`,
           );
         } else result = host.call(request.method, request.args);
       }
