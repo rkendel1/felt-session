@@ -1,11 +1,14 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "fs";
+import { createFeltDB } from "@feltdb/core";
 import { tmpdir } from "os";
 import { join } from "path";
 import { __setSessionsDirForTest } from "../paths";
 import {
   SANDBOX_HTTPS_BASE,
   SANDBOX_HTTPS_RANGE,
+  flushSandboxPreviewPortWrites,
+  initializeManagedSandboxPreviewPorts,
   lookupSandboxHttpsPort,
   releaseSandboxPreviewPorts,
   sandboxAllocationForHttpsPort,
@@ -15,12 +18,17 @@ import {
 let scratch: string;
 let prevDir: string;
 
-beforeAll(() => {
+beforeAll(async () => {
   scratch = mkdtempSync(join(tmpdir(), "bks-preview-ports-"));
   prevDir = __setSessionsDirForTest(scratch);
+  await initializeManagedSandboxPreviewPorts(
+    createFeltDB({ namespace: crypto.randomUUID(), memory: true }),
+    join(scratch, "sandbox-preview-ports.json"),
+  );
 });
 
-afterAll(() => {
+afterAll(async () => {
+  await flushSandboxPreviewPortWrites();
   __setSessionsDirForTest(prevDir);
   rmSync(scratch, { recursive: true, force: true });
 });

@@ -21,7 +21,7 @@
  *    past any port already held by a DIFFERENT key — sandbox-vs-sandbox
  *    collisions are impossible because the allocator never hands out a port
  *    twice.
- *  - Allocations persist in <sessions-dir>/sandbox-preview-ports.json so
+ *  - Allocations persist in managed FeltDB so
  *    the preview URL is stable across opensession restarts and container
  *    recreations; they're released by DockerProvider.destroy().
  *
@@ -29,33 +29,85 @@
  * separate process cleans its own sbxtest-* entries.
  */
 
-import { existsSync, readFileSync } from "fs";
+import type { StateFirstDB } from "@feltdb/core";
+import { existsSync, readFileSync, rmSync } from "fs";
 import { OPENSESSION_SESSIONS_DIR } from "../paths";
-import { writeJsonAtomic } from "../shared/atomic-write";
+import { managedFeltDb } from "../managed-feltdb";
 
 export const SANDBOX_HTTPS_BASE = 20000;
 export const SANDBOX_HTTPS_RANGE = 8000;
 
 /** `<sandboxId>:<containerPort>` → allocated https port. */
 type AllocationMap = Record<string, number>;
+type StoredAllocations = { id: "allocations"; values: AllocationMap };
+const COLLECTION = "opensession_sandbox_preview_ports";
+const MIGRATION = "sandbox-preview-ports-json-to-managed-feltdb-v1";
+let allocationsDb: StateFirstDB | undefined;
+const managedAllocations = ((globalThis as typeof globalThis & {
+  __opensessionSandboxPreviewPorts?: { values: AllocationMap; persistTail: Promise<void> };
+}).__opensessionSandboxPreviewPorts ??= { values: {}, persistTail: Promise.resolve() });
 
 // OPENSESSION_SESSIONS_DIR is a live binding (test seam) — resolve per call.
 function allocationsPath(): string {
   return `${OPENSESSION_SESSIONS_DIR}/sandbox-preview-ports.json`;
 }
 
-function readAllocations(): AllocationMap {
-  try {
-    if (!existsSync(allocationsPath())) return {};
-    const raw = JSON.parse(readFileSync(allocationsPath(), "utf-8"));
-    const out: AllocationMap = {};
-    for (const [k, v] of Object.entries(raw)) {
-      if (typeof v === "number" && Number.isInteger(v)) out[k] = v;
+function validAllocations(raw: unknown): AllocationMap {
+  const out: AllocationMap = {};
+  if (!raw || typeof raw !== "object") return out;
+  for (const [key, value] of Object.entries(raw))
+    if (typeof value === "number" && Number.isInteger(value)) out[key] = value;
+  return out;
+}
+
+export async function initializeManagedSandboxPreviewPorts(
+  db: StateFirstDB = allocationsDb ?? managedFeltDb(),
+  legacyPath = allocationsPath(),
+): Promise<void> {
+  allocationsDb = db;
+  const migrations = db.collection<{ id: string }>("opensession_migrations");
+  const migrationComplete = !!await migrations.get(MIGRATION);
+  const stored = await db.collection<StoredAllocations>(COLLECTION).get("allocations");
+  let values = validAllocations(stored?.values);
+  let importedRollbackValues = false;
+  if (existsSync(legacyPath)) {
+    const legacy = validAllocations(JSON.parse(readFileSync(legacyPath, "utf8")));
+    const used = new Set(Object.values(values));
+    for (const [key, port] of Object.entries(legacy)) {
+      if (key in values || used.has(port)) continue;
+      values[key] = port;
+      used.add(port);
+      importedRollbackValues = true;
     }
-    return out;
-  } catch {
-    return {};
   }
+  if (!migrationComplete || importedRollbackValues) {
+    await db.transaction((tx) => {
+      tx.collection<StoredAllocations>(COLLECTION).set("allocations", { id: "allocations", values });
+      if (!migrationComplete) tx.collection("opensession_migrations").set(MIGRATION,
+        { id: MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
+    }, { transactionId: `opensession:migration:${MIGRATION}:${crypto.randomUUID()}` });
+  }
+  managedAllocations.values = values;
+  if (existsSync(legacyPath)) rmSync(legacyPath, { force: true });
+}
+
+function readAllocations(): AllocationMap {
+  return structuredClone(managedAllocations.values);
+}
+
+function persistAllocations(values: AllocationMap): void {
+  managedAllocations.values = structuredClone(values);
+  const db = allocationsDb ?? managedFeltDb();
+  const snapshot = structuredClone(values);
+  managedAllocations.persistTail = managedAllocations.persistTail.catch(() => {}).then(async () => {
+    await db.transaction((tx) => {
+      tx.collection<StoredAllocations>(COLLECTION).set("allocations", { id: "allocations", values: snapshot });
+    }, { transactionId: `opensession:sandbox-preview-ports:${crypto.randomUUID()}` });
+  });
+}
+
+export async function flushSandboxPreviewPortWrites(): Promise<void> {
+  await managedAllocations.persistTail;
 }
 
 function keyFor(sandboxId: string, containerPort: number): string {
@@ -87,7 +139,7 @@ export function sandboxHttpsPortFor(sandboxId: string, containerPort: number): n
     const port = SANDBOX_HTTPS_BASE + ((start + i) % SANDBOX_HTTPS_RANGE);
     if (used.has(port)) continue;
     map[key] = port;
-    writeJsonAtomic(allocationsPath(), map);
+    persistAllocations(map);
     return port;
   }
   throw new Error("sandbox preview https-port range exhausted (20000-27999 all allocated)");
@@ -127,6 +179,6 @@ export function releaseSandboxPreviewPorts(sandboxId: string): number[] {
       delete map[k];
     }
   }
-  if (released.length) writeJsonAtomic(allocationsPath(), map);
+  if (released.length) persistAllocations(map);
   return released;
 }
