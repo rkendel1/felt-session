@@ -13,15 +13,10 @@ import {
   MESSAGES,
 } from "./slack-api";
 import { createHash } from "node:crypto";
-import { existsSync, unlinkSync } from "node:fs";
 import { managedFeltDb } from "../../server/managed-feltdb";
 import type { SlackFileRef } from "./slack-api";
 
-const SESSION_DIR = `${process.env.HOME}/.slack-sessions`;
-const QUEUE_FILE = `${SESSION_DIR}/message-queue.json`;
 const QUEUE_COLLECTION = "opensession_slack_message_queue";
-const QUEUE_MIGRATIONS_COLLECTION = "opensession_migrations";
-const QUEUE_MIGRATION_ID = "slack-message-queue-json-to-managed-feltdb-v1";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -212,29 +207,6 @@ async function removeDurable(sessionKey: string, message: QueuedMessage): Promis
 
 export async function loadQueue(): Promise<void> {
   try {
-    const migration = managedFeltDb().collection<{ id: string }>(QUEUE_MIGRATIONS_COLLECTION);
-    if (!await migration.get(QUEUE_MIGRATION_ID)) {
-      const file = Bun.file(QUEUE_FILE);
-      if (await file.exists()) {
-        const data = JSON.parse(await file.text()) as Record<string, QueuedMessage[]>;
-        for (const [sessionKey, messages] of Object.entries(data)) {
-          for (const message of messages) {
-            message.promptEntryId ??= crypto.randomUUID();
-            await insertDurable(sessionKey, message);
-          }
-        }
-      }
-      await managedFeltDb().transaction((tx) => {
-        tx.collection(QUEUE_MIGRATIONS_COLLECTION).set(QUEUE_MIGRATION_ID, {
-          id: QUEUE_MIGRATION_ID,
-          completedAt: Date.now(),
-        }, { requireAbsent: true });
-      }, { transactionId: `opensession:migration:${QUEUE_MIGRATION_ID}` });
-      if (existsSync(QUEUE_FILE)) unlinkSync(QUEUE_FILE);
-    } else if (existsSync(QUEUE_FILE)) {
-      unlinkSync(QUEUE_FILE);
-    }
-
     let cursor: string | undefined;
     let total = 0;
     do {
