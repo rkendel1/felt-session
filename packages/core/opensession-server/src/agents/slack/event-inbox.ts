@@ -28,8 +28,8 @@ type StoredRecord = Omit<SlackEventInboxRecord, "id"> & {
 export interface SlackEventInboxDependencies {
   handleDirectMessage: (event: any) => Promise<void>;
   handleMention: (event: any) => Promise<void>;
-  isProcessed: (id: string) => boolean;
-  markProcessed: (id: string) => void;
+  isProcessed: (id: string) => Promise<boolean>;
+  markProcessed: (id: string) => Promise<void>;
 }
 export interface SlackEventInboxOptions { retryDelayMs?: number; db?: StateFirstDB }
 export type SlackEventInboxEnqueueResult = "enqueued" | "pending" | "processed";
@@ -67,7 +67,7 @@ export class SlackEventInbox {
   async enqueue(kind: SlackEventInboxKind, event: any): Promise<SlackEventInboxEnqueueResult> {
     await this.ensureLoaded();
     const id = eventId(event);
-    if (this.deps.isProcessed(id)) return "processed";
+    if (await this.deps.isProcessed(id)) return "processed";
     if (this.records.has(id)) { this.kick(); return "pending"; }
     const key = recordId(id);
     const collection = this.db().collection<StoredRecord>(COLLECTION);
@@ -195,10 +195,10 @@ export class SlackEventInbox {
   private async process(record: StoredRecord): Promise<void> {
     this.inFlight.add(record.eventId);
     try {
-      if (this.deps.isProcessed(record.eventId)) { await this.complete(record); return; }
+      if (await this.deps.isProcessed(record.eventId)) { await this.complete(record); return; }
       if (record.kind === "direct_message") await this.deps.handleDirectMessage(record.event);
       else await this.deps.handleMention(record.event);
-      this.deps.markProcessed(record.eventId);
+      await this.deps.markProcessed(record.eventId);
       await this.complete(record);
     } catch (error) {
       record.attempts += 1;

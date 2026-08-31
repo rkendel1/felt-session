@@ -176,8 +176,8 @@ export async function dispatchSlackEvent(payload: any): Promise<void> {
     isChannelWatched(event.channel)
   ) {
     const watchId = `watch-${event.channel}-${event.ts}`;
-    if (!isEventProcessed(watchId)) {
-      markEventProcessed(watchId);
+    if (!await isEventProcessed(watchId)) {
+      await markEventProcessed(watchId);
       const u = event.user
         ? await resolveSlackUser(event.user)
         : { name: "Unknown", avatarUrl: undefined };
@@ -216,7 +216,7 @@ export async function dispatchSlackEvent(payload: any): Promise<void> {
   // shared message ts.
   if (event.type === "link_shared") {
     const eventId = `unfurl-${event.channel}-${event.message_ts}`;
-    if (!isEventProcessed(eventId)) {
+    if (!await isEventProcessed(eventId)) {
       handleLinkShared(event)
         .then(() => markEventProcessed(eventId))
         .catch((e) => {
@@ -792,7 +792,7 @@ export class SlackAgent implements AgentModule {
     await loadActiveSessionsOnStartup();
     await loadWorktreeChannels();
     await loadQueue();
-    loadProcessedEvents();
+    await loadProcessedEvents();
 
     // Fetch team ID and bot user ID for streaming APIs
     try {

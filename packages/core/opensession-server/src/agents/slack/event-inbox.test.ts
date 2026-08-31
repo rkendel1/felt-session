@@ -8,8 +8,8 @@ function setup(patch: Partial<SlackEventInboxDependencies> = {}) {
   const deps: SlackEventInboxDependencies = {
     handleDirectMessage: async (event) => { handled.push(`dm:${event.ts}`); },
     handleMention: async (event) => { handled.push(`mention:${event.ts}`); },
-    isProcessed: (id) => processed.has(id),
-    markProcessed: (id) => { processed.add(id); },
+    isProcessed: async (id) => processed.has(id),
+    markProcessed: async (id) => { processed.add(id); },
     ...patch,
   };
   const db = createFeltDB({ namespace: crypto.randomUUID(), memory: true });
