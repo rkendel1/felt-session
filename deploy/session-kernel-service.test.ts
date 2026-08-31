@@ -67,6 +67,10 @@ describe("session kernel service deployment", () => {
       resolve(repoRoot, "deploy/self-deploy.sh"),
     ).text();
     expect(deploy).toContain("install-session-kernel-credential.sh");
+    expect(deploy).toContain("migrate-session-kernel-to-feltdb.ts");
+    expect(deploy).toContain(
+      "--confirm-offline gateway-and-actor-stopped",
+    );
     expect(deploy).toContain("opensession-session-kernel.service");
     const stopGateway = deploy.indexOf("systemctl stop opensession.service");
     const restartActor = deploy.indexOf(

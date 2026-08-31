@@ -397,6 +397,18 @@ if [ "$RESTART_KERNEL" = "1" ]; then
     OPENSESSION_STATE_DIR="$STATE_DIR" \
     OPENSESSION_SESSIONS_DIR="$SESSIONS_DIR" \
     "$EXECUTOR_BUN" "$CURRENT_LINK/scripts/migrate-session-kernel-storage.ts"
+  echo "[deploy] migrating isolated session-kernel actors to managed FeltDB"
+  FELTDB_API_KEY="$(cat "$MANAGED_FELTDB_TOKEN_PATH")"
+  run_as_service_user env \
+    HOME="$SERVICE_HOME_DIR" \
+    OPENSESSION_STATE_DIR="$STATE_DIR" \
+    OPENSESSION_SESSIONS_DIR="$SESSIONS_DIR" \
+    OPENSESSION_FELTDB_URL="$FELTDB_URL" \
+    OPENSESSION_FELTDB_NAMESPACE="$FELTDB_NAMESPACE" \
+    OPENSESSION_FELTDB_API_KEY="$FELTDB_API_KEY" \
+    "$EXECUTOR_BUN" "$CURRENT_LINK/scripts/migrate-session-kernel-to-feltdb.ts" \
+      --confirm-offline gateway-and-actor-stopped
+  unset FELTDB_API_KEY
 fi
 
 if [ "$RESTART_EXECUTOR" = "1" ]; then
