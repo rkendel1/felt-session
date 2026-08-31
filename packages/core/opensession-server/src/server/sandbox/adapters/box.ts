@@ -934,7 +934,7 @@ export class BoxProvider implements SandboxProvider {
       } catch {}
     }
 
-    writeRemoteState({
+    await writeRemoteState({
       sandboxId: box.id,
       provider: this.id,
       sessionId: spec.sessionId,
@@ -969,7 +969,7 @@ export class BoxProvider implements SandboxProvider {
       { sandboxId: box.id, provider: this.id, sessionId: spec.sessionId, repoId: repo.id, trustProfile: trust.trustProfile },
     );
     mark("workspace ready");
-    writeRemoteState({
+    await writeRemoteState({
       sandboxId: box.id,
       provider: this.id,
       sessionId: spec.sessionId,
@@ -1106,7 +1106,7 @@ export class BoxProvider implements SandboxProvider {
         throw e;
       }
     }
-    removeRemoteState(this.id, sandboxId);
+    await removeRemoteState(this.id, sandboxId);
   }
 }
 

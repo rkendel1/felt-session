@@ -497,7 +497,7 @@ export class DaytonaProvider implements SandboxProvider {
     // Persist the provider id before any optional setup. A coordinator restart
     // can now recover directly instead of scanning provider labels or creating
     // a duplicate sandbox after a partially completed launch.
-    writeRemoteState({
+    await writeRemoteState({
       sandboxId: sbx.id,
       provider: this.id,
       sessionId: spec.sessionId,
@@ -542,7 +542,7 @@ export class DaytonaProvider implements SandboxProvider {
       await prepareRunner();
       await prepareWorkspace();
     }
-    writeRemoteState({
+    await writeRemoteState({
       sandboxId: sbx.id,
       provider: this.id,
       sessionId: spec.sessionId,
@@ -644,7 +644,7 @@ export class DaytonaProvider implements SandboxProvider {
     } catch (e) {
       console.warn(`[sandbox:daytona] destroy(${sandboxId}):`, e);
     }
-    removeRemoteState(this.id, sandboxId);
+    await removeRemoteState(this.id, sandboxId);
   }
 }
 

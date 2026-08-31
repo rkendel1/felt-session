@@ -187,7 +187,7 @@ export class E2bProvider implements SandboxProvider {
       repo.id,
       { sandboxId: sbx.sandboxId, provider: this.id, sessionId: spec.sessionId, repoId: repo.id, trustProfile: trust.trustProfile },
     );
-    writeRemoteState({
+    await writeRemoteState({
       sandboxId: sbx.sandboxId,
       provider: this.id,
       sessionId: spec.sessionId,
@@ -284,6 +284,6 @@ export class E2bProvider implements SandboxProvider {
     } catch (e) {
       console.warn(`[sandbox:e2b] destroy(${sandboxId}):`, e);
     }
-    removeRemoteState(this.id, sandboxId);
+    await removeRemoteState(this.id, sandboxId);
   }
 }

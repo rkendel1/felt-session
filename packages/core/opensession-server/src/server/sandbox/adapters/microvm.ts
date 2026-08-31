@@ -551,7 +551,7 @@ export class MicrovmProvider implements SandboxProvider {
         }
       } catch {
         await destroyClone(idx, cfg.storeDir).catch(() => {});
-        removeRemoteState(this.id, previous!.sandboxId);
+        await removeRemoteState(this.id, previous!.sandboxId);
         previous = null;
         idx = null;
       }
@@ -602,7 +602,7 @@ export class MicrovmProvider implements SandboxProvider {
       created = true;
     }
     if (created) {
-      writeRemoteState({
+      await writeRemoteState({
         sandboxId: sandboxId(idx),
         provider: this.id,
         sessionId: spec.sessionId,
@@ -671,11 +671,11 @@ export class MicrovmProvider implements SandboxProvider {
     } catch (error) {
       if (created) {
         await destroyClone(idx, cfg.storeDir).catch(() => {});
-        removeRemoteState(this.id, sandboxId(idx));
+        await removeRemoteState(this.id, sandboxId(idx));
       }
       throw error;
     }
-    writeRemoteState({
+    await writeRemoteState({
       sandboxId: sandboxId(idx),
       provider: this.id,
       sessionId: spec.sessionId,
@@ -754,7 +754,7 @@ export class MicrovmProvider implements SandboxProvider {
     // provider block. Custom-store operators should destroy live sessions
     // before removing their config; the default remains recoverable.
     await destroyClone(idx, cfg?.storeDir || "/opt/firecracker/sandbox-store");
-    removeRemoteState(this.id, id);
+    await removeRemoteState(this.id, id);
   }
 
   async pause(id: string): Promise<void> {
@@ -928,7 +928,7 @@ export const microvmPrewarmAdapter: PrewarmAdapter = {
     );
     const id = sandboxId(idx);
     try {
-      writeRemoteState({
+      await writeRemoteState({
         sandboxId: id,
         provider: "microvm",
         sessionId: `__prewarm__:${key}`,
@@ -945,7 +945,7 @@ export const microvmPrewarmAdapter: PrewarmAdapter = {
       return { sandboxId: id, driver: driverFor(idx) };
     } catch (error) {
       await destroyClone(idx, cfg.storeDir).catch(() => {});
-      removeRemoteState("microvm", id);
+      await removeRemoteState("microvm", id);
       throw error;
     }
   },
@@ -987,7 +987,7 @@ export const microvmPrewarmAdapter: PrewarmAdapter = {
     if (idx == null) return;
     const cfg = sandboxConfig().firecrackerMicrovm;
     await destroyClone(idx, cfg?.storeDir || "/opt/firecracker/sandbox-store");
-    removeRemoteState("microvm", id);
+    await removeRemoteState("microvm", id);
   },
 
   async listPrewarmed() {

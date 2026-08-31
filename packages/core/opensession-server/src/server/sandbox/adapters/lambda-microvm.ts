@@ -262,7 +262,7 @@ export class LambdaMicrovmProvider implements SandboxProvider {
         );
       }
       await this.terminate(client, prevState!.sandboxId);
-      removeRemoteState(this.id, prevState!.sandboxId);
+      await removeRemoteState(this.id, prevState!.sandboxId);
       prevState = null;
       info = null;
     }
@@ -270,13 +270,13 @@ export class LambdaMicrovmProvider implements SandboxProvider {
     let created = false;
     if (!info || statusOf(info.state) === "gone") {
       if (prevState && !pendingClientToken) {
-        removeRemoteState(this.id, prevState.sandboxId);
+        await removeRemoteState(this.id, prevState.sandboxId);
         prevState = null;
       }
       const { RunMicrovmCommand } = await awsModule();
       const clientToken = pendingClientToken || crypto.randomUUID();
       if (!pendingClientToken) {
-        writeRemoteState({
+        await writeRemoteState({
           sandboxId: `pending-${clientToken}`,
           pendingClientToken: clientToken,
           provider: this.id,
@@ -326,11 +326,11 @@ export class LambdaMicrovmProvider implements SandboxProvider {
         }),
       );
       if (!response.microvmId) throw new Error("RunMicrovm returned no microvmId");
-      removeRemoteState(this.id, `pending-${clientToken}`);
+      await removeRemoteState(this.id, `pending-${clientToken}`);
       info = response;
       created = true;
       // Persist immediately so a crash during bootstrap cannot orphan paid compute.
-      writeRemoteState({
+      await writeRemoteState({
         sandboxId: response.microvmId,
         provider: this.id,
         sessionId: spec.sessionId,
@@ -362,7 +362,7 @@ export class LambdaMicrovmProvider implements SandboxProvider {
       if (created) await this.terminate(client, id).catch(() => {});
       throw e;
     }
-    writeRemoteState({
+    await writeRemoteState({
       sandboxId: id,
       provider: this.id,
       sessionId: spec.sessionId,
@@ -433,6 +433,6 @@ export class LambdaMicrovmProvider implements SandboxProvider {
         throw e;
       }
     }
-    removeRemoteState(this.id, sandboxId);
+    await removeRemoteState(this.id, sandboxId);
   }
 }

@@ -349,7 +349,7 @@ export class ModalProvider implements SandboxProvider {
       }
     }
     if (sandbox && prevState && sandbox.sandboxId !== prevState.sandboxId) {
-      removeRemoteState(this.id, prevState.sandboxId);
+      await removeRemoteState(this.id, prevState.sandboxId);
       prevState = null;
     }
     // Modal's absolute timeout is not extended by activity. Leave a one-hour
@@ -371,7 +371,7 @@ export class ModalProvider implements SandboxProvider {
       prevState = findRemoteStateBySession(this.id, spec.sessionId);
       await sandbox.setTags({ "opensession.completed": spec.sessionId }).catch(() => {});
       await sandbox.terminate();
-      removeRemoteState(this.id, sandbox.sandboxId);
+      await removeRemoteState(this.id, sandbox.sandboxId);
       sandbox = null;
     }
     if (!sandbox && !prevState?.checkpointArtifactId) {
@@ -403,7 +403,7 @@ export class ModalProvider implements SandboxProvider {
     if (!sandbox) {
       const checkpointArtifactId = prevState?.checkpointArtifactId;
       const checkpointCreatedAt = prevState?.checkpointCreatedAt;
-      if (prevState) removeRemoteState(this.id, prevState.sandboxId);
+      if (prevState) await removeRemoteState(this.id, prevState.sandboxId);
       console.log(`[sandbox:modal] creating sandbox for ${spec.sessionId}`);
       const template = readRemoteRepoTemplate("modal", repo.id);
       // The per-repo environment shape (Settings -> Sandboxes machine profile)
@@ -502,7 +502,7 @@ export class ModalProvider implements SandboxProvider {
       throw e;
     }
     const createdAt = created ? new Date().toISOString() : prevState?.createdAt;
-    writeRemoteState({
+    await writeRemoteState({
       sandboxId: sandbox.sandboxId,
       provider: this.id,
       sessionId: spec.sessionId,
@@ -603,7 +603,7 @@ export class ModalProvider implements SandboxProvider {
     const previous = current.checkpointArtifactId;
     current.checkpointArtifactId = image.imageId;
     current.checkpointCreatedAt = new Date().toISOString();
-    writeRemoteState(current);
+    await writeRemoteState(current);
     if (previous && previous !== image.imageId) {
       await client.images.delete(previous).catch(() => {});
     }
@@ -627,7 +627,7 @@ export class ModalProvider implements SandboxProvider {
     if (state?.checkpointArtifactId) {
       await client.images.delete(state.checkpointArtifactId).catch(() => {});
     }
-    removeRemoteState(this.id, sandboxId);
+    await removeRemoteState(this.id, sandboxId);
   }
 }
 

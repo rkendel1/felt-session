@@ -59,6 +59,7 @@ import {
   rmSync,
   unlinkSync,
 } from "fs";
+import type { StateFirstDB } from "@feltdb/core";
 import { dirname, isAbsolute, relative, resolve } from "path";
 import { OPENSESSION_SESSIONS_DIR, homeDir, stateDir } from "../../paths";
 import { journalSet, journalClear, journalClearIfLineage, journalRecordAbnormalCompletion, type ActiveRunRecord } from "../../run-journal";
@@ -101,6 +102,7 @@ import { hostSteer, hostInterruptSteer, hostCancel } from "../../host-registry";
 import { registerRunToken, unregisterRunToken } from "../../run-rpc";
 import { registerRunWsHost, unregisterRunWsHost, runWsConnector } from "../../run-ws";
 import { writeJsonAtomic } from "../../shared/atomic-write";
+import { managedFeltDb } from "../../managed-feltdb";
 import { createWorkloadIdentityEnv, type WorkloadIdentityContext } from "../../workload-identity";
 import {
   HostHandle,
@@ -382,7 +384,7 @@ export function projectRemoteModelProviderConfig(
   };
 }
 
-// ── Provider state files (mirror docker's, namespaced per provider) ──────────
+// ── Provider state (managed FeltDB, namespaced per provider) ─────────────────
 
 /**
  * The trust policy a sandbox EXISTS under. It belongs to the sandbox, not to
@@ -463,21 +465,79 @@ function sanitizeName(s: string): string {
   return s.replace(/[^a-zA-Z0-9_.-]+/g, "-").replace(/^[^a-zA-Z0-9]+/, "");
 }
 
-function statePath(provider: string, sandboxId: string): string {
-  return `${STATE_DIR}/${provider}-${sanitizeName(sandboxId)}.json`;
+type StoredRemoteSandboxState = RemoteSandboxState & { id: string };
+const REMOTE_STATE_COLLECTION = "opensession_remote_sandbox_state";
+const REMOTE_STATE_MIGRATION = "remote-sandbox-state-json-to-managed-feltdb-v1";
+let remoteStateDb: StateFirstDB | undefined;
+const remoteManagedState = ((globalThis as typeof globalThis & {
+  __opensessionRemoteSandboxState?: {
+    states: Map<string, RemoteSandboxState>;
+    persistTail: Promise<void>;
+  };
+}).__opensessionRemoteSandboxState ??= {
+  states: new Map<string, RemoteSandboxState>(),
+  persistTail: Promise.resolve(),
+});
+const remoteStateKey = (provider: string, sandboxId: string) => `${provider}:${sandboxId}`;
+const remoteStateRecordId = (provider: string, sandboxId: string) =>
+  `sandbox_${Buffer.from(remoteStateKey(provider, sandboxId)).toString("base64url")}`;
+
+export async function initializeManagedRemoteSandboxState(
+  db: StateFirstDB = remoteStateDb ?? managedFeltDb(),
+  legacyDir = STATE_DIR,
+): Promise<void> {
+  remoteStateDb = db;
+  const legacy: Array<{ path: string; state: RemoteSandboxState }> = [];
+  if (existsSync(legacyDir)) {
+    for (const file of readdirSync(legacyDir)) {
+      if (!file.endsWith(".json")) continue;
+      const path = `${legacyDir}/${file}`;
+      try {
+        const state = JSON.parse(readFileSync(path, "utf8")) as Partial<RemoteSandboxState>;
+        if (state.provider && state.sandboxId && state.sessionId)
+          legacy.push({ path, state: withTrustPolicy(state as RemoteSandboxState) });
+      } catch {
+        // Leave malformed and unrelated files untouched. Their owner decides
+        // whether recovery or operator intervention is safe.
+      }
+    }
+  }
+  const migrations = db.collection<{ id: string }>("opensession_migrations");
+  const migrationComplete = !!await migrations.get(REMOTE_STATE_MIGRATION);
+  const managed = await db.collection<StoredRemoteSandboxState>(REMOTE_STATE_COLLECTION).all();
+  const managedByKey = new Map(managed.map((state) => [remoteStateKey(state.provider, state.sandboxId), state]));
+  const imports = legacy.map(({ state }) => state).filter((state) => {
+    if (!migrationComplete) return true;
+    const current = managedByKey.get(remoteStateKey(state.provider, state.sandboxId));
+    return !current || Date.parse(state.lastActivityAt) > Date.parse(current.lastActivityAt);
+  });
+  if (imports.length || !migrationComplete) {
+    for (let offset = 0; offset < imports.length; offset += 100) {
+      const batch = imports.slice(offset, offset + 100);
+      await db.transaction((tx) => {
+        for (const state of batch) {
+          const id = remoteStateRecordId(state.provider, state.sandboxId);
+          tx.collection<StoredRemoteSandboxState>(REMOTE_STATE_COLLECTION).set(id, { id, ...state });
+        }
+      }, { transactionId: `opensession:remote-sandbox-state:import:${crypto.randomUUID()}` });
+    }
+    if (!migrationComplete) await db.transaction((tx) => {
+      tx.collection("opensession_migrations").set(REMOTE_STATE_MIGRATION,
+        { id: REMOTE_STATE_MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
+    }, { transactionId: `opensession:migration:${REMOTE_STATE_MIGRATION}` });
+  }
+  remoteManagedState.states.clear();
+  for (const { id: _, ...state } of await db.collection<StoredRemoteSandboxState>(REMOTE_STATE_COLLECTION).all())
+    remoteManagedState.states.set(remoteStateKey(state.provider, state.sandboxId), state);
+  for (const { path } of legacy) if (existsSync(path)) unlinkSync(path);
 }
 
 export function readRemoteState(
   provider: string,
   sandboxId: string,
 ): RemoteSandboxState | null {
-  try {
-    const p = statePath(provider, sandboxId);
-    if (!existsSync(p)) return null;
-    return withTrustPolicy(JSON.parse(readFileSync(p, "utf-8")));
-  } catch {
-    return null;
-  }
+  const state = remoteManagedState.states.get(remoteStateKey(provider, sandboxId));
+  return state ? structuredClone(state) : null;
 }
 
 /** State files written before the policy was recorded carry none. They can
@@ -487,16 +547,29 @@ function withTrustPolicy(state: RemoteSandboxState): RemoteSandboxState {
   return { ...state, ...resolveTrustPolicy({}, state) };
 }
 
-export function writeRemoteState(state: RemoteSandboxState): void {
-  mkdirSync(STATE_DIR, { recursive: true });
-  writeJsonAtomic(statePath(state.provider, state.sandboxId), state);
+export async function writeRemoteState(state: RemoteSandboxState): Promise<void> {
+  const snapshot = structuredClone(state);
+  remoteManagedState.states.set(remoteStateKey(state.provider, state.sandboxId), snapshot);
+  const db = remoteStateDb ?? managedFeltDb();
+  remoteManagedState.persistTail = remoteManagedState.persistTail.catch(() => {}).then(async () => {
+    const id = remoteStateRecordId(snapshot.provider, snapshot.sandboxId);
+    await db.transaction((tx) => {
+      tx.collection<StoredRemoteSandboxState>(REMOTE_STATE_COLLECTION).set(id, { id, ...snapshot });
+    }, { transactionId: `opensession:remote-sandbox-state:write:${crypto.randomUUID()}` });
+  });
+  await remoteManagedState.persistTail;
 }
 
-export function removeRemoteState(provider: string, sandboxId: string): void {
+export async function removeRemoteState(provider: string, sandboxId: string): Promise<void> {
   const state = readRemoteState(provider, sandboxId);
-  try {
-    unlinkSync(statePath(provider, sandboxId));
-  } catch {}
+  remoteManagedState.states.delete(remoteStateKey(provider, sandboxId));
+  const db = remoteStateDb ?? managedFeltDb();
+  remoteManagedState.persistTail = remoteManagedState.persistTail.catch(() => {}).then(async () => {
+    await db.transaction((tx) => {
+      tx.collection(REMOTE_STATE_COLLECTION).delete(remoteStateRecordId(provider, sandboxId));
+    }, { transactionId: `opensession:remote-sandbox-state:delete:${crypto.randomUUID()}` });
+  });
+  await remoteManagedState.persistTail;
   if (state) {
     try {
       rmSync(`${RUNS_BASE}/${sanitizeName(state.sessionId)}`, { recursive: true, force: true });
@@ -508,11 +581,12 @@ export function touchRemoteState(provider: string, sandboxId: string): void {
   const s = readRemoteState(provider, sandboxId);
   if (s) {
     s.lastActivityAt = new Date().toISOString();
-    writeRemoteState(s);
+    void writeRemoteState(s).catch((error) =>
+      console.error(`[sandbox:${provider}] Failed to persist activity:`, error));
   }
 }
 
-/** Find a provider's state file by session id (the reverse index ensure needs
+/** Find a provider's state by session id (the reverse index ensure needs
  *  when the provider-side label lookup fails). */
 export function findRemoteStateBySession(
   provider: string,
@@ -522,21 +596,15 @@ export function findRemoteStateBySession(
 }
 
 /** Enumerate a provider's persisted sandboxes. Used by provider-side orphan
- * audits (notably local MicroVM prewarms); malformed files fail closed. */
+ * audits (notably local MicroVM prewarms). */
 export function listRemoteStates(provider: string): RemoteSandboxState[] {
-  const states: RemoteSandboxState[] = [];
-  try {
-    if (!existsSync(STATE_DIR)) return states;
-    for (const f of readdirSync(STATE_DIR)) {
-      if (!f.startsWith(`${provider}-`) || !f.endsWith(".json")) continue;
-      try {
-        const s: RemoteSandboxState = JSON.parse(readFileSync(`${STATE_DIR}/${f}`, "utf-8"));
-        if (s.provider === provider && s.sandboxId && s.sessionId)
-          states.push(withTrustPolicy(s));
-      } catch {}
-    }
-  } catch {}
-  return states;
+  return [...remoteManagedState.states.values()]
+    .filter((state) => state.provider === provider)
+    .map((state) => structuredClone(state));
+}
+
+export async function flushRemoteSandboxStateWrites(): Promise<void> {
+  await remoteManagedState.persistTail;
 }
 
 /** Serialize ensure() per provider+session — same in-process chain pattern as
