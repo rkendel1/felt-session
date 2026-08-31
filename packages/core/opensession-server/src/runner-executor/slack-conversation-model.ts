@@ -5,7 +5,7 @@
  * Slack is the human surface; FeltDB is the canonical durable history.
  */
 
-import { createFeltDB, getTelemetryClient } from "@feltdb/core";
+import type { StateFirstDB } from "@feltdb/core";
 import { randomUUIDv7 } from "bun";
 
 /**
@@ -59,8 +59,8 @@ interface StoredSlackConversation {
   messageTs?: string;
   taskId?: string;
   agentId?: string;
-  context: string; // JSON
-  participants: string; // JSON array
+  context: SlackConversation["context"];
+  participants: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -76,7 +76,7 @@ interface StoredConversationEvent {
   slackThreadTs?: string;
   userId: string;
   content: string;
-  metadata?: string; // JSON
+  metadata?: Record<string, unknown>;
   timestamp: string;
 }
 
@@ -110,15 +110,8 @@ export interface SlackConversationModelInterface {
  * Open or create a Slack conversation model.
  */
 export function openSlackConversationModel(
-  path: string,
+  db: StateFirstDB,
 ): SlackConversationModelInterface {
-  const telemetry = getTelemetryClient();
-  telemetry.disable();
-
-  const db = createFeltDB({
-    path,
-    namespace: "mission-control-slack-conversations",
-  });
 
   const CONVERSATIONS_COLLECTION = "slack_conversations";
   const EVENTS_COLLECTION = "slack_conversation_events";
@@ -136,8 +129,8 @@ export function openSlackConversationModel(
         messageTs: conversation.messageTs,
         taskId: conversation.taskId,
         agentId: conversation.agentId,
-        context: JSON.stringify(conversation.context),
-        participants: JSON.stringify(conversation.participants),
+        context: conversation.context,
+        participants: conversation.participants,
         createdAt: conversation.createdAt,
         updatedAt: conversation.updatedAt,
       };
@@ -166,8 +159,8 @@ export function openSlackConversationModel(
         messageTs: row.messageTs,
         taskId: row.taskId,
         agentId: row.agentId,
-        context: JSON.parse(row.context),
-        participants: JSON.parse(row.participants),
+        context: row.context,
+        participants: row.participants,
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
       };
@@ -192,8 +185,8 @@ export function openSlackConversationModel(
         messageTs: row.messageTs,
         taskId: row.taskId,
         agentId: row.agentId,
-        context: JSON.parse(row.context),
-        participants: JSON.parse(row.participants),
+        context: row.context,
+        participants: row.participants,
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
       };
@@ -215,8 +208,8 @@ export function openSlackConversationModel(
         messageTs: row.messageTs,
         taskId: row.taskId,
         agentId: row.agentId,
-        context: JSON.parse(row.context),
-        participants: JSON.parse(row.participants),
+        context: row.context,
+        participants: row.participants,
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
       }));
@@ -234,8 +227,8 @@ export function openSlackConversationModel(
         messageTs: conversation.messageTs,
         taskId: conversation.taskId,
         agentId: conversation.agentId,
-        context: JSON.stringify(conversation.context),
-        participants: JSON.stringify(conversation.participants),
+        context: conversation.context,
+        participants: conversation.participants,
         createdAt: conversation.createdAt,
         updatedAt: new Date().toISOString(),
       };
@@ -263,7 +256,7 @@ export function openSlackConversationModel(
         slackThreadTs: event.slackThreadTs,
         userId: event.userId,
         content: event.content,
-        metadata: event.metadata ? JSON.stringify(event.metadata) : undefined,
+        metadata: event.metadata,
         timestamp: event.timestamp,
       };
 
@@ -290,7 +283,7 @@ export function openSlackConversationModel(
         slackThreadTs: row.slackThreadTs,
         userId: row.userId,
         content: row.content,
-        metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
+        metadata: row.metadata,
         timestamp: row.timestamp,
       }));
     },
@@ -328,7 +321,7 @@ export function openSlackConversationModel(
         slackThreadTs: row.slackThreadTs,
         userId: row.userId,
         content: row.content,
-        metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
+        metadata: row.metadata,
         timestamp: row.timestamp,
       }));
     },

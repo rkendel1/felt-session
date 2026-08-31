@@ -5,7 +5,7 @@
  * Each project gets a dedicated channel for coordinated work.
  */
 
-import { createFeltDB, getTelemetryClient } from "@feltdb/core";
+import type { StateFirstDB } from "@feltdb/core";
 import { randomUUIDv7 } from "bun";
 import type { MissionControlProject } from "./mission-control-project";
 
@@ -60,15 +60,8 @@ export interface SlackChannelManagerInterface {
  * Open or create a Slack channel manager.
  */
 export function openSlackChannelManager(
-  path: string,
+  db: StateFirstDB,
 ): SlackChannelManagerInterface {
-  const telemetry = getTelemetryClient();
-  telemetry.disable();
-
-  const db = createFeltDB({
-    path,
-    namespace: "mission-control-slack-channels",
-  });
 
   const CHANNELS_COLLECTION = "slack_project_channels";
 

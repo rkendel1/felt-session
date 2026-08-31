@@ -25,7 +25,7 @@ import {
   type MissionControlSlackOrchestratorInterface,
 } from "./mission-control-slack-orchestrator";
 import type { AgentIdentity } from "./mission-control-agent-identity";
-import { createFeltDB } from "@feltdb/core";
+import { testFeltDb } from "./test-feltdb";
 
 let testCounter = 0;
 let testDir: string;
@@ -41,20 +41,15 @@ beforeEach(() => {
   testDir = `/tmp/${prefix}-${Date.now()}-${testCounter++}`;
   fs.mkdirSync(testDir, { recursive: true });
 
-  projectRegistry = openDurableProjectRegistry(
-    createFeltDB({
-      namespace: `mission-control-slack-project-test-${testCounter}`,
-      memory: true,
-    }),
-  );
+  projectRegistry = openDurableProjectRegistry(testFeltDb(`${testDir}/projects`));
   agentRegistry = openDurableAgentIdentityRegistry(
-    path.join(testDir, "agents.db"),
+    testFeltDb(path.join(testDir, "agents.db")),
   );
   channelManager = openSlackChannelManager(
-    path.join(testDir, "channels.db"),
+    testFeltDb(path.join(testDir, "channels.db")),
   );
   conversationModel = openSlackConversationModel(
-    path.join(testDir, "conversations.db"),
+    testFeltDb(path.join(testDir, "conversations.db")),
   );
 
   orchestrator = createMissionControlSlackOrchestrator(

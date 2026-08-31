@@ -4,7 +4,7 @@
  * Manages persistent agent identities, presence, and assignments.
  */
 
-import { createFeltDB, getTelemetryClient } from "@feltdb/core";
+import type { StateFirstDB } from "@feltdb/core";
 import { randomUUIDv7 } from "bun";
 import type {
   AgentIdentity,
@@ -25,7 +25,7 @@ interface StoredAgentIdentity {
   kind: "role" | "integration";
   role?: string;
   provider?: string;
-  capabilities: string; // JSON string
+  capabilities: AgentIdentity["capabilities"];
   projectId?: string;
   enabled: boolean;
   createdAt: string;
@@ -91,15 +91,8 @@ export interface DurableAgentIdentityRegistry {
  * Open or create a durable agent identity registry.
  */
 export function openDurableAgentIdentityRegistry(
-  path: string,
+  db: StateFirstDB,
 ): DurableAgentIdentityRegistry {
-  const telemetry = getTelemetryClient();
-  telemetry.disable();
-
-  const db = createFeltDB({
-    path,
-    namespace: "mission-control-agents",
-  });
 
   const IDENTITIES_COLLECTION = "agent_identities";
   const PRESENCE_COLLECTION = "agent_presence";
@@ -115,7 +108,7 @@ export function openDurableAgentIdentityRegistry(
         kind: identity.kind,
         role: identity.role,
         provider: identity.provider,
-        capabilities: JSON.stringify(identity.capabilities),
+        capabilities: identity.capabilities,
         projectId: identity.projectId,
         enabled: identity.enabled,
         createdAt: identity.createdAt,
@@ -143,7 +136,7 @@ export function openDurableAgentIdentityRegistry(
         kind: row.kind,
         role: row.role as any,
         provider: row.provider,
-        capabilities: JSON.parse(row.capabilities),
+        capabilities: row.capabilities,
         projectId: row.projectId,
         enabled: row.enabled,
         createdAt: row.createdAt,
@@ -166,7 +159,7 @@ export function openDurableAgentIdentityRegistry(
         kind: row.kind,
         role: row.role as any,
         provider: row.provider,
-        capabilities: JSON.parse(row.capabilities),
+        capabilities: row.capabilities,
         projectId: row.projectId,
         enabled: row.enabled,
         createdAt: row.createdAt,
@@ -195,7 +188,7 @@ export function openDurableAgentIdentityRegistry(
         kind: row.kind,
         role: row.role as any,
         provider: row.provider,
-        capabilities: JSON.parse(row.capabilities),
+        capabilities: row.capabilities,
         projectId: row.projectId,
         enabled: row.enabled,
         createdAt: row.createdAt,
@@ -212,7 +205,7 @@ export function openDurableAgentIdentityRegistry(
         kind: identity.kind,
         role: identity.role,
         provider: identity.provider,
-        capabilities: JSON.stringify(identity.capabilities),
+        capabilities: identity.capabilities,
         projectId: identity.projectId,
         enabled: identity.enabled,
         createdAt: identity.createdAt,

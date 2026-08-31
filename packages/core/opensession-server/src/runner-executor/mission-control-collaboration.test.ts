@@ -25,6 +25,7 @@ import {
 } from "./durable-agent-identity-registry";
 import type { DurableConversation, ConversationTurn, AgentDecision } from "./mission-control-collaboration";
 import type { AgentIdentity } from "./mission-control-agent-identity";
+import { testFeltDb } from "./test-feltdb";
 
 let testCounter = 0;
 let testDir: string;
@@ -41,7 +42,7 @@ beforeEach(() => {
 
   ledger = openDurableConversationLedger(path.join(testDir, "ledger.db"));
   agentRegistry = openDurableAgentIdentityRegistry(
-    path.join(testDir, "agents.db"),
+    testFeltDb(path.join(testDir, "agents.db")),
   );
   contextBuilder = createAgentContextBuilder(ledger);
   engine = createAutonomousCollaborationEngine(
