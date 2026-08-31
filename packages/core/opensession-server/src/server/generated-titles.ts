@@ -8,61 +8,76 @@
  * Generation is a one-shot Haiku call (see generateSessionTitle), fired in the
  * background at session creation so it never blocks the create path.
  */
-import { readFileSync, existsSync, readdirSync, statSync } from "fs";
-import { writeJsonAtomic } from "./shared/atomic-write";
+import { readFileSync, existsSync, readdirSync, statSync, unlinkSync } from "fs";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
+import { managedFeltDb } from "./managed-feltdb";
+import type { StateFirstDB } from "@feltdb/core";
 import { oneShot } from "./one-shot";
 import { getTitleOverride } from "./title-overrides";
 
 const REGISTRY_PATH = `${OPENSESSION_SESSIONS_DIR}/generated-titles.json`;
 
-let cache: Record<string, string> | null = null;
-let cacheMtimeMs = 0;
-let lastStatAt = 0;
-
-function load(): Record<string, string> {
-	// Re-read when the file changed underneath us. A restart overlaps two
-	// processes (the outgoing one keeps finishing title calls while draining),
-	// and this module used to cache the map for the process lifetime — so a
-	// sibling's titles stayed invisible until the next restart, and our next
-	// whole-map write silently dropped them. Stat at most once a second:
-	// getAllSessions calls this once per session, thousands of times a scan.
-	const now = Date.now();
-	if (cache && now - lastStatAt < 1000) return cache;
-	lastStatAt = now;
-	try {
-		const mtime = existsSync(REGISTRY_PATH) ? statSync(REGISTRY_PATH).mtimeMs : 0;
-		if (cache && mtime === cacheMtimeMs) return cache;
-		cache = mtime ? JSON.parse(readFileSync(REGISTRY_PATH, "utf-8")) : {};
-		cacheMtimeMs = mtime;
-	} catch {
-		cache ??= {};
-	}
-	return cache!;
-}
-
-function save(registry: Record<string, string>): void {
-	cache = registry;
-	writeJsonAtomic(REGISTRY_PATH, registry);
-	try {
-		cacheMtimeMs = statSync(REGISTRY_PATH).mtimeMs;
-	} catch {}
-}
+const COLLECTION = "opensession_generated_titles";
+const MIGRATION = "generated-titles-json-to-managed-feltdb-v1";
+type StoredGeneratedTitle = { id: string; title: string; updatedAt: number };
+const cache = new Map<string, string>();
+let titleDb: StateFirstDB | undefined;
 
 export function getGeneratedTitle(id: string): string | undefined {
-	return load()[id];
+	return cache.get(id);
 }
 
-function setGeneratedTitle(id: string, title: string): void {
-	// Merge over what is on disk right now, not just over our cache: save()
-	// rewrites the WHOLE map, so persisting a stale cache would delete every
-	// title a sibling process stored since we last read.
-	let onDisk: Record<string, string> = {};
-	try {
-		if (existsSync(REGISTRY_PATH))
-			onDisk = JSON.parse(readFileSync(REGISTRY_PATH, "utf-8"));
-	} catch {}
-	save({ ...onDisk, ...load(), [id]: title });
+export async function initializeManagedGeneratedTitles(
+	authority: StateFirstDB = managedFeltDb(),
+): Promise<void> {
+	titleDb = authority;
+	const migrations = authority.collection<{ id: string }>("opensession_migrations");
+	if (!await migrations.get(MIGRATION)) {
+		let legacy: Record<string, string> = {};
+		try {
+			if (existsSync(REGISTRY_PATH)) legacy = JSON.parse(readFileSync(REGISTRY_PATH, "utf8"));
+		} catch {}
+		for (const [id, title] of Object.entries(legacy)) {
+			if (!title) continue;
+			await authority.transaction((tx) => {
+				tx.collection<StoredGeneratedTitle>(COLLECTION).set(id, { id, title, updatedAt: Date.now() });
+			}, { transactionId: `opensession:generated-title:migrate:${id}` });
+		}
+		await authority.transaction((tx) => {
+			tx.collection("opensession_migrations").set(MIGRATION, { id: MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
+		}, { transactionId: `opensession:migration:${MIGRATION}` });
+		if (existsSync(REGISTRY_PATH)) unlinkSync(REGISTRY_PATH);
+	}
+	const records = authority.runtime().runtime === "remote"
+		? await queryGeneratedTitles(authority)
+		: await authority.collection<StoredGeneratedTitle>(COLLECTION).all();
+	cache.clear();
+	for (const record of records) cache.set(record.id, record.title);
+}
+
+async function queryGeneratedTitles(authority: StateFirstDB): Promise<StoredGeneratedTitle[]> {
+	const records: StoredGeneratedTitle[] = [];
+	let cursor: string | undefined;
+	do {
+		const page = await authority.query<StoredGeneratedTitle>({
+			collection: COLLECTION,
+			orderBy: [{ field: "updatedAt", direction: "desc" }],
+			limit: 500,
+			...(cursor ? { cursor } : {}),
+		});
+		records.push(...page.records);
+		cursor = page.exhausted ? undefined : page.nextCursor;
+		if (!page.exhausted && !cursor) throw new Error("FeltDB generated title cursor is missing");
+	} while (cursor);
+	return records;
+}
+
+async function setGeneratedTitle(id: string, title: string): Promise<void> {
+	const authority = titleDb ?? managedFeltDb();
+	await authority.transaction((tx) => {
+		tx.collection<StoredGeneratedTitle>(COLLECTION).set(id, { id, title, updatedAt: Date.now() });
+	}, { transactionId: `opensession:generated-title:${id}:${crypto.randomUUID()}` });
+	cache.set(id, title);
 }
 
 /** Trim a raw model output into a clean short title, or "" if unusable. */
@@ -121,7 +136,7 @@ export async function ensureGeneratedTitle(
 	const title = sanitizeTitle(out);
 	if (!title) return null;
 	try {
-		setGeneratedTitle(id, title);
+		await setGeneratedTitle(id, title);
 	} catch (e) {
 		// A `void ensureGeneratedTitle(...)` caller would surface a write failure
 		// (disk full) as an unhandled rejection — a missing title is not worth that.

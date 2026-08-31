@@ -18,7 +18,7 @@ import { initializeManagedTodos, startTodoReminderTicker } from "./src/server/to
 import { loadActiveSessionsOnStartup as initializeManagedSlackSessions } from "./src/agents/slack/state";
 import { initializeManagedLinearSessions } from "./src/agents/linear/session";
 import { loadTokens as initializeManagedLinearOauth } from "./src/agents/linear/oauth";
-import { startGeneratedTitleSweep } from "./src/server/generated-titles";
+import { initializeManagedGeneratedTitles, startGeneratedTitleSweep } from "./src/server/generated-titles";
 import { startLiveActivitySync } from "./src/server/live-activities";
 import { startRuntimeInvestigationHandoffConsumer } from "./src/server/runtime-investigation-handoffs";
 import { initializeManagedFeltDb } from "./src/server/managed-feltdb";
@@ -160,6 +160,7 @@ if (!g.__opensessionBooted) {
 	await initializeManagedLinearSessions(db);
 	await initializeManagedLinearOauth(db);
 	await initializeManagedScheduledPrompts(db);
+	await initializeManagedGeneratedTitles(db);
 }
 
 // Listeners the server owns. Deliberately started HERE and not as module side
