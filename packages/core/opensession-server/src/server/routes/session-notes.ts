@@ -71,7 +71,7 @@ export async function handleSessionNotesRoutes(
 			return Response.json({ error: "user and note content required" }, { status: 400 });
 		let note;
 		try {
-			note = addSessionNote(sessionId, user, text, images);
+			note = await addSessionNote(sessionId, user, text, images);
 		} catch (error) {
 			removeStagedImages(images);
 			throw error;
@@ -106,13 +106,13 @@ async function handleNoteMutation(
 	if (!user) return Response.json({ error: "user required" }, { status: 400 });
 	const result =
 		req.method === "PATCH"
-			? editSessionNote(
+			? await editSessionNote(
 					sessionId,
 					noteId,
 					typeof body?.text === "string" ? body.text : "",
 					user,
 				)
-			: deleteSessionNote(sessionId, noteId, user);
+			: await deleteSessionNote(sessionId, noteId, user);
 	if (!result.ok)
 		return Response.json(
 			{

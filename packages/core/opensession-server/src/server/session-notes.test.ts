@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createFeltDB } from "@feltdb/core";
 
 // The store's directory is resolved at module load (stateDir), so the scratch
 // namespace has to be in place BEFORE session-notes is imported — hence the
@@ -14,19 +15,23 @@ const {
 	addSessionNote,
 	deleteSessionNote,
 	editSessionNote,
+	initializeManagedSessionNotes,
 	isValidNoteSession,
 	listSessionNotes,
 	sessionNoteActivity,
 } = await import("./session-notes");
+const notesDb = createFeltDB({ namespace: crypto.randomUUID(), memory: true });
+await initializeManagedSessionNotes(notesDb);
 const { stageInlineImages } = await import("./uploads");
 if (saved === undefined) delete process.env.OPENSESSION_STATE_DIR;
 else process.env.OPENSESSION_STATE_DIR = saved;
 
 describe("session notes", () => {
-	test("appends and lists in order, per session", () => {
-		addSessionNote("os-a", "Kent", "first");
-		addSessionNote("os-a", "Michiel", "second");
-		addSessionNote("os-b", "Kent", "elsewhere");
+	test("appends and lists in order, per session", async () => {
+		await addSessionNote("os-a", "Kent", "first");
+		await addSessionNote("os-a", "Michiel", "second");
+		await addSessionNote("os-b", "Kent", "elsewhere");
+		await initializeManagedSessionNotes(notesDb);
 		expect(listSessionNotes("os-a").map((n) => n.text)).toEqual([
 			"first",
 			"second",
@@ -35,21 +40,21 @@ describe("session notes", () => {
 		expect(listSessionNotes("os-never-written")).toEqual([]);
 	});
 
-	test("an empty note is not stored", () => {
-		expect(addSessionNote("os-empty", "Kent", "   ")).toBeNull();
+	test("an empty note is not stored", async () => {
+		expect(await addSessionNote("os-empty", "Kent", "   ")).toBeNull();
 		expect(listSessionNotes("os-empty")).toEqual([]);
 	});
 
-	test("stores images with text and allows image-only notes", () => {
+	test("stores images with text and allows image-only notes", async () => {
 		const image = "/media?path=%2Ftmp%2Fnote.png";
-		const withText = addSessionNote("os-images", "Kent", "look", [image]);
-		const imageOnly = addSessionNote("os-images", "Kent", "", [image]);
+		const withText = await addSessionNote("os-images", "Kent", "look", [image]);
+		const imageOnly = await addSessionNote("os-images", "Kent", "", [image]);
 		expect(withText?.images).toEqual([image]);
 		expect(imageOnly?.text).toBe("");
 		expect(imageOnly?.images).toEqual([image]);
 	});
 
-	test("stages inline image bytes outside the note store and removes them with the note", () => {
+	test("stages inline image bytes outside the note store and removes them with the note", async () => {
 		const urls = stageInlineImages(
 			"os-staged-image",
 			["data:image/png;base64,iVBORw0KGgo="],
@@ -57,9 +62,9 @@ describe("session notes", () => {
 		);
 		const path = new URL(urls[0]!, "http://local").searchParams.get("path")!;
 		expect(existsSync(path)).toBe(true);
-		const note = addSessionNote("os-staged-image", "Kent", "", urls)!;
+		const note = (await addSessionNote("os-staged-image", "Kent", "", urls))!;
 		expect(note.images?.[0]).toStartWith("/media?path=");
-		expect(deleteSessionNote("os-staged-image", note.id, "Kent").ok).toBe(true);
+		expect((await deleteSessionNote("os-staged-image", note.id, "Kent")).ok).toBe(true);
 		expect(existsSync(path)).toBe(false);
 	});
 
@@ -90,37 +95,37 @@ describe("session notes", () => {
 		expect(isValidNoteSession(42)).toBe(false);
 	});
 
-	test("only the author can edit a note", () => {
-		const note = addSessionNote("os-owned", "Kent", "mine")!;
-		expect(editSessionNote("os-owned", note.id, "changed", "Michiel")).toEqual({
+	test("only the author can edit a note", async () => {
+		const note = (await addSessionNote("os-owned", "Kent", "mine"))!;
+		expect(await editSessionNote("os-owned", note.id, "changed", "Michiel")).toEqual({
 			ok: false,
 			reason: "not_author",
 		});
 		expect(listSessionNotes("os-owned")[0]!.text).toBe("mine");
 		// Case and surrounding space don't decide authorship.
-		const ok = editSessionNote("os-owned", note.id, "changed", " kent ");
+		const ok = await editSessionNote("os-owned", note.id, "changed", " kent ");
 		expect(ok.ok).toBe(true);
 		expect(listSessionNotes("os-owned")[0]!.text).toBe("changed");
 		expect(listSessionNotes("os-owned")[0]!.editedAt).toBeGreaterThan(0);
 	});
 
-	test("only the author can delete a note", () => {
-		const note = addSessionNote("os-del", "Kent", "mine")!;
-		expect(deleteSessionNote("os-del", note.id, "Michiel")).toEqual({
+	test("only the author can delete a note", async () => {
+		const note = (await addSessionNote("os-del", "Kent", "mine"))!;
+		expect(await deleteSessionNote("os-del", note.id, "Michiel")).toEqual({
 			ok: false,
 			reason: "not_author",
 		});
 		expect(listSessionNotes("os-del")).toHaveLength(1);
-		expect(deleteSessionNote("os-del", note.id, "Kent").ok).toBe(true);
+		expect((await deleteSessionNote("os-del", note.id, "Kent")).ok).toBe(true);
 		expect(listSessionNotes("os-del")).toEqual([]);
 	});
 
-	test("a missing note is not_found, not not_author", () => {
-		expect(deleteSessionNote("os-del", "nope", "Kent")).toEqual({
+	test("a missing note is not_found, not not_author", async () => {
+		expect(await deleteSessionNote("os-del", "nope", "Kent")).toEqual({
 			ok: false,
 			reason: "not_found",
 		});
-		expect(editSessionNote("os-del", "nope", "x", "Kent")).toEqual({
+		expect(await editSessionNote("os-del", "nope", "x", "Kent")).toEqual({
 			ok: false,
 			reason: "not_found",
 		});

@@ -9,20 +9,23 @@
  * only the part that was in use: per-session notes with optional images. No
  * watercooler, threads or reactions.
  *
- * Notes persist per session in `~/.opensession-session-notes/<id>.json` (the
- * flat-file pattern of pins.ts/push.ts). Realtime delivery rides the app
+ * Notes persist per session in managed FeltDB. Realtime delivery rides the app
  * WebSocket from the route; an `@Name` mention web-pushes that teammate's
  * devices via src/server/push.ts and records a sidebar badge via
  * src/server/mentions.ts, which owns the mention scan for notes and prompts
  * alike.
  */
 
-import { existsSync, mkdirSync, readFileSync, readdirSync } from "fs";
-import { writeJsonAtomic } from "./shared/atomic-write";
+import { existsSync, readFileSync, readdirSync, rmdirSync, unlinkSync } from "node:fs";
+import { createHash } from "node:crypto";
+import type { StateFirstDB } from "@feltdb/core";
+import { managedFeltDb } from "./managed-feltdb";
 import { stateDir } from "./paths";
 import { removeStagedImages } from "./uploads";
 
 const NOTES_DIR = stateDir("session-notes");
+const NOTES_COLLECTION = "opensession_session_notes";
+const NOTES_MIGRATION = "session-notes-json-to-managed-feltdb-v1";
 
 // Keep each session's store bounded — the UI only ever loads the recent tail.
 const MAX_STORED = 2000;
@@ -41,36 +44,88 @@ export interface SessionNote {
 	editedAt?: number;
 }
 
+interface StoredSessionNotes {
+	id: string;
+	sessionId: string;
+	notes: SessionNote[];
+	__version?: number;
+}
+
+let notesDb: StateFirstDB | undefined;
+const noteStores = new Map<string, StoredSessionNotes>();
+const notesId = (sessionId: string) => `session_notes_${createHash("sha256").update(sessionId).digest("hex")}`;
+
+export async function initializeManagedSessionNotes(
+	db: StateFirstDB = notesDb ?? managedFeltDb(),
+): Promise<void> {
+	notesDb = db;
+	const migrations = db.collection<{ id: string }>("opensession_migrations");
+	if (!await migrations.get(NOTES_MIGRATION)) {
+		if (existsSync(NOTES_DIR)) {
+			for (const entry of readdirSync(NOTES_DIR, { withFileTypes: true })) {
+				if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
+				const sessionId = entry.name.slice(0, -5);
+				const path = `${NOTES_DIR}/${entry.name}`;
+				const raw = JSON.parse(readFileSync(path, "utf8")) as { notes?: SessionNote[] };
+				const id = notesId(sessionId);
+				await db.transaction((tx) => {
+					tx.collection<StoredSessionNotes>(NOTES_COLLECTION).set(id, {
+						id,
+						sessionId,
+						notes: Array.isArray(raw.notes) ? raw.notes.slice(-MAX_STORED) : [],
+					});
+				}, { transactionId: `opensession:session-notes:migrate:${id}` });
+				unlinkSync(path);
+			}
+			try { rmdirSync(NOTES_DIR); } catch {}
+		}
+		await db.transaction((tx) => {
+			tx.collection("opensession_migrations").set(NOTES_MIGRATION, { id: NOTES_MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
+		}, { transactionId: `opensession:migration:${NOTES_MIGRATION}` });
+	}
+	noteStores.clear();
+	for (const record of await db.collection<StoredSessionNotes>(NOTES_COLLECTION).all())
+		noteStores.set(record.sessionId, record);
+}
+
 /** Session ids are minted by us (`os-<uuidv7>`), but keep the filename mapping
  *  defensive: anything outside this charset can't become a path. */
 export function isValidNoteSession(id: unknown): id is string {
 	return typeof id === "string" && /^[A-Za-z0-9._-]{1,80}$/.test(id);
 }
 
-function fileFor(sessionId: string): string {
-	return `${NOTES_DIR}/${sessionId}.json`;
+function readAll(sessionId: string): SessionNote[] {
+	return [...(noteStores.get(sessionId)?.notes || [])];
 }
 
-function readAll(sessionId: string): SessionNote[] {
-	try {
-		const f = fileFor(sessionId);
-		if (!existsSync(f)) return [];
-		const raw = JSON.parse(readFileSync(f, "utf8"));
-		if (!Array.isArray(raw?.notes)) return [];
-		return raw.notes.filter(
-			(n: unknown): n is SessionNote =>
-				!!n &&
-				typeof (n as any).id === "string" &&
-				typeof (n as any).user === "string" &&
-				typeof (n as any).text === "string" &&
-				(!(n as any).images ||
-					(Array.isArray((n as any).images) &&
-						(n as any).images.every((image: unknown) => typeof image === "string"))) &&
-				typeof (n as any).ts === "number",
-		);
-	} catch {
-		return [];
+async function mutateNotes<T>(
+	sessionId: string,
+	mutate: (notes: SessionNote[]) => { notes: SessionNote[]; result: T; removedImages?: string[] },
+): Promise<T> {
+	const db = notesDb ?? managedFeltDb();
+	const id = notesId(sessionId);
+	const operationId = crypto.randomUUID();
+	for (let attempt = 0; attempt < 5; attempt++) {
+		const current = await db.collection<StoredSessionNotes>(NOTES_COLLECTION).get(id);
+		if (current && !Number.isSafeInteger(current.__version))
+			throw new Error(`Session notes ${id} have no FeltDB authority version`);
+		const next = mutate([...(current?.notes || [])]);
+		try {
+			await db.transaction((tx) => {
+				tx.collection<StoredSessionNotes>(NOTES_COLLECTION).set(id, {
+					id, sessionId, notes: next.notes.slice(-MAX_STORED),
+				}, current ? { ifVersion: current.__version } : { requireAbsent: true });
+			}, { transactionId: `opensession:session-notes:mutate:${id}:${operationId}` });
+			const saved = await db.collection<StoredSessionNotes>(NOTES_COLLECTION).get(id);
+			if (!saved) throw new Error(`Session notes ${id} disappeared after mutation`);
+			noteStores.set(sessionId, saved);
+			removeStagedImages(next.removedImages);
+			return next.result;
+		} catch (error) {
+			if (attempt === 4) throw error;
+		}
 	}
+	throw new Error(`Session notes ${id} mutation did not complete`);
 }
 
 /** The session's most recent `limit` notes, oldest first. */
@@ -80,12 +135,12 @@ export function listSessionNotes(sessionId: string, limit = 200): SessionNote[] 
 }
 
 /** Append a note and return the stored record, or null when it is empty. */
-export function addSessionNote(
+export async function addSessionNote(
 	sessionId: string,
 	user: string,
 	text: string,
 	images: string[] = [],
-): SessionNote | null {
+): Promise<SessionNote | null> {
 	const trimmed = text.trim().slice(0, MAX_TEXT_LEN);
 	if (!trimmed && images.length === 0) return null;
 	const note: SessionNote = {
@@ -95,13 +150,13 @@ export function addSessionNote(
 		...(images.length ? { images } : {}),
 		ts: Date.now(),
 	};
-	const all = readAll(sessionId);
-	all.push(note);
-	const removed = all.slice(0, -MAX_STORED);
-	if (!existsSync(NOTES_DIR)) mkdirSync(NOTES_DIR, { recursive: true });
-	writeJsonAtomic(fileFor(sessionId), { notes: all.slice(-MAX_STORED) });
-	for (const old of removed) removeStagedImages(old.images);
-	return note;
+	return mutateNotes(sessionId, (all) => {
+		const existing = all.findIndex((candidate) => candidate.id === note.id);
+		if (existing >= 0) all[existing] = note;
+		else all.push(note);
+		const removed = all.slice(0, -MAX_STORED).flatMap((old) => old.images || []);
+		return { notes: all, result: note, removedImages: removed };
+	});
 }
 
 /** Author check, used by both mutations. Display names are what a note
@@ -123,39 +178,40 @@ export type NoteMutation =
  * a teammate silently rewriting it would make the transcript a record of
  * something nobody said. `editedAt` is set so the UI can mark it.
  */
-export function editSessionNote(
+export async function editSessionNote(
 	sessionId: string,
 	noteId: string,
 	text: string,
 	user: string,
-): NoteMutation {
+): Promise<NoteMutation> {
 	const trimmed = text.trim().slice(0, MAX_TEXT_LEN);
 	if (!trimmed) return { ok: false, reason: "not_found" };
-	const all = readAll(sessionId);
-	const note = all.find((n) => n.id === noteId);
-	if (!note) return { ok: false, reason: "not_found" };
-	if (!isAuthor(note, user)) return { ok: false, reason: "not_author" };
-	note.text = trimmed;
-	note.editedAt = Date.now();
-	writeJsonAtomic(fileFor(sessionId), { notes: all });
-	return { ok: true, note };
+	return mutateNotes(sessionId, (all) => {
+		const note = all.find((candidate) => candidate.id === noteId);
+		if (!note) return { notes: all, result: { ok: false, reason: "not_found" } as NoteMutation };
+		if (!isAuthor(note, user)) return { notes: all, result: { ok: false, reason: "not_author" } as NoteMutation };
+		note.text = trimmed;
+		note.editedAt = Date.now();
+		return { notes: all, result: { ok: true, note } as NoteMutation };
+	});
 }
 
 /** Delete a note. Author-only, for the same reason as editing. */
-export function deleteSessionNote(
+export async function deleteSessionNote(
 	sessionId: string,
 	noteId: string,
 	user: string,
-): NoteMutation {
-	const all = readAll(sessionId);
-	const note = all.find((n) => n.id === noteId);
-	if (!note) return { ok: false, reason: "not_found" };
-	if (!isAuthor(note, user)) return { ok: false, reason: "not_author" };
-	writeJsonAtomic(fileFor(sessionId), {
-		notes: all.filter((n) => n.id !== noteId),
+): Promise<NoteMutation> {
+	return mutateNotes(sessionId, (all) => {
+		const note = all.find((candidate) => candidate.id === noteId);
+		if (!note) return { notes: all, result: { ok: false, reason: "not_found" } as NoteMutation };
+		if (!isAuthor(note, user)) return { notes: all, result: { ok: false, reason: "not_author" } as NoteMutation };
+		return {
+			notes: all.filter((candidate) => candidate.id !== noteId),
+			result: { ok: true, note } as NoteMutation,
+			removedImages: note.images,
+		};
 	});
-	removeStagedImages(note.images);
-	return { ok: true, note };
 }
 
 /**
@@ -168,16 +224,10 @@ export function sessionNoteActivity(): Array<{
 	lastUser: string;
 }> {
 	const out: Array<{ sessionId: string; lastTs: number; lastUser: string }> = [];
-	try {
-		for (const f of readdirSync(NOTES_DIR)) {
-			if (!f.endsWith(".json")) continue;
-			const sessionId = f.slice(0, -".json".length);
-			const notes = readAll(sessionId);
-			const last = notes[notes.length - 1];
-			if (!last) continue;
-			out.push({ sessionId, lastTs: last.ts, lastUser: last.user });
-		}
-	} catch {}
+	for (const [sessionId, store] of noteStores) {
+		const last = store.notes[store.notes.length - 1];
+		if (!last) continue;
+		out.push({ sessionId, lastTs: last.ts, lastUser: last.user });
+	}
 	return out;
 }
-
