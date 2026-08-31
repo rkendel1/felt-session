@@ -37,6 +37,7 @@ import { initializeManagedDeskVoice } from "./src/server/desk-voice";
 import { initializeManagedGoals } from "./src/server/goals";
 import { initializeManagedSessionNotes } from "./src/server/session-notes";
 import { initializeManagedWebAuthSessions } from "./src/server/web-auth";
+import { initializeManagedPush } from "./src/server/push";
 import { startLiveActivitySync } from "./src/server/live-activities";
 import { startRuntimeInvestigationHandoffConsumer } from "./src/server/runtime-investigation-handoffs";
 import { initializeManagedFeltDb } from "./src/server/managed-feltdb";
@@ -197,6 +198,7 @@ if (!g.__opensessionBooted) {
 	await initializeManagedGoals(db);
 	await initializeManagedSessionNotes(db);
 	await initializeManagedWebAuthSessions(db);
+	await initializeManagedPush(db);
 }
 
 // Listeners the server owns. Deliberately started HERE and not as module side

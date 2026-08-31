@@ -120,8 +120,10 @@ export async function initializeManagedWebAuthSessions(
     await db.transaction((tx) => {
       tx.collection("opensession_migrations").set(WEB_SESSIONS_MIGRATION, { id: WEB_SESSIONS_MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
     }, { transactionId: `opensession:migration:${WEB_SESSIONS_MIGRATION}` });
-    if (existsSync(sessionsPath())) unlinkSync(sessionsPath());
   }
+  // Always retry cleanup: the migration receipt can commit just before a
+  // process exit, and the legacy file must never survive as hidden authority.
+  if (existsSync(sessionsPath())) unlinkSync(sessionsPath());
   const now = Date.now();
   const map = sessions();
   map.clear();

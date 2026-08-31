@@ -1,62 +1,24 @@
-/**
- * Web Push: phone/desktop notifications that work with the app closed —
- * unlike lib/notify.ts's tab-bound Notification API. Requires the app to be
- * opened over a secure origin; plain HTTP origins have no service workers.
- *
- * VAPID keys are generated once and persisted; subscriptions are stored per
- * user (a person can have several devices). Dead subscriptions (404/410 from
- * the push service) are pruned on send. Delivery is strictly best-effort —
- * push failures never affect the flow that triggered them.
- */
-import { mkdirSync, readFileSync, existsSync } from "fs";
+/** Web Push authorities backed exclusively by managed FeltDB. */
+import { createHash } from "node:crypto";
+import { existsSync, readFileSync, unlinkSync } from "node:fs";
+import type { StateFirstDB } from "@feltdb/core";
 import webpush from "web-push";
-import { writeJsonAtomic } from "./shared/atomic-write";
-import { stateDir } from "./paths";
 import { configuredIntegration } from "./config";
+import { managedFeltDb } from "./managed-feltdb";
+import { stateDir } from "./paths";
 
 const PUSH_DIR = stateDir("push");
 const VAPID_PATH = `${PUSH_DIR}/vapid.json`;
 const SUBS_PATH = `${PUSH_DIR}/subscriptions.json`;
+const SENT_DEDUPE_PATH = `${PUSH_DIR}/sent-dedupe.json`;
+const MIGRATION = "push-json-to-managed-feltdb-v1";
+const VAPID_COLLECTION = "opensession_push_vapid";
+const SUBS_COLLECTION = "opensession_push_subscriptions";
+const DEDUPE_COLLECTION = "opensession_push_dedupe";
+const DEDUPE_TTL_MS = 48 * 60 * 60 * 1000;
 
-mkdirSync(PUSH_DIR, { recursive: true });
-
-interface VapidKeys {
-  publicKey: string;
-  privateKey: string;
-}
-
-let vapid: VapidKeys | null = null;
-let configured = false;
-
-export function getVapidPublicKey(): string {
-  ensureVapid();
-  return vapid!.publicKey;
-}
-
-function ensureVapid(): void {
-  if (vapid) return;
-  try {
-    if (existsSync(VAPID_PATH)) {
-      vapid = JSON.parse(readFileSync(VAPID_PATH, "utf-8"));
-    }
-  } catch {}
-  if (!vapid?.publicKey || !vapid?.privateKey) {
-    vapid = webpush.generateVAPIDKeys();
-    writeJsonAtomic(VAPID_PATH, vapid);
-    console.log("[push] generated VAPID keypair");
-  }
-  if (!configured) {
-    const subject = configuredIntegration("push").vapidSubject;
-    webpush.setVapidDetails(
-      typeof subject === "string" && subject.trim()
-        ? subject.trim()
-        : "mailto:admin@example.com",
-      vapid!.publicKey,
-      vapid!.privateKey,
-    );
-    configured = true;
-  }
-}
+interface VapidKeys { publicKey: string; privateKey: string }
+interface StoredVapid extends VapidKeys { id: "default" }
 
 export interface PushSubscriptionRecord {
   user: string;
@@ -65,127 +27,166 @@ export interface PushSubscriptionRecord {
   userAgent?: string;
   createdAt: string;
 }
+interface StoredSubscription extends PushSubscriptionRecord { id: string; __version?: number }
+interface StoredDedupe { id: string; key: string; sentAt: number; __version?: number }
 
-interface SubsFile {
-  subscriptions: PushSubscriptionRecord[];
+let authority: StateFirstDB | undefined;
+let vapid: VapidKeys | null = null;
+let configured = false;
+const subscriptions = new Map<string, StoredSubscription>();
+const sentDedupe = new Map<string, StoredDedupe>();
+const recordId = (prefix: string, value: string) =>
+  `${prefix}_${createHash("sha256").update(value).digest("hex")}`;
+
+function readLegacy<T>(path: string, fallback: T): T {
+  try { return existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : fallback; }
+  catch { return fallback; }
 }
 
-function readSubs(): SubsFile {
-  try {
-    if (existsSync(SUBS_PATH)) {
-      const s = JSON.parse(readFileSync(SUBS_PATH, "utf-8"));
-      if (Array.isArray(s.subscriptions)) return s;
+export async function initializeManagedPush(db: StateFirstDB = authority ?? managedFeltDb()): Promise<void> {
+  authority = db;
+  if (!await db.collection<{ id: string }>("opensession_migrations").get(MIGRATION)) {
+    const oldVapid = readLegacy<Partial<VapidKeys>>(VAPID_PATH, {});
+    if (oldVapid.publicKey && oldVapid.privateKey && !await db.collection(VAPID_COLLECTION).get("default")) await db.transaction((tx) => {
+      tx.collection<StoredVapid>(VAPID_COLLECTION).set("default", {
+        id: "default", publicKey: oldVapid.publicKey!, privateKey: oldVapid.privateKey!,
+      }, { requireAbsent: true });
+    }, { transactionId: "opensession:push:migrate:vapid" });
+
+    const oldSubs = readLegacy<{ subscriptions?: PushSubscriptionRecord[] }>(SUBS_PATH, {});
+    for (const subscription of oldSubs.subscriptions ?? []) {
+      if (!subscription.endpoint || !subscription.user || !subscription.keys?.p256dh || !subscription.keys?.auth) continue;
+      const id = recordId("push_subscription", subscription.endpoint);
+      await db.transaction((tx) => {
+        tx.collection<StoredSubscription>(SUBS_COLLECTION).set(id, { ...subscription, id, __version: 1 });
+      }, { transactionId: `opensession:push:migrate:subscription:${id}` });
     }
-  } catch {}
-  return { subscriptions: [] };
+
+    const oldDedupe = readLegacy<Record<string, string>>(SENT_DEDUPE_PATH, {});
+    for (const [key, timestamp] of Object.entries(oldDedupe)) {
+      const sentAt = Date.parse(timestamp);
+      if (!Number.isFinite(sentAt)) continue;
+      const id = recordId("push_dedupe", key);
+      await db.transaction((tx) => {
+        tx.collection<StoredDedupe>(DEDUPE_COLLECTION).set(id, { id, key, sentAt, __version: 1 });
+      }, { transactionId: `opensession:push:migrate:dedupe:${id}` });
+    }
+    await db.transaction((tx) => {
+      tx.collection("opensession_migrations").set(MIGRATION, { id: MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
+    }, { transactionId: `opensession:migration:${MIGRATION}` });
+  }
+  // A crash after the migration receipt commits but before cleanup must not
+  // leave a second, stale authority behind on the next boot.
+  for (const path of [VAPID_PATH, SUBS_PATH, SENT_DEDUPE_PATH]) if (existsSync(path)) unlinkSync(path);
+
+  let storedVapid = await db.collection<StoredVapid>(VAPID_COLLECTION).get("default");
+  if (!storedVapid) {
+    const generated = webpush.generateVAPIDKeys();
+    await db.transaction((tx) => {
+      tx.collection<StoredVapid>(VAPID_COLLECTION).set("default", { id: "default", ...generated }, { requireAbsent: true });
+    }, { transactionId: "opensession:push:vapid:create" });
+    storedVapid = { id: "default", ...generated };
+    console.log("[push] generated VAPID keypair in managed FeltDB");
+  }
+  vapid = { publicKey: storedVapid.publicKey, privateKey: storedVapid.privateKey };
+  subscriptions.clear();
+  for (const record of await db.collection<StoredSubscription>(SUBS_COLLECTION).all()) subscriptions.set(record.id, record);
+  sentDedupe.clear();
+  const cutoff = Date.now() - DEDUPE_TTL_MS;
+  for (const record of await db.collection<StoredDedupe>(DEDUPE_COLLECTION).all())
+    if (record.sentAt >= cutoff) sentDedupe.set(record.id, record);
+  configureWebPush();
+}
+
+function configureWebPush(): void {
+  if (configured) return;
+  if (!vapid) throw new Error("Managed push authority is not initialized");
+  const subject = configuredIntegration("push").vapidSubject;
+  webpush.setVapidDetails(
+    typeof subject === "string" && subject.trim() ? subject.trim() : "mailto:admin@example.com",
+    vapid.publicKey, vapid.privateKey,
+  );
+  configured = true;
+}
+
+export function getVapidPublicKey(): string {
+  if (!vapid) throw new Error("Managed push authority is not initialized");
+  return vapid.publicKey;
 }
 
 export function listPushSubscriptions(user?: string): PushSubscriptionRecord[] {
-  const all = readSubs().subscriptions;
-  return user ? all.filter((s) => s.user === user) : all;
+  const all = [...subscriptions.values()];
+  return user ? all.filter((subscription) => subscription.user === user) : all;
 }
 
-export function addPushSubscription(input: {
+export async function addPushSubscription(input: {
   user: string;
   subscription: { endpoint?: string; keys?: { p256dh?: string; auth?: string } };
   userAgent?: string;
-}): { ok: true } | { error: string } {
+}): Promise<{ ok: true } | { error: string }> {
   const { endpoint, keys } = input.subscription || {};
   if (!input.user?.trim()) return { error: "user required" };
   if (!endpoint || !keys?.p256dh || !keys?.auth)
     return { error: "subscription must carry endpoint + p256dh/auth keys" };
-  const store = readSubs();
-  store.subscriptions = store.subscriptions.filter((s) => s.endpoint !== endpoint);
-  store.subscriptions.push({
-    user: input.user.trim(),
-    endpoint,
+  const db = authority ?? managedFeltDb();
+  const id = recordId("push_subscription", endpoint);
+  const current = subscriptions.get(id);
+  const next: StoredSubscription = {
+    id, user: input.user.trim(), endpoint,
     keys: { p256dh: keys.p256dh, auth: keys.auth },
-    userAgent: input.userAgent?.slice(0, 200),
-    createdAt: new Date().toISOString(),
-  });
-  writeJsonAtomic(SUBS_PATH, store);
+    userAgent: input.userAgent?.slice(0, 200), createdAt: new Date().toISOString(),
+  };
+  await db.transaction((tx) => {
+    tx.collection<StoredSubscription>(SUBS_COLLECTION).set(id, next,
+      current && Number.isSafeInteger(current.__version) ? { ifVersion: current.__version } : { requireAbsent: true });
+  }, { transactionId: `opensession:push:subscribe:${id}:${crypto.randomUUID()}` });
+  subscriptions.set(id, { ...next, __version: (current?.__version ?? 0) + 1 });
   return { ok: true };
 }
 
-export function removePushSubscription(endpoint: string): boolean {
-  const store = readSubs();
-  const before = store.subscriptions.length;
-  store.subscriptions = store.subscriptions.filter((s) => s.endpoint !== endpoint);
-  if (store.subscriptions.length === before) return false;
-  writeJsonAtomic(SUBS_PATH, store);
+export async function removePushSubscription(endpoint: string): Promise<boolean> {
+  const id = recordId("push_subscription", endpoint);
+  const current = subscriptions.get(id);
+  if (!current || !Number.isSafeInteger(current.__version)) return false;
+  const db = authority ?? managedFeltDb();
+  await db.transaction((tx) => {
+    tx.collection<StoredSubscription>(SUBS_COLLECTION).delete(id, { ifVersion: current.__version });
+  }, { transactionId: `opensession:push:unsubscribe:${id}:${current.__version}` });
+  subscriptions.delete(id);
   return true;
 }
 
-export interface PushPayload {
-  title: string;
-  body?: string;
-  /** In-app path to open on tap, e.g. /session/<id>. */
-  url?: string;
-  tag?: string;
+export interface PushPayload { title: string; body?: string; url?: string; tag?: string }
+
+async function reserveDedupe(key: string): Promise<boolean> {
+  const now = Date.now();
+  const id = recordId("push_dedupe", key);
+  const current = sentDedupe.get(id);
+  if (current && now - current.sentAt < DEDUPE_TTL_MS) return false;
+  const db = authority ?? managedFeltDb();
+  const next: StoredDedupe = { id, key, sentAt: now };
+  await db.transaction((tx) => {
+    tx.collection<StoredDedupe>(DEDUPE_COLLECTION).set(id, next,
+      current && Number.isSafeInteger(current.__version) ? { ifVersion: current.__version } : { requireAbsent: true });
+  }, { transactionId: `opensession:push:dedupe:${id}:${crypto.randomUUID()}` });
+  sentDedupe.set(id, { ...next, __version: (current?.__version ?? 0) + 1 });
+  return true;
 }
 
-// Dedupe ledger: pushes that must survive a restart without refiring (a
-// service restart resumes ask-blocked runs, which re-ask the same question —
-// the person already got that buzz). Keyed by caller-chosen fingerprint.
-const SENT_DEDUPE_PATH = `${PUSH_DIR}/sent-dedupe.json`;
-const DEDUPE_TTL_MS = 48 * 60 * 60 * 1000;
-
-function readSentDedupe(): Record<string, string> {
-  try {
-    if (existsSync(SENT_DEDUPE_PATH)) {
-      const s = JSON.parse(readFileSync(SENT_DEDUPE_PATH, "utf-8"));
-      if (s && typeof s === "object" && !Array.isArray(s)) return s;
-    }
-  } catch {}
-  return {};
-}
-
-/**
- * Send a push to every device `user` has registered (matched by exact display
- * name — the same value UserPicker stores). Fire-and-forget; prunes dead subs.
- *
- * `dedupeKey` (optional) suppresses the send when the same key was already
- * pushed within the last 48h — the ledger is on disk, so a re-ask of the same
- * question after a service restart doesn't buzz the same person twice.
- */
-export async function sendPushToUser(
-  user: string,
-  payload: PushPayload,
-  opts?: { dedupeKey?: string },
-): Promise<void> {
-  if (opts?.dedupeKey) {
-    const sent = readSentDedupe();
-    const now = Date.now();
-    const prev = sent[opts.dedupeKey] ? Date.parse(sent[opts.dedupeKey]) : NaN;
-    if (Number.isFinite(prev) && now - prev < DEDUPE_TTL_MS) return;
-    for (const [k, v] of Object.entries(sent)) {
-      const t = Date.parse(v);
-      if (!Number.isFinite(t) || now - t >= DEDUPE_TTL_MS) delete sent[k];
-    }
-    sent[opts.dedupeKey] = new Date(now).toISOString();
-    writeJsonAtomic(SENT_DEDUPE_PATH, sent);
-  }
+export async function sendPushToUser(user: string, payload: PushPayload, opts?: { dedupeKey?: string }): Promise<void> {
+  if (opts?.dedupeKey && !await reserveDedupe(opts.dedupeKey)) return;
   const subs = listPushSubscriptions(user);
   if (subs.length === 0) return;
-  ensureVapid();
+  configureWebPush();
   const body = JSON.stringify(payload);
-  await Promise.all(
-    subs.map(async (s) => {
-      try {
-        await webpush.sendNotification(
-          { endpoint: s.endpoint, keys: s.keys },
-          body,
-          { TTL: 60 * 60 },
-        );
-      } catch (e: any) {
-        const code = e?.statusCode;
-        if (code === 404 || code === 410) {
-          removePushSubscription(s.endpoint);
-          console.log(`[push] pruned dead subscription for ${s.user}`);
-        } else {
-          console.error(`[push] send failed for ${s.user}:`, e?.message || e);
-        }
-      }
-    }),
-  );
+  await Promise.all(subs.map(async (subscription) => {
+    try {
+      await webpush.sendNotification({ endpoint: subscription.endpoint, keys: subscription.keys }, body, { TTL: 60 * 60 });
+    } catch (error: any) {
+      if (error?.statusCode === 404 || error?.statusCode === 410) {
+        await removePushSubscription(subscription.endpoint);
+        console.log(`[push] pruned dead subscription for ${subscription.user}`);
+      } else console.error(`[push] send failed for ${subscription.user}:`, error?.message || error);
+    }
+  }));
 }

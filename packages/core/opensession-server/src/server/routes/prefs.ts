@@ -52,7 +52,7 @@ export async function handlePrefsRoutes(
 		if (!body)
 			return Response.json({ error: "Invalid JSON" }, { status: 400 });
 		const { addPushSubscription } = await import("../../server/push");
-		const result = addPushSubscription({
+		const result = await addPushSubscription({
 			user: body.user,
 			subscription: body.subscription,
 			userAgent: req.headers.get("user-agent") || undefined,
@@ -66,7 +66,7 @@ export async function handlePrefsRoutes(
 		if (!body || typeof body.endpoint !== "string")
 			return Response.json({ error: "endpoint required" }, { status: 400 });
 		const { removePushSubscription } = await import("../../server/push");
-		removePushSubscription(body.endpoint);
+		await removePushSubscription(body.endpoint);
 		return Response.json({ ok: true });
 	}
 
