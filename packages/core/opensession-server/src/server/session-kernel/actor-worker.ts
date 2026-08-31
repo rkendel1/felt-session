@@ -34,6 +34,8 @@ import { FeltDbAskStore } from "./feltdb-ask-store";
 import { FeltDbCommandStore } from "./feltdb-command-store";
 import { FeltDbDeliveryStore } from "./feltdb-delivery-store";
 import { FeltDbReducerStore } from "./feltdb-reducer-store";
+import { FeltDbTimerExecutionStore, FeltDbTimerStore } from "./feltdb-timer-store";
+import { FeltDbTurnStore } from "./feltdb-turn-store";
 
 class SessionQuarantinedError extends Error {
   readonly code = "session_quarantined";
@@ -101,11 +103,19 @@ export function startSessionKernelActorWorker(): void {
   const creationStore = (): FeltDbCreationStore =>
     (feltDbCreation ??= new FeltDbCreationStore(decisionStore()));
   const reducerStore = (): FeltDbReducerStore =>
-    (feltDbReducers ??= new FeltDbReducerStore(
-      new FeltDbAskStore(decisionStore()),
-      new FeltDbDeliveryStore(decisionStore()),
-      new FeltDbCommandStore(decisionStore()),
-    ));
+    (feltDbReducers ??= (() => {
+      const commands = new FeltDbCommandStore(decisionStore());
+      const timers = new FeltDbTimerStore(decisionStore());
+      return new FeltDbReducerStore(
+        new FeltDbAskStore(decisionStore()),
+        new FeltDbDeliveryStore(decisionStore()),
+        commands,
+        timers,
+        new FeltDbTimerExecutionStore(timers, commands),
+        new FeltDbTurnStore(decisionStore()),
+        runStore(),
+      );
+    })());
   function post(message: KernelActorResponse): void {
     // Internal worker telemetry is consumed by the parent service and stripped
     // before the actor response crosses the HTTP boundary.
@@ -128,7 +138,8 @@ export function startSessionKernelActorWorker(): void {
           assertTranscriptActorRequest(command.request);
         const managedKind = command.kind === "transcript" ||
           command.kind === "run_event" || command.kind === "creation_event" ||
-          ((command.kind === "ask" || command.kind === "delivery") && !!sessionId);
+          (["ask", "delivery", "gateway", "timer", "turn"].includes(command.kind) &&
+            !!sessionId);
         const managedHead = managedKind && sessionId &&
             process.env.OPENSESSION_FELTDB_SERVER_URL
           ? await decisionStore().head(sessionId)
@@ -271,7 +282,8 @@ export function startSessionKernelActorWorker(): void {
             };
         } else if (command.kind === "gateway") {
           const gateway = command.request;
-          if (gateway.op === "request")
+          if (managedHead) result = reducerStore().gateway(command.commandId, gateway);
+          else if (gateway.op === "request")
             result = store.requestGatewayCommand(gateway);
           else if (gateway.op === "complete")
             result = store.completeGatewayCommand(gateway);
@@ -318,7 +330,8 @@ export function startSessionKernelActorWorker(): void {
             host.refreshSessionProjections(core.sessionId);
         } else if (command.kind === "turn") {
           const turn = command.request;
-          if (turn.op === "snapshot") result = store.turnSnapshot(turn.sessionId);
+          if (managedHead) result = reducerStore().turn(command.commandId, turn);
+          else if (turn.op === "snapshot") result = store.turnSnapshot(turn.sessionId);
           else if (turn.op === "request_cancel_command")
             result = store.requestTurnCancelCommand(turn);
           else if (turn.op === "complete_cancel_command")
@@ -338,7 +351,8 @@ export function startSessionKernelActorWorker(): void {
           else result = store.settleTurnOutcomeProjection(turn);
         } else if (command.kind === "timer") {
           const timer = command.request;
-          if (timer.op === "schedule") result = store.scheduleTimer(timer);
+          if (managedHead) result = reducerStore().timer(command.commandId, timer);
+          else if (timer.op === "schedule") result = store.scheduleTimer(timer);
           else if (timer.op === "cancel")
             result = store.cancelTimer(timer.sessionId, timer.timerId);
           else if (timer.op === "begin") result = store.beginTimerExecution(timer);
