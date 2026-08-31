@@ -15,19 +15,18 @@
  */
 
 import {
-	appendFileSync,
-	chmodSync,
 	existsSync,
-	mkdirSync,
 	readFileSync,
-	rmSync,
-	statSync,
-	writeFileSync,
+	readdirSync,
+	rmdirSync,
+	unlinkSync,
 } from "node:fs";
+import { createHash } from "node:crypto";
+import type { StateFirstDB } from "@feltdb/core";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { stateDir } from "./paths";
-import { writeJsonAtomic } from "./shared/atomic-write";
+import { managedFeltDb } from "./managed-feltdb";
 import { ensureDeskSession } from "./desk";
 import { getSessionControl } from "./session-control";
 import { appendTranscriptEvents } from "./actor-transcript";
@@ -37,6 +36,13 @@ import type { TranscriptEntry } from "./types";
 const DIR = stateDir("desk");
 const KEY_PATH = `${DIR}/voice.json`;
 const HANDOFF_DIR = `${DIR}/voice-handoff`;
+const DIAG_PATH = `${DIR}/voice-diag.jsonl`;
+const VOICE_CONFIG_COLLECTION = "opensession_desk_voice_config";
+const VOICE_HANDOFF_COLLECTION = "opensession_desk_voice_handoffs";
+const VOICE_DIAG_COLLECTION = "opensession_desk_voice_diagnostics";
+const VOICE_MIGRATION = "desk-voice-files-to-managed-feltdb-v1";
+const VOICE_CONFIG_ID = "voice";
+let voiceDb: StateFirstDB | undefined;
 
 /** Realtime model for Desk voice calls. */
 const DESK_VOICE_MODEL = "gpt-realtime";
@@ -55,37 +61,88 @@ export const DESK_VOICE_TURN_DETECTION = {
 // as the model-provider key store: 0600 file, only ever returned masked.
 
 interface VoiceKeyFile {
+	id: string;
 	openaiApiKey?: string;
+	__version?: number;
 }
 
-function readKeyFile(): VoiceKeyFile {
-	try {
-		if (existsSync(KEY_PATH))
-			return JSON.parse(readFileSync(KEY_PATH, "utf-8")) as VoiceKeyFile;
-	} catch (e) {
-		console.error("[desk-voice] failed to read key file:", e);
+let voiceKey: VoiceKeyFile = { id: VOICE_CONFIG_ID };
+
+export async function initializeManagedDeskVoice(
+	db: StateFirstDB = voiceDb ?? managedFeltDb(),
+): Promise<void> {
+	voiceDb = db;
+	const migrations = db.collection<{ id: string }>("opensession_migrations");
+	if (!await migrations.get(VOICE_MIGRATION)) {
+		let legacyKey: Omit<VoiceKeyFile, "id"> = {};
+		if (existsSync(KEY_PATH)) legacyKey = JSON.parse(readFileSync(KEY_PATH, "utf8"));
+		await db.transaction((tx) => {
+			tx.collection<VoiceKeyFile>(VOICE_CONFIG_COLLECTION).set(VOICE_CONFIG_ID, {
+				...legacyKey,
+				id: VOICE_CONFIG_ID,
+			});
+		}, { transactionId: "opensession:desk-voice:migrate:key" });
+
+		if (existsSync(HANDOFF_DIR)) {
+			for (const entry of readdirSync(HANDOFF_DIR, { withFileTypes: true })) {
+				if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
+				const path = `${HANDOFF_DIR}/${entry.name}`;
+				const sessionId = entry.name.slice(0, -5);
+				const entries = JSON.parse(readFileSync(path, "utf8")) as HandoffEntry[];
+				const id = handoffId(sessionId);
+				await db.transaction((tx) => {
+					tx.collection<StoredHandoff>(VOICE_HANDOFF_COLLECTION).set(id, { id, sessionId, entries });
+				}, { transactionId: `opensession:desk-voice:migrate:handoff:${id}` });
+				unlinkSync(path);
+			}
+			try { rmdirSync(HANDOFF_DIR); } catch {}
+		}
+
+		if (existsSync(DIAG_PATH)) {
+			const lines = readFileSync(DIAG_PATH, "utf8").split("\n").filter(Boolean).slice(-200);
+			for (let index = 0; index < lines.length; index++) {
+				let report: Record<string, unknown>;
+				try { report = JSON.parse(lines[index]!); }
+				catch { report = { raw: lines[index] }; }
+				const id = `voice_diag_legacy_${index}`;
+				await db.transaction((tx) => {
+					tx.collection(VOICE_DIAG_COLLECTION).set(id, { ...report, id });
+				}, { transactionId: `opensession:desk-voice:migrate:diag:${id}` });
+			}
+			unlinkSync(DIAG_PATH);
+		}
+		if (existsSync(KEY_PATH)) unlinkSync(KEY_PATH);
+		await db.transaction((tx) => {
+			tx.collection("opensession_migrations").set(VOICE_MIGRATION, { id: VOICE_MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
+		}, { transactionId: `opensession:migration:${VOICE_MIGRATION}` });
 	}
-	return {};
+	voiceKey = await db.collection<VoiceKeyFile>(VOICE_CONFIG_COLLECTION).get(VOICE_CONFIG_ID) || { id: VOICE_CONFIG_ID };
 }
 
 export function voiceKeyConfigured(): boolean {
-	return !!readKeyFile().openaiApiKey;
+	return !!voiceKey.openaiApiKey;
 }
 
 export function voiceKeyMasked(): string | undefined {
-	const key = readKeyFile().openaiApiKey;
+	const key = voiceKey.openaiApiKey;
 	if (!key) return undefined;
 	return `sk-…${key.slice(-4)}`;
 }
 
 /** Empty string clears the key. */
-export function setVoiceKey(apiKey: string): void {
-	mkdirSync(DIR, { recursive: true });
+export async function setVoiceKey(apiKey: string): Promise<void> {
+	const db = voiceDb ?? managedFeltDb();
 	const trimmed = apiKey.trim();
-	writeJsonAtomic(KEY_PATH, trimmed ? { openaiApiKey: trimmed } : {});
-	try {
-		chmodSync(KEY_PATH, 0o600);
-	} catch {}
+	const current = await db.collection<VoiceKeyFile>(VOICE_CONFIG_COLLECTION).get(VOICE_CONFIG_ID);
+	if (current && !Number.isSafeInteger(current.__version))
+		throw new Error("Desk voice key has no FeltDB authority version");
+	await db.transaction((tx) => {
+		tx.collection<VoiceKeyFile>(VOICE_CONFIG_COLLECTION).set(VOICE_CONFIG_ID, {
+			id: VOICE_CONFIG_ID,
+			...(trimmed ? { openaiApiKey: trimmed } : {}),
+		}, current ? { ifVersion: current.__version } : { requireAbsent: true });
+	}, { transactionId: `opensession:desk-voice:key:${crypto.randomUUID()}` });
+	voiceKey = await db.collection<VoiceKeyFile>(VOICE_CONFIG_COLLECTION).get(VOICE_CONFIG_ID) || { id: VOICE_CONFIG_ID };
 }
 
 // ---------------------------------------------------------------------------
@@ -288,7 +345,7 @@ export async function mintVoiceSecret(user: string): Promise<{
 	model: string;
 	sessionId: string;
 }> {
-	const key = readKeyFile().openaiApiKey;
+	const key = voiceKey.openaiApiKey;
 	if (!key)
 		throw new Error(
 			"No OpenAI API key configured for Desk voice — set one in Settings → Desk voice.",
@@ -408,14 +465,10 @@ export async function executeVoiceTool(
 // whether the socket ever came up, whether the microphone produced anything,
 // how often the capture path had to be rebuilt.
 
-const DIAG_PATH = `${DIR}/voice-diag.jsonl`;
-/** Keep the tail bounded — this is a debugging aid, not a data store. */
-const DIAG_MAX_BYTES = 256 * 1024;
-
-export function recordVoiceDiag(
+export async function recordVoiceDiag(
 	user: string,
 	report: Record<string, unknown>,
-): void {
+): Promise<void> {
 	const { user: _user, ...rest } = report;
 	const line = JSON.stringify({
 		at: new Date().toISOString(),
@@ -423,16 +476,11 @@ export function recordVoiceDiag(
 		...rest,
 	});
 	console.log(`[desk-voice] call diagnostics ${line}`);
-	try {
-		mkdirSync(DIR, { recursive: true });
-		if (existsSync(DIAG_PATH) && statSync(DIAG_PATH).size > DIAG_MAX_BYTES) {
-			const kept = readFileSync(DIAG_PATH, "utf-8").split("\n").slice(-200);
-			writeFileSync(DIAG_PATH, kept.join("\n"));
-		}
-		appendFileSync(DIAG_PATH, `${line}\n`);
-	} catch (e) {
-		console.error("[desk-voice] failed to record diagnostics:", e);
-	}
+	const db = voiceDb ?? managedFeltDb();
+	const id = `voice_diag_${crypto.randomUUID()}`;
+	await db.transaction((tx) => {
+		tx.collection(VOICE_DIAG_COLLECTION).set(id, { ...rest, id, at: new Date().toISOString(), user });
+	}, { transactionId: `opensession:desk-voice:diag:${id}` });
 }
 
 // ---------------------------------------------------------------------------
@@ -448,42 +496,52 @@ interface HandoffEntry {
 	text: string;
 }
 
-function handoffPath(sessionId: string): string {
-	return `${HANDOFF_DIR}/${sessionId.replace(/[^A-Za-z0-9_-]/g, "_")}.json`;
+interface StoredHandoff {
+	id: string;
+	sessionId: string;
+	entries: HandoffEntry[];
+	__version?: number;
 }
 
-function appendHandoff(sessionId: string, entries: HandoffEntry[]): void {
-	try {
-		mkdirSync(HANDOFF_DIR, { recursive: true });
-		const path = handoffPath(sessionId);
-		let existing: HandoffEntry[] = [];
-		try {
-			if (existsSync(path))
-				existing = JSON.parse(readFileSync(path, "utf-8")) as HandoffEntry[];
-		} catch {}
-		for (const e of entries) {
-			const i = existing.findIndex((x) => x.id === e.id);
-			if (i >= 0) existing[i] = e;
-			else existing.push(e);
+const handoffId = (sessionId: string) => `voice_handoff_${createHash("sha256").update(sessionId).digest("hex")}`;
+
+async function appendHandoff(sessionId: string, entries: HandoffEntry[]): Promise<void> {
+	const db = voiceDb ?? managedFeltDb();
+	const id = handoffId(sessionId);
+	for (let attempt = 0; attempt < 5; attempt++) {
+		const current = await db.collection<StoredHandoff>(VOICE_HANDOFF_COLLECTION).get(id);
+		if (current && !Number.isSafeInteger(current.__version))
+			throw new Error(`Desk voice handoff ${id} has no FeltDB authority version`);
+		const merged = [...(current?.entries || [])];
+		for (const entry of entries) {
+			const index = merged.findIndex((candidate) => candidate.id === entry.id);
+			if (index >= 0) merged[index] = entry;
+			else merged.push(entry);
 		}
-		writeJsonAtomic(path, existing.slice(-80));
-	} catch (e) {
-		console.error("[desk-voice] failed to buffer handoff:", e);
+		try {
+			await db.transaction((tx) => {
+				tx.collection<StoredHandoff>(VOICE_HANDOFF_COLLECTION).set(id, {
+					id, sessionId, entries: merged.slice(-80),
+				}, current ? { ifVersion: current.__version } : { requireAbsent: true });
+			}, { transactionId: `opensession:desk-voice:handoff:${id}:${crypto.randomUUID()}` });
+			return;
+		} catch (error) {
+			if (attempt === 4) throw error;
+		}
 	}
 }
 
 /** Consume the pending voice handoff for a session (one-shot), formatted as a
  *  context note for the next text turn. Undefined when no voice turns landed. */
-export function takeVoiceHandoff(sessionId: string): string | undefined {
-	const path = handoffPath(sessionId);
-	let entries: HandoffEntry[] = [];
-	try {
-		if (!existsSync(path)) return undefined;
-		entries = JSON.parse(readFileSync(path, "utf-8")) as HandoffEntry[];
-		rmSync(path, { force: true });
-	} catch {
-		return undefined;
-	}
+export async function takeVoiceHandoff(sessionId: string): Promise<string | undefined> {
+	const db = voiceDb ?? managedFeltDb();
+	const id = handoffId(sessionId);
+	const record = await db.collection<StoredHandoff>(VOICE_HANDOFF_COLLECTION).get(id);
+	if (!record || !Number.isSafeInteger(record.__version)) return undefined;
+	await db.transaction((tx) => {
+		tx.collection<StoredHandoff>(VOICE_HANDOFF_COLLECTION).delete(id, { ifVersion: record.__version });
+	}, { transactionId: `opensession:desk-voice:take:${id}:${record.__version}` });
+	const entries = record.entries;
 	if (!entries.length) return undefined;
 	const lines = entries.map((e) =>
 		e.role === "action"
@@ -493,10 +551,12 @@ export function takeVoiceHandoff(sessionId: string): string | undefined {
 	return `## Voice conversation handoff\nWhile in voice mode, you (the Desk) had this spoken conversation via GPT Realtime. It is already in the visible transcript — don't repeat or re-answer it; continue with full awareness of what was said and done:\n\n${lines.join("\n")}`;
 }
 
-export function mirrorVoiceEntries(
+export const __deskVoiceStateForTest = { appendHandoff };
+
+export async function mirrorVoiceEntries(
 	user: string,
 	entries: { id: string; role: "user" | "assistant"; text: string }[],
-): void {
+): Promise<void> {
 	if (!entries.length) return;
 	const { sessionId } = ensureDeskSession(user);
 	const now = new Date().toISOString();
@@ -506,10 +566,8 @@ export function mirrorVoiceEntries(
 		content: e.text,
 		timestamp: now,
 	}));
-	void appendTranscriptEvents(sessionId, tes).catch((error) => {
-    console.error(`[desk-voice] Failed to mirror voice entries for ${sessionId}:`, error);
-  });
-	appendHandoff(
+	await appendTranscriptEvents(sessionId, tes);
+	await appendHandoff(
 		sessionId,
 		entries.map((e) => ({
 			id: e.id,
@@ -519,21 +577,19 @@ export function mirrorVoiceEntries(
 	);
 }
 
-export function mirrorVoiceToolCall(
+export async function mirrorVoiceToolCall(
 	user: string,
 	callId: string,
 	name: string,
 	args: Record<string, unknown>,
 	result: unknown,
-): void {
+): Promise<void> {
 	const { sessionId } = ensureDeskSession(user);
-	void appendTranscriptEvents(
+	await appendTranscriptEvents(
 		sessionId,
 		voiceToolTranscriptEntries(callId, name, args, result),
-	).catch((error) => {
-    console.error(`[desk-voice] Failed to mirror tool call for ${sessionId}:`, error);
-  });
-	appendHandoff(sessionId, [
+	);
+	await appendHandoff(sessionId, [
 		{
 			id: `voice-act-${callId}`,
 			role: "action",

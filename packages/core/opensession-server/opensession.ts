@@ -33,6 +33,7 @@ import { initializeManagedGithubConflictIntents } from "./src/agents/github/pr-c
 import { initializeManagedShippedChangeAnnouncements } from "./src/agents/github/shipped-change-notify";
 import { initializeManagedGrafanaPollDedup } from "./src/agents/grafana-poller";
 import { initializeManagedPlainRouterConfig } from "./src/agents/plain/ticket-router";
+import { initializeManagedDeskVoice } from "./src/server/desk-voice";
 import { startLiveActivitySync } from "./src/server/live-activities";
 import { startRuntimeInvestigationHandoffConsumer } from "./src/server/runtime-investigation-handoffs";
 import { initializeManagedFeltDb } from "./src/server/managed-feltdb";
@@ -189,6 +190,7 @@ if (!g.__opensessionBooted) {
 	await initializeManagedShippedChangeAnnouncements(db);
 	await initializeManagedGrafanaPollDedup(db);
 	await initializeManagedPlainRouterConfig(db);
+	await initializeManagedDeskVoice(db);
 }
 
 // Listeners the server owns. Deliberately started HERE and not as module side

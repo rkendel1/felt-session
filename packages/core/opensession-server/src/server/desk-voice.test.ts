@@ -1,13 +1,37 @@
 import { describe, expect, test } from "bun:test";
+import { createFeltDB } from "@feltdb/core";
 import {
+	__deskVoiceStateForTest,
 	buildVoiceSessionConfig,
 	callVoiceMcpTool,
 	DESK_VOICE_TURN_DETECTION,
+	initializeManagedDeskVoice,
+	setVoiceKey,
+	takeVoiceHandoff,
+	voiceKeyConfigured,
+	voiceKeyMasked,
 	voiceToolTranscriptEntries,
 } from "./desk-voice";
 import { registerSessionControl, type SessionControl } from "./session-control";
 
 describe("Desk voice Realtime session", () => {
+	test("persists its key and one-shot handoff only in managed FeltDB", async () => {
+		const db = createFeltDB({ namespace: crypto.randomUUID(), memory: true });
+		await initializeManagedDeskVoice(db);
+		await setVoiceKey("sk-test-1234");
+		await __deskVoiceStateForTest.appendHandoff("desk-session", [{
+			id: "voice-1",
+			role: "user",
+			text: "Remember this",
+		}]);
+		await initializeManagedDeskVoice(db);
+
+		expect(voiceKeyConfigured()).toBe(true);
+		expect(voiceKeyMasked()).toBe("sk-…1234");
+		expect(await takeVoiceHandoff("desk-session")).toContain("User (voice): Remember this");
+		expect(await takeVoiceHandoff("desk-session")).toBeUndefined();
+	});
+
 	test("uses low-eagerness semantic VAD instead of default endpointing", async () => {
 		expect(DESK_VOICE_TURN_DETECTION).toEqual({
 			type: "semantic_vad",
