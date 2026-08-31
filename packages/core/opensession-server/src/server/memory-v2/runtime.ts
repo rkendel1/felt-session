@@ -1,5 +1,8 @@
 import { createHash } from "crypto";
+import { existsSync, readdirSync, unlinkSync } from "node:fs";
 import { audit } from "../audit";
+import { managedFeltDb } from "../managed-feltdb";
+import type { StateFirstDB } from "@feltdb/core";
 import { stateDir } from "../paths";
 import {
   clearMemoryImportDirty,
@@ -7,19 +10,31 @@ import {
   memoryImportIsDirty,
 } from "../../agents/slack/memory";
 import { importLegacyMemoryDirectory, type LegacyImportResult } from "./legacy-import";
-import { MemoryStore } from "./store";
+import { ManagedMemoryStore } from "./managed-store";
+import { MemoryStore as LegacySqliteMemoryStore } from "./store";
 
 export type MemoryRolloutMode = "legacy" | "shadow" | "v2";
 
 interface RuntimeStore {
-  path: string;
-  store: MemoryStore;
+  store: ManagedMemoryStore;
+  initialized: Promise<void>;
   migration?: Promise<LegacyImportResult>;
 }
 
 let runtime: RuntimeStore | undefined;
+let configuredDb: StateFirstDB | undefined;
 const LEGACY_MIGRATION_SEAL = "legacy-migration-v2";
 const LEGACY_MIGRATION_VERSION = 2;
+const SQLITE_MIGRATION = "memory-v2-sqlite-to-managed-feltdb-v1";
+
+function removeLegacyMemoryFiles(sourceDirs: string[]): void {
+  for (const directory of sourceDirs) {
+    if (!existsSync(directory)) continue;
+    for (const name of readdirSync(directory)) {
+      if (name.endsWith(".json")) unlinkSync(`${directory}/${name}`);
+    }
+  }
+}
 
 /**
  * Memory rollout mode. V2 is the default; legacy and shadow exist as fast
@@ -35,12 +50,35 @@ export function memoryDatabasePath(): string {
 }
 
 /** Lazily acquire the database. Importing this module has no live effects. */
-export function memoryStore(): MemoryStore {
-  const path = memoryDatabasePath();
-  if (runtime?.path === path) return runtime.store;
-  runtime?.store.close();
-  runtime = { path, store: new MemoryStore(path) };
+export async function memoryStore(): Promise<ManagedMemoryStore> {
+  if (runtime) { await runtime.initialized; return runtime.store; }
+  const store = new ManagedMemoryStore(configuredDb ?? managedFeltDb());
+  runtime = { store, initialized: store.initialize() };
+  await runtime.initialized;
   return runtime.store;
+}
+
+export async function initializeManagedMemory(
+  db: StateFirstDB = configuredDb ?? managedFeltDb(),
+): Promise<void> {
+  closeMemoryRuntime();
+  configuredDb = db;
+  const store = await memoryStore();
+  if (!await db.collection<{ id: string }>("opensession_migrations").get(SQLITE_MIGRATION)) {
+    const path = memoryDatabasePath();
+    if (existsSync(path)) {
+      const legacy = new LegacySqliteMemoryStore(path);
+      try { await store.importSqliteSnapshot(legacy.migrationSnapshot()); }
+      finally { legacy.close(); }
+    }
+    await db.transaction((tx) => {
+      tx.collection("opensession_migrations").set(SQLITE_MIGRATION,
+        { id: SQLITE_MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
+    }, { transactionId: `opensession:migration:${SQLITE_MIGRATION}` });
+  }
+  for (const path of [memoryDatabasePath(), `${memoryDatabasePath()}-wal`, `${memoryDatabasePath()}-shm`]) {
+    if (existsSync(path)) unlinkSync(path);
+  }
 }
 
 /**
@@ -50,11 +88,11 @@ export function memoryStore(): MemoryStore {
  * it after verification.
  */
 export async function ensureMemoryV2Ready(): Promise<{
-  store: MemoryStore;
+  store: ManagedMemoryStore;
   migration: LegacyImportResult;
 }> {
   const sourceDirs = memoryImportDirs();
-  const store = memoryStore();
+  const store = await memoryStore();
   if (!runtime) throw new Error("Memory runtime was not initialized.");
   runtime.migration ??= (async () => {
     const sealed = store.metadata(LEGACY_MIGRATION_SEAL);
@@ -64,6 +102,7 @@ export async function ensureMemoryV2Ready(): Promise<{
         parsed.migrationVersion === LEGACY_MIGRATION_VERSION &&
         !memoryImportIsDirty(sourceDirs)
       ) {
+        removeLegacyMemoryFiles(sourceDirs);
         return { ...parsed, complete: true, errors: [] };
       }
     }
@@ -104,7 +143,7 @@ export async function ensureMemoryV2Ready(): Promise<{
           `Memory v2 migration is incomplete: ${result.mapped}/${result.discovered - result.skipped} valid rows mapped, ${result.errors.length} errors.`,
         );
       }
-      store.setMetadata(LEGACY_MIGRATION_SEAL, JSON.stringify({
+      await store.setMetadata(LEGACY_MIGRATION_SEAL, JSON.stringify({
         ...result,
         errors: [],
         migrationVersion: LEGACY_MIGRATION_VERSION,
@@ -113,7 +152,10 @@ export async function ensureMemoryV2Ready(): Promise<{
       }));
     }
 
-    if (result.complete) clearMemoryImportDirty(sourceDirs);
+    if (result.complete) {
+      clearMemoryImportDirty(sourceDirs);
+      removeLegacyMemoryFiles(sourceDirs);
+    }
 
     audit({
       kind: "memory_v2_migration",

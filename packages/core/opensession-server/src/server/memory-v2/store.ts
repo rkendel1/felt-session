@@ -66,6 +66,22 @@ interface RecordRow {
   last_retrieved_at: string | null;
 }
 
+export interface LegacySqliteMemoryAlias {
+  sourceKey: string;
+  legacyId: string;
+  memoryId: string;
+  importedAt: string;
+  rawJson?: string;
+  sourcePresent: boolean;
+  recordOwned: boolean;
+}
+
+export interface LegacySqliteMemorySnapshot {
+  records: MemoryRecord[];
+  aliases: LegacySqliteMemoryAlias[];
+  metadata: Array<{ key: string; value: string; updatedAt: string }>;
+}
+
 /**
  * Transactional memory store. Construct it from a runtime-owned start/ensure
  * function; importing this module does not open a database or create files.
@@ -568,6 +584,29 @@ export class MemoryStore {
     return this.require(id);
   }
 
+  migrationSnapshot(): LegacySqliteMemorySnapshot {
+    const records = (this.db.query("SELECT * FROM memory_records").all() as RecordRow[]).map(fromRow);
+    const aliases = (this.db.query(
+      `SELECT source_key, legacy_id, memory_id, imported_at, raw_json, source_present, record_owned
+       FROM memory_legacy_imports`,
+    ).all() as Array<{
+      source_key: string; legacy_id: string; memory_id: string; imported_at: string;
+      raw_json: string | null; source_present: number; record_owned: number;
+    }>).map((row) => ({
+      sourceKey: row.source_key,
+      legacyId: row.legacy_id,
+      memoryId: row.memory_id,
+      importedAt: row.imported_at,
+      ...(row.raw_json == null ? {} : { rawJson: row.raw_json }),
+      sourcePresent: row.source_present === 1,
+      recordOwned: row.record_owned === 1,
+    }));
+    const metadata = (this.db.query("SELECT key, value, updated_at FROM memory_meta").all() as Array<{
+      key: string; value: string; updated_at: string;
+    }>).map((row) => ({ key: row.key, value: row.value, updatedAt: row.updated_at }));
+    return { records, aliases, metadata };
+  }
+
   close(): void {
     this.db.close();
   }
@@ -644,7 +683,7 @@ export class MemoryStore {
   }
 }
 
-function prepareCreate(input: CreateMemoryInput, now: Date): MemoryRecord {
+export function prepareCreate(input: CreateMemoryInput, now: Date): MemoryRecord {
   const scopeKey = input.scopeKey.trim();
   if (!scopeKey) throw new Error("scopeKey is required.");
   const summary = validateSummary(input.summary);
@@ -683,7 +722,7 @@ function normalizeForFingerprint(value: string): string {
   return value.normalize("NFKC").trim().replace(/\s+/g, " ").toLocaleLowerCase("en-US");
 }
 
-function validateSummary(summary: string): string {
+export function validateSummary(summary: string): string {
   const clean = summary.trim().replace(/\s+/g, " ");
   const length = Array.from(clean).length;
   if (!length) throw new Error("summary is required.");
@@ -702,7 +741,7 @@ function cleanOptional(value: string | null | undefined): string | undefined {
 }
 
 /** Details may be source evidence, so retain its bytes while rejecting blank-only values. */
-function cleanDetails(value: string | null | undefined): string | undefined {
+export function cleanDetails(value: string | null | undefined): string | undefined {
   if (value == null) return undefined;
   if (!value.trim()) return undefined;
   if (Buffer.byteLength(value, "utf8") > DETAILS_MAX_BYTES) {
@@ -711,7 +750,7 @@ function cleanDetails(value: string | null | undefined): string | undefined {
   return value;
 }
 
-function validateSource(source: MemorySource): MemorySource {
+export function validateSource(source: MemorySource): MemorySource {
   const type = validateEnum(source.type, MEMORY_SOURCE_TYPES, "source.type");
   return {
     type,
@@ -733,15 +772,15 @@ function validateDate(value: string, label: string): string {
   return new Date(value).toISOString();
 }
 
-function validateOptionalDate(value: string | null | undefined): string | undefined {
+export function validateOptionalDate(value: string | null | undefined): string | undefined {
   return value == null || value === "" ? undefined : validateDate(value, "date");
 }
 
-function validateKindExpiry(kind: MemoryKind, expiresAt: string | undefined): void {
+export function validateKindExpiry(kind: MemoryKind, expiresAt: string | undefined): void {
   if (kind === "status" && !expiresAt) throw new Error("status memories require expiresAt.");
 }
 
-function normalizeTags(tags: string[]): string[] {
+export function normalizeTags(tags: string[]): string[] {
   if (tags.length > TAG_MAX_COUNT) throw new Error(`tags must contain ${TAG_MAX_COUNT} items or fewer.`);
   const normalized = uniqueStrings(tags.map((tag) => tag.trim().toLocaleLowerCase("en-US")).filter(Boolean));
   if (normalized.some((tag) => Array.from(tag).length > TAG_MAX_CHARS)) {
@@ -750,7 +789,7 @@ function normalizeTags(tags: string[]): string[] {
   return normalized;
 }
 
-function uniqueStrings(values: string[]): string[] {
+export function uniqueStrings(values: string[]): string[] {
   return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
 }
 
@@ -802,7 +841,7 @@ function buildFilterSql(filters: MemoryFilters, alias?: string): { clauses: stri
   return { clauses, params };
 }
 
-function pageLimit(limit?: number): number {
+export function pageLimit(limit?: number): number {
   return Math.min(Math.max(limit ?? 25, 1), MAX_PAGE_SIZE);
 }
 

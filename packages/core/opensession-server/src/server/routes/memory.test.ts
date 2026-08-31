@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { createFeltDB } from "@feltdb/core";
 import { mkdtempSync, mkdirSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { __setMemoryDirForTest } from "../../agents/slack/memory";
-import { closeMemoryRuntime, ensureMemoryV2Ready } from "../memory-v2";
+import { closeMemoryRuntime, ensureMemoryV2Ready, initializeManagedMemory } from "../memory-v2";
 import { configuredIdentity } from "../config";
 import type { RouteContext } from "./context";
 import { handleMemoryRoutes } from "./memory";
@@ -13,7 +14,7 @@ let previousMemoryDir: string | null;
 let previousDb: string | undefined;
 let previousMode: string | undefined;
 
-beforeEach(() => {
+beforeEach(async () => {
 	dir = mkdtempSync(join(tmpdir(), "memory-route-"));
 	const legacyDir = join(dir, "legacy");
 	mkdirSync(legacyDir);
@@ -22,6 +23,7 @@ beforeEach(() => {
 	previousMode = process.env.OPENSESSION_MEMORY_MODE;
 	process.env.OPENSESSION_MEMORY_DB = join(dir, "memory.sqlite");
 	process.env.OPENSESSION_MEMORY_MODE = "v2";
+	await initializeManagedMemory(createFeltDB({ namespace: crypto.randomUUID(), memory: true }));
 });
 
 afterEach(() => {
@@ -118,7 +120,7 @@ describe("memory v2 routes", () => {
 
 	test("preserves provenance when Settings edits an imported or agent-verified memory", async () => {
 		const { store } = await ensureMemoryV2Ready();
-		const original = store.create({
+		const original = await store.create({
 			scopeKey: "repo-opensession",
 			summary: "Use Bun for repository scripts.",
 			kind: "constraint",
@@ -147,7 +149,7 @@ describe("memory v2 routes", () => {
 		const other = team.find((member) => member.slackId && member.github !== viewer?.github);
 		if (!viewer?.github || !other?.slackId) return;
 		const { store } = await ensureMemoryV2Ready();
-		const privateRecord = store.create({
+		const privateRecord = await store.create({
 			scopeKey: `user-${other.slackId}`,
 			summary: "A private teammate preference.",
 			kind: "preference",

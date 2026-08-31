@@ -127,7 +127,7 @@ export async function handleMemoryRoutes(
 
 	try {
 		const { store } = await ensureMemoryV2Ready();
-		store.expireDue();
+		await store.expireDue();
 
 		if (path === "/api/memory/scopes" && req.method === "GET") {
 			const stats = store.stats();
@@ -237,7 +237,7 @@ export async function handleMemoryRoutes(
 			if (!validKind(body?.kind)) throw new Error("Invalid memory kind.");
 			requireStatusExpiry(body.kind, body.expiresAt, true);
 			const now = new Date();
-			const entry = store.create(
+			const entry = await store.create(
 				{
 					scopeKey,
 					summary: String(body?.summary || body?.text || ""),
@@ -277,7 +277,7 @@ export async function handleMemoryRoutes(
 				throw new Error("Every merged memory must exist in the selected scope.");
 			}
 			const now = new Date();
-			const entry = store.supersede(
+			const entry = await store.supersede(
 				{
 					scopeKey,
 					summary: String(body?.summary || ""),
@@ -321,24 +321,24 @@ export async function handleMemoryRoutes(
 				let entry: MemoryRecord;
 				switch (body?.action) {
 					case "pin":
-						store.confirm(id, now);
-						entry = store.update(
+						await store.confirm(id, now);
+						entry = await store.update(
 							id,
 							{ tier: "pinned" },
 							now,
 						);
 						break;
 					case "unpin":
-						entry = store.update(id, { tier: "retrievable" }, now);
+						entry = await store.update(id, { tier: "retrievable" }, now);
 						break;
 					case "confirm":
-						entry = store.confirm(id, now);
+						entry = await store.confirm(id, now);
 						break;
 					case "archive":
-						entry = store.archive(id, now);
+						entry = await store.archive(id, now);
 						break;
 					case "restore":
-						entry = store.restore(id, now);
+						entry = await store.restore(id, now);
 						break;
 					default: {
 						const nextKind = body?.kind === undefined ? record.kind : body.kind;
@@ -347,7 +347,7 @@ export async function handleMemoryRoutes(
 							nextKind,
 							body?.expiresAt === undefined ? record.expiresAt : body.expiresAt,
 						);
-						entry = store.update(
+						entry = await store.update(
 							id,
 							{
 								summary: body?.summary,
@@ -371,7 +371,7 @@ export async function handleMemoryRoutes(
 				if (record.state !== "archived") {
 					throw new Error("Archive this memory before deleting it permanently.");
 				}
-				store.delete(id);
+				await store.delete(id);
 				invalidateMemorySnapshot();
 				return Response.json({ ok: true });
 			}

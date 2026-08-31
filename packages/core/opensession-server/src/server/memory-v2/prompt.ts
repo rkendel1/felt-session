@@ -7,7 +7,7 @@ import {
   retrieveMemory,
   type RetrievalRecord,
 } from "./retrieval";
-import type { MemoryStore } from "./store";
+import type { ManagedMemoryStore } from "./managed-store";
 import type { MemoryRecord } from "./types";
 
 export interface PromptMemoryScopes {
@@ -22,7 +22,7 @@ export interface PromptMemoryResult {
   omitted: number;
 }
 
-function pinnedRecords(store: MemoryStore, scopeKeys: string[]): MemoryRecord[] {
+function pinnedRecords(store: ManagedMemoryStore, scopeKeys: string[]): MemoryRecord[] {
   const records: MemoryRecord[] = [];
   let cursor: string | undefined;
   do {
@@ -37,7 +37,7 @@ function pinnedRecords(store: MemoryStore, scopeKeys: string[]): MemoryRecord[] 
 }
 
 function matchingRecords(
-  store: MemoryStore,
+  store: ManagedMemoryStore,
   scopeKeys: string[],
   query: string,
 ): MemoryRecord[] {
@@ -69,7 +69,7 @@ export async function renderAmbientMemoryForPrompt(
     return { text: "", ids: [], bytes: 0, omitted: 0 };
   }
   const { store } = await ensureMemoryV2Ready();
-  store.expireDue();
+  await store.expireDue();
   const selected = renderAmbientMemory(asRetrievalRecords(pinnedRecords(store, scopes.scopeKeys)), {
     scopeKeys: scopes.scopeKeys,
     primaryRepoKey: scopes.primaryRepoKey,
@@ -97,7 +97,7 @@ export async function retrieveMemoryForPrompt(
     return { text: "", ids: [], bytes: 0, omitted: 0 };
   }
   const { store } = await ensureMemoryV2Ready();
-  store.expireDue();
+  await store.expireDue();
   const selected = retrieveMemory(
     asRetrievalRecords(matchingRecords(store, scopes.scopeKeys, query)).map((record) => ({
       ...record,
@@ -114,7 +114,7 @@ export async function retrieveMemoryForPrompt(
     },
   );
   const ids = selected.records.map(({ record }) => record.id);
-  store.markRetrieved(ids);
+  await store.markRetrieved(ids);
   const text = selected.text ? wrapContext(selected.text, "memory") : "";
   audit({
     kind: "memory_retrieval",

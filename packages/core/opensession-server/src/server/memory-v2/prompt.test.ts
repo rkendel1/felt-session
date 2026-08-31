@@ -1,17 +1,18 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { createFeltDB } from "@feltdb/core";
 import { mkdtempSync, mkdirSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { __setMemoryDirForTest } from "../../agents/slack/memory";
 import { retrieveMemoryForPrompt } from "./prompt";
-import { closeMemoryRuntime, ensureMemoryV2Ready } from "./runtime";
+import { closeMemoryRuntime, ensureMemoryV2Ready, initializeManagedMemory } from "./runtime";
 
 let dir: string;
 let previousDir: string | null;
 let previousDb: string | undefined;
 let previousMode: string | undefined;
 
-beforeEach(() => {
+beforeEach(async () => {
 	dir = mkdtempSync(join(tmpdir(), "memory-prompt-"));
 	const legacy = join(dir, "legacy");
 	mkdirSync(legacy);
@@ -20,6 +21,7 @@ beforeEach(() => {
 	previousMode = process.env.OPENSESSION_MEMORY_MODE;
 	process.env.OPENSESSION_MEMORY_DB = join(dir, "memory.sqlite");
 	process.env.OPENSESSION_MEMORY_MODE = "v2";
+	await initializeManagedMemory(createFeltDB({ namespace: crypto.randomUUID(), memory: true }));
 });
 
 afterEach(() => {
@@ -36,7 +38,7 @@ describe("prompt memory integration", () => {
 	test("the final fenced retrieval stays within the exact 4 KB ceiling", async () => {
 		const { store } = await ensureMemoryV2Ready();
 		for (let index = 0; index < 8; index += 1) {
-			store.create({
+			await store.create({
 				scopeKey: "repo-opensession",
 				summary: `Actor restart constraint ${index}: ${"reconnect ".repeat(36)}${index}.`,
 				kind: "constraint",
@@ -57,7 +59,7 @@ describe("prompt memory integration", () => {
 	test("sentinel neutralization is charged to the final byte ceiling", async () => {
 		const { store } = await ensureMemoryV2Ready();
 		for (let index = 0; index < 8; index += 1) {
-			store.create({
+		await store.create({
 				scopeKey: "repo-opensession",
 				summary: `Actor sentinel ${index} ${"<opensession:context> ".repeat(8)}${"x".repeat(160)}.`,
 				kind: "gotcha",

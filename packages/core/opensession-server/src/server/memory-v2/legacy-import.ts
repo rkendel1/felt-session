@@ -1,8 +1,16 @@
 import { createHash } from "crypto";
 import { readdir } from "fs/promises";
 import { basename, join } from "path";
-import type { MemoryState } from "./types";
-import { MemoryStore } from "./store";
+import type { CreateMemoryInput, MemoryRecord, MemoryState } from "./types";
+
+interface LegacyImportStore {
+  importLegacy(sourceKey: string, legacyId: string, input: CreateMemoryInput, state: MemoryState,
+    supersededBy?: string, rawJson?: string, now?: Date):
+    { record: MemoryRecord; imported: boolean } | Promise<{ record: MemoryRecord; imported: boolean }>;
+  reconcileLegacySource(sourceKey: string, presentLegacyIds: Set<string>, now?: Date): number | Promise<number>;
+  legacyMapping(sourceKey: string, legacyId: string): string | null;
+  setLegacyRelations(id: string, supersedes: string[], supersededBy?: string): MemoryRecord | Promise<MemoryRecord>;
+}
 
 interface LegacyEntry {
   id?: string;
@@ -37,7 +45,7 @@ export interface LegacyImportResult {
  * is retained in details, and a migration journal makes repeated runs no-ops.
  */
 export async function importLegacyMemoryDirectory(
-  store: MemoryStore,
+  store: LegacyImportStore,
   directory: string,
 ): Promise<LegacyImportResult> {
   const result: LegacyImportResult = {
@@ -103,7 +111,7 @@ export async function importLegacyMemoryDirectory(
           ? "archived"
           : "active";
       try {
-        const imported = store.importLegacy(
+        const imported = await store.importLegacy(
           sourceKey,
           legacyId,
           {
@@ -130,7 +138,7 @@ export async function importLegacyMemoryDirectory(
         sourceCanReconcile = false;
       }
     }
-    if (sourceCanReconcile) store.reconcileLegacySource(sourceKey, seenLegacyIds);
+    if (sourceCanReconcile) await store.reconcileLegacySource(sourceKey, seenLegacyIds);
   }
   for (const relation of relations) {
     const memoryId = store.legacyMapping(relation.sourceKey, relation.legacyId);
@@ -141,7 +149,7 @@ export async function importLegacyMemoryDirectory(
     const supersededBy = relation.entry.supersededBy
       ? store.legacyMapping(relation.sourceKey, relation.entry.supersededBy) ?? undefined
       : undefined;
-    store.setLegacyRelations(memoryId, supersedes, supersededBy);
+    await store.setLegacyRelations(memoryId, supersedes, supersededBy);
   }
   return finish(result, digest);
 }

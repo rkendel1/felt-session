@@ -163,8 +163,8 @@ export function createMemoryMcpServer(ctx: MemoryToolContext) {
           tags: input.tags,
         };
         const entry = input.supersedes?.length
-          ? store.supersede({ ...create, supersedes: input.supersedes })
-          : store.create(create);
+          ? await store.supersede({ ...create, supersedes: input.supersedes })
+          : await store.create(create);
         storesThisRun += 1;
         invalidateMemorySnapshot(ctx.sessionId);
         return text(`Stored ${compactRecord(entry)}. Supporting details remain retrieval-only.`);
@@ -287,7 +287,7 @@ export function createMemoryMcpServer(ctx: MemoryToolContext) {
         const current = store.get(input.id);
         if (!current || !canRead(ctx, current)) return text(`Memory [${input.id}] was not found in this session's scopes.`);
         if (current.scopeKey === "workspace" && !ctx.allowTeamWrites) return text("Team memory can only be changed from Memory settings.");
-        const entry = store.update(input.id, {
+        const entry = await store.update(input.id, {
           summary: input.summary,
           kind: input.kind,
           details: input.details,
@@ -329,7 +329,7 @@ export function createMemoryMcpServer(ctx: MemoryToolContext) {
               missing.push(id);
               continue;
             }
-            changed.push(store[action](id));
+            changed.push(await store[action](id));
           }
           invalidateMemorySnapshot(ctx.sessionId);
           return text([
@@ -349,7 +349,7 @@ export function createMemoryMcpServer(ctx: MemoryToolContext) {
         if (!current || !canRead(ctx, current)) return text(`Memory [${args.id}] was not found in this session's scopes.`);
         if (current.scopeKey === "workspace" && !ctx.allowTeamWrites) return text("Team memory can only be deleted from Memory settings.");
         if (current.state !== "archived") return text("Archive this memory before deleting it permanently.");
-        store.delete(args.id);
+        await store.delete(args.id);
         invalidateMemorySnapshot(ctx.sessionId);
         return text(`Permanently deleted [${args.id}].`);
       },

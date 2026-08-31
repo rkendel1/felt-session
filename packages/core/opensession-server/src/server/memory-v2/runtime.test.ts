@@ -1,11 +1,14 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, mkdirSync, rmSync, unlinkSync, writeFileSync } from "fs";
+import { createFeltDB } from "@feltdb/core";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { __setMemoryDirForTest, saveScope } from "../../agents/slack/memory";
+import { MemoryStore } from "./store";
 import {
 	closeMemoryRuntime,
 	ensureMemoryV2Ready,
+	initializeManagedMemory,
 	memoryStore,
 } from "./runtime";
 
@@ -15,7 +18,7 @@ let previousDir: string | null;
 let previousDb: string | undefined;
 let previousMode: string | undefined;
 
-beforeEach(() => {
+beforeEach(async () => {
 	dir = mkdtempSync(join(tmpdir(), "memory-runtime-"));
 	legacyDir = join(dir, "legacy");
 	mkdirSync(legacyDir);
@@ -24,6 +27,7 @@ beforeEach(() => {
 	previousMode = process.env.OPENSESSION_MEMORY_MODE;
 	process.env.OPENSESSION_MEMORY_DB = join(dir, "memory.sqlite");
 	process.env.OPENSESSION_MEMORY_MODE = "v2";
+	await initializeManagedMemory(createFeltDB({ namespace: crypto.randomUUID(), memory: true }));
 });
 
 afterEach(() => {
@@ -37,6 +41,23 @@ afterEach(() => {
 });
 
 describe("memory v2 runtime migration", () => {
+	test("imports the SQLite authority and removes its database files", async () => {
+		closeMemoryRuntime();
+		const path = process.env.OPENSESSION_MEMORY_DB!;
+		const legacy = new MemoryStore(path);
+		const created = legacy.create({
+			scopeKey: "workspace",
+			summary: "A fact from the retired SQLite authority.",
+			kind: "reference",
+			tier: "retrievable",
+			source: { type: "settings" },
+		});
+		legacy.close();
+		await initializeManagedMemory(createFeltDB({ namespace: crypto.randomUUID(), memory: true }));
+		expect((await memoryStore()).get(created.id)?.summary).toBe(created.summary);
+		expect(Bun.file(path).exists()).resolves.toBe(false);
+	});
+
 	test("seals a verified import and survives JSON cleanup plus restart", async () => {
 		const file = join(legacyDir, "repo-opensession.json");
 		writeFileSync(file, JSON.stringify({ entries: [{
@@ -48,8 +69,8 @@ describe("memory v2 runtime migration", () => {
 		const first = await ensureMemoryV2Ready();
 		expect(first.migration.complete).toBe(true);
 		expect(first.migration.mapped).toBe(1);
-		expect(memoryStore().metadata("legacy-migration-v2")).toContain(first.migration.sourceDigest);
-		unlinkSync(file);
+		expect((await memoryStore()).metadata("legacy-migration-v2")).toContain(first.migration.sourceDigest);
+		expect(Bun.file(file).exists()).resolves.toBe(false);
 		closeMemoryRuntime();
 
 		const restarted = await ensureMemoryV2Ready();
@@ -61,7 +82,7 @@ describe("memory v2 runtime migration", () => {
 	test("fails closed and does not seal a malformed source", async () => {
 		writeFileSync(join(legacyDir, "workspace.json"), "not json");
 		await expect(ensureMemoryV2Ready()).rejects.toThrow("migration is incomplete");
-		expect(memoryStore().metadata("legacy-migration-v2")).toBeNull();
+		expect((await memoryStore()).metadata("legacy-migration-v2")).toBeNull();
 	});
 
 	test("upgrades an older seal and backfills raw legacy provenance", async () => {
@@ -72,8 +93,8 @@ describe("memory v2 runtime migration", () => {
 			by: "Fable",
 			at: "2025-01-02T03:04:05Z",
 		}] }));
-		const store = memoryStore();
-		store.importLegacy(
+		const store = await memoryStore();
+		await store.importLegacy(
 			`${file}#workspace`,
 			"legacy-old-seal",
 			{
@@ -85,7 +106,7 @@ describe("memory v2 runtime migration", () => {
 			},
 			"active",
 		);
-		store.setMetadata("legacy-migration-v2", JSON.stringify({ complete: true }));
+		await store.setMetadata("legacy-migration-v2", JSON.stringify({ complete: true }));
 		const result = await ensureMemoryV2Ready();
 		expect(result.migration.complete).toBe(true);
 		expect(JSON.parse(result.store.legacyRaw("legacy-old-seal") || "{}").by).toBe("Fable");
@@ -117,7 +138,7 @@ describe("memory v2 runtime migration", () => {
 			by: "Fable",
 			at: "2026-04-02T00:00:00Z",
 		}]);
-		expect(memoryStore().get("shadow-write")?.summary)
+		expect((await memoryStore()).get("shadow-write")?.summary)
 			.toBe("A fact written during shadow comparison.");
 	});
 

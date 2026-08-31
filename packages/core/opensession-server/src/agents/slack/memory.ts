@@ -156,7 +156,7 @@ export async function addMemory(
     const { ensureMemoryV2Ready, legacySummary } = await import("../../server/memory-v2");
     const { store } = await ensureMemoryV2Ready();
     const summary = legacySummary(text);
-    const record = store.create({
+    const record = await store.create({
       scopeKey: writable,
       summary,
       ...(summary === text.trim() ? {} : { details: text }),
@@ -255,7 +255,7 @@ export async function forgetMemory(
       }
       return { ok: false, error: `No memory entry with id "${id}" in this scope.` };
     }
-    store.delete(id);
+    await store.delete(id);
     return {
       ok: true,
       removed: {
