@@ -30,6 +30,10 @@ import { FeltDbTranscriptStore } from "./feltdb-transcript-store";
 import { FeltDbAgentHostStore } from "./feltdb-agent-host-store";
 import { FeltDbRunStore } from "./feltdb-run-store";
 import { FeltDbCreationStore } from "./feltdb-creation-store";
+import { FeltDbAskStore } from "./feltdb-ask-store";
+import { FeltDbCommandStore } from "./feltdb-command-store";
+import { FeltDbDeliveryStore } from "./feltdb-delivery-store";
+import { FeltDbReducerStore } from "./feltdb-reducer-store";
 
 class SessionQuarantinedError extends Error {
   readonly code = "session_quarantined";
@@ -83,6 +87,7 @@ export function startSessionKernelActorWorker(): void {
   let feltDbAgentHost: FeltDbAgentHostStore | undefined;
   let feltDbRuns: FeltDbRunStore | undefined;
   let feltDbCreation: FeltDbCreationStore | undefined;
+  let feltDbReducers: FeltDbReducerStore | undefined;
   const changeStore = (): FeltDbKernelChangeStore =>
     (feltDbChanges ??= openFeltDbKernelChangeStore());
   const decisionStore = (): FeltDbSessionDecisionStore =>
@@ -95,6 +100,12 @@ export function startSessionKernelActorWorker(): void {
     (feltDbRuns ??= new FeltDbRunStore(decisionStore()));
   const creationStore = (): FeltDbCreationStore =>
     (feltDbCreation ??= new FeltDbCreationStore(decisionStore()));
+  const reducerStore = (): FeltDbReducerStore =>
+    (feltDbReducers ??= new FeltDbReducerStore(
+      new FeltDbAskStore(decisionStore()),
+      new FeltDbDeliveryStore(decisionStore()),
+      new FeltDbCommandStore(decisionStore()),
+    ));
   function post(message: KernelActorResponse): void {
     // Internal worker telemetry is consumed by the parent service and stripped
     // before the actor response crosses the HTTP boundary.
@@ -116,7 +127,8 @@ export function startSessionKernelActorWorker(): void {
         if (command.kind === "transcript")
           assertTranscriptActorRequest(command.request);
         const managedKind = command.kind === "transcript" ||
-          command.kind === "run_event" || command.kind === "creation_event";
+          command.kind === "run_event" || command.kind === "creation_event" ||
+          ((command.kind === "ask" || command.kind === "delivery") && !!sessionId);
         const managedHead = managedKind && sessionId &&
             process.env.OPENSESSION_FELTDB_SERVER_URL
           ? await decisionStore().head(sessionId)
@@ -164,7 +176,9 @@ export function startSessionKernelActorWorker(): void {
             : store.applyRunEvent(command.decision);
         else if (command.kind === "delivery") {
           const delivery = command.request;
-          if (delivery.op === "snapshot")
+          if (managedHead)
+            result = await reducerStore().deliveryRequest(command.commandId, delivery);
+          else if (delivery.op === "snapshot")
             result = store.deliverySnapshot(delivery.sessionId);
           else if (delivery.op === "entries")
             result = host.allDeliveryEntries(delivery.slot);
@@ -243,13 +257,16 @@ export function startSessionKernelActorWorker(): void {
               delivery.sessionId,
               delivery.promptEntryId,
             );
-          if (!isDeliveryReadRequest(delivery) && "sessionId" in delivery)
+          if (!managedHead && !isDeliveryReadRequest(delivery) && "sessionId" in delivery)
             host.refreshSessionProjections(delivery.sessionId);
           if (!isDeliveryReadRequest(delivery))
             result = {
               result,
               ...("sessionId" in delivery
-                ? { revision: store.deliverySnapshot(delivery.sessionId).revision }
+                ? { revision: managedHead
+                    ? (await new FeltDbDeliveryStore(decisionStore())
+                        .snapshot(delivery.sessionId)).revision
+                    : store.deliverySnapshot(delivery.sessionId).revision }
                 : {}),
             };
         } else if (command.kind === "gateway") {
@@ -331,7 +348,9 @@ export function startSessionKernelActorWorker(): void {
           else result = store.recordTimerRuntimeFailure(timer);
         } else {
           const ask = command.request;
-          if (ask.op === "snapshot") result = store.askSnapshot(ask.sessionId);
+          if (managedHead && ask.op !== "entries" && ask.op !== "clear")
+            result = reducerStore().ask(command.commandId, ask);
+          else if (ask.op === "snapshot") result = store.askSnapshot(ask.sessionId);
           else if (ask.op === "entries") result = host.allAskEntries();
           else if (ask.op === "set")
             result = host.call("setAskRecord", [ask.sessionId, ask.value]);
