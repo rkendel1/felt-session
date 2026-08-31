@@ -27,16 +27,19 @@
  * recipes reach it), and the origin is tailnet-only.
  */
 
-import { existsSync, readdirSync, readFileSync, unlinkSync } from "fs";
+import { existsSync, readFileSync, unlinkSync } from "fs";
 import { createHash, randomBytes, timingSafeEqual } from "crypto";
 import type { StateFirstDB } from "@feltdb/core";
 import { managedFeltDb } from "./managed-feltdb";
 import { audit } from "./audit";
 import { configuredIdentity } from "./config";
 import { githubUserAuthActive } from "./github-auth";
-import { isNativeSessionId, OPENSESSION_SESSIONS_DIR, stateDir } from "./paths";
-import { writeJsonAtomic } from "./shared/atomic-write";
+import { OPENSESSION_SESSIONS_DIR, stateDir } from "./paths";
 import { githubLoginFor } from "./shared/user-mappings";
+import {
+  nativeSessionMetadataEntries,
+  updateNativeSessionMetadata,
+} from "./managed-native-sessions";
 
 /** Env override is for tests; read once at first use (the map loads lazily). */
 function sessionsPath(): string {
@@ -414,24 +417,22 @@ export async function migrateSessionsToGithubUser(): Promise<void> {
   let scanned = 0;
   let stamped = 0;
   try {
-    for (const file of readdirSync(OPENSESSION_SESSIONS_DIR)) {
-      // Both id prefixes: `os-` is minted today, `bks-` predates the rename.
-      if (!file.endsWith(".json") || !isNativeSessionId(file)) continue;
-      const path = `${OPENSESSION_SESSIONS_DIR}/${file}`;
+    for (const [id, data] of nativeSessionMetadataEntries()) {
+      if (!data.id || data.id !== id) continue;
       scanned++;
-      try {
-        const data = JSON.parse(readFileSync(path, "utf-8"));
-        if (!data || typeof data !== "object") continue;
-        if (data.createdByLogin) continue;
-        const createdBy: unknown = data.createdBy;
-        if (typeof createdBy !== "string" || !createdBy) continue;
-        if (createdBy.endsWith(" (automation)")) continue;
-        const login = githubLoginFor(createdBy);
-        if (!login) continue;
-        data.createdByLogin = login;
-        writeJsonAtomic(path, data);
-        stamped++;
-      } catch {}
+      if (data.createdByLogin) continue;
+      const createdBy: unknown = data.createdBy;
+      if (typeof createdBy !== "string" || !createdBy) continue;
+      if (createdBy.endsWith(" (automation)")) continue;
+      const login = githubLoginFor(createdBy);
+      if (!login) continue;
+      let applied = false;
+      await updateNativeSessionMetadata(id, (current) => {
+        if (current.createdByLogin) return current;
+        applied = true;
+        return { ...current, createdByLogin: login };
+      });
+      if (applied) stamped++;
     }
   } catch (e) {
     console.error("[web-auth] session→github-user migration failed:", e);
