@@ -22,6 +22,12 @@ import {
   openFeltDbKernelChangeStore,
   type FeltDbKernelChangeStore,
 } from "./feltdb-change-store";
+import {
+  openFeltDbSessionDecisionStore,
+  type FeltDbSessionDecisionStore,
+} from "./feltdb-decision-store";
+import { FeltDbTranscriptStore } from "./feltdb-transcript-store";
+import { FeltDbAgentHostStore } from "./feltdb-agent-host-store";
 
 class SessionQuarantinedError extends Error {
   readonly code = "session_quarantined";
@@ -70,8 +76,17 @@ function routedStoreCall(
 export function startSessionKernelActorWorker(): void {
   const host = new SessionKernelStoreHost();
   let feltDbChanges: FeltDbKernelChangeStore | undefined;
+  let feltDbDecisions: FeltDbSessionDecisionStore | undefined;
+  let feltDbTranscripts: FeltDbTranscriptStore | undefined;
+  let feltDbAgentHost: FeltDbAgentHostStore | undefined;
   const changeStore = (): FeltDbKernelChangeStore =>
     (feltDbChanges ??= openFeltDbKernelChangeStore());
+  const decisionStore = (): FeltDbSessionDecisionStore =>
+    (feltDbDecisions ??= openFeltDbSessionDecisionStore());
+  const transcriptStore = (): FeltDbTranscriptStore =>
+    (feltDbTranscripts ??= new FeltDbTranscriptStore(decisionStore()));
+  const agentHostStore = (): FeltDbAgentHostStore =>
+    (feltDbAgentHost ??= new FeltDbAgentHostStore(decisionStore()));
   function post(message: KernelActorResponse): void {
     // Internal worker telemetry is consumed by the parent service and stripped
     // before the actor response crosses the HTTP boundary.
@@ -92,11 +107,15 @@ export function startSessionKernelActorWorker(): void {
         requestSessionId = sessionId;
         if (command.kind === "transcript")
           assertTranscriptActorRequest(command.request);
-        if (!isReadReducer(command) && sessionId) {
+        const managedTranscript = command.kind === "transcript" && sessionId &&
+            process.env.OPENSESSION_FELTDB_SERVER_URL
+          ? await decisionStore().head(sessionId)
+          : undefined;
+        if (!managedTranscript && !isReadReducer(command) && sessionId) {
           const quarantine = host.quarantinedSession(sessionId);
           if (quarantine) throw new SessionQuarantinedError(sessionId, quarantine.reason);
         }
-        if (sessionId)
+        if (!managedTranscript && sessionId)
           store = host.storeForSession(
             sessionId,
             command.kind === "transcript" ? false : !isReadReducer(command),
@@ -104,12 +123,27 @@ export function startSessionKernelActorWorker(): void {
           );
         if (
           command.kind === "transcript" &&
+          !managedTranscript &&
           !isReadReducer(command) &&
           command.request.op !== "delete" &&
           store.isTombstoned(command.request.sessionId)
         ) throw new Error(`Session ${command.request.sessionId} is tombstoned`);
-        else if (command.kind === "transcript")
-          result = host.transcript(command.request);
+        else if (command.kind === "transcript") {
+          const transcript = command.request;
+          if (!managedTranscript) result = host.transcript(transcript);
+          else if (transcript.op === "agent_append_destination") {
+            await agentHostStore().assertTranscriptDestinationFence(transcript);
+            result = transcriptStore().appendAgentDestination(transcript);
+          } else if (transcript.op === "agent_query_destination_receipt")
+            result = transcriptStore().queryAgentReceipt(transcript);
+          else if (transcript.op === "agent_validate_destination_receipt")
+            result = transcriptStore().validateAgentReceipt(transcript);
+          else {
+            if (transcript.op === "append_destination")
+              await agentHostStore().assertTranscriptDestinationFence(transcript);
+            result = transcriptStore().applyRequest(transcript);
+          }
+        }
         else if (command.kind === "creation_event")
           result = store.applyCreationEvent(command.decision);
         else if (command.kind === "run_event")
