@@ -1,6 +1,6 @@
 /**
- * Review feedback store — the learning half of the review bot. One JSON file
- * per repo at ~/.opensession-github/feedback-<key>.json recording every inline
+ * Review feedback store — the learning half of the review bot. Managed FeltDB
+ * records every inline
  * finding we post and what happened to it (👍/👎 reactions, addressed vs
  * ignored, missed bugs). Consumers:
  *  - postReview (review.ts): records new findings, harvests outcomes from the
@@ -15,8 +15,9 @@
  */
 import { stateDir } from "../../server/paths";
 import { audit } from "../../server/audit";
-import { writeJsonAtomic } from "../../server/shared/atomic-write";
-import { existsSync, readFileSync } from "fs";
+import type { StateFirstDB } from "@feltdb/core";
+import { existsSync, readFileSync, readdirSync, unlinkSync } from "node:fs";
+import { managedFeltDb } from "../../server/managed-feltdb";
 import { defaultRepo, isGithubBotLogin } from "../../server/config";
 import { oneShot } from "../../server/one-shot";
 import { repoForFullName } from "./constants";
@@ -32,36 +33,70 @@ const STATE_DIR = stateDir("github");
 // Also the review-quality trend's history window (analytics.ts reads this
 // store cohort-by-posted-date): at ~5 findings/PR this is months of history.
 const MAX_RECORDS = 2000;
+const COLLECTION = "opensession_github_review_feedback";
+const MIGRATION = "github-feedback-json-to-managed-feltdb-v1";
+let feedbackDb: StateFirstDB | undefined;
+const feedbackByKey = new Map<string, FeedbackRecord[]>();
 
-function feedbackPath(ghRepo?: string): string {
-  const key =
+function feedbackKey(ghRepo?: string): string {
+  return (
     !ghRepo || ghRepo.toLowerCase() === defaultRepo().ghRepo.toLowerCase()
       ? "default"
-      : repoForFullName(ghRepo)?.id || ghRepo.replace(/[^A-Za-z0-9._-]/g, "_");
-  return `${STATE_DIR}/feedback-${key}.json`;
+      : repoForFullName(ghRepo)?.id || ghRepo.replace(/[^A-Za-z0-9._-]/g, "_")
+  );
 }
 
 export function readFeedback(ghRepo?: string): FeedbackRecord[] {
-  const path = feedbackPath(ghRepo);
-  if (!existsSync(path)) return [];
-  try {
-    const parsed = JSON.parse(readFileSync(path, "utf-8"));
-    return Array.isArray(parsed) ? (parsed as FeedbackRecord[]) : [];
-  } catch {
-    return [];
+  return structuredClone(feedbackByKey.get(feedbackKey(ghRepo)) ?? []);
+}
+
+async function writeFeedback(ghRepo: string | undefined, records: FeedbackRecord[]): Promise<void> {
+  const key = feedbackKey(ghRepo);
+  const retained = records.slice(-MAX_RECORDS);
+  const db = feedbackDb ?? managedFeltDb();
+  await db.transaction((tx) => {
+    tx.collection<{ id: string; records: FeedbackRecord[] }>(COLLECTION).set(key, { id: key, records: retained });
+  }, { transactionId: `opensession:github-feedback:put:${crypto.randomUUID()}` });
+  feedbackByKey.set(key, structuredClone(retained));
+}
+
+export async function initializeManagedGithubFeedback(
+  db: StateFirstDB = feedbackDb ?? managedFeltDb(),
+): Promise<void> {
+  feedbackDb = db;
+  if (!await db.collection<{ id: string }>("opensession_migrations").get(MIGRATION)) {
+    if (existsSync(STATE_DIR)) for (const name of readdirSync(STATE_DIR)) {
+      const match = name.match(/^feedback-(.+)\.json$/);
+      if (!match) continue;
+      let records: FeedbackRecord[] = [];
+      try {
+        const parsed = JSON.parse(readFileSync(`${STATE_DIR}/${name}`, "utf8"));
+        if (Array.isArray(parsed)) records = parsed.slice(-MAX_RECORDS);
+      } catch {}
+      await db.transaction((tx) => {
+        tx.collection<{ id: string; records: FeedbackRecord[] }>(COLLECTION).set(match[1]!, { id: match[1]!, records });
+      }, { transactionId: `opensession:github-feedback:migrate:${match[1]}` });
+    }
+    await db.transaction((tx) => {
+      tx.collection("opensession_migrations").set(MIGRATION,
+        { id: MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
+    }, { transactionId: `opensession:migration:${MIGRATION}` });
+  }
+  if (existsSync(STATE_DIR)) for (const name of readdirSync(STATE_DIR)) {
+    if (/^feedback-.+\.json$/.test(name)) unlinkSync(`${STATE_DIR}/${name}`);
+  }
+  feedbackByKey.clear();
+  for (const entry of await db.collection<{ id: string; records: FeedbackRecord[] }>(COLLECTION).all()) {
+    feedbackByKey.set(entry.id, entry.records ?? []);
   }
 }
 
-function writeFeedback(ghRepo: string | undefined, records: FeedbackRecord[]): void {
-  writeJsonAtomic(feedbackPath(ghRepo), records.slice(-MAX_RECORDS));
-}
-
 /** Record the inline findings a review just posted. */
-export function recordPostedFindings(
+export async function recordPostedFindings(
   ghRepo: string | undefined,
   prNumber: number,
   findings: Array<{ path: string; severity?: string; title?: string; body: string }>,
-): void {
+): Promise<void> {
   if (!findings.length) return;
   const records = readFeedback(ghRepo);
   const now = new Date().toISOString();
@@ -75,7 +110,7 @@ export function recordPostedFindings(
       postedAt: now,
     });
   }
-  writeFeedback(ghRepo, records);
+  await writeFeedback(ghRepo, records);
 }
 
 /** Match a stored record to a bot thread: same PR + path, and the thread's
@@ -102,12 +137,12 @@ function matchRecord(
  * open + current when the PR is closing means they didn't ("ignored").
  * Cheap: callers pass threads they already fetched.
  */
-export function harvestThreadOutcomes(
+export async function harvestThreadOutcomes(
   ghRepo: string | undefined,
   prNumber: number,
   threads: ReviewThread[],
   prClosed: boolean,
-): { addressed: number; ignored: number } {
+): Promise<{ addressed: number; ignored: number }> {
   const records = readFeedback(ghRepo);
   let addressed = 0;
   let ignored = 0;
@@ -135,7 +170,7 @@ export function harvestThreadOutcomes(
       dirty = true;
     }
   }
-  if (dirty) writeFeedback(ghRepo, records);
+  if (dirty) await writeFeedback(ghRepo, records);
   if (prClosed && (addressed || ignored)) {
     audit({
       msg: "review_feedback_outcome",
@@ -231,7 +266,7 @@ Output ONLY a JSON array: [{"i": 0, "signal": "dismissive" | "positive" | "neutr
     dirty = true;
   }
   if (dirty) {
-    writeFeedback(ghRepo, fresh);
+    await writeFeedback(ghRepo, fresh);
     audit({
       msg: "review_reply_signal",
       pr_number: prNumber,
@@ -257,11 +292,11 @@ export function shouldSuppressFinding(
 }
 
 /** Record a reviewer false negative (missed-bugs.ts). */
-export function recordFalseNegative(
+export async function recordFalseNegative(
   ghRepo: string | undefined,
   culpritPr: number,
   text: string,
-): void {
+): Promise<void> {
   const records = readFeedback(ghRepo);
   records.push({
     pr: culpritPr,
@@ -272,7 +307,7 @@ export function recordFalseNegative(
     postedAt: new Date().toISOString(),
     falseNegative: true,
   });
-  writeFeedback(ghRepo, records);
+  await writeFeedback(ghRepo, records);
 }
 
 /** Aggregate health numbers (surfaced via the github agent's health()). */

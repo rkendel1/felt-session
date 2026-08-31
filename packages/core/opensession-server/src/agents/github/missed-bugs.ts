@@ -120,7 +120,7 @@ export async function analyzeMergedPrForMissedBugs(payload: any): Promise<void> 
       repo: repoFull,
       fix_title: title.slice(0, 200),
     });
-    recordFalseNegative(
+    await recordFalseNegative(
       ghRepo,
       culpritPr,
       `Fix PR #${pr.number} "${title}" changed code introduced by reviewed PR #${culpritPr} (${subjects[0] || ""})`,

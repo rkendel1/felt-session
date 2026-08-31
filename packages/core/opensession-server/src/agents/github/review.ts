@@ -752,7 +752,7 @@ async function postReview(
   // on our comments and mark outdated/resolved ones "addressed" (the author
   // acted). The "ignored" verdict only lands at PR close (webhook.ts).
   try {
-    harvestThreadOutcomes(pr.ghRepo, pr.number, existingThreads, false);
+    await harvestThreadOutcomes(pr.ghRepo, pr.number, existingThreads, false);
   } catch (e) {
     console.warn(`[github] feedback harvest failed for PR #${pr.number}:`, e);
   }
@@ -797,7 +797,7 @@ async function postReview(
       // back to it (the feedback filter's training data).
       if (ok) {
         try {
-          recordPostedFindings(pr.ghRepo, pr.number, fresh);
+          await recordPostedFindings(pr.ghRepo, pr.number, fresh);
         } catch (e) {
           console.warn(`[github] recording findings failed for PR #${pr.number}:`, e);
         }

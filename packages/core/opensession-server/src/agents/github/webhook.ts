@@ -195,7 +195,7 @@ export async function handleGithubPrEvent(event: string, payload: any): Promise<
         .then(async (m) => {
           const threads = await m.listReviewThreads(pr.number, ghRepo);
           const { harvestThreadOutcomes, harvestReplySignals } = await import("./feedback");
-          harvestThreadOutcomes(ghRepo, pr.number, threads, /*prClosed*/ true);
+          await harvestThreadOutcomes(ghRepo, pr.number, threads, /*prClosed*/ true);
           await harvestReplySignals(ghRepo, pr.number, threads);
         })
         .catch((e) => console.warn(`[github] merge feedback sweep failed for #${pr.number}:`, e));
