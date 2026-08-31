@@ -5,7 +5,7 @@
  * Conversations are the audit trail of all Mission Control work.
  */
 
-import { createFeltDB, getTelemetryClient } from "@feltdb/core";
+import type { StateFirstDB } from "@feltdb/core";
 import { randomUUIDv7 } from "bun";
 import type {
   DurableConversation,
@@ -24,8 +24,8 @@ interface StoredConversation {
   taskId: string;
   projectId: string;
   title: string;
-  agents: string; // JSON
-  participants: string; // JSON
+  agents: DurableConversation["agents"];
+  participants: DurableConversation["participants"];
   turnCount: number;
   status: string;
   createdAt: string;
@@ -44,7 +44,7 @@ interface StoredConversationTurn {
   actor: string;
   messageType: string;
   content: string;
-  metadata?: string; // JSON
+  metadata?: ConversationTurn["metadata"];
   timestamp: string;
 }
 
@@ -59,9 +59,9 @@ interface StoredAgentDecision {
   decision: string;
   reasoning: string;
   confidence: number;
-  alternatives?: string; // JSON
+  alternatives?: AgentDecision["alternatives"];
   approvalRequired?: boolean;
-  approvedBy?: string; // JSON
+  approvedBy?: AgentDecision["approvedBy"];
   timestamp: string;
 }
 
@@ -74,8 +74,8 @@ interface StoredCollaborationState {
   projectId: string;
   phase: string;
   activeAgentId?: string;
-  decisions: string; // JSON
-  transitions: string; // JSON
+  decisions: CollaborationState["decisions"];
+  transitions: CollaborationState["transitions"];
   startedAt: string;
   completedAt?: string;
 }
@@ -90,9 +90,9 @@ interface StoredAuditEntry {
   timestamp: string;
   actor: string;
   action: string;
-  changes?: string; // JSON
+  changes?: AuditEntry["changes"];
   result: string;
-  metadata?: string; // JSON
+  metadata?: AuditEntry["metadata"];
 }
 
 /**
@@ -136,15 +136,8 @@ export interface DurableConversationLedger {
  * Open or create a durable conversation ledger.
  */
 export function openDurableConversationLedger(
-  path: string,
+  db: StateFirstDB,
 ): DurableConversationLedger {
-  const telemetry = getTelemetryClient();
-  telemetry.disable();
-
-  const db = createFeltDB({
-    path,
-    namespace: "mission-control-conversations",
-  });
 
   const CONVERSATIONS_COLLECTION = "conversations";
   const TURNS_COLLECTION = "conversation_turns";
@@ -161,8 +154,8 @@ export function openDurableConversationLedger(
         taskId: conversation.taskId,
         projectId: conversation.projectId,
         title: conversation.title,
-        agents: JSON.stringify(conversation.agents),
-        participants: JSON.stringify(conversation.participants),
+        agents: conversation.agents,
+        participants: conversation.participants,
         turnCount: conversation.turns.length,
         status: conversation.status,
         createdAt: conversation.createdAt,
@@ -195,8 +188,8 @@ export function openDurableConversationLedger(
         taskId: row.taskId,
         projectId: row.projectId,
         title: row.title,
-        agents: JSON.parse(row.agents),
-        participants: JSON.parse(row.participants),
+        agents: row.agents,
+        participants: row.participants,
         turns: turns.map((t) => ({
           id: t.id,
           conversationId: t.conversationId,
@@ -205,7 +198,7 @@ export function openDurableConversationLedger(
           actor: t.actor as any,
           messageType: t.messageType as any,
           content: t.content,
-          metadata: t.metadata ? JSON.parse(t.metadata) : undefined,
+          metadata: t.metadata,
           timestamp: t.timestamp,
         })),
         status: row.status as any,
@@ -249,8 +242,8 @@ export function openDurableConversationLedger(
         taskId: conversation.taskId,
         projectId: conversation.projectId,
         title: conversation.title,
-        agents: JSON.stringify(conversation.agents),
-        participants: JSON.stringify(conversation.participants),
+        agents: conversation.agents,
+        participants: conversation.participants,
         turnCount: conversation.turns.length,
         status: conversation.status,
         createdAt: conversation.createdAt,
@@ -275,7 +268,7 @@ export function openDurableConversationLedger(
         actor: turn.actor,
         messageType: turn.messageType,
         content: turn.content,
-        metadata: turn.metadata ? JSON.stringify(turn.metadata) : undefined,
+        metadata: turn.metadata,
         timestamp: turn.timestamp,
       };
 
@@ -297,7 +290,7 @@ export function openDurableConversationLedger(
         actor: row.actor as any,
         messageType: row.messageType as any,
         content: row.content,
-        metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
+        metadata: row.metadata,
         timestamp: row.timestamp,
       };
     },
@@ -319,7 +312,7 @@ export function openDurableConversationLedger(
           actor: r.actor as any,
           messageType: r.messageType as any,
           content: r.content,
-          metadata: r.metadata ? JSON.parse(r.metadata) : undefined,
+          metadata: r.metadata,
           timestamp: r.timestamp,
         }));
     },
@@ -341,13 +334,9 @@ export function openDurableConversationLedger(
         decision: decision.decision,
         reasoning: decision.reasoning,
         confidence: decision.confidence,
-        alternatives: decision.alternatives
-          ? JSON.stringify(decision.alternatives)
-          : undefined,
+        alternatives: decision.alternatives,
         approvalRequired: decision.approvalRequired,
-        approvedBy: decision.approvedBy
-          ? JSON.stringify(decision.approvedBy)
-          : undefined,
+        approvedBy: decision.approvedBy,
         timestamp: decision.timestamp,
       };
 
@@ -372,9 +361,9 @@ export function openDurableConversationLedger(
         decision: row.decision,
         reasoning: row.reasoning,
         confidence: row.confidence,
-        alternatives: row.alternatives ? JSON.parse(row.alternatives) : undefined,
+        alternatives: row.alternatives,
         approvalRequired: row.approvalRequired,
-        approvedBy: row.approvedBy ? JSON.parse(row.approvedBy) : undefined,
+        approvedBy: row.approvedBy,
         timestamp: row.timestamp,
       };
     },
@@ -394,9 +383,9 @@ export function openDurableConversationLedger(
         decision: r.decision,
         reasoning: r.reasoning,
         confidence: r.confidence,
-        alternatives: r.alternatives ? JSON.parse(r.alternatives) : undefined,
+        alternatives: r.alternatives,
         approvalRequired: r.approvalRequired,
-        approvedBy: r.approvedBy ? JSON.parse(r.approvedBy) : undefined,
+        approvedBy: r.approvedBy,
         timestamp: r.timestamp,
       }));
     },
@@ -417,9 +406,9 @@ export function openDurableConversationLedger(
         decision: r.decision,
         reasoning: r.reasoning,
         confidence: r.confidence,
-        alternatives: r.alternatives ? JSON.parse(r.alternatives) : undefined,
+        alternatives: r.alternatives,
         approvalRequired: r.approvalRequired,
-        approvedBy: r.approvedBy ? JSON.parse(r.approvedBy) : undefined,
+        approvedBy: r.approvedBy,
         timestamp: r.timestamp,
       }));
     },
@@ -431,8 +420,8 @@ export function openDurableConversationLedger(
         projectId: state.projectId,
         phase: state.phase,
         activeAgentId: state.activeAgentId,
-        decisions: JSON.stringify(state.decisions),
-        transitions: JSON.stringify(state.transitions),
+        decisions: state.decisions,
+        transitions: state.transitions,
         startedAt: state.startedAt,
         completedAt: state.completedAt,
       };
@@ -458,8 +447,8 @@ export function openDurableConversationLedger(
         projectId: row.projectId,
         phase: row.phase as any,
         activeAgentId: row.activeAgentId,
-        decisions: JSON.parse(row.decisions),
-        transitions: JSON.parse(row.transitions),
+        decisions: row.decisions,
+        transitions: row.transitions,
         startedAt: row.startedAt,
         completedAt: row.completedAt,
       };
@@ -473,9 +462,9 @@ export function openDurableConversationLedger(
         timestamp: entry.timestamp,
         actor: entry.actor,
         action: entry.action,
-        changes: entry.changes ? JSON.stringify(entry.changes) : undefined,
+        changes: entry.changes,
         result: entry.result,
-        metadata: entry.metadata ? JSON.stringify(entry.metadata) : undefined,
+        metadata: entry.metadata,
       };
 
       await db.transaction((tx) => {
@@ -500,9 +489,9 @@ export function openDurableConversationLedger(
           timestamp: r.timestamp,
           actor: r.actor,
           action: r.action,
-          changes: r.changes ? JSON.parse(r.changes) : undefined,
+          changes: r.changes,
           result: r.result as any,
-          metadata: r.metadata ? JSON.parse(r.metadata) : undefined,
+          metadata: r.metadata,
         }));
     },
 
@@ -521,9 +510,9 @@ export function openDurableConversationLedger(
         timestamp: r.timestamp,
         actor: r.actor,
         action: r.action,
-        changes: r.changes ? JSON.parse(r.changes) : undefined,
+        changes: r.changes,
         result: r.result as any,
-        metadata: r.metadata ? JSON.parse(r.metadata) : undefined,
+        metadata: r.metadata,
       }));
     },
 

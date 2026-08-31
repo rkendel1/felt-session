@@ -36,7 +36,7 @@ beforeEach(() => {
   stateRegistry = openDurableCollaborationStateRegistry(
     testFeltDb(path.join(testDir, "state.db")),
   );
-  ledger = openDurableConversationLedger(path.join(testDir, "ledger.db"));
+  ledger = openDurableConversationLedger(testFeltDb(path.join(testDir, "ledger.db")));
 });
 
 afterEach(() => {

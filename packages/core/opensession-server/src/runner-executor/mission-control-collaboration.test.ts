@@ -40,7 +40,7 @@ beforeEach(() => {
   testDir = `/tmp/${prefix}-${Date.now()}-${testCounter++}`;
   fs.mkdirSync(testDir, { recursive: true });
 
-  ledger = openDurableConversationLedger(path.join(testDir, "ledger.db"));
+  ledger = openDurableConversationLedger(testFeltDb(path.join(testDir, "ledger.db")));
   agentRegistry = openDurableAgentIdentityRegistry(
     testFeltDb(path.join(testDir, "agents.db")),
   );
