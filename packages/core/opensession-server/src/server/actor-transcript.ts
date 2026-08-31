@@ -30,17 +30,7 @@ import {
 async function callTranscript<T extends TranscriptActorRequest>(
   request: T,
 ): Promise<import("./session-kernel").TranscriptActorResult<T>> {
-  if (process.env.NODE_ENV !== "test") {
-    try {
-      return await sessionTranscript(request);
-    } catch (error) {
-      // Keep pre-cutover sessions usable while the one-time actor transcript
-      // migration is still pending. Actor-owned sessions never take this path.
-      if (!(error instanceof Error) ||
-          !error.message.includes("has no isolated actor transcript placement"))
-        throw error;
-    }
-  }
+  if (process.env.NODE_ENV !== "test") return sessionTranscript(request);
   const { transcriptStore } = await import("./transcript-store");
   return transcriptStore().applyActorRequest(request) as
     import("./session-kernel").TranscriptActorResult<T>;
