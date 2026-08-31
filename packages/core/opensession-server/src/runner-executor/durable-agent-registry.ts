@@ -5,7 +5,7 @@
  * and the LLM model to use for each team member.
  */
 
-import { createFeltDB, getTelemetryClient } from "@feltdb/core";
+import type { StateFirstDB } from "@feltdb/core";
 import {
   type MissionControlAgent,
   type AgentRole,
@@ -21,7 +21,7 @@ interface StoredAgentRow {
   role: AgentRole;
   provider: AgentProvider;
   model: string;
-  capabilities: string;
+  capabilities: MissionControlAgent["capabilities"];
   systemPrompt: string;
   status: AgentStatus;
   createdAt: string;
@@ -60,14 +60,7 @@ export interface DurableAgentRegistry {
   deleteAgent(agentId: string): Promise<void>;
 }
 
-export function openDurableAgentRegistry(path: string): DurableAgentRegistry {
-  const telemetry = getTelemetryClient();
-  telemetry.disable();
-
-  const db = createFeltDB({
-    path,
-    namespace: "mission-control-agents",
-  });
+export function openDurableAgentRegistry(db: StateFirstDB): DurableAgentRegistry {
 
   return {
     async upsertAgent(agent: MissionControlAgent): Promise<void> {
@@ -77,7 +70,7 @@ export function openDurableAgentRegistry(path: string): DurableAgentRegistry {
         role: agent.role,
         provider: agent.provider,
         model: agent.model,
-        capabilities: JSON.stringify(agent.capabilities),
+        capabilities: agent.capabilities,
         systemPrompt: agent.systemPrompt,
         status: agent.status,
         createdAt: agent.createdAt,
@@ -102,7 +95,7 @@ export function openDurableAgentRegistry(path: string): DurableAgentRegistry {
         role: row.role,
         provider: row.provider,
         model: row.model,
-        capabilities: JSON.parse(row.capabilities),
+        capabilities: row.capabilities,
         systemPrompt: row.systemPrompt,
         status: row.status,
         createdAt: row.createdAt,
@@ -121,7 +114,7 @@ export function openDurableAgentRegistry(path: string): DurableAgentRegistry {
         role: row.role,
         provider: row.provider,
         model: row.model,
-        capabilities: JSON.parse(row.capabilities),
+        capabilities: row.capabilities,
         systemPrompt: row.systemPrompt,
         status: row.status,
         createdAt: row.createdAt,
@@ -138,7 +131,7 @@ export function openDurableAgentRegistry(path: string): DurableAgentRegistry {
         role: row.role,
         provider: row.provider,
         model: row.model,
-        capabilities: JSON.parse(row.capabilities),
+        capabilities: row.capabilities,
         systemPrompt: row.systemPrompt,
         status: row.status,
         createdAt: row.createdAt,

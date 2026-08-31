@@ -14,6 +14,7 @@ import {
   createStandardAgent,
 } from "./durable-agent-registry";
 import type { MissionControlAgent, AgentRole, AgentProvider } from "./mission-control-agent";
+import { testFeltDb } from "./test-feltdb";
 
 const roots: string[] = [];
 
@@ -31,7 +32,7 @@ function tmpRoot(): string {
 
 describe("DurableAgentRegistry", () => {
   test("creates and retrieves agents", async () => {
-    const registry = openDurableAgentRegistry(tmpRoot());
+    const registry = openDurableAgentRegistry(testFeltDb(tmpRoot()));
 
     const agent = createStandardAgent(
       "agent-1",
@@ -52,7 +53,7 @@ describe("DurableAgentRegistry", () => {
   });
 
   test("lists agents by role", async () => {
-    const registry = openDurableAgentRegistry(tmpRoot());
+    const registry = openDurableAgentRegistry(testFeltDb(tmpRoot()));
 
     const builders = [
       createStandardAgent("builder-1", "builder", "anthropic", "claude-opus"),
@@ -76,7 +77,7 @@ describe("DurableAgentRegistry", () => {
   });
 
   test("lists all agents", async () => {
-    const registry = openDurableAgentRegistry(tmpRoot());
+    const registry = openDurableAgentRegistry(testFeltDb(tmpRoot()));
 
     const roles: AgentRole[] = [
       "architect",
@@ -111,7 +112,7 @@ describe("DurableAgentRegistry", () => {
   });
 
   test("updates agent status", async () => {
-    const registry = openDurableAgentRegistry(tmpRoot());
+    const registry = openDurableAgentRegistry(testFeltDb(tmpRoot()));
 
     const agent = createStandardAgent(
       "agent-1",
@@ -136,7 +137,7 @@ describe("DurableAgentRegistry", () => {
   });
 
   test("deletes agents", async () => {
-    const registry = openDurableAgentRegistry(tmpRoot());
+    const registry = openDurableAgentRegistry(testFeltDb(tmpRoot()));
 
     const agent = createStandardAgent(
       "agent-1",
@@ -153,7 +154,7 @@ describe("DurableAgentRegistry", () => {
   });
 
   test("handles non-existent agents gracefully", async () => {
-    const registry = openDurableAgentRegistry(tmpRoot());
+    const registry = openDurableAgentRegistry(testFeltDb(tmpRoot()));
 
     const retrieved = await registry.getAgent("non-existent");
     expect(retrieved).toBeNull();
@@ -176,7 +177,7 @@ describe("DurableAgentRegistry", () => {
   });
 
   test("preserves agent metadata through persistence", async () => {
-    const registry = openDurableAgentRegistry(tmpRoot());
+    const registry = openDurableAgentRegistry(testFeltDb(tmpRoot()));
 
     const agent: MissionControlAgent = {
       id: "agent-1",

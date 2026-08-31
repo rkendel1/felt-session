@@ -10,6 +10,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openFeltDbEventSpine } from "./feltdb-event-spine";
+import { testFeltDb } from "./test-feltdb";
 import { createMissionControlSlackAdapter } from "./slack-mission-control-adapter";
 import { parseSlackCommand } from "./slack-command-parser";
 import type { SlackCommandReceivedEvent } from "./event-spine";
@@ -41,7 +42,7 @@ class MockSlackNotificationSender {
 
 describe("Slack Mission Control Integration", () => {
   test("records Slack command as durable event through FeltDB", async () => {
-    const eventSpine = openFeltDbEventSpine(join(tmpRoot(), "events"));
+    const eventSpine = openFeltDbEventSpine(testFeltDb(join(tmpRoot(), "events")));
     const slackClient = new MockSlackNotificationSender();
 
     const adapter = createMissionControlSlackAdapter({
@@ -79,7 +80,7 @@ describe("Slack Mission Control Integration", () => {
   });
 
   test("persists multiple commands with correct sequence", async () => {
-    const eventSpine = openFeltDbEventSpine(join(tmpRoot(), "events"));
+    const eventSpine = openFeltDbEventSpine(testFeltDb(join(tmpRoot(), "events")));
     const slackClient = new MockSlackNotificationSender();
 
     const adapter = createMissionControlSlackAdapter({
@@ -134,7 +135,7 @@ describe("Slack Mission Control Integration", () => {
 
     // First "process" - record events
     {
-      const eventSpine = openFeltDbEventSpine(dbPath);
+      const eventSpine = openFeltDbEventSpine(testFeltDb(dbPath));
       const slackClient = new MockSlackNotificationSender();
 
       const adapter = createMissionControlSlackAdapter({
@@ -166,7 +167,7 @@ describe("Slack Mission Control Integration", () => {
     // Simulate process crash and restart
     // Second "process" - verify events survived
     {
-      const eventSpine = openFeltDbEventSpine(dbPath);
+      const eventSpine = openFeltDbEventSpine(testFeltDb(dbPath));
       const sessionId = "slack-T0LFGBRPA-current";
 
       const events = await eventSpine.range(sessionId, 0, 10);
@@ -179,7 +180,7 @@ describe("Slack Mission Control Integration", () => {
   });
 
   test("records agent notifications with event durability", async () => {
-    const eventSpine = openFeltDbEventSpine(join(tmpRoot(), "events"));
+    const eventSpine = openFeltDbEventSpine(testFeltDb(join(tmpRoot(), "events")));
     const slackClient = new MockSlackNotificationSender();
 
     const adapter = createMissionControlSlackAdapter({
@@ -216,7 +217,7 @@ describe("Slack Mission Control Integration", () => {
   });
 
   test("interleaves human commands and agent notifications in event log", async () => {
-    const eventSpine = openFeltDbEventSpine(join(tmpRoot(), "events"));
+    const eventSpine = openFeltDbEventSpine(testFeltDb(join(tmpRoot(), "events")));
     const slackClient = new MockSlackNotificationSender();
 
     const adapter = createMissionControlSlackAdapter({
@@ -272,7 +273,7 @@ describe("Slack Mission Control Integration", () => {
   });
 
   test("counts events correctly after multiple operations", async () => {
-    const eventSpine = openFeltDbEventSpine(join(tmpRoot(), "events"));
+    const eventSpine = openFeltDbEventSpine(testFeltDb(join(tmpRoot(), "events")));
     const slackClient = new MockSlackNotificationSender();
 
     const adapter = createMissionControlSlackAdapter({

@@ -6,7 +6,7 @@
  * relationships and blocking dependencies.
  */
 
-import { createFeltDB, getTelemetryClient } from "@feltdb/core";
+import type { StateFirstDB } from "@feltdb/core";
 import {
   type MissionControlTask,
   type TaskExecution,
@@ -27,8 +27,8 @@ interface StoredTaskRow {
   createdBy: string;
   createdAt: string;
   updatedAt: string;
-  acceptanceCriteria: string;
-  blockedBy: string;
+  acceptanceCriteria: string[];
+  blockedBy: string[];
 }
 
 interface StoredTaskExecutionRow {
@@ -113,14 +113,7 @@ export interface DurableTaskRegistry {
   deleteTask(taskId: string): Promise<void>;
 }
 
-export function openDurableTaskRegistry(path: string): DurableTaskRegistry {
-  const telemetry = getTelemetryClient();
-  telemetry.disable();
-
-  const db = createFeltDB({
-    path,
-    namespace: "mission-control-tasks",
-  });
+export function openDurableTaskRegistry(db: StateFirstDB): DurableTaskRegistry {
 
   return {
     async upsertTask(task: MissionControlTask): Promise<void> {
@@ -136,8 +129,8 @@ export function openDurableTaskRegistry(path: string): DurableTaskRegistry {
         createdBy: task.createdBy,
         createdAt: task.createdAt,
         updatedAt: task.updatedAt,
-        acceptanceCriteria: JSON.stringify(task.acceptanceCriteria),
-        blockedBy: JSON.stringify(task.blockedBy),
+        acceptanceCriteria: task.acceptanceCriteria,
+        blockedBy: task.blockedBy,
       };
 
       await db.transaction((tx) => {
@@ -164,8 +157,8 @@ export function openDurableTaskRegistry(path: string): DurableTaskRegistry {
         createdBy: row.createdBy,
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
-        acceptanceCriteria: JSON.parse(row.acceptanceCriteria),
-        blockedBy: JSON.parse(row.blockedBy),
+        acceptanceCriteria: row.acceptanceCriteria,
+        blockedBy: row.blockedBy,
       };
     },
 
@@ -186,8 +179,8 @@ export function openDurableTaskRegistry(path: string): DurableTaskRegistry {
         createdBy: row.createdBy,
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
-        acceptanceCriteria: JSON.parse(row.acceptanceCriteria),
-        blockedBy: JSON.parse(row.blockedBy),
+        acceptanceCriteria: row.acceptanceCriteria,
+        blockedBy: row.blockedBy,
       }));
     },
 
@@ -208,8 +201,8 @@ export function openDurableTaskRegistry(path: string): DurableTaskRegistry {
         createdBy: row.createdBy,
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
-        acceptanceCriteria: JSON.parse(row.acceptanceCriteria),
-        blockedBy: JSON.parse(row.blockedBy),
+        acceptanceCriteria: row.acceptanceCriteria,
+        blockedBy: row.blockedBy,
       }));
     },
 
@@ -230,8 +223,8 @@ export function openDurableTaskRegistry(path: string): DurableTaskRegistry {
         createdBy: row.createdBy,
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
-        acceptanceCriteria: JSON.parse(row.acceptanceCriteria),
-        blockedBy: JSON.parse(row.blockedBy),
+        acceptanceCriteria: row.acceptanceCriteria,
+        blockedBy: row.blockedBy,
       }));
     },
 

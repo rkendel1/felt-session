@@ -10,6 +10,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openDurableTaskRegistry } from "./durable-task-registry";
+import { testFeltDb } from "./test-feltdb";
 import { openDurableAgentRegistry, createStandardAgent } from "./durable-agent-registry";
 import { openFeltDbEventSpine } from "./feltdb-event-spine";
 import { createContextEngine } from "./context-engine";
@@ -52,9 +53,9 @@ function createTask(
 
 describe("Orchestration", () => {
   test("starts task and transitions to in_progress", async () => {
-    const taskRegistry = openDurableTaskRegistry(join(tmpRoot(), "tasks"));
-    const agentRegistry = openDurableAgentRegistry(join(tmpRoot(), "agents"));
-    const eventSpine = openFeltDbEventSpine(join(tmpRoot(), "events"));
+    const taskRegistry = openDurableTaskRegistry(testFeltDb(join(tmpRoot(), "tasks")));
+    const agentRegistry = openDurableAgentRegistry(testFeltDb(join(tmpRoot(), "agents")));
+    const eventSpine = openFeltDbEventSpine(testFeltDb(join(tmpRoot(), "events")));
     const contextEngine = createContextEngine(taskRegistry, eventSpine);
     const orchestration = createOrchestration(
       taskRegistry,
@@ -73,9 +74,9 @@ describe("Orchestration", () => {
   });
 
   test("determines next role based on task status", () => {
-    const taskRegistry = openDurableTaskRegistry(join(tmpRoot(), "tasks"));
-    const agentRegistry = openDurableAgentRegistry(join(tmpRoot(), "agents"));
-    const eventSpine = openFeltDbEventSpine(join(tmpRoot(), "events"));
+    const taskRegistry = openDurableTaskRegistry(testFeltDb(join(tmpRoot(), "tasks")));
+    const agentRegistry = openDurableAgentRegistry(testFeltDb(join(tmpRoot(), "agents")));
+    const eventSpine = openFeltDbEventSpine(testFeltDb(join(tmpRoot(), "events")));
     const contextEngine = createContextEngine(taskRegistry, eventSpine);
     const orchestration = createOrchestration(
       taskRegistry,
@@ -96,9 +97,9 @@ describe("Orchestration", () => {
   });
 
   test("handles successful execution completion", async () => {
-    const taskRegistry = openDurableTaskRegistry(join(tmpRoot(), "tasks"));
-    const agentRegistry = openDurableAgentRegistry(join(tmpRoot(), "agents"));
-    const eventSpine = openFeltDbEventSpine(join(tmpRoot(), "events"));
+    const taskRegistry = openDurableTaskRegistry(testFeltDb(join(tmpRoot(), "tasks")));
+    const agentRegistry = openDurableAgentRegistry(testFeltDb(join(tmpRoot(), "agents")));
+    const eventSpine = openFeltDbEventSpine(testFeltDb(join(tmpRoot(), "events")));
     const contextEngine = createContextEngine(taskRegistry, eventSpine);
     const orchestration = createOrchestration(
       taskRegistry,
@@ -122,9 +123,9 @@ describe("Orchestration", () => {
   });
 
   test("handles failed execution", async () => {
-    const taskRegistry = openDurableTaskRegistry(join(tmpRoot(), "tasks"));
-    const agentRegistry = openDurableAgentRegistry(join(tmpRoot(), "agents"));
-    const eventSpine = openFeltDbEventSpine(join(tmpRoot(), "events"));
+    const taskRegistry = openDurableTaskRegistry(testFeltDb(join(tmpRoot(), "tasks")));
+    const agentRegistry = openDurableAgentRegistry(testFeltDb(join(tmpRoot(), "agents")));
+    const eventSpine = openFeltDbEventSpine(testFeltDb(join(tmpRoot(), "events")));
     const contextEngine = createContextEngine(taskRegistry, eventSpine);
     const orchestration = createOrchestration(
       taskRegistry,
@@ -145,15 +146,15 @@ describe("Orchestration", () => {
 
     const events = await eventSpine.range("task-1", 0, 10);
     const failureEvent = events.find(
-      (e) => (e as any).status === "failed"
+      (e) => e.kind === "agent.execution.completed" && e.state === "failed",
     );
     expect(failureEvent).toBeTruthy();
   });
 
   test("handles approved review", async () => {
-    const taskRegistry = openDurableTaskRegistry(join(tmpRoot(), "tasks"));
-    const agentRegistry = openDurableAgentRegistry(join(tmpRoot(), "agents"));
-    const eventSpine = openFeltDbEventSpine(join(tmpRoot(), "events"));
+    const taskRegistry = openDurableTaskRegistry(testFeltDb(join(tmpRoot(), "tasks")));
+    const agentRegistry = openDurableAgentRegistry(testFeltDb(join(tmpRoot(), "agents")));
+    const eventSpine = openFeltDbEventSpine(testFeltDb(join(tmpRoot(), "events")));
     const contextEngine = createContextEngine(taskRegistry, eventSpine);
     const orchestration = createOrchestration(
       taskRegistry,
@@ -177,9 +178,9 @@ describe("Orchestration", () => {
   });
 
   test("handles rejected review", async () => {
-    const taskRegistry = openDurableTaskRegistry(join(tmpRoot(), "tasks"));
-    const agentRegistry = openDurableAgentRegistry(join(tmpRoot(), "agents"));
-    const eventSpine = openFeltDbEventSpine(join(tmpRoot(), "events"));
+    const taskRegistry = openDurableTaskRegistry(testFeltDb(join(tmpRoot(), "tasks")));
+    const agentRegistry = openDurableAgentRegistry(testFeltDb(join(tmpRoot(), "agents")));
+    const eventSpine = openFeltDbEventSpine(testFeltDb(join(tmpRoot(), "events")));
     const contextEngine = createContextEngine(taskRegistry, eventSpine);
     const orchestration = createOrchestration(
       taskRegistry,
@@ -203,9 +204,9 @@ describe("Orchestration", () => {
   });
 
   test("creates work envelope for agent", async () => {
-    const taskRegistry = openDurableTaskRegistry(join(tmpRoot(), "tasks"));
-    const agentRegistry = openDurableAgentRegistry(join(tmpRoot(), "agents"));
-    const eventSpine = openFeltDbEventSpine(join(tmpRoot(), "events"));
+    const taskRegistry = openDurableTaskRegistry(testFeltDb(join(tmpRoot(), "tasks")));
+    const agentRegistry = openDurableAgentRegistry(testFeltDb(join(tmpRoot(), "agents")));
+    const eventSpine = openFeltDbEventSpine(testFeltDb(join(tmpRoot(), "events")));
     const contextEngine = createContextEngine(taskRegistry, eventSpine);
     const orchestration = createOrchestration(
       taskRegistry,
@@ -233,9 +234,9 @@ describe("Orchestration", () => {
   });
 
   test("orchestration handles missing resources gracefully", async () => {
-    const taskRegistry = openDurableTaskRegistry(join(tmpRoot(), "tasks"));
-    const agentRegistry = openDurableAgentRegistry(join(tmpRoot(), "agents"));
-    const eventSpine = openFeltDbEventSpine(join(tmpRoot(), "events"));
+    const taskRegistry = openDurableTaskRegistry(testFeltDb(join(tmpRoot(), "tasks")));
+    const agentRegistry = openDurableAgentRegistry(testFeltDb(join(tmpRoot(), "agents")));
+    const eventSpine = openFeltDbEventSpine(testFeltDb(join(tmpRoot(), "events")));
     const contextEngine = createContextEngine(taskRegistry, eventSpine);
     const orchestration = createOrchestration(
       taskRegistry,

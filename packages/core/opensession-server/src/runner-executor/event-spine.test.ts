@@ -11,6 +11,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openFeltDbEventSpine } from "./feltdb-event-spine";
+import { testFeltDb } from "./test-feltdb";
 import type { EventSpine, AnyMissionControlEvent } from "./event-spine";
 
 const roots: string[] = [];
@@ -30,7 +31,7 @@ function tmpRoot(): string {
 const testBackends = [
   {
     name: "FeltDbEventSpine",
-    open: () => openFeltDbEventSpine(join(tmpRoot(), "events")),
+    open: () => openFeltDbEventSpine(testFeltDb(join(tmpRoot(), "events"))),
   },
 ];
 

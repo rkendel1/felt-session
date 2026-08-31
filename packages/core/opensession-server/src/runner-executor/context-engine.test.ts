@@ -10,6 +10,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openDurableTaskRegistry } from "./durable-task-registry";
+import { testFeltDb } from "./test-feltdb";
 import { openFeltDbEventSpine } from "./feltdb-event-spine";
 import { createContextEngine } from "./context-engine";
 import type { MissionControlTask } from "./mission-control-task";
@@ -50,8 +51,8 @@ function createTask(
 
 describe("ContextEngine", () => {
   test("assembles comprehensive task context", async () => {
-    const taskRegistry = openDurableTaskRegistry(join(tmpRoot(), "tasks"));
-    const eventSpine = openFeltDbEventSpine(join(tmpRoot(), "events"));
+    const taskRegistry = openDurableTaskRegistry(testFeltDb(join(tmpRoot(), "tasks")));
+    const eventSpine = openFeltDbEventSpine(testFeltDb(join(tmpRoot(), "events")));
     const engine = createContextEngine(taskRegistry, eventSpine);
 
     const task = createTask();
@@ -66,8 +67,8 @@ describe("ContextEngine", () => {
   });
 
   test("includes prior executions in context", async () => {
-    const taskRegistry = openDurableTaskRegistry(join(tmpRoot(), "tasks"));
-    const eventSpine = openFeltDbEventSpine(join(tmpRoot(), "events"));
+    const taskRegistry = openDurableTaskRegistry(testFeltDb(join(tmpRoot(), "tasks")));
+    const eventSpine = openFeltDbEventSpine(testFeltDb(join(tmpRoot(), "events")));
     const engine = createContextEngine(taskRegistry, eventSpine);
 
     const task = createTask();
@@ -91,8 +92,8 @@ describe("ContextEngine", () => {
   });
 
   test("includes review feedback in context", async () => {
-    const taskRegistry = openDurableTaskRegistry(join(tmpRoot(), "tasks"));
-    const eventSpine = openFeltDbEventSpine(join(tmpRoot(), "events"));
+    const taskRegistry = openDurableTaskRegistry(testFeltDb(join(tmpRoot(), "tasks")));
+    const eventSpine = openFeltDbEventSpine(testFeltDb(join(tmpRoot(), "events")));
     const engine = createContextEngine(taskRegistry, eventSpine);
 
     const task = createTask();
@@ -124,8 +125,8 @@ describe("ContextEngine", () => {
   });
 
   test("lists active tasks in project", async () => {
-    const taskRegistry = openDurableTaskRegistry(join(tmpRoot(), "tasks"));
-    const eventSpine = openFeltDbEventSpine(join(tmpRoot(), "events"));
+    const taskRegistry = openDurableTaskRegistry(testFeltDb(join(tmpRoot(), "tasks")));
+    const eventSpine = openFeltDbEventSpine(testFeltDb(join(tmpRoot(), "events")));
     const engine = createContextEngine(taskRegistry, eventSpine);
 
     await taskRegistry.upsertTask(createTask({ id: "task-1", status: "open" }));
@@ -144,8 +145,8 @@ describe("ContextEngine", () => {
   });
 
   test("gets task history with executions and reviews", async () => {
-    const taskRegistry = openDurableTaskRegistry(join(tmpRoot(), "tasks"));
-    const eventSpine = openFeltDbEventSpine(join(tmpRoot(), "events"));
+    const taskRegistry = openDurableTaskRegistry(testFeltDb(join(tmpRoot(), "tasks")));
+    const eventSpine = openFeltDbEventSpine(testFeltDb(join(tmpRoot(), "events")));
     const engine = createContextEngine(taskRegistry, eventSpine);
 
     const task = createTask();
@@ -176,8 +177,8 @@ describe("ContextEngine", () => {
   });
 
   test("lists blocked tasks in project", async () => {
-    const taskRegistry = openDurableTaskRegistry(join(tmpRoot(), "tasks"));
-    const eventSpine = openFeltDbEventSpine(join(tmpRoot(), "events"));
+    const taskRegistry = openDurableTaskRegistry(testFeltDb(join(tmpRoot(), "tasks")));
+    const eventSpine = openFeltDbEventSpine(testFeltDb(join(tmpRoot(), "events")));
     const engine = createContextEngine(taskRegistry, eventSpine);
 
     await taskRegistry.upsertTask(createTask({ id: "task-1", status: "blocked" }));
@@ -192,8 +193,8 @@ describe("ContextEngine", () => {
   });
 
   test("retrieves all review feedback for a task", async () => {
-    const taskRegistry = openDurableTaskRegistry(join(tmpRoot(), "tasks"));
-    const eventSpine = openFeltDbEventSpine(join(tmpRoot(), "events"));
+    const taskRegistry = openDurableTaskRegistry(testFeltDb(join(tmpRoot(), "tasks")));
+    const eventSpine = openFeltDbEventSpine(testFeltDb(join(tmpRoot(), "events")));
     const engine = createContextEngine(taskRegistry, eventSpine);
 
     const task = createTask();
@@ -227,8 +228,8 @@ describe("ContextEngine", () => {
   });
 
   test("handles blocked by relationships", async () => {
-    const taskRegistry = openDurableTaskRegistry(join(tmpRoot(), "tasks"));
-    const eventSpine = openFeltDbEventSpine(join(tmpRoot(), "events"));
+    const taskRegistry = openDurableTaskRegistry(testFeltDb(join(tmpRoot(), "tasks")));
+    const eventSpine = openFeltDbEventSpine(testFeltDb(join(tmpRoot(), "events")));
     const engine = createContextEngine(taskRegistry, eventSpine);
 
     const blocker = createTask({ id: "task-blocker" });
@@ -247,8 +248,8 @@ describe("ContextEngine", () => {
   });
 
   test("handles missing blockers gracefully", async () => {
-    const taskRegistry = openDurableTaskRegistry(join(tmpRoot(), "tasks"));
-    const eventSpine = openFeltDbEventSpine(join(tmpRoot(), "events"));
+    const taskRegistry = openDurableTaskRegistry(testFeltDb(join(tmpRoot(), "tasks")));
+    const eventSpine = openFeltDbEventSpine(testFeltDb(join(tmpRoot(), "events")));
     const engine = createContextEngine(taskRegistry, eventSpine);
 
     const task = createTask({

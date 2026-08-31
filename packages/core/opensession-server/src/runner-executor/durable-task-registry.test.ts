@@ -10,6 +10,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openDurableTaskRegistry } from "./durable-task-registry";
+import { testFeltDb } from "./test-feltdb";
 import type {
   MissionControlTask,
   TaskExecution,
@@ -52,7 +53,7 @@ function createTask(
 
 describe("DurableTaskRegistry", () => {
   test("creates and retrieves tasks", async () => {
-    const registry = openDurableTaskRegistry(tmpRoot());
+    const registry = openDurableTaskRegistry(testFeltDb(tmpRoot()));
     const task = createTask();
 
     await registry.upsertTask(task);
@@ -65,7 +66,7 @@ describe("DurableTaskRegistry", () => {
   });
 
   test("lists tasks by project", async () => {
-    const registry = openDurableTaskRegistry(tmpRoot());
+    const registry = openDurableTaskRegistry(testFeltDb(tmpRoot()));
 
     const task1 = createTask({ id: "task-1", projectId: "project-1" });
     const task2 = createTask({ id: "task-2", projectId: "project-1" });
@@ -83,7 +84,7 @@ describe("DurableTaskRegistry", () => {
   });
 
   test("lists tasks by status", async () => {
-    const registry = openDurableTaskRegistry(tmpRoot());
+    const registry = openDurableTaskRegistry(testFeltDb(tmpRoot()));
 
     const openTask = createTask({ id: "task-1", status: "open" });
     const inProgressTask = createTask({
@@ -106,7 +107,7 @@ describe("DurableTaskRegistry", () => {
   });
 
   test("handles parent and child task relationships", async () => {
-    const registry = openDurableTaskRegistry(tmpRoot());
+    const registry = openDurableTaskRegistry(testFeltDb(tmpRoot()));
 
     const parentTask = createTask({ id: "parent-1" });
     const childTask1 = createTask({
@@ -130,7 +131,7 @@ describe("DurableTaskRegistry", () => {
   });
 
   test("tracks task blockers", async () => {
-    const registry = openDurableTaskRegistry(tmpRoot());
+    const registry = openDurableTaskRegistry(testFeltDb(tmpRoot()));
 
     const task = createTask({
       id: "task-1",
@@ -145,7 +146,7 @@ describe("DurableTaskRegistry", () => {
   });
 
   test("records and retrieves task executions", async () => {
-    const registry = openDurableTaskRegistry(tmpRoot());
+    const registry = openDurableTaskRegistry(testFeltDb(tmpRoot()));
 
     const task = createTask();
     await registry.upsertTask(task);
@@ -167,7 +168,7 @@ describe("DurableTaskRegistry", () => {
   });
 
   test("tracks execution completion", async () => {
-    const registry = openDurableTaskRegistry(tmpRoot());
+    const registry = openDurableTaskRegistry(testFeltDb(tmpRoot()));
 
     const task = createTask();
     await registry.upsertTask(task);
@@ -192,7 +193,7 @@ describe("DurableTaskRegistry", () => {
   });
 
   test("records and retrieves task reviews", async () => {
-    const registry = openDurableTaskRegistry(tmpRoot());
+    const registry = openDurableTaskRegistry(testFeltDb(tmpRoot()));
 
     const task = createTask();
     await registry.upsertTask(task);
@@ -214,7 +215,7 @@ describe("DurableTaskRegistry", () => {
   });
 
   test("tracks review completion with feedback", async () => {
-    const registry = openDurableTaskRegistry(tmpRoot());
+    const registry = openDurableTaskRegistry(testFeltDb(tmpRoot()));
 
     const task = createTask();
     await registry.upsertTask(task);
@@ -238,7 +239,7 @@ describe("DurableTaskRegistry", () => {
   });
 
   test("handles multiple executions for a single task", async () => {
-    const registry = openDurableTaskRegistry(tmpRoot());
+    const registry = openDurableTaskRegistry(testFeltDb(tmpRoot()));
 
     const task = createTask();
     await registry.upsertTask(task);
@@ -276,7 +277,7 @@ describe("DurableTaskRegistry", () => {
   });
 
   test("updates task status", async () => {
-    const registry = openDurableTaskRegistry(tmpRoot());
+    const registry = openDurableTaskRegistry(testFeltDb(tmpRoot()));
 
     const task = createTask({ status: "open" });
     await registry.upsertTask(task);
@@ -296,7 +297,7 @@ describe("DurableTaskRegistry", () => {
   });
 
   test("deletes tasks", async () => {
-    const registry = openDurableTaskRegistry(tmpRoot());
+    const registry = openDurableTaskRegistry(testFeltDb(tmpRoot()));
 
     const task = createTask();
     await registry.upsertTask(task);

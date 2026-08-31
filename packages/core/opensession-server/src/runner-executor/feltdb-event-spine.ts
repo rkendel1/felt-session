@@ -5,7 +5,7 @@
  * enabling efficient replay and projection building.
  */
 
-import { createFeltDB, getTelemetryClient } from "@feltdb/core";
+import type { StateFirstDB } from "@feltdb/core";
 import {
   type AnyMissionControlEvent,
   type EventId,
@@ -17,19 +17,12 @@ interface StoredEventRow {
   sessionId: string;
   eventSequence: number;
   timestamp: string;
-  payload: string;
+  payload: AnyMissionControlEvent;
 }
 
 const COLLECTION_NAME = "mission_control_events";
 
-export function openFeltDbEventSpine(path: string): EventSpine {
-  const telemetry = getTelemetryClient();
-  telemetry.disable();
-
-  const db = createFeltDB({
-    path,
-    namespace: "mission-control-events",
-  });
+export function openFeltDbEventSpine(db: StateFirstDB): EventSpine {
 
   return {
     async record(event: AnyMissionControlEvent): Promise<EventId> {
@@ -41,7 +34,7 @@ export function openFeltDbEventSpine(path: string): EventSpine {
         sessionId: id.sessionId,
         eventSequence: id.eventSequence,
         timestamp: event.timestamp,
-        payload: JSON.stringify(event),
+        payload: event,
       };
 
       await db.transaction((tx) => {
@@ -65,7 +58,7 @@ export function openFeltDbEventSpine(path: string): EventSpine {
 
         if (!row) break;
 
-        events.push(JSON.parse(row.payload));
+        events.push(row.payload);
       }
 
       return events;
@@ -88,7 +81,7 @@ export function openFeltDbEventSpine(path: string): EventSpine {
         const eventTime = new Date(row.timestamp).getTime();
 
         if (eventTime >= startTime) {
-          events.push(JSON.parse(row.payload));
+          events.push(row.payload);
         }
       }
 
