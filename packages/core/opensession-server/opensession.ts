@@ -40,6 +40,7 @@ import { initializeManagedWebAuthSessions } from "./src/server/web-auth";
 import { initializeManagedPush } from "./src/server/push";
 import { initializeManagedDesks } from "./src/server/desk";
 import { initializeManagedConfigFeeds } from "./src/server/feeds-config";
+import { initializeEphemeralMcpToolsCache } from "./src/server/mcp-tools-cache";
 import { startLiveActivitySync } from "./src/server/live-activities";
 import { startRuntimeInvestigationHandoffConsumer } from "./src/server/runtime-investigation-handoffs";
 import { initializeManagedFeltDb } from "./src/server/managed-feltdb";
@@ -203,6 +204,7 @@ if (!g.__opensessionBooted) {
 	await initializeManagedPush(db);
 	await initializeManagedDesks(db);
 	await initializeManagedConfigFeeds(db);
+	initializeEphemeralMcpToolsCache();
 }
 
 // Listeners the server owns. Deliberately started HERE and not as module side

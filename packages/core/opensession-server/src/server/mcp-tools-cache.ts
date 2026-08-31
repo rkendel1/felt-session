@@ -29,16 +29,14 @@
  *    upstream throws from that one call (the bridge already degrades a dead
  *    server to absent tools rather than a failed turn), and the entry is
  *    rewritten the next time that server is listed for real.
- *  - Concurrent runs share one file. Writes are atomic (rename), so a reader
- *    never sees a torn file; two runs racing can lose one update, which
- *    costs exactly one re-list. Not worth a lock.
+ *  - Concurrent runs and hot reloads share one process-local map. Losing it on
+ *    restart only causes the next run to re-list the upstream server.
  *
  * Kill switch: OPENSESSION_MCP_TOOLS_CACHE=0 restores connect-on-build.
  */
 import { createHash } from "crypto";
-import { existsSync, readFileSync } from "fs";
+import { existsSync, unlinkSync } from "node:fs";
 import { stateDir } from "./paths";
-import { writeJsonAtomic } from "./shared/atomic-write";
 
 export interface CachedToolCatalog {
 	/** Hash of the config entry this listing was taken under. */
@@ -49,22 +47,19 @@ export interface CachedToolCatalog {
 	at: number;
 }
 
-interface CacheFile {
-	version: number;
-	servers: Record<string, CachedToolCatalog>;
-}
-
-const VERSION = 1;
 /** Bounds drift for a server that changes its tools without a config change. */
 export const DEFAULT_TTL_MS = 24 * 60 * 60 * 1000;
-/** Tool descriptions are not secret, but the file is ours alone. */
-const FILE_MODE = 0o600;
+const cache = ((globalThis as any).__opensessionMcpToolsCache ??=
+	new Map<string, CachedToolCatalog>()) as Map<string, CachedToolCatalog>;
 
-/** Resolved PER CALL: statePath reads the env when asked, so a test pointing
- *  OPENSESSION_STATE_DIR at a scratch dir is actually isolated (a module-load
- *  constant here would pin whichever test imported this file first). */
+/** Legacy path retained only so boot can remove the obsolete durable cache. */
 function cachePath(): string {
 	return stateDir("mcp-tools-cache.json");
+}
+
+/** Remove the obsolete durable cache without doing filesystem work at import. */
+export function initializeEphemeralMcpToolsCache(): void {
+	if (existsSync(cachePath())) unlinkSync(cachePath());
 }
 
 export function toolsCacheEnabled(): boolean {
@@ -89,21 +84,6 @@ export function toolsCacheKey(cfg: unknown): string {
 	return createHash("sha256").update(stable(cfg)).digest("hex").slice(0, 32);
 }
 
-function readFile(): CacheFile {
-	try {
-		const path = cachePath();
-		if (!existsSync(path)) return { version: VERSION, servers: {} };
-		const parsed = JSON.parse(readFileSync(path, "utf8")) as CacheFile | null;
-		if (!parsed || parsed.version !== VERSION || typeof parsed.servers !== "object") {
-			return { version: VERSION, servers: {} };
-		}
-		return { version: VERSION, servers: parsed.servers ?? {} };
-	} catch {
-		// A corrupt or unreadable cache is a cold cache, never an error.
-		return { version: VERSION, servers: {} };
-	}
-}
-
 /**
  * The cached listing for `server` if one was taken under this exact config
  * hash and is still inside the TTL. Undefined means "connect and list".
@@ -115,7 +95,7 @@ export function readCachedTools(
 	now = Date.now(),
 ): Array<Record<string, unknown>> | undefined {
 	if (!toolsCacheEnabled()) return undefined;
-	const entry = readFile().servers[server];
+	const entry = cache.get(server);
 	if (!entry || entry.hash !== hash || !Array.isArray(entry.tools)) return undefined;
 	if (!Number.isFinite(entry.at) || now - entry.at > ttlMs) return undefined;
 	// A server that legitimately exposes no tools would re-list every build;
@@ -123,8 +103,7 @@ export function readCachedTools(
 	return entry.tools.length ? entry.tools : undefined;
 }
 
-/** Record a fresh listing. No-op when nothing changed, to keep parallel runs
- *  from rewriting the file on every turn. */
+/** Record a fresh listing. No-op when nothing changed. */
 export function writeCachedTools(
 	server: string,
 	hash: string,
@@ -133,15 +112,13 @@ export function writeCachedTools(
 ): void {
 	if (!toolsCacheEnabled() || !Array.isArray(tools) || !tools.length) return;
 	try {
-		const file = readFile();
-		const prev = file.servers[server];
+		const prev = cache.get(server);
 		if (prev?.hash === hash && stable(prev.tools) === stable(tools)) {
 			// Same listing under the same config: only the timestamp would move,
 			// and refreshing it is what keeps a live server from expiring.
 			if (now - prev.at < DEFAULT_TTL_MS / 4) return;
 		}
-		file.servers[server] = { hash, tools, at: now };
-		writeJsonAtomic(cachePath(), file, true, FILE_MODE);
+		cache.set(server, { hash, tools, at: now });
 	} catch {
 		// Caching is an optimization; a failed write must never fail a run.
 	}
@@ -150,9 +127,7 @@ export function writeCachedTools(
 /** Drop one server's entry (or the whole cache when no server is named). */
 export function forgetCachedTools(server?: string): void {
 	try {
-		const file = readFile();
-		if (server) delete file.servers[server];
-		else file.servers = {};
-		writeJsonAtomic(cachePath(), file, true, FILE_MODE);
+		if (server) cache.delete(server);
+		else cache.clear();
 	} catch {}
 }

@@ -1,5 +1,5 @@
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 
@@ -13,6 +13,7 @@ process.env.OPENSESSION_STATE_DIR = DIR;
 const {
 	DEFAULT_TTL_MS,
 	forgetCachedTools,
+	initializeEphemeralMcpToolsCache,
 	readCachedTools,
 	toolsCacheKey,
 	writeCachedTools,
@@ -104,21 +105,11 @@ describe("degradation", () => {
 		expect(readCachedTools("acme", hash)).toBeUndefined();
 	});
 
-	test("a corrupt cache file is a cold cache, not a throw", () => {
-		writeFileSync(join(DIR, ".opensession-mcp-tools-cache.json"), "{ not json");
-		expect(() => readCachedTools("acme", "deadbeef")).not.toThrow();
-		expect(readCachedTools("acme", "deadbeef")).toBeUndefined();
-		// And it heals: the next write replaces the file wholesale.
-		const hash = toolsCacheKey({ command: "npx" });
-		writeCachedTools("acme", hash, TOOLS);
-		expect(readCachedTools("acme", hash)).toEqual(TOOLS);
-	});
-
-	test("a file from a future schema version is ignored", () => {
-		writeFileSync(
-			join(DIR, ".opensession-mcp-tools-cache.json"),
-			JSON.stringify({ version: 99, servers: { acme: { hash: "h", tools: TOOLS, at: Date.now() } } }),
-		);
+	test("boot removes the obsolete JSON cache without importing it", () => {
+		const legacy = join(DIR, ".opensession-mcp-tools-cache.json");
+		writeFileSync(legacy, JSON.stringify({ version: 1, servers: { acme: { hash: "h", tools: TOOLS, at: Date.now() } } }));
+		initializeEphemeralMcpToolsCache();
+		expect(existsSync(legacy)).toBe(false);
 		expect(readCachedTools("acme", "h")).toBeUndefined();
 	});
 });
