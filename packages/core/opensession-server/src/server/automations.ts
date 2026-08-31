@@ -971,12 +971,12 @@ export function automationResumeMcpForSession(
   });
 }
 
-export function deleteAutomation(id: string): boolean {
+export async function deleteAutomation(id: string): Promise<boolean> {
   const path = `${AUTOMATIONS_DIR}/${id}.json`;
   if (!existsSync(path)) return false;
   unlinkSync(path);
-  deleteAutomationInputState(id);
-  deleteAutomationOutputState(id);
+  await deleteAutomationInputState(id);
+  await deleteAutomationOutputState(id);
   return true;
 }
 
@@ -1042,7 +1042,8 @@ export function settleResumedAutomationRun(sessionId: string, error: string | nu
     });
     const completedIntent = clearAutomationIntent(sessionId);
     if (completedIntent?.deleteAutomationAfterRun)
-      deleteAutomation(automation.id);
+      void deleteAutomation(automation.id).catch((error) =>
+        console.error(`[automations] Failed to delete ${automation.id}:`, error));
     console.log(
       `[automations] Settled resumed run ${sessionId} for "${automation.name}" (${error ? "error" : "ok"})`
     );
@@ -1200,7 +1201,8 @@ export function resumePendingAutomationRuns(
       if (automationIntentAlreadySettled(intent.sessionId, automation.runs || [])) {
         const completedIntent = clearAutomationIntent(intent.sessionId);
         if (completedIntent?.deleteAutomationAfterRun)
-          deleteAutomation(automation.id);
+          void deleteAutomation(automation.id).catch((error) =>
+            console.error(`[automations] Failed to delete ${automation.id}:`, error));
         resumed++;
         continue;
       }
@@ -1212,7 +1214,8 @@ export function resumePendingAutomationRuns(
         });
         const completedIntent = clearAutomationIntent(intent.sessionId);
         if (completedIntent?.deleteAutomationAfterRun)
-          deleteAutomation(automation.id);
+          void deleteAutomation(automation.id).catch((error) =>
+            console.error(`[automations] Failed to delete ${automation.id}:`, error));
         resumed++;
         continue;
       }
@@ -1709,7 +1712,7 @@ export async function runAutomation(
         sessionId: bksId,
         startedAt,
       });
-      preparedInputs.commit();
+      await preparedInputs.commit();
     }
 
     recordAutomationIntentTerminal(bksId, errorMsg || undefined);
@@ -1720,7 +1723,7 @@ export async function runAutomation(
     });
     const completedIntent = clearAutomationIntent(bksId);
     if (completedIntent?.deleteAutomationAfterRun)
-      deleteAutomation(automation.id);
+      await deleteAutomation(automation.id);
     console.log(
       `[automations] "${automation.name}" finished ${errorMsg ? `with error: ${errorMsg}` : "ok"}`
     );
@@ -1873,9 +1876,9 @@ export function startScheduler(onSessionCreated?: (sessionId: string) => void): 
               osSessionId,
               deleteAutomationAfterRun: true,
             },
-          ).finally(() => {
+          ).finally(async () => {
             // Pre-launch failure stays durable and retains its disabled config.
-            if (!hasAutomationIntent(osSessionId)) deleteAutomation(automation.id);
+            if (!hasAutomationIntent(osSessionId)) await deleteAutomation(automation.id);
           });
         }
         continue;

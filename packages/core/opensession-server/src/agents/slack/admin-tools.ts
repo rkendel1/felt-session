@@ -370,7 +370,7 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
         { id: z.string() },
         async (args: { id: string }) => {
           const a = getAutomation(args.id);
-          const ok = deleteAutomation(args.id);
+          const ok = await deleteAutomation(args.id);
           return text(
             ok
               ? `Deleted automation ${a ? `*${a.name}* ` : ""}[\`${args.id}\`].`

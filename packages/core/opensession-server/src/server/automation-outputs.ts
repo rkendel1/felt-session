@@ -5,7 +5,8 @@
  * a Slack write tool.
  */
 
-import { readFileSync, rmSync } from "fs";
+import { existsSync, readFileSync, readdirSync, rmSync } from "fs";
+import type { StateFirstDB } from "@feltdb/core";
 import { configuredServer } from "./config";
 import { stateDir } from "./paths";
 import {
@@ -14,7 +15,7 @@ import {
 	type ReportMeta,
 	type ReportUrgency,
 } from "./reports";
-import { writeJsonAtomic } from "./shared/atomic-write";
+import { managedFeltDb } from "./managed-feltdb";
 
 interface AutomationOutputBase {
 	id: string;
@@ -53,26 +54,54 @@ const CONFIDENCE_SCORE: Record<ReportConfidence, number> = {
 const OUTPUT_STATE_ROOT = stateDir("automation-output-state");
 
 interface OutputState {
+	id: string;
 	delivered: Record<string, { reportId: string; at: string }>;
+	__version?: number;
 }
 
 function outputStateFile(automationId: string): string {
 	return `${OUTPUT_STATE_ROOT}/${automationId}.json`;
 }
 
-function readOutputState(automationId: string): OutputState {
-	try {
-		const parsed = JSON.parse(readFileSync(outputStateFile(automationId), "utf8"));
-		return parsed && typeof parsed.delivered === "object"
-			? { delivered: parsed.delivered }
-			: { delivered: {} };
-	} catch {
-		return { delivered: {} };
+const OUTPUT_STATE_COLLECTION = "opensession_automation_output_state";
+const OUTPUT_STATE_MIGRATION = "automation-output-state-files-to-managed-feltdb-v1";
+let outputStateDb: StateFirstDB | undefined;
+const outputStates = new Map<string, OutputState>();
+
+export async function initializeManagedAutomationOutputs(db: StateFirstDB = outputStateDb ?? managedFeltDb()): Promise<void> {
+	outputStateDb = db;
+	const migrations = db.collection<{ id: string }>("opensession_migrations");
+	if (!await migrations.get(OUTPUT_STATE_MIGRATION)) {
+		const legacy: OutputState[] = [];
+		if (existsSync(OUTPUT_STATE_ROOT)) for (const file of readdirSync(OUTPUT_STATE_ROOT)) {
+			if (!file.endsWith(".json")) continue;
+			const id = file.slice(0, -5);
+			const parsed = JSON.parse(readFileSync(outputStateFile(id), "utf8"));
+			legacy.push({ id, delivered: parsed?.delivered && typeof parsed.delivered === "object" ? parsed.delivered : {} });
+		}
+		await db.transaction((tx) => {
+			for (const record of legacy) tx.collection<OutputState>(OUTPUT_STATE_COLLECTION).set(record.id, record, { requireAbsent: true });
+			tx.collection("opensession_migrations").set(OUTPUT_STATE_MIGRATION,
+				{ id: OUTPUT_STATE_MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
+		}, { transactionId: `opensession:migration:${OUTPUT_STATE_MIGRATION}` });
 	}
+	if (existsSync(OUTPUT_STATE_ROOT)) rmSync(OUTPUT_STATE_ROOT, { recursive: true, force: true });
+	outputStates.clear();
+	for (const record of await db.collection<OutputState>(OUTPUT_STATE_COLLECTION).all()) outputStates.set(record.id, record);
 }
 
-export function deleteAutomationOutputState(automationId: string): void {
-	rmSync(outputStateFile(automationId), { force: true });
+function readOutputState(automationId: string): OutputState {
+	return outputStates.get(automationId) ?? { id: automationId, delivered: {} };
+}
+
+export async function deleteAutomationOutputState(automationId: string): Promise<void> {
+	const current = outputStates.get(automationId);
+	if (!current) return;
+	const db = outputStateDb ?? managedFeltDb();
+	await db.transaction((tx) => {
+		tx.collection<OutputState>(OUTPUT_STATE_COLLECTION).delete(automationId, { ifVersion: current.__version });
+	}, { transactionId: `opensession:automation-output-state:delete:${automationId}` });
+	outputStates.delete(automationId);
 }
 
 export function sanitizeAutomationOutputs(
@@ -248,6 +277,13 @@ export async function deliverAutomationOutputs(opts: {
 			reportId: latest.id,
 			at: new Date().toISOString(),
 		};
-		writeJsonAtomic(outputStateFile(opts.automationId), next);
+		const db = outputStateDb ?? managedFeltDb();
+		await db.transaction((tx) => {
+			tx.collection<OutputState>(OUTPUT_STATE_COLLECTION).set(opts.automationId, next,
+				next.__version ? { ifVersion: next.__version } : { requireAbsent: true });
+		}, { transactionId: `opensession:automation-output-state:${opts.automationId}:${crypto.randomUUID()}` });
+		const saved = await db.collection<OutputState>(OUTPUT_STATE_COLLECTION).get(opts.automationId);
+		if (!saved) throw new Error(`Automation output state ${opts.automationId} disappeared after save`);
+		outputStates.set(opts.automationId, saved);
 	}
 }

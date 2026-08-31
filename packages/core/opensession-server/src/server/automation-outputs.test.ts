@@ -1,18 +1,21 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeAll, describe, expect, test } from "bun:test";
+import { createFeltDB } from "@feltdb/core";
 import { rmSync } from "fs";
 import { join } from "path";
 import {
 	automationSlackBlocks,
 	deleteAutomationOutputState,
 	deliverAutomationOutputs,
+	initializeManagedAutomationOutputs,
 	sanitizeAutomationOutputs,
 } from "./automation-outputs";
 import { __resetReportIndexForTest, publishReport, REPORTS_ROOT } from "./reports";
 
 const automationId = `test-automation-outputs-${process.pid}`;
+beforeAll(async () => initializeManagedAutomationOutputs(createFeltDB({ namespace: crypto.randomUUID(), memory: true })));
 
-afterEach(() => {
-	deleteAutomationOutputState(automationId);
+afterEach(async () => {
+	await deleteAutomationOutputState(automationId);
 	rmSync(join(REPORTS_ROOT, automationId), { recursive: true, force: true });
 	__resetReportIndexForTest();
 });

@@ -1,9 +1,11 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeAll, describe, expect, test } from "bun:test";
+import { createFeltDB } from "@feltdb/core";
 import { rmSync } from "fs";
 import { join } from "path";
 import {
 	automationInputStateExists,
 	deleteAutomationInputState,
+	initializeManagedAutomationInputs,
 	prepareAutomationInputs,
 	sanitizeAutomationInputs,
 	type AutomationInput,
@@ -11,9 +13,10 @@ import {
 import { publishReport, REPORTS_ROOT } from "./reports";
 
 const automationId = `test-automation-inputs-${process.pid}`;
+beforeAll(async () => initializeManagedAutomationInputs(createFeltDB({ namespace: crypto.randomUUID(), memory: true })));
 
-afterEach(() => {
-	deleteAutomationInputState(automationId);
+afterEach(async () => {
+	await deleteAutomationInputState(automationId);
 	rmSync(join(REPORTS_ROOT, automationId), { recursive: true, force: true });
 });
 
@@ -104,7 +107,7 @@ describe("prepareAutomationInputs", () => {
 		expect(prepared.note).toContain("untrusted data");
 		expect(prepared.note).toContain("concrete claim");
 		expect(automationInputStateExists(automationId)).toBe(false);
-		prepared.commit();
+		await prepared.commit();
 		expect(automationInputStateExists(automationId)).toBe(true);
 
 		await prepareAutomationInputs(

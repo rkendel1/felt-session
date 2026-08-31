@@ -7,11 +7,12 @@
  * and reductions are never persisted here.
  */
 
-import { existsSync, readFileSync, rmSync } from "fs";
+import { existsSync, readFileSync, readdirSync, rmSync } from "fs";
+import type { StateFirstDB } from "@feltdb/core";
 import { oneShot } from "./one-shot";
 import { stateDir } from "./paths";
 import { listReports } from "./reports";
-import { writeJsonAtomic } from "./shared/atomic-write";
+import { managedFeltDb } from "./managed-feltdb";
 
 export interface AutomationInputWindow {
 	mode?: "since_last_success" | "rolling";
@@ -73,7 +74,9 @@ interface InputCheckpoint {
 }
 
 interface InputState {
+	id: string;
 	inputs: Record<string, InputCheckpoint>;
+	__version?: number;
 }
 
 interface CollectedInput {
@@ -86,7 +89,7 @@ interface CollectedInput {
 
 export interface PreparedAutomationInputs {
 	note: string;
-	commit: () => void;
+	commit: () => Promise<void>;
 }
 
 interface InputDeps {
@@ -107,20 +110,46 @@ function stateFile(automationId: string): string {
 	return `${INPUTS_ROOT}/${automationId}.json`;
 }
 
-function readState(automationId: string): InputState {
-	try {
-		const parsed = JSON.parse(readFileSync(stateFile(automationId), "utf8"));
-		return parsed && typeof parsed.inputs === "object"
-			? { inputs: parsed.inputs }
-			: { inputs: {} };
-	} catch {
-		return { inputs: {} };
+const INPUT_STATE_COLLECTION = "opensession_automation_input_state";
+const INPUT_STATE_MIGRATION = "automation-input-state-files-to-managed-feltdb-v1";
+let inputStateDb: StateFirstDB | undefined;
+const inputStates = new Map<string, InputState>();
+
+export async function initializeManagedAutomationInputs(db: StateFirstDB = inputStateDb ?? managedFeltDb()): Promise<void> {
+	inputStateDb = db;
+	const migrations = db.collection<{ id: string }>("opensession_migrations");
+	if (!await migrations.get(INPUT_STATE_MIGRATION)) {
+		const legacy: InputState[] = [];
+		if (existsSync(INPUTS_ROOT)) for (const file of readdirSync(INPUTS_ROOT)) {
+			if (!file.endsWith(".json")) continue;
+			const id = file.slice(0, -5);
+			const parsed = JSON.parse(readFileSync(stateFile(id), "utf8"));
+			legacy.push({ id, inputs: parsed?.inputs && typeof parsed.inputs === "object" ? parsed.inputs : {} });
+		}
+		await db.transaction((tx) => {
+			for (const record of legacy) tx.collection<InputState>(INPUT_STATE_COLLECTION).set(record.id, record, { requireAbsent: true });
+			tx.collection("opensession_migrations").set(INPUT_STATE_MIGRATION,
+				{ id: INPUT_STATE_MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
+		}, { transactionId: `opensession:migration:${INPUT_STATE_MIGRATION}` });
 	}
+	if (existsSync(INPUTS_ROOT)) rmSync(INPUTS_ROOT, { recursive: true, force: true });
+	inputStates.clear();
+	for (const record of await db.collection<InputState>(INPUT_STATE_COLLECTION).all()) inputStates.set(record.id, record);
 }
 
-export function deleteAutomationInputState(automationId: string): void {
+function readState(automationId: string): InputState {
+	return inputStates.get(automationId) ?? { id: automationId, inputs: {} };
+}
+
+export async function deleteAutomationInputState(automationId: string): Promise<void> {
 	if (!SEGMENT_RE.test(automationId)) return;
-	rmSync(stateFile(automationId), { force: true });
+	const current = inputStates.get(automationId);
+	if (!current) return;
+	const db = inputStateDb ?? managedFeltDb();
+	await db.transaction((tx) => {
+		tx.collection<InputState>(INPUT_STATE_COLLECTION).delete(automationId, { ifVersion: current.__version });
+	}, { transactionId: `opensession:automation-input-state:delete:${automationId}` });
+	inputStates.delete(automationId);
 }
 
 function numberInRange(
@@ -460,7 +489,7 @@ export async function prepareAutomationInputs(
 	},
 	depsOverride?: InputDeps,
 ): Promise<PreparedAutomationInputs> {
-	if (!opts.inputs?.length) return { note: "", commit: () => {} };
+	if (!opts.inputs?.length) return { note: "", commit: async () => {} };
 	const state = readState(opts.automationId);
 	const deps = depsOverride || (await defaultDeps());
 	const sections: string[] = [
@@ -498,16 +527,22 @@ export async function prepareAutomationInputs(
 	}
 	return {
 		note: sections.join("\n"),
-		commit: () => {
+		commit: async () => {
 			if (!Object.keys(pending).length) return;
 			const latest = readState(opts.automationId);
-			writeJsonAtomic(stateFile(opts.automationId), {
-				inputs: { ...latest.inputs, ...pending },
-			});
+			const next: InputState = { ...latest, id: opts.automationId, inputs: { ...latest.inputs, ...pending } };
+			const db = inputStateDb ?? managedFeltDb();
+			await db.transaction((tx) => {
+				tx.collection<InputState>(INPUT_STATE_COLLECTION).set(opts.automationId, next,
+					latest.__version ? { ifVersion: latest.__version } : { requireAbsent: true });
+			}, { transactionId: `opensession:automation-input-state:${opts.automationId}:${crypto.randomUUID()}` });
+			const saved = await db.collection<InputState>(INPUT_STATE_COLLECTION).get(opts.automationId);
+			if (!saved) throw new Error(`Automation input state ${opts.automationId} disappeared after save`);
+			inputStates.set(opts.automationId, saved);
 		},
 	};
 }
 
 export function automationInputStateExists(automationId: string): boolean {
-	return existsSync(stateFile(automationId));
+	return inputStates.has(automationId);
 }

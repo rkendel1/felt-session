@@ -139,7 +139,7 @@ export async function handleAutomationsRoutes(
 	}
 
 	if (autoMatch && req.method === "DELETE") {
-		return deleteAutomation(autoMatch[1])
+		return await deleteAutomation(autoMatch[1])
 			? Response.json({ ok: true })
 			: Response.json({ error: "Not found" }, { status: 404 });
 	}
