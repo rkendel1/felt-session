@@ -5,9 +5,7 @@
  * enabling recovery after process restart.
  */
 
-import { createFeltDB, getTelemetryClient } from "@feltdb/core";
-import { dirname } from "node:path";
-import { mkdirSync } from "node:fs";
+import type { StateFirstDB } from "@feltdb/core";
 import {
   ExecutorStateConflictError,
   type ExecutorAuditEntry,
@@ -59,27 +57,13 @@ const CLAIMS_COLLECTION = "executor_instance_claims";
  * Durably tracks the lifecycle and state of managed executors.
  */
 export class FeltDbExecutorStateStore implements ExecutorStateStore {
-  readonly #db: ReturnType<typeof createFeltDB>;
+  readonly #db: StateFirstDB;
   #closed = false;
   #sessionIndex = new Map<string, string>();
 
-  constructor(path: string) {
-    if (!path || path === ":memory:")
-      throw new Error(
-        "a filesystem FeltDB path is required for Executor State Store",
-      );
-
-    // Ensure directory exists
-    const dir = dirname(path);
-    mkdirSync(dir, { recursive: true });
-
-    const telemetry = getTelemetryClient();
-    telemetry.disable();
-
-    this.#db = createFeltDB({
-      path,
-      namespace: "executor-state",
-    });
+  constructor(db: StateFirstDB) {
+    if (!db) throw new Error("managed FeltDB authority is required for Executor State Store");
+    this.#db = db;
   }
 
   async getByExecutorId(
@@ -100,9 +84,13 @@ export class FeltDbExecutorStateStore implements ExecutorStateStore {
     if (this.#closed) throw new Error("State store is closed");
 
     const executorId = this.#sessionIndex.get(sessionId);
-    if (!executorId) return undefined;
-
-    return this.getByExecutorId(executorId);
+    if (executorId) return this.getByExecutorId(executorId);
+    const [record] = await this.#db
+      .collection<StoredExecutorRow>(EXECUTOR_COLLECTION)
+      .find({ sessionId });
+    if (!record) return undefined;
+    this.#sessionIndex.set(sessionId, record.executorId);
+    return this.#rowToRecord(record);
   }
 
   async insertIntent(record: ExecutorRecord): Promise<void> {
@@ -112,7 +100,9 @@ export class FeltDbExecutorStateStore implements ExecutorStateStore {
     const existing = await this.#db
       .collection<StoredExecutorRow>(EXECUTOR_COLLECTION)
       .get(record.executorId);
-    const sessionExisting = this.#sessionIndex.get(record.sessionId);
+    const sessionExisting = this.#sessionIndex.get(record.sessionId)
+      ?? (await this.#db.collection<StoredExecutorRow>(EXECUTOR_COLLECTION)
+        .find({ sessionId: record.sessionId }))[0]?.executorId;
 
     if (existing) {
       throw new ExecutorStateConflictError(
@@ -304,11 +294,5 @@ export class FeltDbExecutorStateStore implements ExecutorStateStore {
 
   close(): void | Promise<void> {
     this.#closed = true;
-    try {
-      return this.#db.close?.();
-    } catch (error) {
-      // Silently ignore close errors - they may occur if the DB is in an inconsistent state
-      console.error("Error closing FeltDB state store:", error);
-    }
   }
 }

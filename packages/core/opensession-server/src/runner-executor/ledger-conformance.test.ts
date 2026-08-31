@@ -6,9 +6,6 @@
  * in the dual-write phase, where a divergence would look like data loss.
  */
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import {
   InMemoryCommandLedger,
   LedgerFullError,
@@ -18,21 +15,13 @@ import {
   type LedgerScope,
 } from "./ledger";
 import { openFeltDbCommandLedger } from "./feltdb-ledger";
+import { createFeltDB } from "@feltdb/core";
 
-const roots: string[] = [];
 const closers: Array<() => void | Promise<void>> = [];
 
 afterEach(async () => {
   for (const close of closers.splice(0)) await close();
-  for (const root of roots.splice(0))
-    rmSync(root, { recursive: true, force: true });
 });
-
-function root(prefix: string): string {
-  const created = mkdtempSync(join(tmpdir(), prefix));
-  roots.push(created);
-  return created;
-}
 
 interface Backend {
   name: string;
@@ -48,7 +37,7 @@ const backends: Backend[] = [
     name: "FeltDbCommandLedger",
     open: (options) => {
       const ledger = openFeltDbCommandLedger({
-        path: join(root("conformance-feltdb-"), "state"),
+        db: createFeltDB({ namespace: crypto.randomUUID(), memory: true }),
         ...options,
       });
       closers.push(() => ledger.close());

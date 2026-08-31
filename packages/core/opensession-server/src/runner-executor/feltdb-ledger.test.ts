@@ -5,10 +5,7 @@
  * than served.
  */
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { createFeltDB, getTelemetryClient } from "@feltdb/core";
+import { createFeltDB } from "@feltdb/core";
 import {
   operationDigest,
   type LedgerCommandIdentity,
@@ -19,23 +16,18 @@ import {
   type FeltDbCommandLedger,
 } from "./feltdb-ledger";
 
-const roots: string[] = [];
 const ledgers: FeltDbCommandLedger[] = [];
 
 afterEach(async () => {
   for (const ledger of ledgers.splice(0)) await ledger.close();
-  for (const root of roots.splice(0))
-    rmSync(root, { recursive: true, force: true });
 });
 
-function pathFor(): string {
-  const root = mkdtempSync(join(tmpdir(), "feltdb-ledger-"));
-  roots.push(root);
-  return join(root, "state");
+function dbFor() {
+  return createFeltDB({ namespace: crypto.randomUUID(), memory: true });
 }
 
-function open(path = pathFor(), options: Record<string, number> = {}) {
-  const ledger = openFeltDbCommandLedger({ path, ...options });
+function open(db = dbFor(), options: Record<string, number> = {}) {
+  const ledger = openFeltDbCommandLedger({ db, ...options });
   ledgers.push(ledger);
   return ledger;
 }
@@ -97,8 +89,8 @@ function claim(
 }
 
 describe("FeltDbCommandLedger", () => {
-  test("requires a durable directory", () => {
-    expect(() => openFeltDbCommandLedger({ path: "" })).toThrow("durable");
+  test("requires a managed authority", () => {
+    expect(() => openFeltDbCommandLedger({ db: undefined as any })).toThrow("managed FeltDB");
   });
 
   test("rejects a non-positive capacity", () => {
@@ -108,22 +100,22 @@ describe("FeltDbCommandLedger", () => {
   });
 
   test("persists records across a reopen", async () => {
-    const path = pathFor();
+    const db = dbFor();
     const identity = command("request", { key: "key" });
-    const first = open(path);
+    const first = open(db);
     await claim(first, identity, "receipt");
     await close(first);
 
-    const reopened = open(path);
+    const reopened = open(db);
     const record = await reopened.get(identity, "receipt");
     expect(record?.operation).toEqual(identity.operation);
     expect(record?.receipt.state).toBe("queued");
   });
 
   test("persists retired-scope tombstones across a reopen", async () => {
-    const path = pathFor();
+    const db = dbFor();
     const identity = command("retire-me", { key: "retire-key" });
-    const first = open(path);
+    const first = open(db);
     await claim(first, identity, "retire-receipt");
     await first.transition(identity, "retire-receipt", "queued", {
       state: "failed",
@@ -133,7 +125,7 @@ describe("FeltDbCommandLedger", () => {
     expect(await first.retireScope(identity)).toBe(1);
     await close(first);
 
-    const reopened = open(path);
+    const reopened = open(db);
     await expect(
       claim(reopened, command("replay", { key: "retire-key" }), "replay-r"),
     ).rejects.toMatchObject({ name: "LedgerScopeRetiredError" });
@@ -141,8 +133,8 @@ describe("FeltDbCommandLedger", () => {
   });
 
   test("keeps eviction order across a reopen", async () => {
-    const path = pathFor();
-    const first = open(path, { capacity: 2 });
+    const db = dbFor();
+    const first = open(db, { capacity: 2 });
     const settle = async (
       ledger: FeltDbCommandLedger,
       identity: LedgerCommandIdentity,
@@ -161,7 +153,7 @@ describe("FeltDbCommandLedger", () => {
 
     // The ordinal counter is durable, so the record claimed before the reopen
     // is still the oldest and is the one evicted.
-    const reopened = open(path, { capacity: 2 });
+    const reopened = open(db, { capacity: 2 });
     await settle(reopened, command("newer"), "newer-r");
     await claim(reopened, command("overflow"), "overflow-r");
     expect(await reopened.get(oldest, "oldest-r")).toBeUndefined();
@@ -169,8 +161,8 @@ describe("FeltDbCommandLedger", () => {
   });
 
   test("leaves nothing behind when a claim is rejected", async () => {
-    const path = pathFor();
-    const ledger = open(path);
+    const db = dbFor();
+    const ledger = open(db);
     await claim(ledger, command("first"), "shared-receipt");
     await expect(
       claim(ledger, command("second"), "shared-receipt"),
@@ -185,55 +177,26 @@ describe("FeltDbCommandLedger", () => {
   });
 
   test("refuses a persisted row edited behind the ledger", async () => {
-    const path = pathFor();
+    const db = dbFor();
     const identity = command("request");
-    const ledger = open(path);
+    const ledger = open(db);
     await claim(ledger, identity, "receipt");
     await close(ledger);
 
-    const raw = createFeltDB({
-      namespace: "opensession-runner-ledger",
-      path,
-    });
-    const rows = raw.collection<Record<string, unknown>>(
+    const rows = db.collection<Record<string, unknown>>(
       "runner_command_ledger",
     );
     const row = await rows.get("receipt");
-    await raw.transaction((tx) => {
+    await db.transaction((tx) => {
       tx.collection("runner_command_ledger").set("receipt", {
         ...row,
         state: "running",
       });
     });
-    await raw.close();
-
-    const reopened = open(path);
+    const reopened = open(db);
     expect(reopened.get(identity, "receipt")).rejects.toThrow(
       "identity mismatch",
     );
-  });
-
-  test("does not let the storage layer phone home", async () => {
-    // Constructing a FeltDB database posts an adoption event to feltdb.com.
-    // Opening a ledger must leave that off rather than opening an outbound
-    // channel from the command ledger.
-    delete process.env.FELTDB_TELEMETRY;
-    getTelemetryClient().enable();
-    open();
-    expect(String(process.env.FELTDB_TELEMETRY)).toBe("0");
-    expect(getTelemetryClient().isEnabled()).toBe(false);
-  });
-
-  test("leaves an explicit operator opt-in alone", async () => {
-    const previous = process.env.FELTDB_TELEMETRY;
-    process.env.FELTDB_TELEMETRY = "1";
-    try {
-      open();
-      expect(process.env.FELTDB_TELEMETRY).toBe("1");
-    } finally {
-      if (previous === undefined) delete process.env.FELTDB_TELEMETRY;
-      else process.env.FELTDB_TELEMETRY = previous;
-    }
   });
 
   test("refuses use after close", async () => {

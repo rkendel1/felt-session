@@ -19,6 +19,7 @@ import {
 } from "./ingress";
 import { executorOperationDigest } from "./grants";
 import { createExecutorRuntime } from "./runtime";
+import { createFeltDB } from "@feltdb/core";
 
 const roots: string[] = [];
 function setup(
@@ -34,11 +35,7 @@ function setup(
   roots.push(root);
   const calls: unknown[] = [];
   const runtime = createExecutorRuntime({
-    paths: {
-      runnerLedgerDb: join(root, "runner-ledger.sqlite"),
-      managedStateDb: join(root, "managed-state.sqlite"),
-      instanceClaimsDb: join(root, "claims.sqlite"),
-    },
+    db: createFeltDB({ namespace: crypto.randomUUID(), memory: true }),
     providers: [
       {
         id: "box",
@@ -196,7 +193,7 @@ describe("ExecutorRuntime", () => {
     ]);
     expect(firstStart).toBe(runtime);
     expect(secondStart).toBe(runtime);
-    expect(existsSync(join(root, "runner-ledger.sqlite.feltdb"))).toBe(true);
+    expect(existsSync(join(root, "runner-ledger.sqlite.feltdb"))).toBe(false);
     expect(await runtime.start()).toBe(runtime);
     const firstClose = runtime.close();
     expect(runtime.close()).toBe(firstClose);

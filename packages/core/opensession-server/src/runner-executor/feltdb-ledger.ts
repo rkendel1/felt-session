@@ -21,18 +21,12 @@
  * the asynchronous restore of persisted index configs on reopen. Index tuning
  * belongs to the Phase 3 benchmark, against real command volumes.
  *
- * Telemetry is off unless an operator turns it on. Constructing a FeltDB
- * database posts an "initialize" event to feltdb.com, which neither the
- * local-first premise of the ADR nor this server's security model allows a
- * storage layer to do on its own.
- *
  * Durability comes from FeltDB's atomic transactions: every mutation that
  * touches more than one record commits as one durable snapshot, so a crash
- * leaves the whole transaction applied or none of it. Reads that decide a write
- * run under an in-process lock — the file runtime does not serialize concurrent
- * writers across processes, so this ledger expects a single owning process.
+ * leaves the whole transaction applied or none of it. The owning runtime
+ * serializes command transitions, while managed CAS allocates global ordinals.
  */
-import { createFeltDB, getTelemetryClient } from "@feltdb/core";
+import type { StateFirstDB } from "@feltdb/core";
 import type { ExecutorReceipt } from "@tellahq/opensession-protocol/executor";
 import {
   DEFAULT_LEDGER_LIMITS,
@@ -64,8 +58,8 @@ import {
 const COMMANDS = "runner_command_ledger";
 const COMMAND_INDEX = "runner_command_index";
 const RETIRED_SCOPES = "runner_retired_scopes";
-const ORDINAL_SCOPE = "runner_command_ledger";
-const ORDINAL_SCOPE_ID = "ordinal";
+const ORDINALS = "runner_command_ordinals";
+const ORDINAL_ID = "ledger";
 
 type CommandKind = "request" | "mutation";
 
@@ -103,11 +97,11 @@ interface StoredRetiredScopeRow {
   generation: number;
 }
 
+interface StoredOrdinalRow { id: string; value: number; __version?: number }
+
 export interface FeltDbCommandLedgerOptions {
-  /** Directory holding the durable FeltDB state. Created if absent. */
-  path: string;
-  /** Isolates this ledger's collections from other FeltDB users of the same directory. */
-  namespace?: string;
+	/** The single managed authority shared by the Open Session runtime. */
+	db: StateFirstDB;
   capacity?: number;
   maxRecordBytes?: number;
   maxStringBytes?: number;
@@ -121,14 +115,14 @@ export function openFeltDbCommandLedger(
 }
 
 export class FeltDbCommandLedger implements DurableCommandLedger {
-  readonly #db: ReturnType<typeof createFeltDB>;
+	readonly #db: StateFirstDB;
   readonly #capacity: number;
   readonly #limits: LedgerLimits;
   #serial: Promise<void> = Promise.resolve();
   #closed = false;
 
   private constructor(
-    db: ReturnType<typeof createFeltDB>,
+		db: StateFirstDB,
     capacity: number,
     limits: LedgerLimits,
   ) {
@@ -156,14 +150,8 @@ export class FeltDbCommandLedger implements DurableCommandLedger {
         "event limit",
       ),
     };
-    if (!options.path)
-      throw new Error("feltdb ledger requires a durable directory path");
-    enforceLocalFirstTelemetry();
-    const db = createFeltDB({
-      namespace: options.namespace ?? "opensession-runner-ledger",
-      path: options.path,
-    });
-    return new FeltDbCommandLedger(db, capacity, limits);
+		if (!options.db) throw new Error("managed FeltDB authority is required");
+		return new FeltDbCommandLedger(options.db, capacity, limits);
   }
 
   async claim(
@@ -196,10 +184,7 @@ export class FeltDbCommandLedger implements DurableCommandLedger {
         );
       }
       const reclaimed = await this.#reclaimable();
-      const ordinal = await this.#db.allocateSequence({
-        scope: ORDINAL_SCOPE,
-        scopeId: ORDINAL_SCOPE_ID,
-      });
+      const ordinal = await this.#nextOrdinal();
       const row: StoredCommandRow = {
         id: receipt.receiptId,
         commandKind: kind,
@@ -356,11 +341,10 @@ export class FeltDbCommandLedger implements DurableCommandLedger {
     });
   }
 
-  async close(): Promise<void> {
-    if (this.#closed) return;
-    this.#closed = true;
-    await this.#db.close();
-  }
+	async close(): Promise<void> {
+		if (this.#closed) return;
+		this.#closed = true;
+	}
 
   #commands() {
     return this.#db.collection<StoredCommandRow>(COMMANDS);
@@ -370,6 +354,28 @@ export class FeltDbCommandLedger implements DurableCommandLedger {
   }
   #retired() {
     return this.#db.collection<StoredRetiredScopeRow>(RETIRED_SCOPES);
+  }
+
+  async #nextOrdinal(): Promise<number> {
+    const ordinals = this.#db.collection<StoredOrdinalRow>(ORDINALS);
+    for (;;) {
+      const current = await ordinals.get(ORDINAL_ID);
+      const value = (current?.value ?? 0) + 1;
+      try {
+        await this.#db.transaction((tx) => {
+          tx.collection<StoredOrdinalRow>(ORDINALS).set(
+            ORDINAL_ID,
+            { id: ORDINAL_ID, value },
+            current?.__version
+              ? { ifVersion: current.__version }
+              : { requireAbsent: true },
+          );
+        }, { transactionId: `runner-ledger-ordinal-${crypto.randomUUID()}` });
+        return value;
+      } catch (error) {
+        if ((error as { name?: string }).name !== "ConditionalConflictError") throw error;
+      }
+    }
   }
 
   #assertOpen(): void {
@@ -485,24 +491,6 @@ function commandKey(identity: LedgerCommandIdentity): string {
   return identity.idempotencyKey === undefined
     ? `${scope}:request:${identity.requestId}`
     : `${scope}:mutation:${identity.idempotencyKey}`;
-}
-
-/**
- * Keep the substrate local-first.
- *
- * FeltDB emits an adoption event to feltdb.com the first time a database is
- * constructed, and schedules a timer to flush more. A command ledger is not a
- * place from which to open an outbound connection, so this defaults the
- * library's own opt-out on before the first database exists. Setting
- * FELTDB_TELEMETRY to anything else is an operator's explicit choice and is
- * left alone.
- */
-function enforceLocalFirstTelemetry(): void {
-  process.env.FELTDB_TELEMETRY ??= "0";
-  const setting = process.env.FELTDB_TELEMETRY;
-  if (setting !== "0" && setting !== "false") return;
-  // Covers a client already constructed by some other FeltDB user in-process.
-  getTelemetryClient().disable();
 }
 
 /** Record ids must be opaque and bounded; command and scope keys are neither. */

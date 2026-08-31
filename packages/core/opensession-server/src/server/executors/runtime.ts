@@ -2,6 +2,7 @@ import type {
   ExecutorCapability,
   ExecutorGrant,
 } from "@tellahq/opensession-protocol/executor";
+import type { StateFirstDB } from "@feltdb/core";
 import {
   openCommandLedger,
   type OpenCommandLedger,
@@ -30,20 +31,14 @@ import { ExecutorProviderRegistry } from "../managed-executors/registry";
 import { FeltDbExecutorStateStore } from "../managed-executors/feltdb-state";
 import type { ExecutorRecord } from "../managed-executors/state";
 
-export interface ExecutorRuntimePaths {
-  /** Boot should derive these from stateDir() and keep each database distinct. */
-  runnerLedgerDb: string;
-  managedStateDb: string;
-  instanceClaimsDb: string;
-}
-
 export interface RunnerExecutorAuthorization {
   generation: number;
   capabilities: readonly ExecutorCapability[];
 }
 
 export interface ExecutorRuntimeOptions {
-  paths: ExecutorRuntimePaths;
+  /** The one managed authority shared with the rest of Open Session. */
+  db: StateFirstDB;
   providers: readonly ExecutorProvider[];
   runner: {
     /** Atomically verifies pairing and exact durable generation/connectability. */
@@ -81,7 +76,6 @@ export interface ExecutorRuntimeOptions {
     maxStringBytes?: number;
     maxEvents?: number;
   };
-  feltdbPath?: string;
   /** Explicit provider-client shutdown, called only after manager drain. Use a deliberate no-op when appropriate. */
   closeProviders: () => void | Promise<void>;
 }
@@ -89,8 +83,8 @@ export interface ExecutorRuntimeOptions {
 /**
  * Explicit, import-inert composition root for the next Executor runtime.
  *
- * Boot integration is deliberately not included here. Boot must derive private state paths,
- * provide the real paired-token and socket-peer callbacks, route the exact ingress path with
+ * Boot integration is deliberately not included here. Boot must inject the shared managed
+ * authority, provide paired-token and socket-peer callbacks, and route the exact ingress path with
  * the kernel-reported peer address, attach `ingress.websocket` to Bun.serve, and call start()
  * before exposing routes. It must call close() during shutdown. Provider SDK construction and
  * credentials remain outside this module. Until those obligations and the grant-validation
@@ -160,18 +154,13 @@ export class ExecutorRuntime {
     let claims: FeltDbRunnerExecutorClaims | undefined;
     try {
       ledger = openCommandLedger({
-        dbPath: this.#options.paths.runnerLedgerDb,
-        feltdbPath: this.#options.feltdbPath,
+        db: this.#options.db,
         ...this.#options.runnerLedger,
       });
       await ledger.recover();
       if (this.#closed) throw new Error("Executor runtime closed during start");
-      managedStore = new FeltDbExecutorStateStore(
-        this.#options.paths.managedStateDb,
-      );
-      claims = new FeltDbRunnerExecutorClaims(
-        this.#options.paths.instanceClaimsDb,
-      );
+      managedStore = new FeltDbExecutorStateStore(this.#options.db);
+      claims = new FeltDbRunnerExecutorClaims(this.#options.db);
 
       const manager = new ExecutorManager({
         store: managedStore,
@@ -434,23 +423,12 @@ export class ExecutorRuntime {
 function assertOptions(options: ExecutorRuntimeOptions): void {
   if (
     !options ||
-    !options.paths ||
+    !options.db ||
     !options.runner ||
     !options.managed ||
     !options.ingress
   )
     throw new TypeError("Executor runtime dependencies are required");
-  const paths = Object.values(options.paths);
-  if (
-    paths.some(
-      (path) => typeof path !== "string" || !path || path === ":memory:",
-    )
-  )
-    throw new TypeError(
-      "Executor runtime database paths must be explicit filesystem paths",
-    );
-  if (new Set(paths).size !== paths.length)
-    throw new TypeError("Executor runtime database paths must be distinct");
   for (const callback of [
     options.runner.authenticateRunner,
     options.runner.isTrustedPeer,

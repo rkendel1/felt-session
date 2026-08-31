@@ -7,9 +7,7 @@
  * session with FeltDB as the sole durable authority.
  */
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { createFeltDB } from "@feltdb/core";
 import {
   openCommandLedger,
   type OpenCommandLedger,
@@ -20,20 +18,11 @@ import {
   type LedgerScope,
 } from "./ledger";
 
-const roots: string[] = [];
 const ledgers: OpenCommandLedger[] = [];
 
 afterEach(async () => {
   for (const ledger of ledgers.splice(0)) await ledger.close();
-  for (const root of roots.splice(0))
-    rmSync(root, { recursive: true, force: true });
 });
-
-function dbPath(): string {
-  const root = mkdtempSync(join(tmpdir(), "feltdb-runtime-"));
-  roots.push(root);
-  return join(root, "private", "ledger.sqlite");
-}
 
 function openLedger(
   options: Parameters<typeof openCommandLedger>[0],
@@ -45,7 +34,7 @@ function openLedger(
 
 describe("FeltDB Runtime Integration", () => {
   test("persists and recovers commands across process restart", async () => {
-    const path = dbPath();
+    const db = createFeltDB({ namespace: crypto.randomUUID(), memory: true });
     const scope: LedgerScope = {
       executorId: "executor-1",
       rootId: "root-1",
@@ -57,7 +46,7 @@ describe("FeltDB Runtime Integration", () => {
     // Vertical slice: create session → create command
     {
       const ledger = openLedger({
-        dbPath: path,
+        db,
       });
 
       const operation = { kind: "fs.read" as const, path: "x" };
@@ -118,7 +107,7 @@ describe("FeltDB Runtime Integration", () => {
     // Restart owner → recover command → continue session
     {
       const ledger = openLedger({
-        dbPath: path,
+        db,
       });
 
       // Verify FeltDB is the source of truth after restart
@@ -141,7 +130,7 @@ describe("FeltDB Runtime Integration", () => {
   });
 
   test("handles idempotent commands correctly across restart", async () => {
-    const path = dbPath();
+    const db = createFeltDB({ namespace: crypto.randomUUID(), memory: true });
     const scope: LedgerScope = {
       executorId: "executor-1",
       rootId: "root-1",
@@ -153,7 +142,7 @@ describe("FeltDB Runtime Integration", () => {
     // Create idempotent command (with idempotencyKey)
     {
       const ledger = openLedger({
-        dbPath: path,
+        db,
       });
 
       const operation = {
@@ -197,7 +186,7 @@ describe("FeltDB Runtime Integration", () => {
     // After restart, duplicate claims should return existing command
     {
       const ledger = openLedger({
-        dbPath: path,
+        db,
       });
 
       const operation = {
@@ -237,7 +226,7 @@ describe("FeltDB Runtime Integration", () => {
   });
 
   test("handles failed executions and makes them recoverable", async () => {
-    const path = dbPath();
+    const db = createFeltDB({ namespace: crypto.randomUUID(), memory: true });
     const scope: LedgerScope = {
       executorId: "executor-1",
       rootId: "root-1",
@@ -249,7 +238,7 @@ describe("FeltDB Runtime Integration", () => {
     // Create a command that fails
     {
       const ledger = openLedger({
-        dbPath: path,
+        db,
       });
 
       const operation = { kind: "fs.read" as const, path: "missing" };
@@ -285,7 +274,7 @@ describe("FeltDB Runtime Integration", () => {
     // After restart, failed command should still be recoverable
     {
       const ledger = openLedger({
-        dbPath: path,
+        db,
       });
 
       const record = await ledger.get(scope, "receipt-1");
@@ -304,7 +293,7 @@ describe("FeltDB Runtime Integration", () => {
   });
 
   test("proves FeltDB remains source of truth after multiple restarts", async () => {
-    const path = dbPath();
+    const db = createFeltDB({ namespace: crypto.randomUUID(), memory: true });
     const scope: LedgerScope = {
       executorId: "executor-1",
       rootId: "root-1",
@@ -318,7 +307,7 @@ describe("FeltDB Runtime Integration", () => {
     // Create three commands
     {
       const ledger = openLedger({
-        dbPath: path,
+        db,
       });
 
       for (let i = 0; i < requests.length; i++) {
@@ -356,7 +345,7 @@ describe("FeltDB Runtime Integration", () => {
     // First restart - verify all commands are present
     {
       const ledger = openLedger({
-        dbPath: path,
+        db,
       });
 
       for (let i = 0; i < requests.length; i++) {
@@ -377,7 +366,7 @@ describe("FeltDB Runtime Integration", () => {
     // Second restart - verify data integrity is preserved
     {
       const ledger = openLedger({
-        dbPath: path,
+        db,
       });
 
       for (let i = 0; i < requests.length; i++) {

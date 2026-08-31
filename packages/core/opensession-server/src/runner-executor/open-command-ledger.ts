@@ -5,7 +5,7 @@
  * DurableCommandLedger backed by FeltDB. The ledger is required for crash
  * recovery, execution state durability, and atomic command tracking.
  */
-import { join } from "node:path";
+import type { StateFirstDB } from "@feltdb/core";
 import type { DurableCommandLedger } from "./ledger";
 import { openFeltDbCommandLedger } from "./feltdb-ledger";
 
@@ -15,10 +15,7 @@ export interface OpenCommandLedger extends DurableCommandLedger {
 }
 
 export interface OpenCommandLedgerOptions {
-  /** FeltDB state directory. Defaults to `<dbPath>.feltdb`. */
-  feltdbPath?: string;
-  /** Legacy dbPath parameter kept for compatibility, but ignored. */
-  dbPath?: string;
+	db: StateFirstDB;
   capacity?: number;
   maxRecordBytes?: number;
   maxStringBytes?: number;
@@ -28,19 +25,5 @@ export interface OpenCommandLedgerOptions {
 export function openCommandLedger(
   options: OpenCommandLedgerOptions,
 ): OpenCommandLedger {
-  const {
-    dbPath,
-    feltdbPath,
-    ...limits
-  } = options;
-  const path = feltdbPath ?? defaultFeltDbPath(dbPath);
-  return openFeltDbCommandLedger({
-    path,
-    ...limits,
-  });
-}
-
-function defaultFeltDbPath(dbPath?: string): string {
-  if (!dbPath) throw new Error("FeltDB path must be provided");
-  return join(`${dbPath}.feltdb`);
+	return openFeltDbCommandLedger(options);
 }

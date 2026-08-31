@@ -1,27 +1,16 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { createFeltDB } from "@feltdb/core";
 import {
   openCommandLedger,
   type OpenCommandLedger,
 } from "./open-command-ledger";
 import { operationDigest, type LedgerCommandIdentity } from "./ledger";
 
-const roots: string[] = [];
 const ledgers: OpenCommandLedger[] = [];
 
 afterEach(async () => {
   for (const ledger of ledgers.splice(0)) await ledger.close();
-  for (const root of roots.splice(0))
-    rmSync(root, { recursive: true, force: true });
 });
-
-function dbPath(): string {
-  const root = mkdtempSync(join(tmpdir(), "open-ledger-"));
-  roots.push(root);
-  return join(root, "private", "ledger.sqlite");
-}
 
 function open(options: Parameters<typeof openCommandLedger>[0]) {
   const ledger = openCommandLedger(options);
@@ -47,26 +36,16 @@ const receipt = {
 };
 
 describe("openCommandLedger", () => {
-  test("opens the feltdb backend using the provided path", async () => {
-    const path = dbPath();
-    const ledger = open({ dbPath: path });
+  test("uses the injected FeltDB authority", async () => {
+    const db = createFeltDB({ namespace: crypto.randomUUID(), memory: true });
+    const ledger = open({ db });
     await ledger.claim(identity, receipt);
-    expect(existsSync(`${path}.feltdb`)).toBe(true);
-    expect(existsSync(path)).toBe(false);
     expect(await ledger.get(identity, "receipt-1")).toMatchObject({
       receipt: { state: "queued" },
     });
   });
 
-  test("honors an explicit feltdb directory", async () => {
-    const path = dbPath();
-    const explicit = join(dbPath(), "..", "elsewhere");
-    const ledger = open({
-      dbPath: path,
-      feltdbPath: explicit,
-    });
-    await ledger.claim(identity, receipt);
-    expect(existsSync(explicit)).toBe(true);
-    expect(existsSync(`${path}.feltdb`)).toBe(false);
+  test("requires an authority", () => {
+    expect(() => open({ db: undefined as any })).toThrow("managed FeltDB");
   });
 });
