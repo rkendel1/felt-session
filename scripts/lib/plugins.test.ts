@@ -68,12 +68,12 @@ function fakeStores(options: { failOn?: string } = {}) {
 		removeMcpServer(name) {
 			mcp.delete(name);
 		},
-		upsertFeed(feed) {
+		async upsertFeed(feed) {
 			const id = (feed as { id: string }).id;
 			if (options.failOn === `feed:${id}`) throw new Error("boom");
 			feeds.set(id, feed);
 		},
-		removeFeed(id) {
+		async removeFeed(id) {
 			feeds.delete(id);
 		},
 		async addAutomation(recipe, createdBy) {

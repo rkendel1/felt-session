@@ -365,8 +365,8 @@ export interface InstanceStores {
 	state(): Promise<InstanceState>;
 	addMcpServer(name: string, entry: unknown, allowedUsers?: string[]): void;
 	removeMcpServer(name: string): void;
-	upsertFeed(feed: unknown): void;
-	removeFeed(id: string): void;
+	upsertFeed(feed: unknown): Promise<void>;
+	removeFeed(id: string): Promise<void>;
 	addAutomation(recipe: Recipe, createdBy: string): Promise<void>;
 	removeAutomation(recipe: Recipe): Promise<void>;
 	/** Copies the skill directory in; returns the sha256 of its SKILL.md. */
@@ -415,12 +415,12 @@ export async function defaultStores(): Promise<InstanceStores> {
 		removeMcpServer(name) {
 			connections.removeMcpServer(name);
 		},
-		upsertFeed(feed) {
-			const result = feeds.upsertConfigFeed(feed);
+		async upsertFeed(feed) {
+			const result = await feeds.upsertConfigFeed(feed);
 			if ("error" in result) throw new Error(result.error);
 		},
-		removeFeed(id) {
-			feeds.removeConfigFeed(id);
+		async removeFeed(id) {
+			await feeds.removeConfigFeed(id);
 		},
 		async addAutomation(recipe, createdBy) {
 			await installRecipe(recipe, createdBy);
@@ -477,7 +477,7 @@ export async function applyPlan(input: ApplyInput): Promise<InstalledPackage> {
 			if (action.kind === "mcp") {
 				stores.addMcpServer(action.ref, action.payload, input.allowedUsers);
 			} else if (action.kind === "feed") {
-				stores.upsertFeed(action.payload);
+				await stores.upsertFeed(action.payload);
 			} else if (action.kind === "automation") {
 				await stores.addAutomation(
 					recipeFor(manifest.name, action.payload as any),
@@ -531,7 +531,7 @@ async function removeArtifact(
 			stores.removeMcpServer(artifact.ref);
 			return;
 		case "feed":
-			stores.removeFeed(artifact.ref);
+			await stores.removeFeed(artifact.ref);
 			return;
 		case "skill":
 			stores.removeSkill(artifact.ref);

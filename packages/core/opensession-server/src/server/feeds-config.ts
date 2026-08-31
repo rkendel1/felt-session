@@ -25,10 +25,15 @@
  *   }
  * }
  */
-import { readFileSync, writeFileSync, existsSync } from "fs";
+import { existsSync, readFileSync, unlinkSync } from "node:fs";
+import type { StateFirstDB } from "@feltdb/core";
+import { managedFeltDb } from "./managed-feltdb";
 import { statePath } from "./paths";
 
 const STORE_PATH = statePath(".opensession-feeds.json");
+const COLLECTION = "opensession_config_feeds";
+const MIGRATION = "config-feeds-json-to-managed-feltdb-v1";
+let feedsDb: StateFirstDB | undefined;
 
 export interface FeedPanelSpec {
   /** Tab label ("Video", "Conversation", …). */
@@ -84,19 +89,50 @@ export interface ConfigFeed {
   filters?: unknown[];
 }
 
-export function readConfigFeeds(): ConfigFeed[] {
-  try {
-    const raw = JSON.parse(readFileSync(STORE_PATH, "utf8"));
-    return Array.isArray(raw?.feeds) ? raw.feeds : [];
-  } catch {
-    return [];
+interface StoredConfigFeed extends ConfigFeed { __version?: number }
+const feeds = new Map<string, StoredConfigFeed>();
+
+export async function initializeManagedConfigFeeds(db: StateFirstDB = feedsDb ?? managedFeltDb()): Promise<void> {
+  feedsDb = db;
+  if (!await db.collection<{ id: string }>("opensession_migrations").get(MIGRATION)) {
+    let legacy: ConfigFeed[] = [];
+    try {
+      if (existsSync(STORE_PATH)) {
+        const raw = JSON.parse(readFileSync(STORE_PATH, "utf8"));
+        legacy = Array.isArray(raw?.feeds) ? raw.feeds : [];
+      }
+    } catch {}
+    for (const feed of legacy) {
+      if (!feed?.id) continue;
+      await db.transaction((tx) => {
+        tx.collection<StoredConfigFeed>(COLLECTION).set(feed.id, { ...feed, __version: 1 });
+      }, { transactionId: `opensession:config-feed:migrate:${feed.id}` });
+    }
+    await db.transaction((tx) => {
+      tx.collection("opensession_migrations").set(MIGRATION, { id: MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
+    }, { transactionId: `opensession:migration:${MIGRATION}` });
   }
+  if (existsSync(STORE_PATH)) unlinkSync(STORE_PATH);
+  feeds.clear();
+  for (const feed of await db.collection<StoredConfigFeed>(COLLECTION).all()) feeds.set(feed.id, feed);
 }
 
-function writeConfigFeeds(feeds: ConfigFeed[]): void {
-  writeFileSync(STORE_PATH, JSON.stringify({ feeds }, null, 2) + "\n", {
-    mode: 0o600,
-  });
+export function readConfigFeeds(): ConfigFeed[] {
+  return [...feeds.values()];
+}
+
+async function writeConfigFeed(feed: StoredConfigFeed | undefined, id: string): Promise<void> {
+  const db = feedsDb ?? managedFeltDb();
+  const current = feeds.get(id);
+  if (current && !Number.isSafeInteger(current.__version))
+    throw new Error(`Config feed ${id} has no FeltDB authority version`);
+  await db.transaction((tx) => {
+    if (!feed) tx.collection<StoredConfigFeed>(COLLECTION).delete(id, { ifVersion: current!.__version! });
+    else tx.collection<StoredConfigFeed>(COLLECTION).set(id, feed,
+      current ? { ifVersion: current.__version } : { requireAbsent: true });
+  }, { transactionId: `opensession:config-feed:${id}:${crypto.randomUUID()}` });
+  if (!feed) feeds.delete(id);
+  else feeds.set(id, { ...feed, __version: (current?.__version ?? 0) + 1 });
 }
 
 const ID_RE = /^[a-z0-9][a-z0-9_-]{0,40}$/;
@@ -156,20 +192,16 @@ export function validateConfigFeed(input: unknown): ConfigFeed | { error: string
   };
 }
 
-export function upsertConfigFeed(input: unknown): { ok: true } | { error: string } {
+export async function upsertConfigFeed(input: unknown): Promise<{ ok: true } | { error: string }> {
   const feed = validateConfigFeed(input);
   if ("error" in feed) return feed;
-  const feeds = readConfigFeeds().filter((f) => f.id !== feed.id);
-  feeds.push(feed);
-  writeConfigFeeds(feeds);
+  await writeConfigFeed(feed, feed.id);
   return { ok: true };
 }
 
-export function removeConfigFeed(id: string): { ok: true } | { error: string } {
-  const feeds = readConfigFeeds();
-  const next = feeds.filter((f) => f.id !== id);
-  if (next.length === feeds.length) return { error: `No feed "${id}"` };
-  writeConfigFeeds(next);
+export async function removeConfigFeed(id: string): Promise<{ ok: true } | { error: string }> {
+  if (!feeds.has(id)) return { error: `No feed "${id}"` };
+  await writeConfigFeed(undefined, id);
   return { ok: true };
 }
 
