@@ -24,9 +24,10 @@
  * and how far the cursor is allowed to move.
  */
 
-import { existsSync, readFileSync } from "fs";
+import { existsSync, readFileSync, unlinkSync } from "fs";
+import type { StateFirstDB } from "@feltdb/core";
 import { stateDir } from "./paths";
-import { writeJsonAtomic } from "./shared/atomic-write";
+import { managedFeltDb } from "./managed-feltdb";
 import { transcript } from "./actor-transcript";
 
 export interface CommitRef {
@@ -63,6 +64,7 @@ const HEX_RUN = /\b[0-9a-f]{7,40}\b/g;
 const JSON_ESCAPE = /\\./g;
 
 interface StoredIndex {
+	id: string;
 	/** Bumped when the scan changes, so a stale index is re-read rather than
 	 *  believed: a row the old rule walked past is not read again otherwise. */
 	v: 2;
@@ -70,10 +72,11 @@ interface StoredIndex {
 	links: Record<string, { session: string; ts: number; at: number }>;
 	/** Session id → the last transcript seq read. */
 	cursors: Record<string, { seq: number; at: number }>;
+	__version?: number;
 }
 
 function emptyIndex(): StoredIndex {
-	return { v: 2, links: {}, cursors: {} };
+	return { id: "commit-sessions", v: 2, links: {}, cursors: {} };
 }
 
 function indexFile(): string {
@@ -83,31 +86,51 @@ function indexFile(): string {
 /** The index lives in memory once read: this process is its only writer, so
  *  the file is a restart's copy of it rather than the authority. */
 let cached: StoredIndex | null = null;
+let commitSessionsDb: StateFirstDB | undefined;
+const COMMIT_SESSIONS_COLLECTION = "opensession_commit_sessions";
+const COMMIT_SESSIONS_MIGRATION = "commit-sessions-file-to-managed-feltdb-v1";
+
+export async function initializeManagedCommitSessions(
+	db: StateFirstDB = commitSessionsDb ?? managedFeltDb(),
+): Promise<void> {
+	commitSessionsDb = db;
+	const migrations = db.collection<{ id: string }>("opensession_migrations");
+	if (!await migrations.get(COMMIT_SESSIONS_MIGRATION)) {
+		let index = emptyIndex();
+		if (existsSync(indexFile())) {
+			const parsed = JSON.parse(readFileSync(indexFile(), "utf8")) as StoredIndex;
+			if (parsed?.v === 2 && parsed.links && parsed.cursors) index = { ...parsed, id: "commit-sessions" };
+		}
+		await db.transaction((tx) => {
+			tx.collection<StoredIndex>(COMMIT_SESSIONS_COLLECTION).set(index.id, index, { requireAbsent: true });
+			tx.collection("opensession_migrations").set(COMMIT_SESSIONS_MIGRATION,
+				{ id: COMMIT_SESSIONS_MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
+		}, { transactionId: `opensession:migration:${COMMIT_SESSIONS_MIGRATION}` });
+	}
+	if (existsSync(indexFile())) unlinkSync(indexFile());
+	cached = await db.collection<StoredIndex>(COMMIT_SESSIONS_COLLECTION).get("commit-sessions");
+	if (!cached) throw new Error("Managed commit-session index is missing");
+}
 
 function load(): StoredIndex {
 	if (cached) return cached;
-	try {
-		const file = indexFile();
-		if (!existsSync(file)) return (cached = emptyIndex());
-		const data = JSON.parse(readFileSync(file, "utf8")) as StoredIndex;
-		if (data?.v !== 2 || !data.links || !data.cursors) return (cached = emptyIndex());
-		return (cached = data);
-	} catch {
-		return (cached = emptyIndex());
-	}
+	throw new Error("Managed commit-session index has not been initialized");
 }
 
-function save(index: StoredIndex): void {
+async function save(index: StoredIndex): Promise<void> {
 	const floor = Date.now() - KEEP_DAYS * 86_400_000;
 	for (const [sha, link] of Object.entries(index.links))
 		if (link.at < floor) delete index.links[sha];
 	for (const [id, cursor] of Object.entries(index.cursors))
 		if (cursor.at < floor) delete index.cursors[id];
-	try {
-		writeJsonAtomic(indexFile(), index, false);
-	} catch {
-		// An index that cannot be written is a slower feed, not a failure.
-	}
+	const db = commitSessionsDb ?? managedFeltDb();
+	await db.transaction((tx) => {
+		tx.collection<StoredIndex>(COMMIT_SESSIONS_COLLECTION).set(index.id, index,
+			index.__version ? { ifVersion: index.__version } : { requireAbsent: true });
+	}, { transactionId: `opensession:commit-sessions:${crypto.randomUUID()}` });
+	const saved = await db.collection<StoredIndex>(COMMIT_SESSIONS_COLLECTION).get(index.id);
+	if (!saved) throw new Error("Managed commit-session index disappeared after save");
+	Object.assign(index, saved);
 }
 
 /**
@@ -262,8 +285,8 @@ export async function commitSessions(
 		// twice and race the cursors they write.
 		sweeping ??= sweep(index, wanted, commitsReadAt)
 			.catch(() => {})
-			.finally(() => {
-				save(index);
+			.finally(async () => {
+				await save(index);
 				sweeping = null;
 			});
 		await sweeping;

@@ -10,6 +10,7 @@ import {
 } from "./src/server/agent-runner";
 import { initializeManagedAccountHealth, startAccountHealthMonitor } from "./src/server/account-health";
 import { initializeManagedGithubLimits } from "./src/server/github-limit";
+import { initializeManagedCommitSessions } from "./src/server/commit-sessions";
 import { initializeManagedAutomationInputs } from "./src/server/automation-inputs";
 import { initializeManagedAutomationOutputs } from "./src/server/automation-outputs";
 import { initializeManagedAutomationIntents, initializeManagedAutomations } from "./src/server/automations";
@@ -207,6 +208,7 @@ if (!g.__opensessionBooted) {
 	await initializeManagedRunJournal(db);
 	await initializeManagedAccountHealth(db);
 	await initializeManagedGithubLimits(db);
+	await initializeManagedCommitSessions(db);
 	await initializeManagedAutomationInputs(db);
 	await initializeManagedAutomationOutputs(db);
 	await initializeManagedAutomations(db);
