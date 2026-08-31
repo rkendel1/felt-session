@@ -30,10 +30,9 @@
  *    replenishes itself. Pool empty (burst of creates, first boot) → fall
  *    back to a direct cp -al from the template, exactly the old behavior.
  *
- * Config (Settings → Warm previews): `<sessions>/warm-templates/config.json`
- *   { "repos": { "app": { "enabled": true, "intervalHours": 6 } } }
- * State per repo: `<sessions>/warm-templates/<repoId>.state.json` (+ the
- * manifest at `<repoId>.manifest`, only rewritten on a SUCCESSFUL refresh so
+ * Config and refresh state live in managed FeltDB. The dependency manifest at
+ * `<sessions>/warm-templates/<repoId>.manifest` is a rebuildable artifact,
+ * only rewritten on a SUCCESSFUL refresh so
  * a failed refresh keeps seeding from the last good one).
  *
  * Everything here is host-side (covers host previews AND docker bind-mode
@@ -42,6 +41,7 @@
  * sandbox/adapters/bootstrap.ts and reads the same config.
  */
 import { $ } from "bun";
+import type { StateFirstDB } from "@feltdb/core";
 import {
   existsSync,
   mkdirSync,
@@ -56,7 +56,7 @@ import {
 import { dirname, join } from "path";
 import { configuredPaths, configuredRepos, type Repo } from "./config";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
-import { writeJsonAtomic } from "./shared/atomic-write";
+import { managedFeltDb } from "./managed-feltdb";
 
 // ── Config ───────────────────────────────────────────────────────────────────
 
@@ -79,11 +79,64 @@ function warmDir(): string {
   return join(OPENSESSION_SESSIONS_DIR, "warm-templates");
 }
 
-function configFile(): string {
-  return join(warmDir(), "config.json");
+type StoredWarmConfig = WarmTemplateRepoConfig & { id: string };
+type StoredWarmState = WarmTemplateState & { id: string };
+const CONFIG_COLLECTION = "opensession_warm_template_config";
+const STATE_COLLECTION = "opensession_warm_template_state";
+const MIGRATION = "warm-template-json-to-managed-feltdb-v1";
+let warmTemplateDb: StateFirstDB | undefined;
+const managedWarmTemplates = ((globalThis as typeof globalThis & {
+  __opensessionManagedWarmTemplates?: {
+    configs: Map<string, Partial<WarmTemplateRepoConfig>>;
+    states: Map<string, WarmTemplateState>;
+  };
+}).__opensessionManagedWarmTemplates ??= {
+  configs: new Map<string, Partial<WarmTemplateRepoConfig>>(),
+  states: new Map<string, WarmTemplateState>(),
+});
+
+export async function initializeManagedWarmTemplates(
+  db: StateFirstDB = warmTemplateDb ?? managedFeltDb(),
+  legacyDir = warmDir(),
+): Promise<void> {
+  warmTemplateDb = db;
+  const migrations = db.collection<{ id: string }>("opensession_migrations");
+  const migrationComplete = !!await migrations.get(MIGRATION);
+  const legacyConfigPath = join(legacyDir, "config.json");
+  let legacyConfigs: Record<string, Partial<WarmTemplateRepoConfig>> = {};
+  if (existsSync(legacyConfigPath)) {
+    const parsed = JSON.parse(readFileSync(legacyConfigPath, "utf8"));
+    if (parsed?.repos && typeof parsed.repos === "object") legacyConfigs = parsed.repos;
+  }
+  const legacyStates: Array<{ path: string; state: WarmTemplateState }> = [];
+  if (existsSync(legacyDir)) for (const name of readdirSync(legacyDir)) {
+    if (!name.endsWith(".state.json")) continue;
+    const path = join(legacyDir, name);
+    const state = JSON.parse(readFileSync(path, "utf8")) as WarmTemplateState;
+    if (state.repoId) legacyStates.push({ path, state });
+  }
+  if (!migrationComplete || Object.keys(legacyConfigs).length || legacyStates.length) {
+    await db.transaction((tx) => {
+      const configs = tx.collection<StoredWarmConfig>(CONFIG_COLLECTION);
+      for (const [repoId, config] of Object.entries(legacyConfigs))
+        configs.set(repoId, { id: repoId, enabled: false, intervalHours: 6, warmRoutes: [], ...config });
+      const states = tx.collection<StoredWarmState>(STATE_COLLECTION);
+      for (const { state } of legacyStates) states.set(state.repoId, { id: state.repoId, ...state });
+      if (!migrationComplete) tx.collection("opensession_migrations").set(MIGRATION,
+        { id: MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
+    }, { transactionId: `opensession:migration:${MIGRATION}:${crypto.randomUUID()}` });
+  }
+  managedWarmTemplates.configs.clear();
+  for (const { id, ...config } of await db.collection<StoredWarmConfig>(CONFIG_COLLECTION).all())
+    managedWarmTemplates.configs.set(id, config);
+  managedWarmTemplates.states.clear();
+  for (const { id: _, ...state } of await db.collection<StoredWarmState>(STATE_COLLECTION).all())
+    managedWarmTemplates.states.set(state.repoId, state);
+  rmSync(legacyConfigPath, { force: true });
+  for (const { path } of legacyStates) rmSync(path, { force: true });
 }
 
-/** Per-repo warm config, read fresh per call (Settings PUTs rewrite it).
+/** Per-repo warm config, read from the managed in-process projection.
  *  warmRoutes precedence: explicit instance config → the repo's committed
  *  `.agents/preview.json` (read from the template worktree, so the repo
  *  itself declares which routes to pre-compile) → defaults. */
@@ -121,24 +174,27 @@ function repoWarmRoutes(repoId: string): string[] | null {
 }
 
 function readWarmConfigRaw(): Record<string, any> {
-  try {
-    const f = configFile();
-    if (!existsSync(f)) return {};
-    const parsed = JSON.parse(readFileSync(f, "utf-8"));
-    return parsed?.repos && typeof parsed.repos === "object" ? parsed.repos : {};
-  } catch {
-    return {};
-  }
+  return Object.fromEntries([...managedWarmTemplates.configs].map(([id, config]) => [id, structuredClone(config)]));
 }
 
-export function setWarmTemplateConfig(
+export async function setWarmTemplateConfig(
   repoId: string,
   patch: Partial<Pick<WarmTemplateRepoConfig, "enabled" | "intervalHours" | "warmRoutes">>,
-): WarmTemplateRepoConfig {
-  mkdirSync(warmDir(), { recursive: true });
+): Promise<WarmTemplateRepoConfig> {
   const repos = readWarmConfigRaw();
   repos[repoId] = { ...repos[repoId], ...patch };
-  writeJsonAtomic(configFile(), { repos });
+  const stored: StoredWarmConfig = {
+    id: repoId,
+    enabled: repos[repoId].enabled === true,
+    intervalHours: typeof repos[repoId].intervalHours === "number" ? repos[repoId].intervalHours : 6,
+    warmRoutes: Array.isArray(repos[repoId].warmRoutes) ? repos[repoId].warmRoutes : [],
+  };
+  const db = warmTemplateDb ?? managedFeltDb();
+  await db.transaction((tx) => {
+    tx.collection<StoredWarmConfig>(CONFIG_COLLECTION).set(repoId, stored);
+  }, { transactionId: `opensession:warm-template:config:${crypto.randomUUID()}` });
+  const { id: _, ...config } = stored;
+  managedWarmTemplates.configs.set(repoId, config);
   const cfg = warmTemplateConfig(repoId);
   // Turning a repo on shouldn't wait for the next sweep tick.
   if (patch.enabled) void refreshWarmTemplate(repoId).catch(() => {});
@@ -162,31 +218,22 @@ export interface WarmTemplateState {
   manifestEntries?: number;
 }
 
-function stateFile(repoId: string): string {
-  return join(warmDir(), `${repoId}.state.json`);
-}
-
 function manifestFile(repoId: string): string {
   return join(warmDir(), `${repoId}.manifest`);
 }
 
 function warmTemplateState(repoId: string): WarmTemplateState | null {
-  try {
-    const f = stateFile(repoId);
-    if (!existsSync(f)) return null;
-    return JSON.parse(readFileSync(f, "utf-8")) as WarmTemplateState;
-  } catch {
-    return null;
-  }
+  const state = managedWarmTemplates.states.get(repoId);
+  return state ? structuredClone(state) : null;
 }
 
-function writeState(state: WarmTemplateState): void {
-  try {
-    mkdirSync(warmDir(), { recursive: true });
-    writeJsonAtomic(stateFile(state.repoId), state);
-  } catch (e) {
-    console.warn(`[warm-template] persist(${state.repoId}) failed:`, e);
-  }
+async function writeState(state: WarmTemplateState): Promise<void> {
+  const db = warmTemplateDb ?? managedFeltDb();
+  const record = structuredClone(state);
+  await db.transaction((tx) => {
+    tx.collection<StoredWarmState>(STATE_COLLECTION).set(state.repoId, { id: state.repoId, ...record });
+  }, { transactionId: `opensession:warm-template:state:${crypto.randomUUID()}` });
+  managedWarmTemplates.states.set(state.repoId, record);
 }
 
 /** The template worktree path for a repo (whether or not it exists yet). */
@@ -351,7 +398,7 @@ async function doRefresh(repoId: string, force: boolean): Promise<void> {
   const prev = warmTemplateState(repoId);
   const fail = async (msg: string) => {
     console.warn(`[warm-template] ${repoId}: ${msg}`);
-    writeState({
+    await writeState({
       ...(prev || {}),
       repoId,
       dir,
@@ -437,7 +484,7 @@ async function doRefresh(repoId: string, force: boolean): Promise<void> {
     if (!manifest.length) return void (await fail("refresh produced no node_modules to seed"));
     writeFileSync(manifestFile(repoId), manifest.join("\n") + "\n");
 
-    writeState({
+    await writeState({
       repoId,
       dir,
       sha,
@@ -707,7 +754,7 @@ async function sweepWarmTemplates(): Promise<void> {
     const cfg = warmTemplateConfig(repo.id);
     if (!cfg.enabled) continue;
     const status = templateStatus(repo.id);
-    // Age is a freshness policy, not a usability question, so the state file
+    // Age is a freshness policy, not a usability question, so managed state
     // owns it. Everything else (including ok-but-gutted, i.e. the template
     // deleted/recreated externally) comes from templateStatus, so a gutted
     // template refreshes now rather than serving cold seeds until the

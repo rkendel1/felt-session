@@ -67,6 +67,7 @@ import { flushSandboxPreviewPortWrites, initializeManagedSandboxPreviewPorts } f
 import { flushRemoteSandboxStateWrites, initializeManagedRemoteSandboxState } from "./src/server/sandbox/adapters/bootstrap";
 import { initializeManagedRemoteRepoTemplates } from "./src/server/sandbox/remote-repo-template";
 import { flushPrewarmWrites, initializeManagedPrewarms } from "./src/server/sandbox/prewarm";
+import { initializeManagedWarmTemplates } from "./src/server/warm-template";
 import { initializeManagedWorkloadIdentity } from "./src/server/workload-identity";
 import { initializeManagedPapercuts } from "./src/server/papercuts";
 import { initializeManagedSecurity } from "./src/server/security";
@@ -278,6 +279,7 @@ if (!g.__opensessionBooted) {
 	await initializeManagedRemoteSandboxState(db);
 	await initializeManagedRemoteRepoTemplates(db);
 	await initializeManagedPrewarms(db);
+	await initializeManagedWarmTemplates(db);
 	await initializeManagedWorkloadIdentity(db);
 	await initializeManagedPapercuts(db);
 	await initializeManagedSecurity(db);

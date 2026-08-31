@@ -1,16 +1,45 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "fs";
+import { createFeltDB } from "@feltdb/core";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { __setSessionsDirForTest } from "./paths";
 import {
   filterManifest,
+  initializeManagedWarmTemplates,
   isNodeModulesEntry,
   seedableManifest,
+  setWarmTemplateConfig,
   templateStatus,
+  warmTemplateConfig,
   type TemplateStatus,
   type WarmTemplateState,
 } from "./warm-template";
+
+describe("managed warm-template configuration", () => {
+  test("persists configuration in FeltDB without a JSON authority", async () => {
+    const root = mkdtempSync(join(tmpdir(), "warm-template-config-"));
+    const prev = __setSessionsDirForTest(root);
+    const db = createFeltDB({ namespace: crypto.randomUUID(), memory: true });
+    try {
+      await initializeManagedWarmTemplates(db, join(root, "warm-templates"));
+      await setWarmTemplateConfig("app", { enabled: false, intervalHours: 9, warmRoutes: ["/health"] });
+      expect(warmTemplateConfig("app")).toMatchObject({
+        enabled: false,
+        intervalHours: 9,
+        warmRoutes: ["/health"],
+      });
+      const stored = await db.collection<{ id: string; intervalHours: number }>(
+        "opensession_warm_template_config",
+      ).get("app");
+      expect(stored?.intervalHours).toBe(9);
+      expect(existsSync(join(root, "warm-templates", "config.json"))).toBe(false);
+    } finally {
+      __setSessionsDirForTest(prev);
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
 
 // The manifest is `git ls-files -o -i --exclude-standard --directory` output
 // from the template worktree: fully-ignored dirs collapsed with a trailing
@@ -199,7 +228,7 @@ const CASES: Case[] = [
 
 describe("templateStatus", () => {
   for (const c of CASES) {
-    test(c.name, () => {
+    test(c.name, async () => {
       const root = mkdtempSync(join(tmpdir(), "warm-template-"));
       const warm = join(root, "warm-templates");
       const templateDir = join(root, "app-warm-template");
@@ -223,6 +252,10 @@ describe("templateStatus", () => {
       }
       const prev = __setSessionsDirForTest(root);
       try {
+        await initializeManagedWarmTemplates(
+          createFeltDB({ namespace: crypto.randomUUID(), memory: true }),
+          warm,
+        );
         const status = templateStatus("app");
         expect(status.kind).toBe(c.expect);
         if (c.reason && status.kind === "stale") expect(status.reason).toContain(c.reason);

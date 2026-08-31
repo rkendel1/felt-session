@@ -101,7 +101,7 @@ export async function handlePrefsRoutes(
 					patch.warmRoutes = body.warmRoutes.filter(
 						(r: unknown): r is string => typeof r === "string",
 					);
-				setWarmTemplateConfig(repoId, patch);
+				await setWarmTemplateConfig(repoId, patch);
 				return Response.json({ repos: warmTemplateStatus() });
 			}
 			if (m[2] && req.method === "POST") {
