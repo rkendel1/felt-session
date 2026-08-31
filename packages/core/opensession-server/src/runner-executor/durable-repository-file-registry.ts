@@ -4,7 +4,7 @@
  * Manages code inventory, symbols, and file-level metadata.
  */
 
-import { createFeltDB, getTelemetryClient } from "@feltdb/core";
+import type { StateFirstDB } from "@feltdb/core";
 import type {
   RepositoryFile,
   CodeSymbol,
@@ -34,11 +34,11 @@ interface StoredRepositoryFile {
   language: string;
   size: number;
   lines: number;
-  symbols: string; // JSON
-  imports: string; // JSON
-  exports: string; // JSON
-  dependencies: string; // JSON
-  dependents: string; // JSON
+  symbols: CodeSymbol[];
+  imports: ImportRelationship[];
+  exports: ExportStatement[];
+  dependencies: string[];
+  dependents: string[];
   complexity?: number;
   testCoverage?: number;
   lastAnalyzedAt: string;
@@ -56,8 +56,8 @@ interface StoredFileRelationship {
   relationshipType: string;
   riskScore: number;
   weight: number;
-  sharedSymbols?: string; // JSON
-  metadata?: string; // JSON
+  sharedSymbols?: FileRelationship["sharedSymbols"];
+  metadata?: FileRelationship["metadata"];
 }
 
 /**
@@ -71,7 +71,7 @@ interface StoredCommitFileChange {
   changeType: string;
   additions: number;
   deletions: number;
-  changedSymbols?: string; // JSON
+  changedSymbols?: CommitFileChange["changedSymbols"];
   timestamp: string;
 }
 
@@ -121,15 +121,8 @@ export interface DurableRepositoryFileRegistry {
  * Open or create a durable repository file registry.
  */
 export function openDurableRepositoryFileRegistry(
-  path: string,
+  db: StateFirstDB,
 ): DurableRepositoryFileRegistry {
-  const telemetry = getTelemetryClient();
-  telemetry.disable();
-
-  const db = createFeltDB({
-    path,
-    namespace: "mission-control-repository-files",
-  });
 
   const FILES_COLLECTION = "repository_files";
   const RELATIONSHIPS_COLLECTION = "file_relationships";
@@ -145,11 +138,11 @@ export function openDurableRepositoryFileRegistry(
         language: file.language,
         size: file.size,
         lines: file.lines,
-        symbols: JSON.stringify(file.symbols),
-        imports: JSON.stringify(file.imports),
-        exports: JSON.stringify(file.exports),
-        dependencies: JSON.stringify(file.dependencies),
-        dependents: JSON.stringify(file.dependents),
+        symbols: file.symbols,
+        imports: file.imports,
+        exports: file.exports,
+        dependencies: file.dependencies,
+        dependents: file.dependents,
         complexity: file.complexity,
         testCoverage: file.testCoverage,
         lastAnalyzedAt: file.lastAnalyzedAt,
@@ -174,11 +167,11 @@ export function openDurableRepositoryFileRegistry(
         language: row.language,
         size: row.size,
         lines: row.lines,
-        symbols: JSON.parse(row.symbols),
-        imports: JSON.parse(row.imports),
-        exports: JSON.parse(row.exports),
-        dependencies: JSON.parse(row.dependencies),
-        dependents: JSON.parse(row.dependents),
+        symbols: row.symbols,
+        imports: row.imports,
+        exports: row.exports,
+        dependencies: row.dependencies,
+        dependents: row.dependents,
         complexity: row.complexity,
         testCoverage: row.testCoverage,
         lastAnalyzedAt: row.lastAnalyzedAt,
@@ -204,11 +197,11 @@ export function openDurableRepositoryFileRegistry(
         language: row.language,
         size: row.size,
         lines: row.lines,
-        symbols: JSON.parse(row.symbols),
-        imports: JSON.parse(row.imports),
-        exports: JSON.parse(row.exports),
-        dependencies: JSON.parse(row.dependencies),
-        dependents: JSON.parse(row.dependents),
+        symbols: row.symbols,
+        imports: row.imports,
+        exports: row.exports,
+        dependencies: row.dependencies,
+        dependents: row.dependents,
         complexity: row.complexity,
         testCoverage: row.testCoverage,
         lastAnalyzedAt: row.lastAnalyzedAt,
@@ -236,11 +229,11 @@ export function openDurableRepositoryFileRegistry(
         language: row.language,
         size: row.size,
         lines: row.lines,
-        symbols: JSON.parse(row.symbols),
-        imports: JSON.parse(row.imports),
-        exports: JSON.parse(row.exports),
-        dependencies: JSON.parse(row.dependencies),
-        dependents: JSON.parse(row.dependents),
+        symbols: row.symbols,
+        imports: row.imports,
+        exports: row.exports,
+        dependencies: row.dependencies,
+        dependents: row.dependents,
         complexity: row.complexity,
         testCoverage: row.testCoverage,
         lastAnalyzedAt: row.lastAnalyzedAt,
@@ -257,11 +250,11 @@ export function openDurableRepositoryFileRegistry(
         language: file.language,
         size: file.size,
         lines: file.lines,
-        symbols: JSON.stringify(file.symbols),
-        imports: JSON.stringify(file.imports),
-        exports: JSON.stringify(file.exports),
-        dependencies: JSON.stringify(file.dependencies),
-        dependents: JSON.stringify(file.dependents),
+        symbols: file.symbols,
+        imports: file.imports,
+        exports: file.exports,
+        dependencies: file.dependencies,
+        dependents: file.dependents,
         complexity: file.complexity,
         testCoverage: file.testCoverage,
         lastAnalyzedAt: file.lastAnalyzedAt,
@@ -290,12 +283,8 @@ export function openDurableRepositoryFileRegistry(
         relationshipType: relationship.relationshipType,
         riskScore: relationship.riskScore,
         weight: relationship.weight,
-        sharedSymbols: relationship.sharedSymbols
-          ? JSON.stringify(relationship.sharedSymbols)
-          : undefined,
-        metadata: relationship.metadata
-          ? JSON.stringify(relationship.metadata)
-          : undefined,
+        sharedSymbols: relationship.sharedSymbols,
+        metadata: relationship.metadata,
       };
 
       await db.transaction((tx) => {
@@ -328,10 +317,8 @@ export function openDurableRepositoryFileRegistry(
         relationshipType: row.relationshipType as any,
         riskScore: row.riskScore,
         weight: row.weight,
-        sharedSymbols: row.sharedSymbols
-          ? JSON.parse(row.sharedSymbols)
-          : undefined,
-        metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
+        sharedSymbols: row.sharedSymbols,
+        metadata: row.metadata,
       }));
     },
 
@@ -357,7 +344,7 @@ export function openDurableRepositoryFileRegistry(
           fromId: row.sourceFile,
           toId: row.targetFile,
           kind: row.relationshipType,
-          metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
+          metadata: row.metadata,
         }));
     },
 
@@ -378,10 +365,8 @@ export function openDurableRepositoryFileRegistry(
         relationshipType: row.relationshipType as any,
         riskScore: row.riskScore,
         weight: row.weight,
-        sharedSymbols: row.sharedSymbols
-          ? JSON.parse(row.sharedSymbols)
-          : undefined,
-        metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
+        sharedSymbols: row.sharedSymbols,
+        metadata: row.metadata,
       }));
     },
 
@@ -396,12 +381,8 @@ export function openDurableRepositoryFileRegistry(
         relationshipType: relationship.relationshipType,
         riskScore: relationship.riskScore,
         weight: relationship.weight,
-        sharedSymbols: relationship.sharedSymbols
-          ? JSON.stringify(relationship.sharedSymbols)
-          : undefined,
-        metadata: relationship.metadata
-          ? JSON.stringify(relationship.metadata)
-          : undefined,
+        sharedSymbols: relationship.sharedSymbols,
+        metadata: relationship.metadata,
       };
 
       await db.transaction((tx) => {
@@ -427,9 +408,7 @@ export function openDurableRepositoryFileRegistry(
         changeType: change.changeType,
         additions: change.additions,
         deletions: change.deletions,
-        changedSymbols: change.changedSymbols
-          ? JSON.stringify(change.changedSymbols)
-          : undefined,
+        changedSymbols: change.changedSymbols,
         timestamp: change.timestamp,
       };
 
@@ -457,9 +436,7 @@ export function openDurableRepositoryFileRegistry(
         changeType: row.changeType as any,
         additions: row.additions,
         deletions: row.deletions,
-        changedSymbols: row.changedSymbols
-          ? JSON.parse(row.changedSymbols)
-          : undefined,
+        changedSymbols: row.changedSymbols,
         timestamp: row.timestamp,
       }));
     },
@@ -480,9 +457,7 @@ export function openDurableRepositoryFileRegistry(
         changeType: row.changeType as any,
         additions: row.additions,
         deletions: row.deletions,
-        changedSymbols: row.changedSymbols
-          ? JSON.parse(row.changedSymbols)
-          : undefined,
+        changedSymbols: row.changedSymbols,
         timestamp: row.timestamp,
       }));
     },
@@ -551,9 +526,7 @@ export function openDurableRepositoryFileRegistry(
           changeType: row.changeType as any,
           additions: row.additions,
           deletions: row.deletions,
-          changedSymbols: row.changedSymbols
-            ? JSON.parse(row.changedSymbols)
-            : undefined,
+          changedSymbols: row.changedSymbols,
           timestamp: row.timestamp,
         }));
     },

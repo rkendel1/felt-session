@@ -32,7 +32,7 @@ beforeEach(() => {
   fs.mkdirSync(testDir, { recursive: true });
 
   fileRegistry = openDurableRepositoryFileRegistry(
-    path.join(testDir, "files.db"),
+    testFeltDb(path.join(testDir, "files.db")),
   );
   analyzer = createGraphAnalyzer(fileRegistry);
   contextManager = createTaskCodeContextManager(

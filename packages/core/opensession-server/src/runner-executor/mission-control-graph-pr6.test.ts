@@ -41,7 +41,7 @@ beforeEach(() => {
     testFeltDb(path.join(testDir, "commits.db")),
   );
   fileRegistry = openDurableRepositoryFileRegistry(
-    path.join(testDir, "files.db")
+    testFeltDb(path.join(testDir, "files.db")),
   );
   graphQueries = createRepositoryGraphQueries({
     fileRegistry,
