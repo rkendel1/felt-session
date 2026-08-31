@@ -55,16 +55,6 @@ type RunnerLaunchOpts = {
 
 type RunnerEvents = AsyncGenerator<StreamEvent> & { runnerId: string };
 
-type RunnerOpeningLaunchState = {
-	version: 1;
-	hostId: string;
-	sessionId: string;
-	promptEntryId?: string;
-	phase: "prepared" | "launching" | "started" | "rejected";
-};
-
-const RUNNER_OPENING_LAUNCH_STATE = "opening-launch.json";
-
 function serverWsBase(): string {
 	return configuredServer().publicBaseUrl.replace(/\/$/, "");
 }
@@ -86,7 +76,6 @@ export async function maybeLaunchRunnerRun(
 	const hostId = opts.hostId || `rh-${Bun.randomUUIDv7()}`;
 	const hostDir = `${runHostsDir(OPENSESSION_SESSIONS_DIR)}/${hostId}`;
 	const specPath = `${hostDir}/${HOST_SPEC_NAME}`;
-	const launchStatePath = `${hostDir}/${RUNNER_OPENING_LAUNCH_STATE}`;
 	const priorSpec = existsSync(specPath) ? readRunnerHostSpec(specPath) : null;
 	if (existsSync(specPath) && !priorSpec)
 		throw new Error(`Runner host ${hostId} has an unreadable durable specification`);
@@ -104,18 +93,6 @@ export async function maybeLaunchRunnerRun(
 			run.hostId === hostId &&
 			run.promptEntryId === opts.promptEntryId,
 	);
-	const priorLaunchState = existsSync(launchStatePath)
-		? readRunnerOpeningLaunchState(launchStatePath)
-		: null;
-	if (existsSync(launchStatePath) && !priorLaunchState)
-		throw new Error(`Runner host ${hostId} has unreadable durable launch state`);
-	if (
-		priorLaunchState &&
-		(priorLaunchState.hostId !== hostId ||
-			priorLaunchState.sessionId !== session.id ||
-			priorLaunchState.promptEntryId !== opts.promptEntryId)
-	)
-		throw new Error(`Runner host ${hostId} crossed durable launch ownership`);
 	const spec: RunHostSpec = priorSpec ?? {
 		hostId,
 		osSessionId: session.id,
@@ -147,14 +124,6 @@ export async function maybeLaunchRunnerRun(
 		mkdirSync(hostDir, { recursive: true });
 		writeJsonAtomic(specPath, spec);
 	}
-	let launchState: RunnerOpeningLaunchState = priorLaunchState ?? {
-		version: 1,
-		hostId,
-		sessionId: session.id,
-		promptEntryId: opts.promptEntryId,
-		phase: priorRun?.launchPhase ?? "prepared",
-	};
-	if (!priorLaunchState) writeJsonAtomic(launchStatePath, launchState);
 	const rpcToken = spec.rpcToken;
 	const wsToken = spec.wsToken;
 	let run: ActiveRunRecord = {
@@ -177,8 +146,7 @@ export async function maybeLaunchRunnerRun(
 		runnerId: runner.id,
 		hostId,
 		promptEntryId: opts.promptEntryId,
-		launchPhase:
-			launchState.phase === "rejected" ? "prepared" : launchState.phase,
+		launchPhase: priorRun?.launchPhase ?? "prepared",
 		startedAt: priorRun?.startedAt ?? new Date().toISOString(),
 	};
 	await journalSet(run);
@@ -218,22 +186,14 @@ export async function maybeLaunchRunnerRun(
       throw new RunnerHostLaunchRejectedError(
         `Runner dispatch ${hostId} was cancelled before launch`,
       );
-		if (launchState.phase === "rejected")
-			throw new RunnerHostLaunchRejectedError(
-				`Runner opening ${hostId} was durably rejected before dispatch`,
-			);
 		if (run.launchPhase === "prepared") {
 			// `launching` is durable before the request can reach the Runner. A
 			// restart may adopt remote evidence, but may never infer non-execution
 			// from an absent connection and launch the same turn again.
-			launchState = { ...launchState, phase: "launching" };
-			writeJsonAtomic(launchStatePath, launchState);
 			run = { ...run, launchPhase: "launching" };
 			await journalSet(run);
 			await launcher.launch(hostId, hostDir);
       if (opts.shouldCancel?.()) handle.requestCancel();
-			launchState = { ...launchState, phase: "started" };
-			writeJsonAtomic(launchStatePath, launchState);
 			run = { ...run, launchPhase: "started" };
 			await journalSet(run);
 		} else {
@@ -251,8 +211,6 @@ export async function maybeLaunchRunnerRun(
 					`Runner opening ${hostId} was admitted but has no adoptable remote evidence`,
 				);
 			if (run.launchPhase !== "started") {
-				launchState = { ...launchState, phase: "started" };
-				writeJsonAtomic(launchStatePath, launchState);
 				run = { ...run, launchPhase: "started" };
 				await journalSet(run);
 			}
@@ -286,8 +244,6 @@ export async function maybeLaunchRunnerRun(
 		) {
 			// Server-side preflight rejection proves the launch request was never
 			// sent. Fence retries durably before retiring the prepared journal.
-			launchState = { ...launchState, phase: "rejected" };
-			writeJsonAtomic(launchStatePath, launchState);
       await journalClearIfLineage(run);
 		} else {
 			// Once launch admission may have crossed the Runner connection, absence
@@ -305,28 +261,6 @@ export async function maybeLaunchRunnerRun(
 function readRunnerHostSpec(path: string): RunHostSpec | null {
 	try {
 		return JSON.parse(readFileSync(path, "utf8")) as RunHostSpec;
-	} catch {
-		return null;
-	}
-}
-
-function readRunnerOpeningLaunchState(
-	path: string,
-): RunnerOpeningLaunchState | null {
-	try {
-		const value = JSON.parse(readFileSync(path, "utf8")) as Partial<RunnerOpeningLaunchState>;
-		if (
-			value.version !== 1 ||
-			typeof value.hostId !== "string" ||
-			typeof value.sessionId !== "string" ||
-			(value.promptEntryId !== undefined &&
-				typeof value.promptEntryId !== "string") ||
-			!["prepared", "launching", "started", "rejected"].includes(
-				String(value.phase),
-			)
-		)
-			return null;
-		return value as RunnerOpeningLaunchState;
 	} catch {
 		return null;
 	}

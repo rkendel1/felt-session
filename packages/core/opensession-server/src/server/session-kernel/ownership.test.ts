@@ -634,8 +634,8 @@ describe("single session ownership", () => {
 		expect(runner).toContain('run.launchPhase === "prepared"');
 		expect(runner).toContain('launchPhase: "launching"');
 		const durableLaunching = runner.indexOf(
-			'writeJsonAtomic(launchStatePath, launchState)',
-			runner.indexOf('phase: "launching"'),
+			"await journalSet(run)",
+			runner.indexOf('launchPhase: "launching"'),
 		);
 		const physicalLaunch = runner.indexOf(
 			"await launcher.launch(hostId, hostDir)",
@@ -643,8 +643,8 @@ describe("single session ownership", () => {
 		);
 		expect(durableLaunching).toBeGreaterThan(0);
 		expect(physicalLaunch).toBeGreaterThan(durableLaunching);
+		expect(runner).not.toContain("opening-launch.json");
 		expect(runner).toContain('launchPhase: "started"');
-		expect(runner).toContain('phase: "rejected"');
 		expect(runner).toContain('reason: "ambiguous_runner_launch"');
 		expect(runner).toContain("setRunnerWorkload(runner.id, undefined, session.id)");
 		expect(runner).toContain("has no adoptable remote evidence");
