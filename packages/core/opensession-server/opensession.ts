@@ -66,6 +66,7 @@ import { flushDockerSandboxStateWrites, initializeManagedDockerSandboxState } fr
 import { flushSandboxPreviewPortWrites, initializeManagedSandboxPreviewPorts } from "./src/server/sandbox/preview-ports";
 import { flushRemoteSandboxStateWrites, initializeManagedRemoteSandboxState } from "./src/server/sandbox/adapters/bootstrap";
 import { initializeManagedRemoteRepoTemplates } from "./src/server/sandbox/remote-repo-template";
+import { flushPrewarmWrites, initializeManagedPrewarms } from "./src/server/sandbox/prewarm";
 import { initializeManagedWorkloadIdentity } from "./src/server/workload-identity";
 import { initializeManagedPapercuts } from "./src/server/papercuts";
 import { initializeManagedSecurity } from "./src/server/security";
@@ -276,6 +277,7 @@ if (!g.__opensessionBooted) {
 	await initializeManagedSandboxPreviewPorts(db);
 	await initializeManagedRemoteSandboxState(db);
 	await initializeManagedRemoteRepoTemplates(db);
+	await initializeManagedPrewarms(db);
 	await initializeManagedWorkloadIdentity(db);
 	await initializeManagedPapercuts(db);
 	await initializeManagedSecurity(db);
@@ -1288,6 +1290,7 @@ if (!g.__opensessionBooted) {
 		await flushDockerSandboxStateWrites();
 		await flushSandboxPreviewPortWrites();
 		await flushRemoteSandboxStateWrites();
+		await flushPrewarmWrites();
 		// Keep HTTP available while runs drain. Stopping the listener before the
 		// bounded wait made Caddy return 502 for the full drain window on every
 		// deploy. Shutdown-aware intake above already parks new agent work.
