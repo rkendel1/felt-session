@@ -9,8 +9,7 @@
  * decision documented in docs/self-hosting-sandboxes.md.
  */
 
-import { existsSync, readFileSync } from "fs";
-import { stateDir } from "../paths";
+import { readAuditDayEvents } from "../audit";
 
 export const SCORECARD_DEFAULT_DAYS = 30;
 export const SCORECARD_THRESHOLDS = {
@@ -339,28 +338,21 @@ export function buildSandboxScorecard(
   };
 }
 
-export function readSandboxScorecard(days = SCORECARD_DEFAULT_DAYS): SandboxScorecard {
+export async function readSandboxScorecard(days = SCORECARD_DEFAULT_DAYS): Promise<SandboxScorecard> {
   const boundedDays = Math.min(90, Math.max(1, Math.floor(days)));
   const now = new Date();
   const events: AuditEvent[] = [];
-  const auditDir = stateDir("audit");
   for (let offset = 0; offset < boundedDays; offset++) {
     const date = utcDate(offset, now);
-    const path = `${auditDir}/audit-${date}.jsonl`;
-    if (!existsSync(path)) continue;
-    for (const line of readFileSync(path, "utf-8").split("\n")) {
-      if (!line) continue;
-      try {
-        const event = JSON.parse(line) as AuditEvent;
-        if (
-          event.kind === "session_turn_metric" ||
-          event.kind === "preview_ready_metric" ||
-          event.kind === "sandbox_resume_metric" ||
-          event.kind === "sandbox_restart_survival_metric"
-        ) {
-          events.push(event);
-        }
-      } catch {}
+    for (const event of await readAuditDayEvents(date) as AuditEvent[]) {
+      if (
+        event.kind === "session_turn_metric" ||
+        event.kind === "preview_ready_metric" ||
+        event.kind === "sandbox_resume_metric" ||
+        event.kind === "sandbox_restart_survival_metric"
+      ) {
+        events.push(event);
+      }
     }
   }
   return buildSandboxScorecard(events, { days: boundedDays, now });

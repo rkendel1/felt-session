@@ -10,6 +10,7 @@ import {
 import { basename, dirname } from "node:path";
 import { createInterface } from "node:readline";
 import { isNativeSessionId, stateDir } from "./paths";
+import { readAuditDayEvents } from "./audit";
 
 export interface PiModelUsage {
   model: string;
@@ -141,18 +142,10 @@ function writeCache(date: string, day: PiUsageDay): void {
   }
 }
 
-function readLegacyAuditDay(date: string): PiUsageDay | null {
-  const path = `${stateDir("audit")}/audit-${date}.jsonl`;
-  if (!existsSync(path)) return null;
+async function readLegacyAuditDay(date: string): Promise<PiUsageDay | null> {
   const bucket = emptyMutable();
-  for (const line of readFileSync(path, "utf8").split("\n")) {
-    if (!line.includes('"kind":"result"')) continue;
-    let event: Record<string, unknown>;
-    try {
-      event = JSON.parse(line);
-    } catch {
-      continue;
-    }
+  for (const event of await readAuditDayEvents(date)) {
+    if (event.kind !== "result") continue;
     const time = Date.parse(String(event.time || ""));
     if (
       date === CUTOVER_DAY &&
@@ -193,7 +186,7 @@ function readLegacyAuditDay(date: string): PiUsageDay | null {
 /** Preserve the final OpenCode measurement on the mixed cutover day and all
  * earlier days. The retired scanner wrote this versioned shape once per day;
  * the cutover day's still-volatile measurement falls back to its audit rows. */
-function readLegacyEngineDay(date: string): PiUsageDay | null {
+async function readLegacyEngineDay(date: string): Promise<PiUsageDay | null> {
   try {
     const parsed = JSON.parse(
       readFileSync(`${CACHE_DIR()}/engine-day-${date}.json`, "utf8"),
@@ -217,7 +210,7 @@ function readLegacyEngineDay(date: string): PiUsageDay | null {
       coverage: { pi: day.unmeasured ? "unmeasured" : "measured" },
     };
   } catch {
-    return readLegacyAuditDay(date);
+    return await readLegacyAuditDay(date);
   }
 }
 
@@ -392,7 +385,7 @@ export async function piUsageForDates(
         const merged = emptyMutable();
         let measured = false;
         if (date <= CUTOVER_DAY) {
-          const legacy = readLegacyEngineDay(date);
+          const legacy = await readLegacyEngineDay(date);
           if (legacy) {
             mergeDay(merged, legacy);
             measured = !legacy.unmeasured;

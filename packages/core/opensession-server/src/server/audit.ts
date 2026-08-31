@@ -1,71 +1,159 @@
 import { createHash } from "node:crypto";
-import {
-  appendFileSync,
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  unlinkSync,
-} from "node:fs";
+import { existsSync, readdirSync, readFileSync, unlinkSync } from "node:fs";
+import type { StateFirstDB } from "@feltdb/core";
 import { stateDir } from "./paths";
+import { managedFeltDb } from "./managed-feltdb";
 
-// Structured audit log.
-// One JSON line per event into a daily file under ~/.opensession-audit/.
-// incident-agent ships stdout via Docker's awslogs driver; opensession runs as
-// a systemd unit that hard-denies IMDS (opensession.service), so it can never
-// hold AWS credentials itself — a separate amazon-cloudwatch-agent service
-// tails these files into CloudWatch Logs instead (see deploy/README-audit.md).
+// Structured audit events live in managed FeltDB. Legacy daily JSONL files are
+// imported once during boot and then removed.
 
 const AUDIT_DIR = stateDir("audit");
 
-// Match incident-agent's CloudWatch retention (400d) for the local files.
 const RETENTION_DAYS = 400;
+const AUDIT_COLLECTION = "opensession_audit_events";
+const AUDIT_DAYS_COLLECTION = "opensession_audit_days";
+const AUDIT_MIGRATION = "audit-jsonl-to-managed-feltdb-v1";
+type AuditRecord = { id: string; date: string; timeMs: number; order: number; event: Record<string, unknown> };
+type AuditDay = { id: string; latestTimeMs: number };
+let auditDb: StateFirstDB | undefined;
+const pendingAuditWrites = new Set<Promise<unknown>>();
 
-let initialized = false;
-
-function ensureAuditDir(): void {
-  if (initialized) return;
-  initialized = true;
-  mkdirSync(AUDIT_DIR, { recursive: true });
-  pruneOldFiles();
+function legacyAuditFiles(dir = AUDIT_DIR): string[] {
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir)
+    .filter((file) => /^audit-\d{4}-\d{2}-\d{2}\.jsonl$/.test(file))
+    .map((file) => `${dir}/${file}`);
 }
 
-function pruneOldFiles(): void {
-  const cutoff = Date.now() - RETENTION_DAYS * 24 * 60 * 60 * 1000;
+function legacyRecord(path: string, index: number, line: string): AuditRecord | null {
   try {
-    for (const file of readdirSync(AUDIT_DIR)) {
-      const m = file.match(/^audit-(\d{4}-\d{2}-\d{2})\.jsonl$/);
-      if (!m) continue;
-      if (new Date(`${m[1]}T00:00:00Z`).getTime() < cutoff) {
-        unlinkSync(`${AUDIT_DIR}/${file}`);
-      }
-    }
-  } catch (e) {
-    console.error("[audit] prune failed:", e);
+    const event = JSON.parse(line) as Record<string, unknown>;
+    const fileDate = path.match(/audit-(\d{4}-\d{2}-\d{2})\.jsonl$/)?.[1];
+    const timeMs = Date.parse(String(event.time || ""));
+    const date = fileDate;
+    if (!date) return null;
+    return {
+      id: `legacy-${createHash("sha256").update(`${path}:${index}:${line}`).digest("hex")}`,
+      date,
+      timeMs: Number.isFinite(timeMs) ? timeMs : Date.parse(`${date}T00:00:00Z`) + index,
+      order: (Number.isFinite(timeMs) ? timeMs : Date.parse(`${date}T00:00:00Z`)) * 1000 + index % 1000,
+      event,
+    };
+  } catch {
+    return null;
   }
 }
 
+export async function initializeManagedAudit(
+  db: StateFirstDB = auditDb ?? managedFeltDb(),
+  legacyDir = AUDIT_DIR,
+): Promise<void> {
+  auditDb = db;
+  const files = legacyAuditFiles(legacyDir);
+  const migrations = db.collection<{ id: string }>("opensession_migrations");
+  if (!await migrations.get(AUDIT_MIGRATION)) {
+    const days = new Map<string, number>();
+    for (const path of files) {
+      const records = readFileSync(path, "utf8").split("\n")
+        .map((line, index) => line ? legacyRecord(path, index, line) : null)
+        .filter((record): record is AuditRecord => !!record);
+      for (let offset = 0; offset < records.length; offset += 250) {
+        const batch = records.slice(offset, offset + 250);
+        await db.transaction((tx) => {
+          for (const record of batch) {
+            tx.collection<AuditRecord>(AUDIT_COLLECTION).set(record.id, record);
+            days.set(record.date, Math.max(days.get(record.date) || 0, record.timeMs));
+          }
+        }, { transactionId: `opensession:audit-import:${createHash("sha256").update(`${path}:${offset}`).digest("hex")}` });
+      }
+    }
+    await db.transaction((tx) => {
+      for (const [date, latestTimeMs] of days)
+        tx.collection<AuditDay>(AUDIT_DAYS_COLLECTION).set(date, { id: date, latestTimeMs });
+      tx.collection("opensession_migrations").set(AUDIT_MIGRATION,
+        { id: AUDIT_MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
+    }, { transactionId: `opensession:migration:${AUDIT_MIGRATION}` });
+  }
+  for (const path of files) if (existsSync(path)) unlinkSync(path);
+  await pruneManagedAudit();
+}
+
+async function pruneManagedAudit(): Promise<void> {
+  const db = auditDb ?? managedFeltDb();
+  const cutoff = Date.now() - RETENTION_DAYS * 86_400_000;
+  if (db.runtime().runtime !== "remote") {
+    const expired = (await db.collection<AuditRecord>(AUDIT_COLLECTION).all())
+      .filter((record) => record.timeMs < cutoff);
+    if (expired.length) await db.transaction((tx) => {
+      for (const record of expired) tx.collection(AUDIT_COLLECTION).delete(record.id);
+    }, { transactionId: `opensession:audit-prune:${crypto.randomUUID()}` });
+  } else {
+  for (;;) {
+    const page = await db.query<AuditRecord>({
+      collection: AUDIT_COLLECTION,
+      where: [{ field: "timeMs", lt: cutoff }],
+      orderBy: [{ field: "timeMs", direction: "asc" }],
+      limit: 500,
+    });
+    if (!page.records.length) break;
+    await db.transaction((tx) => {
+      for (const record of page.records) tx.collection(AUDIT_COLLECTION).delete(record.id);
+    }, { transactionId: `opensession:audit-prune:${crypto.randomUUID()}` });
+  }
+  }
+  for (const day of await db.collection<AuditDay>(AUDIT_DAYS_COLLECTION).all())
+    if (day.latestTimeMs < cutoff) await db.collection<AuditDay>(AUDIT_DAYS_COLLECTION).delete(day.id);
+}
+
 /**
- * Emit one audit event as a JSON line. Never throws — audit failures must not
+ * Emit one managed audit event. Never throws — audit failures must not
  * take down the run they're observing (they do land in journald via stderr).
  */
 export function audit(event: Record<string, unknown>): void {
   try {
     // bun test shares this module with the live audit paths — keep fake-run /
-    // FSM test events out of the real ~/.opensession-audit files (they feed
+    // FSM test events out of the managed production audit stream (it feeds
     // the digest and Dreaming). No test asserts on audit output today.
     if (process.env.NODE_ENV === "test") return;
-    ensureAuditDir();
     const now = new Date();
-    const line = JSON.stringify({
+    const order = now.getTime() * 1000 + nextAuditOrdinal(now.getTime());
+    const record: AuditRecord = {
+      id: `audit-${now.getTime()}-${crypto.randomUUID()}`,
+      date: now.toISOString().slice(0, 10),
+      timeMs: now.getTime(),
+      order,
+      event: {
       time: now.toISOString(),
       service: "opensession",
       ...event,
-    });
-    appendFileSync(`${AUDIT_DIR}/audit-${now.toISOString().slice(0, 10)}.jsonl`, line + "\n");
+      },
+    };
+    const db = auditDb ?? managedFeltDb();
+    const write = db.transaction((tx) => {
+      tx.collection<AuditRecord>(AUDIT_COLLECTION).set(record.id, record, { requireAbsent: true });
+      tx.collection<AuditDay>(AUDIT_DAYS_COLLECTION).set(record.date,
+        { id: record.date, latestTimeMs: record.timeMs });
+    }, { transactionId: `opensession:audit:${record.id}` })
+      .catch((error) => console.error("[audit] write failed:", error))
+      .finally(() => pendingAuditWrites.delete(write));
+    pendingAuditWrites.add(write);
   } catch (e) {
     console.error("[audit] write failed:", e);
   }
+}
+
+export async function flushAuditWrites(): Promise<void> {
+  while (pendingAuditWrites.size) await Promise.allSettled([...pendingAuditWrites]);
+}
+
+let auditOrdinalMs = 0;
+let auditOrdinal = 0;
+function nextAuditOrdinal(timeMs: number): number {
+  if (timeMs !== auditOrdinalMs) {
+    auditOrdinalMs = timeMs;
+    auditOrdinal = 0;
+  }
+  return auditOrdinal++ % 1000;
 }
 
 // Stored all-lowercase so the redactor's `.toLowerCase()` lookup catches
@@ -126,18 +214,11 @@ export function summarizeText(text: string | undefined, snippetBytes = 300): Tex
 
 // ── Read side (the in-app audit viewer, Settings → Audit log) ──
 
-/** Dates (YYYY-MM-DD, newest first) that have an audit file. */
-export function listAuditDates(): string[] {
-  ensureAuditDir();
-  try {
-    return readdirSync(AUDIT_DIR)
-      .map((f) => f.match(/^audit-(\d{4}-\d{2}-\d{2})\.jsonl$/)?.[1])
-      .filter((d): d is string => !!d)
-      .sort()
-      .reverse();
-  } catch {
-    return [];
-  }
+/** Dates (YYYY-MM-DD, newest first) represented in managed audit state. */
+export async function listAuditDates(): Promise<string[]> {
+  await flushAuditWrites();
+  const days = await (auditDb ?? managedFeltDb()).collection<AuditDay>(AUDIT_DAYS_COLLECTION).all();
+  return days.map((day) => day.id).sort().reverse();
 }
 
 /** The per-turn streaming firehose — hidden by the viewer's default
@@ -165,7 +246,7 @@ function eventType(e: Record<string, unknown>): string {
   return String(e.kind || e.msg || "event");
 }
 
-export function readAuditEvents(opts: {
+export async function readAuditEvents(opts: {
   date: string;
   /** Case-insensitive substring across the raw line. */
   q?: string;
@@ -177,10 +258,8 @@ export function readAuditEvents(opts: {
   significantOnly?: boolean;
   offset?: number;
   limit?: number;
-}): AuditReadResult {
-  ensureAuditDir();
-  const path = `${AUDIT_DIR}/audit-${opts.date}.jsonl`;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(opts.date) || !existsSync(path)) {
+}): Promise<AuditReadResult> {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(opts.date)) {
     return { events: [], total: 0, types: [] };
   }
   const q = (opts.q || "").toLowerCase();
@@ -190,23 +269,15 @@ export function readAuditEvents(opts: {
 
   const types = new Set<string>();
   const matches: Array<Record<string, unknown>> = [];
-  for (const line of readFileSync(path, "utf-8").split("\n")) {
-    if (!line) continue;
-    let e: Record<string, unknown>;
-    try {
-      e = JSON.parse(line);
-    } catch {
-      continue;
-    }
+  for (const e of await readAuditDayEvents(opts.date)) {
     const t = eventType(e);
     types.add(t);
     if (opts.type && t !== opts.type) continue;
     if (!opts.type && significantOnly && NOISY_KINDS.has(t)) continue;
     if (opts.session && !String(e.session_id || e.bks_session_id || "").includes(opts.session)) continue;
-    if (q && !line.toLowerCase().includes(q)) continue;
+    if (q && !JSON.stringify(e).toLowerCase().includes(q)) continue;
     matches.push(e);
   }
-  matches.reverse(); // newest first
   return {
     events: matches.slice(offset, offset + limit),
     total: matches.length,
@@ -215,17 +286,44 @@ export function readAuditEvents(opts: {
 }
 
 /** One day's audit log rolled up into a compact, LLM-consumable shape. Built
- *  for the nightly "Dreaming" reflection automation: the raw jsonl is 10-20MB
- *  (far past what the read tool can take), so it webfetches /api/audit/digest
+ *  for the nightly "Dreaming" reflection automation: a busy raw day is far
+ *  past what the read tool can take, so it webfetches /api/audit/digest
  *  instead of shell-processing the log. The whole digest is 50-70KB, which the
  *  engine truncates as a large tool output — callers can pass `?section=` to
  *  fetch detail sections individually. Keep the field names stable — the
  *  automation prompt names them. */
-export function buildAuditDigest(date: string): Record<string, unknown> | null {
-  ensureAuditDir();
-  const path = `${AUDIT_DIR}/audit-${date}.jsonl`;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !existsSync(path)) return null;
-  return buildAuditDigestFromLines(date, readFileSync(path, "utf-8"));
+export async function buildAuditDigest(date: string): Promise<Record<string, unknown> | null> {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+  const events = await readAuditDayEvents(date);
+  if (!events.length) return null;
+  return buildAuditDigestFromLines(date, events.toReversed().map((event) => JSON.stringify(event)).join("\n"));
+}
+
+export async function readAuditDayEvents(date: string): Promise<Array<Record<string, unknown>>> {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return [];
+  await flushAuditWrites();
+  const db = auditDb ?? managedFeltDb();
+  if (db.runtime().runtime !== "remote") {
+    return (await db.collection<AuditRecord>(AUDIT_COLLECTION).all())
+      .filter((record) => record.date === date)
+      .sort((a, b) => b.order - a.order)
+      .map((record) => record.event);
+  }
+  const events: Array<Record<string, unknown>> = [];
+  let cursor: string | undefined;
+  do {
+    const page = await db.query<AuditRecord>({
+      collection: AUDIT_COLLECTION,
+      where: [{ field: "date", eq: date }],
+      orderBy: [{ field: "order", direction: "desc" }],
+      limit: 500,
+      ...(cursor ? { cursor } : {}),
+    });
+    events.push(...page.records.map((record) => record.event));
+    cursor = page.exhausted ? undefined : page.nextCursor;
+    if (!page.exhausted && !cursor) throw new Error("FeltDB audit cursor is missing");
+  } while (cursor);
+  return events;
 }
 
 /** Pure digest builder used by focused mixed-format fixtures. */

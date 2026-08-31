@@ -82,7 +82,6 @@ Mounts (rationale in the docker.ts header):
 | `mcp-config.json`, `~/.opensession/claude-accounts.json` | ro | external MCP servers + in-container account-pool selection |
 | `~/.opensession/codex-accounts.json`, each home account's `<CODEX_HOME>/auth.json` | ro | seed access-token-only Pi/OpenAI authentication |
 | `~/.opensession/model-providers.json` → `~/.opensession-model-providers.json`; `~/.opensession/pi.json` → `~/.opensession-pi.json` | ro | model-provider and Pi configuration, readable in the sandbox |
-| `~/.opensession/audit` | rw | one audit jsonl stream for host + sandboxed runs |
 
 Known Phase 1 caveats: external MCP servers spawn inside the container, so
 host-only dependencies will not work. Full writable Codex account homes are not

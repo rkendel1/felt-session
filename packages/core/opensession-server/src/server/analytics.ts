@@ -2,11 +2,9 @@
  * Analytics: what happened on/because of Open Session, aggregated for the
  * Analytics view (sidebar → Analytics). Four sources, all read-only:
  *
- * - The audit log (~/.opensession-audit/audit-YYYY-MM-DD.jsonl) for logical
+ * - Managed FeltDB audit events for logical
  *   turn facts: active sessions, duration, run kinds, errors and cancellations.
- *   Day files are 10-20MB, so each day is parsed once into a compact rollup and
- *   disk-cached (keyed by source size — today's growing file recomputes, past
- *   days never do).
+ *   Each requested day is reduced into a compact rollup.
  * - Pi's native session JSONL for per-request model, token and list-price usage,
  *   including retries, tool rounds, failed attempts and cache writes.
  * - The session store (~/.opensession-sessions) for who created what: person,
@@ -27,11 +25,9 @@ import { gitIdentityFor } from "./shared/user-mappings";
 import { delegatedActorParent, isMachineActor, machineActorLabel } from "./session-actors";
 import { PI_USAGE_CUTOVER_MS, piUsageForDates } from "./pi-usage";
 import { persistedSlackSessions } from "../agents/slack/state";
+import { readAuditDayEvents } from "./audit";
 
-const AUDIT_DIR = stateDir("audit");
 const CACHE_DIR = stateDir("analytics-cache");
-// Bump when the rollup shape changes — stale disk caches recompute.
-const ROLLUP_VERSION = 10;
 
 interface TokenTotals {
 	input: number;
@@ -348,30 +344,9 @@ export function rollupAuditContents(date: string, contents: string): DayRollup {
 	return rollup;
 }
 
-function rollupAuditDay(date: string): DayRollup {
-	const path = `${AUDIT_DIR}/audit-${date}.jsonl`;
-	return rollupAuditContents(date, existsSync(path) ? readFileSync(path, "utf8") : "");
-}
-
-/** Rollup with a per-day disk cache keyed on the source file's size. */
-function cachedRollup(date: string): DayRollup {
-	const src = `${AUDIT_DIR}/audit-${date}.jsonl`;
-	const size = existsSync(src) ? statSync(src).size : 0;
-	const cachePath = `${CACHE_DIR}/day-${date}.json`;
-	try {
-		if (existsSync(cachePath)) {
-			const cached = JSON.parse(readFileSync(cachePath, "utf-8"));
-			if (cached.v === ROLLUP_VERSION && cached.size === size) return cached.rollup;
-		}
-	} catch {}
-	const rollup = rollupAuditDay(date);
-	try {
-		mkdirSync(CACHE_DIR, { recursive: true });
-		writeFileSync(cachePath, JSON.stringify({ v: ROLLUP_VERSION, size, rollup }));
-	} catch (e) {
-		console.error("[analytics] rollup cache write failed:", e);
-	}
-	return rollup;
+async function managedRollup(date: string): Promise<DayRollup> {
+	const events = await readAuditDayEvents(date);
+	return rollupAuditContents(date, events.toReversed().map((event) => JSON.stringify(event)).join("\n"));
 }
 
 // ── Generic timestamped disk cache (gh fetches + composed summaries) ──
@@ -1162,7 +1137,7 @@ export async function buildAnalytics(from: string, to: string): Promise<Analytic
 
 	const reviewByDate = new Map<string, ReviewDayAgg>();
 	for (const date of dates) {
-		const r = cachedRollup(date);
+		const r = await managedRollup(date);
 		const engine = engineDays.get(date);
 		reviewByDate.set(date, r.review || emptyReviewAgg());
 		const sessionsByKind: Record<string, number> = {};
@@ -1588,7 +1563,7 @@ export async function buildHomeStats(
 	const days: { date: string; bucket: HomeStatsBucket; ids: string[] }[] = [];
 	for (let back = 0; back <= 14; back++) {
 		const date = new Date(now - back * 86_400_000).toISOString().slice(0, 10);
-		const r = cachedRollup(date);
+		const r = await managedRollup(date);
 		days.push({
 			date,
 			bucket: {

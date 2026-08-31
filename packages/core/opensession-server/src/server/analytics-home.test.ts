@@ -2,6 +2,8 @@ import { afterAll, beforeAll, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createFeltDB } from "@feltdb/core";
+import { initializeManagedAudit, readAuditDayEvents } from "./audit";
 type UsageDay = { input: number; output: number; cacheRead: number; cacheWrite: number };
 
 const root = mkdtempSync(join(tmpdir(), "analytics-home-"));
@@ -20,7 +22,7 @@ function usage(_date: string, input: number, output: number): UsageDay {
 	return { input, output, cacheRead: input * 10, cacheWrite: output * 10 };
 }
 
-beforeAll(() => {
+beforeAll(async () => {
 	const auditDir = join(root, ".opensession-audit");
 	mkdirSync(auditDir, { recursive: true });
 	writeFileSync(
@@ -46,6 +48,10 @@ beforeAll(() => {
 		join(auditDir, "audit-2026-08-15.jsonl"),
 		event({ kind: "result", session_id: "session-a", input_tokens: 3, output_tokens: 4 }) + "\n",
 	);
+	await initializeManagedAudit(
+		createFeltDB({ namespace: crypto.randomUUID(), memory: true }),
+		auditDir,
+	);
 });
 
 afterAll(() => {
@@ -55,6 +61,8 @@ afterAll(() => {
 });
 
 test("Home takes activity from audit and tokens from engine usage", async () => {
+	expect((await readAuditDayEvents("2026-08-16")).map((event) => event.kind || event.msg))
+		.toEqual(["session_turn_metric", "pi_turn"]);
 	const loadedDates: string[][] = [];
 	const stats = await buildHomeStats(NOW, async (dates: string[]) => {
 		loadedDates.push(dates);

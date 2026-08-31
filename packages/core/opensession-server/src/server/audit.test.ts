@@ -1,5 +1,15 @@
 import { describe, expect, test } from "bun:test";
-import { buildAuditDigestFromLines } from "./audit";
+import { createFeltDB } from "@feltdb/core";
+import { existsSync, mkdtempSync, writeFileSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
+import {
+  buildAuditDigest,
+  buildAuditDigestFromLines,
+  initializeManagedAudit,
+  listAuditDates,
+  readAuditEvents,
+} from "./audit";
 
 const digest = (...events: Array<Record<string, unknown>>) =>
   buildAuditDigestFromLines("2026-08-19", events.map((event) => JSON.stringify(event)).join("\n"));
@@ -13,6 +23,24 @@ function byRunKind(value: Record<string, unknown>): Record<string, Record<string
 }
 
 describe("buildAuditDigest", () => {
+  test("imports legacy JSONL once, serves it from FeltDB, and removes the file", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "audit-legacy-"));
+    const path = join(dir, "audit-2026-08-19.jsonl");
+    writeFileSync(path, [
+      JSON.stringify({ time: "2026-08-19T10:00:00.000Z", kind: "result", session_id: "s1" }),
+      JSON.stringify({ time: "2026-08-19T11:00:00.000Z", msg: "session_created", session_id: "s2" }),
+    ].join("\n"));
+    await initializeManagedAudit(
+      createFeltDB({ namespace: crypto.randomUUID(), memory: true }),
+      dir,
+    );
+    expect(existsSync(path)).toBe(false);
+    expect(await listAuditDates()).toEqual(["2026-08-19"]);
+    const read = await readAuditEvents({ date: "2026-08-19", significantOnly: false });
+    expect(read.events.map((event) => event.session_id)).toEqual(["s2", "s1"]);
+    expect(await buildAuditDigest("2026-08-19")).not.toBeNull();
+  });
+
   test("keeps historical generic terminals and learns metadata from later events", () => {
     const value = digest(
       { msg: "session_created", session_id: "legacy" },

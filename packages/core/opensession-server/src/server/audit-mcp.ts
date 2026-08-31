@@ -3,32 +3,30 @@
  * up. One tool, one optional date, no writes.
  *
  * It returns what GET /api/audit/digest serves: buildAuditDigest(date), the
- * compact roll-up of a day's ~10-20MB jsonl that the nightly Dreaming
- * reflection reads.
+ * compact roll-up of a busy managed audit day that nightly Dreaming reads.
  *
  * Why a tool and not a fetch, same story as opensession-health. Dreaming is an
  * unattended automation, and an automation cannot reach its own host over
  * HTTP: web-fetch.ts refuses loopback and private addresses by design, and no
- * engine gives an unattended ask run a shell to curl with. Nor can it read the
- * files: Pi's ask tool list is read/grep/find/ls (pi-runner.ts) and those are
- * sandboxed to the session workspace, so ~/.opensession-audit is out of reach.
+ * engine gives an unattended ask run a shell to curl with. Managed audit state
+ * also remains server-owned and unavailable to the run.
  * Moving automations to Pi (aeb73d59f) took the last path away, and the
  * reflection ran blind.
  *
  * Held to the automation in-process bar, same as opensession-health and
  * opensession-turn: the only argument is a date, validated against
- * YYYY-MM-DD before it becomes a filename component, so untrusted text cannot
- * steer it at a path, a glob or a range. It reads aggregate counters and
+ * YYYY-MM-DD before it becomes a query value, so untrusted text cannot steer
+ * it at a range. It reads aggregate counters and
  * already-redacted event fields, writes nothing, and there is nothing here to
  * escalate with. Never grow this server past that: no raw event reads, no
- * arbitrary file paths.
+ * arbitrary queries.
  */
 
 import { z } from "zod";
 import { buildAuditDigest, listAuditDates } from "./audit";
 import { createSdkMcpServer, tool } from "./inprocess-mcp";
 
-/** A date is a filename component here, so nothing but a plain ISO day. */
+/** Nothing but one plain ISO day is accepted. */
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 /** Detail arrays are capped harder than the endpoint caps them: a busy day's
@@ -46,19 +44,19 @@ function yesterdayUtc(): string {
 }
 
 export interface AuditDigestDeps {
-  build: (date: string) => Record<string, unknown> | null;
-  dates: () => string[];
+  build: (date: string) => Promise<Record<string, unknown> | null>;
+  dates: () => Promise<string[]>;
 }
 
 /**
  * The tool's whole answer, as data. Split out from the handler so the date
  * validation, the missing-log case and the size caps are testable without a
- * live audit directory (deps are injected in audit-mcp.test.ts).
+ * live managed authority (deps are injected in audit-mcp.test.ts).
  */
-export function auditDigestPayload(
+export async function auditDigestPayload(
   date: string | undefined,
   deps: AuditDigestDeps = { build: buildAuditDigest, dates: listAuditDates }
-): Record<string, unknown> {
+): Promise<Record<string, unknown>> {
   const day = date?.trim() || yesterdayUtc();
   if (!DATE_RE.test(day)) {
     return {
@@ -67,13 +65,13 @@ export function auditDigestPayload(
     };
   }
 
-  const digest = deps.build(day);
+  const digest = await deps.build(day);
   if (!digest) {
     return {
       ok: false,
       date: day,
       error: `no audit log for ${day}`,
-      availableDates: deps.dates().slice(0, 7),
+      availableDates: (await deps.dates()).slice(0, 7),
     };
   }
 
@@ -111,7 +109,7 @@ export function createAuditMcpServer() {
   const tools = [
     tool(
       "read_audit_digest",
-      "Read one day of this instance's audit log, rolled up: totals (events, sessions, turns, errors, tool errors, cost), turn verdicts including silent drops, per-run-kind breakdown, model usage, the top recurring error and tool-error groups, top tools, one-shot counts, logged papercuts, and the most troubled sessions. Defaults to yesterday (UTC). Use this instead of trying to read the audit state directory or fetch the server over HTTP. Neither is reachable from an unattended run.",
+      "Read one day of this instance's managed audit log, rolled up: totals (events, sessions, turns, errors, tool errors, cost), turn verdicts including silent drops, per-run-kind breakdown, model usage, the top recurring error and tool-error groups, top tools, one-shot counts, logged papercuts, and the most troubled sessions. Defaults to yesterday (UTC).",
       {
         date: z
           .string()
@@ -122,7 +120,7 @@ export function createAuditMcpServer() {
         content: [
           {
             type: "text" as const,
-            text: JSON.stringify(auditDigestPayload(date), null, 2),
+            text: JSON.stringify(await auditDigestPayload(date), null, 2),
           },
         ],
       })

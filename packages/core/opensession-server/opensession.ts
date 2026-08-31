@@ -24,6 +24,7 @@ import { startPortalReaper } from "./src/server/portal-supervisor";
 import { startRunnerPortalReaper } from "./src/server/runner-portals";
 import { initializeManagedRunnerPortals } from "./src/server/runner-portals";
 import { initializeManagedRunJournal } from "./src/server/run-journal";
+import { flushAuditWrites, initializeManagedAudit } from "./src/server/audit";
 import { initializeManagedTodos, startTodoReminderTicker } from "./src/server/todos";
 import { loadActiveSessionsOnStartup as initializeManagedSlackSessions } from "./src/agents/slack/state";
 import { initializeManagedLinearSessions } from "./src/agents/linear/session";
@@ -209,6 +210,7 @@ const g = globalThis as any;
 // startup failure; there is deliberately no local fallback.
 if (!g.__opensessionBooted) {
 	const db = await initializeManagedFeltDb();
+	await initializeManagedAudit(db);
 	await initializeManagedRunJournal(db);
 	await initializeManagedAccountHealth(db);
 	await initializeManagedGithubLimits(db);
@@ -1260,6 +1262,7 @@ if (!g.__opensessionBooted) {
 				`[shutdown] ${surviving} run(s) continue on detached engine servers — reattaching on next boot`,
 			);
 		}
+		await flushAuditWrites();
 		// Keep HTTP available while runs drain. Stopping the listener before the
 		// bounded wait made Caddy return 502 for the full drain window on every
 		// deploy. Shutdown-aware intake above already parks new agent work.

@@ -48,8 +48,6 @@
  *    only — the same ambient trust those runs already have on the host today.
  *    Automations are NOT sandboxed in Phase 1 (the wiring refuses them), so
  *    none of this is reachable from untrusted prompt text.
- *  - ~/.opensession-audit is mounted rw so in-container runs land in the same
- *    audit log stream as host runs (appendFileSync, O_APPEND).
  *
  * Later additions (docs/self-hosting-sandboxes.md):
  *  - VOLUME workspaces (config `workspace: "volume"`, new sandboxes only): the
@@ -615,15 +613,7 @@ async function createContainer(
     ...vol(transcriptDir, transcriptDir),
     // Per-session run dirs: spec/meta/journal/host.sock/log for every run.
     ...vol(runsDir, runsDir),
-    // Audit log parity (append-only jsonl stream). Deliberately rw where the
-    // other trust mounts are ro: in-container runs must land in the SAME audit
-    // stream as host runs (append-only writes via O_APPEND), and host runs can
-    // already write here today — so this is parity with host-run trust, not an
-    // escalation. Worst case a hostile run scribbles on its own audit trail;
-    // it gains no credentials or control surface from it.
-    ...vol(stateDir("audit"), stateDir("audit")),
   ];
-  mkdirSync(stateDir("audit"), { recursive: true });
 
   // run-rpc socket (opensession-* proxies). WS transport skips it — the proxies
   // dial /rpc-ws instead, which also removes the stale-inode caveat
