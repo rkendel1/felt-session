@@ -3,11 +3,15 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { defaultRepo } from "../../server/config";
+import { createFeltDB, type StateFirstDB } from "@feltdb/core";
 import type { SessionControl, SessionSummary } from "../../server/session-control";
 import {
   boundedSessionNotificationIds,
+  initializeManagedGithubPendingDeploys,
   matchSessions,
   MAX_SESSION_NOTIFICATION_FANOUT,
+  recordPendingDeploy,
+  takePendingDeploy,
 } from "./session-notify";
 
 const scratch: string[] = [];
@@ -56,5 +60,25 @@ describe("GitHub session notification matching", () => {
         Array.from({ length: MAX_SESSION_NOTIFICATION_FANOUT + 1 }, (_, i) => `session-${i}`),
       ),
     ).toBeNull();
+  });
+});
+
+describe("GitHub pending deploys", () => {
+  test("survive managed-store hydration and are consumed once", async () => {
+    const db: StateFirstDB = createFeltDB({ namespace: crypto.randomUUID(), memory: true });
+    await initializeManagedGithubPendingDeploys(db);
+    await recordPendingDeploy("merge-sha", {
+      prNumber: 42,
+      title: "FeltDB",
+      headRef: "feature/feltdb",
+      sessionIds: ["session-1"],
+      recordedAt: new Date().toISOString(),
+    });
+    await initializeManagedGithubPendingDeploys(db);
+
+    expect((await takePendingDeploy("merge-sha"))?.prNumber).toBe(42);
+    expect(await takePendingDeploy("merge-sha")).toBeUndefined();
+    await initializeManagedGithubPendingDeploys(db);
+    expect(await takePendingDeploy("merge-sha")).toBeUndefined();
   });
 });

@@ -4,21 +4,24 @@
  * merged, a `[GitHub]` message is delivered into that session's transcript through the
  * SessionControl registry — the same steer/queue/start path a human message
  * takes — so the agent sees it and can react. The merge commit is then tracked in
- * ~/.opensession-github/pending-deploys.json (survives restarts), and when the
+ * managed FeltDB (survives restarts), and when the
  * Deploy workflow (.github/workflows/deploy.yml) completes for that commit the
  * session gets a second message with the outcome. (Pre-merge staging previews
  * are NOT announced here — the session header's Preview environment button already surfaces
  * the preview URL + Ready state, so a session notification would just be redundant.)
  */
 import { stateDir } from "../../server/paths";
-import { existsSync, readFileSync } from "fs";
-import { writeJsonAtomic } from "../../server/shared/atomic-write";
+import { existsSync, readFileSync, unlinkSync } from "node:fs";
+import type { StateFirstDB } from "@feltdb/core";
+import { managedFeltDb } from "../../server/managed-feltdb";
 import { tryGetSessionControl, type SessionControl, type SessionSummary } from "../../server/session-control";
 import { audit } from "../../server/audit";
 import { isSharedCheckoutDir, REPOS, worktreeHeadBranch } from "../../server/worktree";
 import { defaultRepo } from "../../server/config";
 
 const PENDING_PATH = `${stateDir("github")}/pending-deploys.json`;
+const PENDING_COLLECTION = "opensession_github_pending_deploys";
+const PENDING_MIGRATION = "github-pending-deploys-json-to-managed-feltdb-v1";
 const DEPLOY_WORKFLOW_PATH = ".github/workflows/deploy.yml";
 /** A merge whose deploy never reported back is dropped after this long. */
 const PENDING_TTL_MS = 48 * 60 * 60 * 1000;
@@ -27,6 +30,7 @@ const PENDING_TTL_MS = 48 * 60 * 60 * 1000;
 export const MAX_SESSION_NOTIFICATION_FANOUT = 25;
 
 interface PendingDeploy {
+  id: string;
   prNumber: number;
   title: string;
   headRef: string;
@@ -35,20 +39,56 @@ interface PendingDeploy {
 }
 
 /** merge_commit_sha → the merge we're waiting on a deploy for. */
-type PendingDeploys = Record<string, PendingDeploy>;
+type LegacyPendingDeploy = Omit<PendingDeploy, "id">;
+const pendingDeploys = new Map<string, PendingDeploy>();
+let pendingDb: StateFirstDB | undefined;
 
-function readPending(): PendingDeploys {
-  if (!existsSync(PENDING_PATH)) return {};
-  try {
-    const all = JSON.parse(readFileSync(PENDING_PATH, "utf-8")) as PendingDeploys;
-    const cutoff = Date.now() - PENDING_TTL_MS;
-    for (const [sha, p] of Object.entries(all)) {
-      if (new Date(p.recordedAt).getTime() < cutoff) delete all[sha];
+export async function initializeManagedGithubPendingDeploys(
+  db: StateFirstDB = pendingDb ?? managedFeltDb(),
+): Promise<void> {
+  pendingDb = db;
+  const migrations = db.collection<{ id: string }>("opensession_migrations");
+  if (!await migrations.get(PENDING_MIGRATION)) {
+    let legacy: Record<string, LegacyPendingDeploy> = {};
+    try {
+      if (existsSync(PENDING_PATH)) legacy = JSON.parse(readFileSync(PENDING_PATH, "utf8"));
+    } catch {}
+    for (const [sha, value] of Object.entries(legacy)) {
+      const record = { ...value, id: sha };
+      await db.transaction((tx) => {
+        tx.collection<PendingDeploy>(PENDING_COLLECTION).set(sha, record);
+      }, { transactionId: `opensession:github-pending-deploy:migrate:${sha}` });
     }
-    return all;
-  } catch {
-    return {};
+    await db.transaction((tx) => {
+      tx.collection("opensession_migrations").set(PENDING_MIGRATION, { id: PENDING_MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
+    }, { transactionId: `opensession:migration:${PENDING_MIGRATION}` });
+    if (existsSync(PENDING_PATH)) unlinkSync(PENDING_PATH);
   }
+  const cutoff = Date.now() - PENDING_TTL_MS;
+  pendingDeploys.clear();
+  for (const record of await db.collection<PendingDeploy>(PENDING_COLLECTION).all()) {
+    if (Date.parse(record.recordedAt) >= cutoff) pendingDeploys.set(record.id, record);
+  }
+}
+
+export async function recordPendingDeploy(sha: string, value: LegacyPendingDeploy): Promise<void> {
+  const db = pendingDb ?? managedFeltDb();
+  const record: PendingDeploy = { ...value, id: sha };
+  await db.transaction((tx) => {
+    tx.collection<PendingDeploy>(PENDING_COLLECTION).set(sha, record);
+  }, { transactionId: `opensession:github-pending-deploy:set:${sha}` });
+  pendingDeploys.set(sha, record);
+}
+
+export async function takePendingDeploy(sha: string): Promise<PendingDeploy | undefined> {
+  const entry = pendingDeploys.get(sha);
+  if (!entry) return undefined;
+  const db = pendingDb ?? managedFeltDb();
+  await db.transaction((tx) => {
+    tx.collection<PendingDeploy>(PENDING_COLLECTION).delete(sha);
+  }, { transactionId: `opensession:github-pending-deploy:take:${sha}` });
+  pendingDeploys.delete(sha);
+  return entry;
 }
 
 /** Registry project id for a GitHub owner/name, or null if unconfigured. */
@@ -176,15 +216,13 @@ export async function notifyMergedPrSessions(payload: any): Promise<void> {
   );
 
   if (trackDeploy) {
-    const pending = readPending();
-    pending[pr.merge_commit_sha] = {
+    await recordPendingDeploy(pr.merge_commit_sha, {
       prNumber,
       title,
       headRef,
       sessionIds,
       recordedAt: new Date().toISOString(),
-    };
-    writeJsonAtomic(PENDING_PATH, pending);
+    });
   }
 }
 
@@ -194,11 +232,8 @@ export async function handleDeployWorkflowRun(payload: any): Promise<void> {
   const run = payload?.workflow_run;
   if (!run || (run.path !== DEPLOY_WORKFLOW_PATH && run.name !== "Deploy")) return;
 
-  const pending = readPending();
-  const entry = pending[run.head_sha];
+  const entry = await takePendingDeploy(run.head_sha);
   if (!entry) return;
-  delete pending[run.head_sha];
-  writeJsonAtomic(PENDING_PATH, pending);
 
   const control = tryGetSessionControl();
   if (!control) return;
