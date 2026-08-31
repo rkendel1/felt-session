@@ -537,7 +537,7 @@ export async function handleConnectionsRoutes(
 			const models = await discoverOllamaModels(
 				provider.baseURL || "http://127.0.0.1:11434/v1",
 			);
-			const pickerModels = replacePickerModelsForProvider("ollama", models);
+			const pickerModels = await replacePickerModelsForProvider("ollama", models);
 			refreshPickerModels();
 			return Response.json({
 				models: pickerModels.filter((model) => model.startsWith("pi/ollama/")),
@@ -589,7 +589,7 @@ export async function handleConnectionsRoutes(
 				)
 			: undefined;
 		try {
-			setModelProvider(id, {
+			await setModelProvider(id, {
 				apiKey: id === "ollama" && !apiKey ? "ollama" : apiKey,
 				baseURL:
 					id === "ollama" && !baseURL
@@ -606,7 +606,7 @@ export async function handleConnectionsRoutes(
 				// `models` replaces this provider's picker entries wholesale.
 				const prefix = `pi/${id}/`;
 				for (const m of pickerModels) {
-					if (m.startsWith(prefix)) removePickerModel(m);
+					if (m.startsWith(prefix)) await removePickerModel(m);
 				}
 				for (const m of providerModels) {
 					// Accept "grok-4", "xai/grok-4" or "pi/xai/grok-4".
@@ -614,7 +614,7 @@ export async function handleConnectionsRoutes(
 					if (tail.startsWith("pi/"))
 						tail = tail.slice("pi/".length);
 					if (tail.startsWith(`${id}/`)) tail = tail.slice(id.length + 1);
-					if (tail) addPickerModel(`${prefix}${tail}`);
+					if (tail) await addPickerModel(`${prefix}${tail}`);
 				}
 			}
 			refreshPickerModels();
@@ -641,12 +641,12 @@ export async function handleConnectionsRoutes(
 	if (modelProviderMatch && req.method === "DELETE") {
 		const id = decodeURIComponent(modelProviderMatch[1]);
 		try {
-			const removed = removeModelProvider(id);
+			const removed = await removeModelProvider(id);
 			const prefix = `pi/${id}/`;
 			let cleared = 0;
 			for (const m of readModelProviderConfig()?.pickerModels || []) {
 				if (m.startsWith(prefix)) {
-					removePickerModel(m);
+					await removePickerModel(m);
 					cleared++;
 				}
 			}

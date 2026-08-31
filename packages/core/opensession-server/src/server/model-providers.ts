@@ -1,15 +1,19 @@
 /**
  * API-key model providers and subscription account preferences shared by Pi.
- * Stored in ~/.opensession-model-providers.json with mode 0600. Reads are
- * fresh per call; Settings writes preserve unknown fields.
+ * Stored in managed FeltDB. Settings writes preserve unknown fields imported
+ * from the legacy JSON configuration.
  */
 
-import { homeDir } from "./paths";
 import { stateDir } from "./paths";
-import { writeJsonAtomic } from "./shared/atomic-write";
-import { chmodSync, existsSync, readFileSync } from "fs";
+import { existsSync, readFileSync, unlinkSync } from "node:fs";
+import type { StateFirstDB } from "@feltdb/core";
+import { managedFeltDb } from "./managed-feltdb";
 
-const HOME = homeDir();
+const COLLECTION = "opensession_model_provider_settings";
+const CONFIG_ID = "settings";
+const MIGRATION = "model-providers-json-to-managed-feltdb-v1";
+let providersDb: StateFirstDB | undefined;
+let rawConfig: (Record<string, unknown> & { __version?: number }) | null = null;
 
 /** Bridge-config file path (exported for the state-path regression test). */
 export function configPath(): string {
@@ -361,14 +365,44 @@ export function normalizeModelProviderConfig(raw: unknown): ModelProviderSetting
 }
 
 export function readModelProviderConfig(): ModelProviderSettings | null {
-  const path = configPath();
-  if (!existsSync(path)) return null;
-  try {
-    return normalizeModelProviderConfig(JSON.parse(readFileSync(path, "utf-8")));
-  } catch (e) {
-    console.warn(`[model-providers] Failed to parse ${path}:`, e);
-    return null;
+  const projected = process.env.OPENSESSION_MODEL_PROVIDERS_JSON;
+  if (projected) {
+    try { return normalizeModelProviderConfig(JSON.parse(projected)); }
+    catch { return null; }
   }
+  return normalizeModelProviderConfig(rawConfig);
+}
+
+/** Runtime projection for isolated runner processes. FeltDB remains the
+ * authority; this value is transport-only and is never written to host disk. */
+export function modelProviderConfigProjection(): string | undefined {
+  if (!rawConfig) return undefined;
+  const { __version: _version, ...raw } = rawConfig;
+  return JSON.stringify(raw);
+}
+
+export async function initializeManagedModelProviders(db: StateFirstDB = providersDb ?? managedFeltDb()): Promise<void> {
+  providersDb = db;
+  if (!await db.collection<{ id: string }>("opensession_migrations").get(MIGRATION)) {
+    let legacy: Record<string, unknown> | null = null;
+    try {
+      if (existsSync(configPath())) {
+        const parsed = JSON.parse(readFileSync(configPath(), "utf8"));
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) legacy = parsed;
+      }
+    } catch (error) {
+      throw new Error(`Cannot migrate ${configPath()}: ${String(error)}`);
+    }
+    if (legacy) await db.transaction((tx) => {
+      tx.collection<Record<string, unknown>>(COLLECTION).set(CONFIG_ID, legacy!);
+    }, { transactionId: "opensession:model-providers:migrate" });
+    await db.transaction((tx) => {
+      tx.collection("opensession_migrations").set(MIGRATION,
+        { id: MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
+    }, { transactionId: `opensession:migration:${MIGRATION}` });
+  }
+  if (existsSync(configPath())) unlinkSync(configPath());
+  rawConfig = await db.collection<Record<string, unknown> & { __version?: number }>(COLLECTION).get(CONFIG_ID);
 }
 
 export const DEFAULT_BRIDGE_PORT = 3456;
@@ -408,21 +442,18 @@ export function configuredPickerModels(): string[] {
 // preserve everything we don't own. Atomic rename + 0600 — the file holds keys.
 
 function readRawModelProviderConfig(): Record<string, unknown> {
-  const path = configPath();
-  if (!existsSync(path)) return {};
-  // Unlike the read path (fail-soft null), a write built on `{}` would clobber
-  // a config that's merely unparseable — fail loudly instead.
-  const raw = JSON.parse(readFileSync(path, "utf-8"));
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-    throw new Error(`Cannot update ${path}: existing content is not a JSON object`);
-  }
-  return raw as Record<string, unknown>;
+  return rawConfig ? structuredClone(rawConfig) : {};
 }
 
-function writeRawModelProviderConfig(raw: Record<string, unknown>): void {
-  const path = configPath();
-  writeJsonAtomic(path, raw);
-  chmodSync(path, 0o600);
+async function writeRawModelProviderConfig(raw: Record<string, unknown>): Promise<void> {
+  delete raw.__version;
+  const db = providersDb ?? managedFeltDb();
+  const previous = rawConfig;
+  await db.transaction((tx) => {
+    tx.collection<Record<string, unknown>>(COLLECTION).set(CONFIG_ID, raw,
+      previous ? { ifVersion: previous.__version } : { requireAbsent: true });
+  }, { transactionId: `opensession:model-providers:put:${crypto.randomUUID()}` });
+  rawConfig = { ...raw, __version: (previous?.__version ?? 0) + 1 };
 }
 
 function rawProviders(raw: Record<string, unknown>): Record<string, unknown> {
@@ -447,7 +478,7 @@ export function modelProviders(): Record<string, ModelProviderConfig> {
  * value, `""` clears it, anything else replaces it. Throws on invalid ids and
  * on the bridge providers (anthropic/openai run on subscriptions, not keys).
  */
-export function setModelProvider(id: string, cfg: ModelProviderConfig): void {
+export async function setModelProvider(id: string, cfg: ModelProviderConfig): Promise<void> {
   if (!PROVIDER_ID_RE.test(id)) {
     throw new Error(`Invalid provider id "${id}" (lowercase letters, digits and dashes only)`);
   }
@@ -474,42 +505,42 @@ export function setModelProvider(id: string, cfg: ModelProviderConfig): void {
   }
   providers[id] = next;
   raw.providers = providers;
-  writeRawModelProviderConfig(raw);
+  await writeRawModelProviderConfig(raw);
 }
 
 /** Remove a third-party provider. Returns whether it existed. */
-export function removeModelProvider(id: string): boolean {
+export async function removeModelProvider(id: string): Promise<boolean> {
   const raw = readRawModelProviderConfig();
   const providers = rawProviders(raw);
   if (!(id in providers)) return false;
   delete providers[id];
   if (Object.keys(providers).length) raw.providers = providers;
   else delete raw.providers;
-  writeRawModelProviderConfig(raw);
+  await writeRawModelProviderConfig(raw);
   return true;
 }
 
 /** Add an id to pickerModels (idempotent). Returns the stored list. */
-export function addPickerModel(id: string): string[] {
+export async function addPickerModel(id: string): Promise<string[]> {
   const raw = readRawModelProviderConfig();
   const list = rawPickerModels(raw);
   if (!list.includes(id)) list.push(id);
   raw.pickerModels = list;
-  writeRawModelProviderConfig(raw);
+  await writeRawModelProviderConfig(raw);
   return list;
 }
 
 /** Remove an id from pickerModels. Returns the stored list. */
-export function removePickerModel(id: string): string[] {
+export async function removePickerModel(id: string): Promise<string[]> {
   const raw = readRawModelProviderConfig();
   const list = rawPickerModels(raw).filter((x) => x !== id);
   raw.pickerModels = list;
-  writeRawModelProviderConfig(raw);
+  await writeRawModelProviderConfig(raw);
   return list;
 }
 
 /** Replace one provider's picker entries in one atomic config write. */
-export function replacePickerModelsForProvider(id: string, models: readonly string[]): string[] {
+export async function replacePickerModelsForProvider(id: string, models: readonly string[]): Promise<string[]> {
 	if (!PROVIDER_ID_RE.test(id)) throw new Error(`Invalid provider id "${id}"`);
 	const raw = readRawModelProviderConfig();
 	const prefix = `pi/${id}/`;
@@ -519,7 +550,7 @@ export function replacePickerModelsForProvider(id: string, models: readonly stri
 		.filter(Boolean)
 		.map((model) => `${prefix}${model}`);
 	raw.pickerModels = [...retained, ...new Set(discovered)];
-	writeRawModelProviderConfig(raw);
+	await writeRawModelProviderConfig(raw);
 	return raw.pickerModels as string[];
 }
 

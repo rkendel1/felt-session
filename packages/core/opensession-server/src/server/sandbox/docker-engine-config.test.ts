@@ -1,9 +1,8 @@
 /**
  * The engine-config projection seam for docker sandboxes: engineConfigMounts
- * must land the model provider bridge config AND the pi engine config at the exact
- * legacy in-container paths the guest runner-host reads (path parity is the
- * sandbox contract; the remote adapters' upload destinations are the same
- * names), and a missing host file must be omitted rather than mounted (a
+ * mounts the Pi engine config at the exact legacy in-container path the guest
+ * runner-host reads. Model-provider settings travel as a FeltDB-derived runtime
+ * projection instead of a host JSON mount. A missing host file is omitted (a
  * docker bind of a missing path creates a directory in its place).
  */
 
@@ -14,7 +13,6 @@ import { join } from "path";
 import { engineConfigMounts } from "./docker";
 import {
   REMOTE_HOME,
-  REMOTE_MODEL_PROVIDERS_CONFIG,
   REMOTE_PI_CONFIG,
 } from "./adapters/bootstrap";
 
@@ -39,11 +37,10 @@ afterAll(() => {
 });
 
 describe("engineConfigMounts", () => {
-  test("projects both configs at the legacy in-container names", () => {
+  test("projects only the file-backed Pi engine config", () => {
     process.env.OPENSESSION_MODEL_PROVIDERS_CONFIG = providerPath;
     process.env.OPENSESSION_PI_CONFIG = piPath;
     expect(engineConfigMounts("/home/ubuntu")).toEqual([
-      [providerPath, "/home/ubuntu/.opensession-model-providers.json"],
       [piPath, "/home/ubuntu/.opensession-pi.json"],
     ]);
   });
@@ -52,14 +49,12 @@ describe("engineConfigMounts", () => {
     process.env.OPENSESSION_MODEL_PROVIDERS_CONFIG = providerPath;
     process.env.OPENSESSION_PI_CONFIG = piPath;
     const dests = engineConfigMounts(REMOTE_HOME).map(([, dest]) => dest);
-    expect(dests).toEqual([REMOTE_MODEL_PROVIDERS_CONFIG, REMOTE_PI_CONFIG]);
+    expect(dests).toEqual([REMOTE_PI_CONFIG]);
   });
 
   test("omits a missing source instead of mounting it", () => {
     process.env.OPENSESSION_MODEL_PROVIDERS_CONFIG = providerPath;
     process.env.OPENSESSION_PI_CONFIG = join(scratch, "missing-pi.json");
-    expect(engineConfigMounts("/home/ubuntu")).toEqual([
-      [providerPath, "/home/ubuntu/.opensession-model-providers.json"],
-    ]);
+    expect(engineConfigMounts("/home/ubuntu")).toEqual([]);
   });
 });

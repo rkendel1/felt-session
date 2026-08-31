@@ -11,6 +11,7 @@ import {
 } from "../github-app";
 import type { RouteContext } from "./context";
 import { initializeManagedWebAuthSessions, resolveWebAuth } from "../web-auth";
+import { initializeManagedModelProviders } from "../model-providers";
 
 // The GitHub connect routes behave differently by mode: operator mode (web
 // sign-in on) gates on the signed-in identity; simple mode (no sign-in) drives
@@ -41,7 +42,9 @@ beforeEach(async () => {
   process.env.OPENSESSION_WEB_SESSIONS_STORE = join(dir, "web-sessions.json");
   process.env.OPENSESSION_MODEL_PROVIDERS_CONFIG = join(dir, "model-providers.json");
   __setGithubAppKeyPathForTest(join(dir, "github-app.pem"));
-  await initializeManagedWebAuthSessions(createFeltDB({ namespace: crypto.randomUUID(), memory: true }));
+  const db = createFeltDB({ namespace: crypto.randomUUID(), memory: true });
+  await initializeManagedWebAuthSessions(db);
+  await initializeManagedModelProviders(db);
 });
 
 afterEach(() => {

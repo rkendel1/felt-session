@@ -117,6 +117,7 @@ import { journalSet, journalClear, journalClearIfLineage, journalRecordAbnormalC
 import { shouldPersistModelSwitch, type StreamEvent } from "../run-events";
 import { recoveryKind, restartContinuationPrompt } from "../agent-runner";
 import { modelSupportsSteer, providerFor } from "../models";
+import { modelProviderConfigProjection } from "../model-providers";
 import { hostRunBusy, hostSteer, hostInterruptSteer, hostCancel } from "../host-registry";
 import { registerRunToken, unregisterRunToken } from "../run-rpc";
 import { writeJsonAtomic } from "../shared/atomic-write";
@@ -522,9 +523,6 @@ async function repoOriginUrl(repoDir: string): Promise<string> {
  */
 export function engineConfigMounts(home = HOME): Array<[src: string, dest: string]> {
   const out: Array<[string, string]> = [];
-  const providerSrc =
-    process.env.OPENSESSION_MODEL_PROVIDERS_CONFIG || stateDir("model-providers.json");
-  if (existsSync(providerSrc)) out.push([providerSrc, `${home}/.opensession-model-providers.json`]);
   const piSrc = process.env.OPENSESSION_PI_CONFIG || stateDir("pi.json");
   if (existsSync(piSrc)) out.push([piSrc, `${home}/.opensession-pi.json`]);
   return out;
@@ -705,6 +703,7 @@ async function createContainer(
     "--memory", memory,
     ...portArgs,
     ...mounts,
+    ...(modelProviderConfigProjection() ? ["-e", `OPENSESSION_MODEL_PROVIDERS_JSON=${modelProviderConfigProjection()}`] : []),
     image,
   ]);
   if (r.exitCode !== 0) {

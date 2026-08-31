@@ -1712,20 +1712,11 @@ function makeRemoteLauncher(
       // third-party provider scope because its fallback walk can switch within
       // one runner-host launch. Rewritten/removed every launch so stale wider
       // authority cannot linger on a reused sandbox.
-      const ocCfgSrc =
-        process.env.OPENSESSION_MODEL_PROVIDERS_CONFIG ||
-        // Dual-read the host path (a new-name-only host has no
-        // ~/.opensession-pi.json); the remote destination below stays the
-        // legacy name the in-sandbox build dual-reads.
-        stateDir("model-providers.json");
+      const { modelProviderConfigProjection } = await import("../../model-providers");
+      const modelProviderProjection = modelProviderConfigProjection();
       let settingsProviderIds: string[] = [];
-      if (existsSync(ocCfgSrc)) {
-        let raw: unknown;
-        try {
-          raw = JSON.parse(readFileSync(ocCfgSrc, "utf-8"));
-        } catch (error) {
-          throw new Error(`Cannot project sandbox Pi config ${ocCfgSrc}: ${error}`);
-        }
+      if (modelProviderProjection) {
+        const raw = JSON.parse(modelProviderProjection);
         const projected = projectRemoteModelProviderConfig(
           raw,
           spec.model,
