@@ -97,7 +97,7 @@ import { FRONTEND_SRC, IS_DEV, SPA_HEADERS, ensureFrontendBuilt, frontend, isPre
 import { configuredIntegration } from "./src/server/config";
 import { initHumanAsks } from "./src/server/human-asks";
 import { interactiveMcpServers } from "./src/server/interactive-mcp";
-import { homeDir, OPENSESSION_SESSIONS_DIR, stateDir } from "./src/server/paths";
+import { homeDir, OPENSESSION_SESSIONS_DIR } from "./src/server/paths";
 import { shouldRedirectLegacyPublicPath } from "./src/server/legacy-public-prefix";
 import { startPlainArchiveSweep } from "./src/server/plain-archive";
 import { devInstanceBootError, isDevInstance } from "./src/server/dev-mode";
@@ -161,7 +161,8 @@ import {
 	type WSClientData,
 	broadcastToAll,
 } from "./src/server/ws-hub";
-import { mkdirSync, watch, writeFileSync } from "fs";
+import { mkdirSync, watch } from "fs";
+import { initializeManagedRestartState, recordRestart } from "./src/server/restart-state";
 import { join } from "node:path";
 
 // Side-effect modules: these must be loaded even when the entry references
@@ -273,6 +274,7 @@ if (!g.__opensessionBooted) {
 	await initializeManagedOrganizationIcon(db);
 	await initializeManagedMcpOauth(db);
 	await initializeManagedWorkspaceSecrets(db);
+	await initializeManagedRestartState(db);
 	await initializeManagedSandboxConnections(db);
 	await initializeManagedSandboxConfig(db);
 	await initializeManagedSandboxOperations(db);
@@ -1221,16 +1223,13 @@ if (!g.__opensessionBooted) {
 		// messages that would be lost). Brief pause to let the frames flush.
 		// Best-effort attribution: a session-triggered `systemctl restart` shows
 		// up as an in-flight run in this checkout (sharedCheckoutEditors). The
-		// marker file lets the NEXT boot's hello frame name the culprit in the
+		// managed record lets the NEXT boot's hello frame name the culprit in the
 		// post-restart toast; the `by` here feeds the pre-restart overlay.
 		const restartBy = sharedCheckoutEditors();
 		try {
 			// A dev instance must not overwrite the production restart marker.
 			if (!devInstance) {
-				writeFileSync(
-					stateDir("last-restart.json"),
-					JSON.stringify({ by: restartBy || "", at: new Date().toISOString(), signal }),
-				);
+				await recordRestart(restartBy || "", signal);
 			}
 		} catch {}
 		broadcastToAll({ type: "server_restarting", ...(restartBy ? { by: restartBy } : {}) });

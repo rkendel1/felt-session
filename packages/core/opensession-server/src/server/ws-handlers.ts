@@ -55,8 +55,8 @@ import { MAX_UPLOAD_BYTES, WS_MAX_PAYLOAD_BYTES, asDataUrlList, parseImageDataUr
 import { githubReconnectRequired } from "./github-auth";
 import { refreshWebIdentity } from "./web-auth";
 import { BOOT_ID, allClients, broadcastToAll, broadcastToSession, globalPresenceFrame, joinSession, leaveSession, markClientSeen, setClientAway, setClientTyping, } from "./ws-hub";
-import { existsSync, readFileSync, statSync, watch } from "fs";
-import { stateDir } from "./paths";
+import { existsSync, statSync, watch } from "fs";
+import { lastRestartBy } from "./restart-state";
 import { isInternalKernelDispatch } from "./session-kernel/ws-command-bridge";
 import { withSessionMutationLock } from "./session-mutation-lock";
 import {
@@ -76,25 +76,6 @@ import {
 } from "./session-kernel";
 import { publicSessionSafety } from "./session-safety";
 import { TRANSCRIPT_ACTOR_RANGE_PAGE_LIMIT } from "./session-kernel/transcript-protocol";
-
-// Who likely triggered the restart that booted THIS process — read once from
-// the marker the previous process wrote in gracefulShutdown, and only trusted
-// when the shutdown was recent (a stale marker from days ago means this boot
-// wasn't that restart). Parked on globalThis so hot reloads keep the value.
-function lastRestartBy(): string {
-	const g = globalThis as any;
-	if (g.__lastRestartBy === undefined) {
-		g.__lastRestartBy = "";
-		try {
-			const d = JSON.parse(
-				readFileSync(stateDir("last-restart.json"), "utf8"),
-			);
-			if (d?.by && Date.now() - Date.parse(d.at) < 10 * 60_000)
-				g.__lastRestartBy = String(d.by);
-		} catch {}
-	}
-	return g.__lastRestartBy;
-}
 
 /**
  * The non-transcript half of the watch handshake — pending question, queue +
