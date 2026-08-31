@@ -164,6 +164,7 @@ import {
 import { mkdirSync, watch } from "fs";
 import { initializeManagedRestartState, recordRestart } from "./src/server/restart-state";
 import { flushWorkflowWrites, initializeManagedWorkflows } from "./src/server/workflow-store";
+import { flushTimerPoisonWrites, initializeManagedTimerPoisonState } from "./src/server/timer-poison-state";
 import { join } from "node:path";
 
 // Side-effect modules: these must be loaded even when the entry references
@@ -277,6 +278,7 @@ if (!g.__opensessionBooted) {
 	await initializeManagedWorkspaceSecrets(db);
 	await initializeManagedRestartState(db);
 	await initializeManagedWorkflows(db);
+	await initializeManagedTimerPoisonState(db);
 	await initializeManagedSandboxConnections(db);
 	await initializeManagedSandboxConfig(db);
 	await initializeManagedSandboxOperations(db);
@@ -1300,6 +1302,7 @@ if (!g.__opensessionBooted) {
 		await flushPrewarmWrites();
 		await flushCreatePlanWrites();
 		await flushWorkflowWrites();
+		await flushTimerPoisonWrites();
 		// Keep HTTP available while runs drain. Stopping the listener before the
 		// bounded wait made Caddy return 502 for the full drain window on every
 		// deploy. Shutdown-aware intake above already parks new agent work.

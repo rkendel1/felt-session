@@ -43,12 +43,11 @@
  * real restart (routes don't hot-apply at all — CLAUDE.md).
  */
 
-import { readFileSync, writeFileSync } from "node:fs";
 import { cpus, loadavg } from "node:os";
 import { audit } from "./audit";
 import { dispatchRunRpc, timingSafeEqStr } from "./run-rpc";
 import type { HostConnection, HostConnectionHandlers, HostConnector } from "./host-client";
-import { stateDir } from "./paths";
+import { noteTimerPoisonExit } from "./timer-poison-state";
 
 const g = globalThis as any;
 
@@ -624,20 +623,14 @@ function escalateTimerPoison(staleMs: number): void {
   // too, so unbounded auto-exits would flap forever. Track recent auto-exits
   // in a state file; after 3 in 30 minutes stop exiting and just scream — at
   // that point the tree needs a human (or a fixing agent), not a restart.
-  const guardPath = stateDir("timer-poison.json");
-  let exits: string[] = [];
-  try {
-    exits = (JSON.parse(readFileSync(guardPath, "utf8")).exits ?? []) as string[];
-  } catch {}
-  const cutoff = Date.now() - 30 * 60_000;
-  exits = exits.filter((t) => Date.parse(t) > cutoff);
-  if (exits.length >= 3) {
+  const guard = noteTimerPoisonExit();
+  if (guard.halted) {
     if (!g.__timerPoisonHalted) {
       g.__timerPoisonHalted = true;
       audit({
         msg: "timer_poison_halted",
         staleSeconds: Math.round(staleMs / 1000),
-        recentExits: exits,
+        recentExits: guard.exits,
         load1: Math.round(load1),
         cores,
       });
@@ -648,15 +641,11 @@ function escalateTimerPoison(staleMs: number): void {
     }
     return;
   }
-  exits.push(new Date().toISOString());
-  try {
-    writeFileSync(guardPath, JSON.stringify({ exits }));
-  } catch {}
   g.__timerPoisonExiting = true;
   audit({
     msg: "timer_poison_restart",
     staleSeconds: Math.round(staleMs / 1000),
-    autoExitsLast30m: exits.length,
+    autoExitsLast30m: guard.exits.length,
     load1: Math.round(load1),
     cores,
   });
