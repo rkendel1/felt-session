@@ -125,7 +125,7 @@ export async function startDemo(): Promise<void> {
     const [{ loadPrCacheSnapshot }, { loadPrDetailsSnapshot, seedPrDiff }] =
       await Promise.all([import("../sessions"), import("../pr-info")]);
     await loadPrCacheSnapshot();
-    loadPrDetailsSnapshot();
+    await loadPrDetailsSnapshot();
     // The Review page's Files-changed tab renders GitHub's patch, which no
     // amount of local git can stand in for — pin the synthetic one.
     const { demoPrDiff, DEMO_BRANCH, DEMO_GH_REPO } = await import("./fixtures");

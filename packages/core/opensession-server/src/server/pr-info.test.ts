@@ -1,4 +1,8 @@
 import { describe, expect, test } from "bun:test";
+import { createFeltDB } from "@feltdb/core";
+import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   cachedPrDetailsForSession,
   ghApiErrorMessage,
@@ -180,6 +184,17 @@ describe("ghApiErrorMessage", () => {
 });
 
 describe("durable PR detail restart grace", () => {
+  test("imports the legacy JSON snapshot into managed FeltDB and removes it", async () => {
+    const path = join(mkdtempSync(join(tmpdir(), "pr-details-cache-")), "details.json");
+    writeFileSync(path, JSON.stringify({ "owner/repo\u0000branch": { data: null, ts: Date.now() } }));
+    const db = createFeltDB({ namespace: crypto.randomUUID(), memory: true });
+    const { initializeManagedPrDetailsCache } = await import("./pr-info");
+    await initializeManagedPrDetailsCache(db, path);
+    expect(existsSync(path)).toBe(false);
+    const stored = await db.collection<{ entries: Record<string, unknown> }>("opensession_pr_details_cache").get("details");
+    expect(stored?.entries["owner/repo\u0000branch"]).toBeDefined();
+  });
+
   test("does not replay an expired rich refresh immediately after boot", async () => {
     const { shouldRefreshPrDetails } = await import("./pr-info");
     const now = 1_000_000;

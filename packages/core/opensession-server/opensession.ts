@@ -27,6 +27,7 @@ import { initializeManagedRunJournal } from "./src/server/run-journal";
 import { flushAuditWrites, initializeManagedAudit } from "./src/server/audit";
 import { initializeManagedPiUsage } from "./src/server/pi-usage";
 import { flushPrCacheWrites, initializeManagedPrCache } from "./src/server/pr-cache";
+import { flushPrDetailsCacheWrites, initializeManagedPrDetailsCache } from "./src/server/pr-info";
 import { initializeManagedTodos, startTodoReminderTicker } from "./src/server/todos";
 import { loadActiveSessionsOnStartup as initializeManagedSlackSessions } from "./src/agents/slack/state";
 import { initializeManagedLinearSessions } from "./src/agents/linear/session";
@@ -215,6 +216,7 @@ if (!g.__opensessionBooted) {
 	await initializeManagedAudit(db);
 	await initializeManagedPiUsage(db);
 	await initializeManagedPrCache(db);
+	await initializeManagedPrDetailsCache(db);
 	await initializeManagedAnalyticsCache(db);
 	await initializeManagedRunJournal(db);
 	await initializeManagedAccountHealth(db);
@@ -1269,6 +1271,7 @@ if (!g.__opensessionBooted) {
 		}
 		await flushAuditWrites();
 		await flushPrCacheWrites();
+		await flushPrDetailsCacheWrites();
 		// Keep HTTP available while runs drain. Stopping the listener before the
 		// bounded wait made Caddy return 502 for the full drain window on every
 		// deploy. Shutdown-aware intake above already parks new agent work.

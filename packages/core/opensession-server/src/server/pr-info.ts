@@ -10,7 +10,8 @@ import { statePath } from "./paths";
 import { configuredIntegration, configuredRepos, configuredServer, defaultRepo } from "./config";
 import { $ } from "bun";
 import { createHash } from "node:crypto";
-import { readFileSync, writeFileSync } from "fs";
+import { existsSync, readFileSync, unlinkSync } from "fs";
+import type { StateFirstDB } from "@feltdb/core";
 import { audited } from "./audit";
 import { ghRateLimited, noteGhRateLimited, isGhRateLimitMsg } from "./github-limit";
 import {
@@ -22,6 +23,7 @@ import { githubToken } from "./github-app";
 import { reviewRequestRemovalSpecs } from "./github-review-requests";
 import { noteGithubGraphqlCall } from "./github-budget";
 import { getPrStack, unmergedLayersBelow } from "./pr-stack";
+import { managedFeltDb } from "./managed-feltdb";
 import type {
   MergeMethod,
   MutationPrMeta,
@@ -366,38 +368,97 @@ export function shouldRefreshPrDetails(
   return now - loadedAt >= RESTART_REFRESH_GRACE_MS;
 }
 
-// The details cache is snapshotted to disk (debounced) and seeded on boot —
+// The details cache is snapshotted to managed FeltDB (debounced) and seeded on boot —
 // without this, a restart during a GitHub outage or rate-limit window boots
 // with an empty cache and the PR panel shows a dead error instead of the
 // last-good snapshot (same failure mode the bulk cache fixed on 2026-07-22).
 // Entries keep their original ts, so everything seeds as stale: served
 // immediately while a background refresh runs. The diff cache is NOT
 // persisted — patches are big and cheap to refetch.
-const DETAILS_CACHE_FILE = statePath(".opensession-pr-details-cache.json");
-/** Seed the details cache from disk. Also exported for demo instances, whose
- *  snapshot is written at the end of boot — see loadPrCacheSnapshot(). */
-export function loadPrDetailsSnapshot(): void {
-  try {
-    const raw: Record<string, { data: PrDetails | null; ts: number }> = JSON.parse(
-      readFileSync(DETAILS_CACHE_FILE, "utf8"),
-    );
-    for (const [k, v] of Object.entries(raw)) cache.set(k, v);
-  } catch {}
+const detailsCacheFile = () => statePath(".opensession-pr-details-cache.json");
+const DETAILS_COLLECTION = "opensession_pr_details_cache";
+const DETAILS_ID = "details";
+const DETAILS_MIGRATION = "pr-details-cache-json-to-managed-feltdb-v1";
+type PrDetailsEntries = Record<string, { data: PrDetails | null; ts: number }>;
+type StoredPrDetails = { id: string; entries: PrDetailsEntries };
+let detailsDb: StateFirstDB | undefined;
+let persistTail: Promise<void> = Promise.resolve();
+
+function applyDetails(entries: PrDetailsEntries): void {
+  cache.clear();
+  for (const [key, value] of Object.entries(entries)) cache.set(key, value);
 }
-loadPrDetailsSnapshot();
+
+function serializedDetails(): StoredPrDetails {
+  const cutoff = Date.now() - 7 * 24 * 3600_000;
+  const entries: PrDetailsEntries = {};
+  for (const [key, value] of cache) if (value.ts > cutoff) entries[key] = value;
+  return { id: DETAILS_ID, entries };
+}
+
+async function persistDetails(snapshot = serializedDetails()): Promise<void> {
+  const db = detailsDb ?? managedFeltDb();
+  await db.transaction((tx) => {
+    tx.collection<StoredPrDetails>(DETAILS_COLLECTION).set(DETAILS_ID, snapshot);
+  }, { transactionId: `opensession:pr-details-cache:${crypto.randomUUID()}` });
+}
+
+export async function initializeManagedPrDetailsCache(
+  db: StateFirstDB = detailsDb ?? managedFeltDb(),
+  legacyPath = detailsCacheFile(),
+): Promise<void> {
+  detailsDb = db;
+  const migrations = db.collection<{ id: string }>("opensession_migrations");
+  if (!await migrations.get(DETAILS_MIGRATION)) {
+    if (existsSync(legacyPath)) applyDetails(JSON.parse(readFileSync(legacyPath, "utf8")));
+    if (cache.size) await persistDetails();
+    await db.transaction((tx) => {
+      tx.collection("opensession_migrations").set(DETAILS_MIGRATION,
+        { id: DETAILS_MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
+    }, { transactionId: `opensession:migration:${DETAILS_MIGRATION}` });
+    if (existsSync(legacyPath)) unlinkSync(legacyPath);
+  } else {
+    const stored = await db.collection<StoredPrDetails>(DETAILS_COLLECTION).get(DETAILS_ID);
+    if (stored) applyDetails(stored.entries);
+  }
+}
+
+/** Import a newly generated demo/test legacy fixture into managed FeltDB. */
+export async function loadPrDetailsSnapshot(
+  db: StateFirstDB = detailsDb ?? managedFeltDb(),
+  legacyPath = detailsCacheFile(),
+): Promise<void> {
+  detailsDb = db;
+  if (!existsSync(legacyPath)) {
+    const stored = await db.collection<StoredPrDetails>(DETAILS_COLLECTION).get(DETAILS_ID);
+    if (stored) applyDetails(stored.entries);
+    return;
+  }
+  applyDetails(JSON.parse(readFileSync(legacyPath, "utf8")));
+  await persistDetails();
+  unlinkSync(legacyPath);
+}
 
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
 function schedulePersist() {
   if (persistTimer) return;
   persistTimer = setTimeout(() => {
     persistTimer = null;
-    try {
-      const cutoff = Date.now() - 7 * 24 * 3600_000; // drop long-dead branches
-      const obj: Record<string, { data: PrDetails | null; ts: number }> = {};
-      for (const [k, v] of cache) if (v.ts > cutoff) obj[k] = v;
-      writeFileSync(DETAILS_CACHE_FILE, JSON.stringify(obj));
-    } catch {}
+    const snapshot = serializedDetails();
+    persistTail = persistTail.catch(() => {}).then(() => persistDetails(snapshot))
+      .catch((error) => console.error("Failed to persist PR details cache:", error));
   }, 5_000);
+}
+
+export async function flushPrDetailsCacheWrites(): Promise<void> {
+  if (persistTimer) {
+    clearTimeout(persistTimer);
+    persistTimer = null;
+    const snapshot = serializedDetails();
+    persistTail = persistTail.catch(() => {}).then(() => persistDetails(snapshot))
+      .catch((error) => console.error("Failed to persist PR details cache:", error));
+  }
+  await persistTail;
 }
 
 // Caches are keyed by `<repo>\0<branch>` so the same branch name in different
