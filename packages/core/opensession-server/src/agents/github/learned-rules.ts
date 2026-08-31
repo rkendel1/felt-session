@@ -1,6 +1,6 @@
 /**
  * Learned review rules — the cross-PR learning channel for the PR reviewer.
- * A small per-repo JSON file (~/.opensession-github/learned-rules-<key>.json)
+ * A small per-repo managed FeltDB record
  * of human-readable calibration rules, injected into every review prompt and
  * periodically re-distilled by a model from the feedback store's outcome
  * signals: ignored/dismissed findings (stop flagging that), missed bugs
@@ -13,9 +13,10 @@
  *
  * Pure decision logic (validation, due-check) lives in learned-rules-gates.ts.
  */
-import { existsSync, readFileSync } from "fs";
+import type { StateFirstDB } from "@feltdb/core";
+import { existsSync, readFileSync, readdirSync, unlinkSync } from "node:fs";
+import { managedFeltDb } from "../../server/managed-feltdb";
 import { stateDir } from "../../server/paths";
-import { writeJsonAtomic } from "../../server/shared/atomic-write";
 import { audit } from "../../server/audit";
 import { configuredRepos, defaultRepo } from "../../server/config";
 import { oneShot } from "../../server/one-shot";
@@ -38,6 +39,10 @@ const STATE_DIR = stateDir("github");
  *  it runs at most twice a day per repo, so use a frontier model. */
 const DISTILL_MODEL = "pi/anthropic/claude-fable-5";
 const TICK_MS = 60 * 60 * 1000;
+const COLLECTION = "opensession_github_learned_rules";
+const MIGRATION = "github-learned-rules-json-to-managed-feltdb-v1";
+let rulesDb: StateFirstDB | undefined;
+const rulesByRepo = new Map<string, LearnedRulesFile>();
 
 function repoKey(ghRepo?: string): string {
   return !ghRepo || ghRepo.toLowerCase() === defaultRepo().ghRepo.toLowerCase()
@@ -45,18 +50,40 @@ function repoKey(ghRepo?: string): string {
     : repoForFullName(ghRepo)?.id || ghRepo.replace(/[^A-Za-z0-9._-]/g, "_");
 }
 
-function rulesPath(ghRepo?: string): string {
-  return `${STATE_DIR}/learned-rules-${repoKey(ghRepo)}.json`;
+export function readLearnedRules(ghRepo?: string): LearnedRulesFile | null {
+  const value = rulesByRepo.get(repoKey(ghRepo));
+  return value ? structuredClone(value) : null;
 }
 
-export function readLearnedRules(ghRepo?: string): LearnedRulesFile | null {
-  const path = rulesPath(ghRepo);
-  if (!existsSync(path)) return null;
-  try {
-    const parsed = JSON.parse(readFileSync(path, "utf-8")) as LearnedRulesFile;
-    return Array.isArray(parsed?.rules) ? parsed : null;
-  } catch {
-    return null;
+export async function initializeManagedGithubLearnedRules(
+  db: StateFirstDB = rulesDb ?? managedFeltDb(),
+): Promise<void> {
+  rulesDb = db;
+  if (!await db.collection<{ id: string }>("opensession_migrations").get(MIGRATION)) {
+    if (existsSync(STATE_DIR)) for (const name of readdirSync(STATE_DIR)) {
+      const match = name.match(/^learned-rules-(.+)\.json$/);
+      if (!match) continue;
+      let file: LearnedRulesFile | undefined;
+      try {
+        const parsed = JSON.parse(readFileSync(`${STATE_DIR}/${name}`, "utf8")) as LearnedRulesFile;
+        if (Array.isArray(parsed?.rules)) file = parsed;
+      } catch {}
+      if (file) await db.transaction((tx) => {
+        tx.collection<LearnedRulesFile & { id?: string }>(COLLECTION).set(match[1]!, { ...file, id: match[1] });
+      }, { transactionId: `opensession:github-learned-rules:migrate:${match[1]}` });
+    }
+    await db.transaction((tx) => {
+      tx.collection("opensession_migrations").set(MIGRATION,
+        { id: MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
+    }, { transactionId: `opensession:migration:${MIGRATION}` });
+  }
+  if (existsSync(STATE_DIR)) for (const name of readdirSync(STATE_DIR)) {
+    if (/^learned-rules-.+\.json$/.test(name)) unlinkSync(`${STATE_DIR}/${name}`);
+  }
+  rulesByRepo.clear();
+  for (const file of await db.collection<LearnedRulesFile & { id: string }>(COLLECTION).all()) {
+    const { id, ...rules } = file;
+    rulesByRepo.set(id, rules);
   }
 }
 
@@ -148,7 +175,12 @@ export async function distillLearnedRules(ghRepo?: string, force = false): Promi
     return false;
   }
   const file: LearnedRulesFile = { updatedAt: new Date().toISOString(), signalCount, rules };
-  writeJsonAtomic(rulesPath(ghRepo), file);
+  const key = repoKey(ghRepo);
+  const db = rulesDb ?? managedFeltDb();
+  await db.transaction((tx) => {
+    tx.collection<LearnedRulesFile & { id: string }>(COLLECTION).set(key, { ...file, id: key });
+  }, { transactionId: `opensession:github-learned-rules:put:${crypto.randomUUID()}` });
+  rulesByRepo.set(key, structuredClone(file));
   console.log(`[github] distilled ${rules.length} learned review rule(s) for ${repoFull} (${signalCount} signals)`);
   audit({
     msg: "review_rules_distilled",

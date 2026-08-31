@@ -52,6 +52,7 @@ import { initializeManagedWorkloadIdentity } from "./src/server/workload-identit
 import { initializeManagedPapercuts } from "./src/server/papercuts";
 import { initializeManagedSecurity } from "./src/server/security";
 import { initializeManagedGithubFeedback } from "./src/agents/github/feedback";
+import { initializeManagedGithubLearnedRules } from "./src/agents/github/learned-rules";
 import { startLiveActivitySync } from "./src/server/live-activities";
 import { initializeManagedLiveActivities } from "./src/server/live-activities";
 import { initializeManagedSandboxPortals } from "./src/server/sandbox-portals";
@@ -232,6 +233,7 @@ if (!g.__opensessionBooted) {
 	await initializeManagedPapercuts(db);
 	await initializeManagedSecurity(db);
 	await initializeManagedGithubFeedback(db);
+	await initializeManagedGithubLearnedRules(db);
 	await initializeManagedPrivateAppDomain(db);
 	await initializeManagedModelProviders(db);
 	await initializeManagedPiConfig(db);
