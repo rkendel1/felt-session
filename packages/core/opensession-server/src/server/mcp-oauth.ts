@@ -8,7 +8,7 @@
  * `<publicBaseUrl>/api/connections/mcp-oauth/callback`, so a
  * Connect button works from any signed-in device (iPhone PWA included).
  *
- * Grants are stored per server in ~/.opensession-mcp-oauth.json (0600):
+ * Grants are stored in managed FeltDB:
  * one optional `shared` grant (workspace-wide identity, like the Linear/Plain
  * servers today) and per-user grants keyed by canonical team name (same
  * identity table as commit attribution — the github-auth.ts pattern). At run
@@ -21,13 +21,18 @@
  * on the server origin → authorization server → RFC 8414 AS metadata →
  * dynamic client registration (RFC 7591, token_endpoint_auth_method "none").
  */
-import { readFileSync, writeFileSync, existsSync } from "fs";
+import { existsSync, readFileSync, unlinkSync } from "node:fs";
 import { randomBytes, createHash } from "crypto";
+import type { StateFirstDB } from "@feltdb/core";
 import { configuredServer, productName } from "./config";
+import { managedFeltDb } from "./managed-feltdb";
 import { statePath } from "./paths";
 import { resolveTeammate } from "./shared/user-mappings";
 
 const STORE_PATH = statePath(".opensession-mcp-oauth.json");
+const COLLECTION = "opensession_mcp_oauth";
+const STORE_ID = "grants";
+const MIGRATION = "mcp-oauth-json-to-managed-feltdb-v1";
 
 interface OauthEndpoints {
   authorize: string;
@@ -61,6 +66,28 @@ interface ServerAuth {
 }
 
 type Store = Record<string, ServerAuth>;
+interface StoredOauth { id: string; value: Store; __version?: number }
+let oauthDb: StateFirstDB | undefined;
+let storedOauth: StoredOauth = { id: STORE_ID, value: {} };
+
+export async function initializeManagedMcpOauth(db: StateFirstDB = oauthDb ?? managedFeltDb()): Promise<void> {
+  oauthDb = db;
+  if (!await db.collection<{ id: string }>("opensession_migrations").get(MIGRATION)) {
+    let legacy: Store = {};
+    try { if (existsSync(STORE_PATH)) legacy = JSON.parse(readFileSync(STORE_PATH, "utf8")); } catch {}
+    if (Object.keys(legacy).length && !await db.collection(COLLECTION).get(STORE_ID)) {
+      await db.transaction((tx) => {
+        tx.collection<StoredOauth>(COLLECTION).set(STORE_ID, { id: STORE_ID, value: legacy }, { requireAbsent: true });
+      }, { transactionId: "opensession:mcp-oauth:migrate:grants" });
+    }
+    await db.transaction((tx) => {
+      tx.collection("opensession_migrations").set(MIGRATION, { id: MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
+    }, { transactionId: `opensession:migration:${MIGRATION}` });
+  }
+  if (existsSync(STORE_PATH)) unlinkSync(STORE_PATH);
+  if (existsSync(CAPABLE_PATH)) unlinkSync(CAPABLE_PATH);
+  storedOauth = await db.collection<StoredOauth>(COLLECTION).get(STORE_ID) ?? { id: STORE_ID, value: {} };
+}
 
 /**
  * Which grant slot on a ServerAuth we're talking about: the workspace-wide
@@ -99,17 +126,19 @@ function writeGrant(entry: ServerAuth, slot: GrantSlot, grant: Grant): void {
 }
 
 function readStore(): Store {
-  try {
-    return JSON.parse(readFileSync(STORE_PATH, "utf8"));
-  } catch {
-    return {};
-  }
+  return structuredClone(storedOauth.value);
 }
 
-function writeStore(store: Store): void {
-  writeFileSync(STORE_PATH, JSON.stringify(store, null, 2) + "\n", {
-    mode: 0o600,
-  });
+async function writeStore(store: Store): Promise<void> {
+  const db = oauthDb ?? managedFeltDb();
+  const next: StoredOauth = { id: STORE_ID, value: store };
+  if (storedOauth.__version !== undefined && !Number.isSafeInteger(storedOauth.__version))
+    throw new Error("MCP OAuth store has no FeltDB authority version");
+  await db.transaction((tx) => {
+    tx.collection<StoredOauth>(COLLECTION).set(STORE_ID, next,
+      storedOauth.__version === undefined ? { requireAbsent: true } : { ifVersion: storedOauth.__version });
+  }, { transactionId: `opensession:mcp-oauth:save:${crypto.randomUUID()}` });
+  storedOauth = { ...next, __version: (storedOauth.__version ?? 0) + 1 };
 }
 
 /**
@@ -287,7 +316,7 @@ async function ensureServerAuth(
   };
   const fresh = readStore();
   fresh[name] = next;
-  writeStore(fresh);
+  await writeStore(fresh);
   return next;
 }
 
@@ -350,7 +379,7 @@ export async function startMcpOauthFlow(
       endpoints: { authorize: preset.authorize, token: preset.token },
       clientInfo: { clientId: process.env[preset.clientIdEnv]! },
     };
-    writeStore(store);
+    await writeStore(store);
     return { url: url.toString() };
   }
   const auth = await ensureServerAuth(name, serverUrl);
@@ -424,7 +453,7 @@ export async function completeMcpOauthFlow(
     const entry = fresh[flow.name];
     if (!entry) throw new Error(`Registration for ${flow.name} vanished`);
     writeGrant(entry, slotFor(flow.teamName), grant);
-    writeStore(fresh);
+    await writeStore(fresh);
     return { name: flow.name, teamName: flow.teamName };
   }
   const store = readStore();
@@ -471,7 +500,7 @@ export async function completeMcpOauthFlow(
   const entry = fresh[flow.name];
   if (!entry) throw new Error(`Registration for ${flow.name} vanished`);
   writeGrant(entry, slotFor(flow.teamName), grant);
-  writeStore(fresh);
+  await writeStore(fresh);
   return { name: flow.name, teamName: flow.teamName };
 }
 
@@ -519,7 +548,7 @@ async function refreshGrant(
     const entry = store[name];
     if (!entry) return;
     writeGrant(entry, ref, next);
-    writeStore(store);
+    await writeStore(store);
   } catch (e) {
     console.error(
       `[mcp-oauth] refresh failed for ${name}/${slotLabel(ref)}:`,
@@ -623,13 +652,8 @@ export function mcpOauthStatus(
 // server origin) — drives "Connect my account" visibility for servers that
 // run on a static workspace key today (e.g. posthog).
 //
-// The answer is kept on disk, not only in memory, because it decides
-// MEMBERSHIP of the My accounts list rather than one row's state: a cold
-// process cannot say which tools belong on that list at all, so the panel
-// would have to wait on a probe per configured server before it could draw a
-// single row. Whether an origin publishes OAuth metadata is a stable fact
-// about that service, so the last answer is a good one to show while a fresh
-// probe runs behind it.
+// The answer is a disposable process cache. A cold process probes configured
+// servers again; it is never a second durable authority for account state.
 //
 // A probe that never got an answer is remembered in memory only, and briefly:
 // a network blip must not persist "this tool has no personal sign-in" and drop
@@ -646,21 +670,11 @@ interface Capability {
   soft?: boolean;
 }
 
-let capableCache: Map<string, Capability> | null = null;
+const capableCache = ((globalThis as any).__opensessionMcpOauthCapabilities ??=
+  new Map<string, Capability>()) as Map<string, Capability>;
 const capableInflight = new Map<string, Promise<boolean>>();
 
 function capabilities(): Map<string, Capability> {
-  if (capableCache) return capableCache;
-  capableCache = new Map();
-  try {
-    const raw = JSON.parse(readFileSync(CAPABLE_PATH, "utf8")) as Record<
-      string,
-      Capability
-    >;
-    for (const [origin, e] of Object.entries(raw))
-      if (typeof e?.capable === "boolean" && typeof e?.ts === "number")
-        capableCache.set(origin, { capable: e.capable, ts: e.ts });
-  } catch {}
   return capableCache;
 }
 
@@ -695,19 +709,10 @@ function probeCapable(origin: string): Promise<boolean> {
       ts: Date.now(),
       ...(answered ? {} : { soft: true }),
     });
-    if (answered) persistCapabilities();
     return capable;
   })().finally(() => capableInflight.delete(origin));
   capableInflight.set(origin, p);
   return p;
-}
-
-function persistCapabilities(): void {
-  const out: Record<string, Capability> = {};
-  for (const [origin, e] of capabilities()) if (!e.soft) out[origin] = e;
-  try {
-    writeFileSync(CAPABLE_PATH, JSON.stringify(out, null, 2) + "\n");
-  } catch {}
 }
 
 /**
@@ -749,7 +754,7 @@ export function hasMcpOauthGrant(name: string, user?: string): boolean {
 }
 
 /** Drop a grant (Disconnect in the UI). */
-export function removeMcpOauthGrant(name: string, forUser?: string): boolean {
+export async function removeMcpOauthGrant(name: string, forUser?: string): Promise<boolean> {
   const store = readStore();
   const auth = store[name];
   if (!auth) return false;
@@ -761,7 +766,7 @@ export function removeMcpOauthGrant(name: string, forUser?: string): boolean {
     if (!auth.shared) return false;
     delete auth.shared;
   }
-  writeStore(store);
+  await writeStore(store);
   return true;
 }
 
@@ -822,5 +827,5 @@ export async function saveManualMcpGrant(
     updatedAt: new Date().toISOString(),
     ...(opts.connectedBy ? { connectedBy: opts.connectedBy } : {}),
   });
-  writeStore(store);
+  await writeStore(store);
 }

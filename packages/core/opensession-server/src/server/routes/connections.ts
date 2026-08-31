@@ -385,7 +385,7 @@ export async function handleConnectionsRoutes(
 	if (mcpOauthMatch && req.method === "DELETE") {
 		const { removeMcpOauthGrant } = await import("../mcp-oauth");
 		const me = url.searchParams.get("scope") === "me";
-		const ok = removeMcpOauthGrant(
+		const ok = await removeMcpOauthGrant(
 			decodeURIComponent(mcpOauthMatch[1]),
 			me ? ctx.authUser?.login || ctx.authUser?.name || undefined : undefined,
 		);

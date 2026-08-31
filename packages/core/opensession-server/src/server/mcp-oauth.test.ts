@@ -1,8 +1,18 @@
-import { afterEach, describe, expect, test } from "bun:test";
-import { startMcpOauthFlow } from "./mcp-oauth";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { createFeltDB } from "@feltdb/core";
+import {
+  hasMcpOauthGrant,
+  initializeManagedMcpOauth,
+  removeMcpOauthGrant,
+  startMcpOauthFlow,
+} from "./mcp-oauth";
 
 describe("MCP OAuth client registration", () => {
   const realFetch = globalThis.fetch;
+
+  beforeEach(async () => {
+    await initializeManagedMcpOauth(createFeltDB({ namespace: crypto.randomUUID(), memory: true }));
+  });
 
   afterEach(() => {
     globalThis.fetch = realFetch;
@@ -39,5 +49,25 @@ describe("MCP OAuth client registration", () => {
     ).rejects.toThrow(
       "Its remote MCP server accepts only clients listed in the Figma MCP Catalog",
     );
+  });
+
+  test("hydrates and removes grants from FeltDB", async () => {
+    const db = createFeltDB({ namespace: crypto.randomUUID(), memory: true });
+    await db.collection("opensession_mcp_oauth").insert({
+      id: "grants",
+      value: {
+        slack: {
+          serverUrl: "https://slack.example.test",
+          endpoints: { authorize: "", token: "" },
+          clientInfo: { clientId: "test" },
+          shared: { tokens: { accessToken: "secret" }, updatedAt: new Date().toISOString() },
+        },
+      },
+    }, "grants");
+    await initializeManagedMcpOauth(db);
+    expect(hasMcpOauthGrant("slack")).toBe(true);
+    expect(await removeMcpOauthGrant("slack")).toBe(true);
+    await initializeManagedMcpOauth(db);
+    expect(hasMcpOauthGrant("slack")).toBe(false);
   });
 });
