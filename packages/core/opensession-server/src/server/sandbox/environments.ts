@@ -556,7 +556,7 @@ export function startSandboxEnvironmentMaintenance(): void {
   (globalThis as any).__sandboxEnvironmentMaintenanceTimer = maintenanceTimer;
 }
 
-export function scheduleSandboxEnvironment(
+export async function scheduleSandboxEnvironment(
   repo: string,
   provider: WorkspaceSandboxProvider,
   options: { rebuild?: boolean; refresh?: boolean; user?: string; settings?: SandboxMachineSettings } = {},
@@ -570,7 +570,7 @@ export function scheduleSandboxEnvironment(
   );
   if (existing) return existing;
   const previous = providerQueues.get(provider) || Promise.resolve();
-  const operation = startSandboxOperation(
+  const operation = await startSandboxOperation(
     { kind: "environment_rebuild", provider, repo },
     async (update) => {
       const run = previous.catch(() => {}).then(() =>

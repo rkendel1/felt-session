@@ -88,7 +88,7 @@ export async function handleSandboxesRoutes(
 		const body = (await req.json().catch(() => ({}))) as {
 			settings?: SandboxMachineSettings;
 		};
-		const operation = scheduleSandboxEnvironment(repo, provider, {
+		const operation = await scheduleSandboxEnvironment(repo, provider, {
 			rebuild: true,
 			user: requestUser(ctx) || "workspace-admin",
 			settings: body.settings,
