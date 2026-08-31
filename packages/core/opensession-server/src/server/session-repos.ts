@@ -240,7 +240,7 @@ export async function buildSessionNote(
 			// answer "what's happening" without a tool round-trip and won't
 			// spawn a worker onto work that's already running.
 			session.desk ? DESK_NOTE : "",
-			session.desk ? deskBriefingFor(user) : "",
+			session.desk ? await deskBriefingFor(user) : "",
 			buildReposNote(session),
 			await memoryNoteFor(user, sessionRepoIds(session), session.id),
 		]

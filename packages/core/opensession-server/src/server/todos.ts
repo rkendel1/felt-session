@@ -5,28 +5,21 @@
  * which session added it. The Desk overlay (DeskOverlay.tsx) is the human
  * management surface; routes/todos.ts is the HTTP surface.
  *
- * Storage: one JSON file at ~/.opensession-todos/todos.json (atomic writes —
- * items are mutable state, unlike the append-only papercuts log). Mutations
- * broadcast `todos_changed` to every UI client and mirror into the audit log
- * so a future daily-digest automation sees todo activity with no extra
- * plumbing.
+ * Storage: one managed FeltDB record per todo. Mutations broadcast
+ * `todos_changed` to every UI client and mirror into the audit log so a future
+ * daily-digest automation sees todo activity with no extra plumbing.
  */
-import { existsSync, readFileSync } from "node:fs";
 import { randomUUIDv7 } from "bun";
+import type { StateFirstDB } from "@feltdb/core";
+import { existsSync, readFileSync, unlinkSync } from "node:fs";
 import { audit } from "./audit";
 import { sendPushToUser } from "./push";
+import { managedFeltDb } from "./managed-feltdb";
 import { stateDir } from "./paths";
-import { writeJsonAtomic } from "./shared/atomic-write";
 import { resolveTeammate } from "./shared/user-mappings";
 import { broadcastToAll } from "./ws-hub";
 import { openDirectMessage, sendSlackMessage } from "../agents/slack/slack-api";
 import { personaName } from "./config";
-
-/** Resolved per call, not at load, so a dev instance or a test that repoints
- *  the state root can never read or write the live list. */
-function todosPath(): string {
-	return `${stateDir("todos")}/todos.json`;
-}
 
 export type TodoStatus = "open" | "done" | "dropped";
 
@@ -59,46 +52,87 @@ export interface TodoItem {
 	source: TodoSource;
 }
 
-interface TodoStore {
-	items: TodoItem[];
-}
-
 const MAX_TEXT_CHARS = 500;
 const MAX_NOTE_CHARS = 500;
+const TODOS_COLLECTION = "opensession_todos";
+const TODOS_MIGRATIONS_COLLECTION = "opensession_migrations";
+const TODOS_MIGRATION_ID = "todos-json-to-managed-feltdb-v1";
+type StoredTodo = TodoItem & {
+	reminderPending: boolean;
+	__version?: number;
+};
 
-function readStore(): TodoStore {
-	try {
-		const path = todosPath();
-		if (existsSync(path))
-			return JSON.parse(readFileSync(path, "utf-8")) as TodoStore;
-	} catch (e) {
-		console.error("[todos] failed to read store:", e);
-	}
-	return { items: [] };
+function collection() {
+	return managedFeltDb().collection<StoredTodo>(TODOS_COLLECTION);
 }
 
-function writeStore(store: TodoStore): void {
-	writeJsonAtomic(todosPath(), store);
+/** One-way boot migration for the former JSON authority. The legacy file is
+ * removed only after every item and the completion receipt are durable in the
+ * managed authority. A completed receipt makes repeated boots no-ops. */
+export async function initializeManagedTodos(db: StateFirstDB = managedFeltDb()): Promise<void> {
+	const legacyPath = `${stateDir("todos")}/todos.json`;
+	const migration = db.collection<{ id: string; completedAt: number }>(TODOS_MIGRATIONS_COLLECTION);
+	const completed = await migration.get(TODOS_MIGRATION_ID);
+	if (completed) {
+		if (existsSync(legacyPath)) unlinkSync(legacyPath);
+		return;
+	}
+	let items: TodoItem[] = [];
+	if (existsSync(legacyPath)) {
+		const parsed = JSON.parse(readFileSync(legacyPath, "utf8")) as { items?: unknown };
+		if (!Array.isArray(parsed.items)) throw new Error("Legacy todo store is invalid");
+		items = parsed.items as TodoItem[];
+	}
+	for (const item of items) {
+		if (!item?.id || !item.user || !item.createdAt)
+			throw new Error("Legacy todo store contains an invalid item");
+		const stored: StoredTodo = {
+			...item,
+			reminderPending: item.status === "open" && !!item.remindAt && !item.remindedAt,
+		};
+		const existing = await db.collection<StoredTodo>(TODOS_COLLECTION).get(item.id);
+		if (existing) {
+			const { __version: _, ...current } = existing;
+			if (JSON.stringify(current) !== JSON.stringify(stored))
+				throw new Error(`Managed todo ${item.id} conflicts with the legacy migration`);
+			continue;
+		}
+		await db.transaction((tx) => {
+			tx.collection<StoredTodo>(TODOS_COLLECTION).set(item.id, stored, { requireAbsent: true });
+		}, { transactionId: `opensession:todo:migrate:${item.id}` });
+	}
+	await db.transaction((tx) => {
+		tx.collection(TODOS_MIGRATIONS_COLLECTION).set(TODOS_MIGRATION_ID, {
+			id: TODOS_MIGRATION_ID,
+			completedAt: Date.now(),
+		}, { requireAbsent: true });
+	}, { transactionId: `opensession:migration:${TODOS_MIGRATION_ID}` });
+	if (existsSync(legacyPath)) unlinkSync(legacyPath);
+}
+
+function publicTodo(stored: StoredTodo): TodoItem {
+	const { reminderPending: _, __version: __, ...item } = stored;
+	return item;
 }
 
 function changed(user: string): void {
 	broadcastToAll({ type: "todos_changed", user });
 }
 
-export function addTodo(input: {
+export async function addTodo(input: {
 	user: string;
 	text: string;
 	note?: string;
 	due?: string;
 	remindAt?: string;
 	source: TodoSource;
-}): TodoItem {
+}): Promise<TodoItem> {
 	const text = (input.text || "").trim().slice(0, MAX_TEXT_CHARS);
 	if (!text) throw new Error("todo text is empty");
 	const user = (input.user || "").trim();
 	if (!user) throw new Error("todo user is empty");
 	const now = new Date().toISOString();
-	const item: TodoItem = {
+	const item: StoredTodo = {
 		id: `todo-${randomUUIDv7()}`,
 		user,
 		text,
@@ -108,11 +142,12 @@ export function addTodo(input: {
 		...(input.note ? { note: input.note.trim().slice(0, MAX_NOTE_CHARS) } : {}),
 		...(input.due ? { due: input.due } : {}),
 		...(input.remindAt ? { remindAt: input.remindAt } : {}),
+		reminderPending: !!input.remindAt,
 		source: input.source,
 	};
-	const store = readStore();
-	store.items.push(item);
-	writeStore(store);
+	await managedFeltDb().transaction((tx) => {
+		tx.collection<StoredTodo>(TODOS_COLLECTION).set(item.id, item, { requireAbsent: true });
+	}, { transactionId: `opensession:todo:add:${item.id}` });
 	audit({
 		kind: "todo_added",
 		session_id: input.source.sessionId,
@@ -121,20 +156,29 @@ export function addTodo(input: {
 		message: text,
 	});
 	changed(user);
-	return item;
+	return publicTodo(item);
 }
 
 /** Newest first within a status; open items before done/dropped. */
-export function listTodos(opts?: {
+export async function listTodos(opts?: {
 	user?: string;
 	status?: TodoStatus | "all";
 	limit?: number;
-}): TodoItem[] {
+}): Promise<TodoItem[]> {
 	const limit = Math.min(500, Math.max(1, opts?.limit || 200));
 	const status = opts?.status || "open";
 	const rank: Record<TodoStatus, number> = { open: 0, done: 1, dropped: 2 };
-	return readStore()
-		.items.filter(
+	const page = await managedFeltDb().query<StoredTodo>({
+		collection: TODOS_COLLECTION,
+		where: [
+			...(opts?.user ? [{ field: "user" as const, eq: opts.user }] : []),
+			...(status === "all" ? [] : [{ field: "status" as const, eq: status }]),
+		],
+		orderBy: [{ field: "createdAt", direction: "desc" }],
+		limit: status === "all" ? 500 : limit,
+	});
+	return page.records
+		.filter(
 			(t) =>
 				(!opts?.user || t.user === opts.user) &&
 				(status === "all" || t.status === status),
@@ -144,14 +188,16 @@ export function listTodos(opts?: {
 				rank[a.status] - rank[b.status] ||
 				(a.createdAt < b.createdAt ? 1 : -1),
 		)
-		.slice(0, limit);
+		.slice(0, limit)
+		.map(publicTodo);
 }
 
-export function getTodo(id: string): TodoItem | undefined {
-	return readStore().items.find((t) => t.id === id);
+export async function getTodo(id: string): Promise<TodoItem | undefined> {
+	const item = await collection().get(id);
+	return item ? publicTodo(item) : undefined;
 }
 
-export function updateTodo(
+export async function updateTodo(
 	id: string,
 	patch: {
 		status?: TodoStatus;
@@ -161,33 +207,47 @@ export function updateTodo(
 		remindAt?: string | null;
 	},
 	by?: string,
-): TodoItem {
-	const store = readStore();
-	const item = store.items.find((t) => t.id === id);
+): Promise<TodoItem> {
+	let item = await collection().get(id);
 	if (!item) throw new Error(`unknown todo "${id}"`);
-	const now = new Date().toISOString();
-	if (patch.status && patch.status !== item.status) {
-		item.status = patch.status;
-		if (patch.status === "open") delete item.completedAt;
-		else item.completedAt = now;
+	for (let attempt = 0; attempt < 5; attempt++) {
+		if (!Number.isSafeInteger(item.__version))
+			throw new Error(`Todo ${id} has no FeltDB authority version`);
+		const next: StoredTodo = { ...item };
+		delete next.__version;
+		const now = new Date().toISOString();
+		if (patch.status && patch.status !== next.status) {
+			next.status = patch.status;
+			if (patch.status === "open") delete next.completedAt;
+			else next.completedAt = now;
+		}
+		if (typeof patch.text === "string" && patch.text.trim())
+			next.text = patch.text.trim().slice(0, MAX_TEXT_CHARS);
+		if (patch.note === null) delete next.note;
+		else if (typeof patch.note === "string")
+			next.note = patch.note.trim().slice(0, MAX_NOTE_CHARS);
+		if (patch.due === null) delete next.due;
+		else if (typeof patch.due === "string") next.due = patch.due;
+		if (patch.remindAt === null) {
+			delete next.remindAt;
+			delete next.remindedAt;
+			next.reminderPending = false;
+		} else if (typeof patch.remindAt === "string") {
+			next.remindAt = patch.remindAt;
+			delete next.remindedAt;
+			next.reminderPending = true;
+		}
+		next.updatedAt = now;
+		const result = await collection().updateIfVersion(id, item.__version!, next);
+		if (result.updated) {
+			item = next;
+			break;
+		}
+		const refreshed = await collection().get(id);
+		if (!refreshed) throw new Error(`Todo ${id} disappeared during update`);
+		item = refreshed;
+		if (attempt === 4) throw new Error(`Todo ${id} remained contended`);
 	}
-	if (typeof patch.text === "string" && patch.text.trim())
-		item.text = patch.text.trim().slice(0, MAX_TEXT_CHARS);
-	if (patch.note === null) delete item.note;
-	else if (typeof patch.note === "string")
-		item.note = patch.note.trim().slice(0, MAX_NOTE_CHARS);
-	if (patch.due === null) delete item.due;
-	else if (typeof patch.due === "string") item.due = patch.due;
-	if (patch.remindAt === null) {
-		delete item.remindAt;
-		delete item.remindedAt;
-	} else if (typeof patch.remindAt === "string") {
-		item.remindAt = patch.remindAt;
-		// A (re)scheduled reminder fires again.
-		delete item.remindedAt;
-	}
-	item.updatedAt = now;
-	writeStore(store);
 	audit({
 		kind: "todo_updated",
 		by: by || item.user,
@@ -196,7 +256,7 @@ export function updateTodo(
 		message: item.text,
 	});
 	changed(item.user);
-	return item;
+	return publicTodo(item);
 }
 
 // ── Reminders ────────────────────────────────────────────────────────────────
@@ -207,15 +267,26 @@ export function updateTodo(
 const SWEEP_MS = 30_000;
 
 async function sweepReminders(): Promise<void> {
-	const store = readStore();
 	const now = new Date().toISOString();
-	const due = store.items.filter(
-		(t) => t.status === "open" && t.remindAt && !t.remindedAt && t.remindAt <= now,
-	);
+	const due = (await managedFeltDb().query<StoredTodo>({
+		collection: TODOS_COLLECTION,
+		where: [
+			{ field: "status", eq: "open" },
+			{ field: "reminderPending", eq: true },
+			{ field: "remindAt", lte: now },
+		],
+		orderBy: [{ field: "remindAt", direction: "asc" }],
+		limit: 100,
+	})).records;
 	if (!due.length) return;
-	for (const t of due) t.remindedAt = now;
-	writeStore(store);
 	for (const t of due) {
+		if (!Number.isSafeInteger(t.__version)) continue;
+		const claimed = await collection().updateIfVersion(t.id, t.__version!, {
+			remindedAt: now,
+			reminderPending: false,
+			updatedAt: now,
+		});
+		if (!claimed.updated) continue;
 		audit({ kind: "todo_reminder", user: t.user, message: t.text });
 		try {
 			await sendPushToUser(

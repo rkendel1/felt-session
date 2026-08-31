@@ -14,7 +14,7 @@ import { startDiskGc } from "./src/server/disk-gc";
 import { startWorktreeReaper } from "./src/server/worktree-reaper";
 import { startPortalReaper } from "./src/server/portal-supervisor";
 import { startRunnerPortalReaper } from "./src/server/runner-portals";
-import { startTodoReminderTicker } from "./src/server/todos";
+import { initializeManagedTodos, startTodoReminderTicker } from "./src/server/todos";
 import { startGeneratedTitleSweep } from "./src/server/generated-titles";
 import { startLiveActivitySync } from "./src/server/live-activities";
 import { startRuntimeInvestigationHandoffConsumer } from "./src/server/runtime-investigation-handoffs";
@@ -152,6 +152,7 @@ const g = globalThis as any;
 if (!g.__opensessionBooted) {
 	const db = await initializeManagedFeltDb();
 	await initializeManagedWorkspaces(db);
+	await initializeManagedTodos(db);
 }
 
 // Listeners the server owns. Deliberately started HERE and not as module side
