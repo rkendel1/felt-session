@@ -1,13 +1,8 @@
 /**
  * Workflow persistence + live registry + broadcast.
  *
- * Disk layout: ~/.opensession-workflows/<runId>/ with
- *   run.json      — WorkflowRunSnapshot (the UI payload)
- *   journal.jsonl — one record per completed agent() call (WorkflowJournalEntry)
- *                   or mcp.* call (WorkflowMcpJournalEntry, kind:"mcp") — the
- *                   resume-replay unit and the UI drill-in detail
- *   script.mjs    — the workflow script source, verbatim
- * Tests point OPENSESSION_WORKFLOWS_DIR at a tmp dir.
+ * Managed FeltDB stores the run snapshot, source script, and ordered journal.
+ * The former per-run disk layout is imported once and removed at boot.
  *
  * Live state is parked on globalThis (same pattern as queue-state.ts /
  * asks.ts) so a `bun --hot` reload keeps running workflows' snapshots and
@@ -16,9 +11,10 @@
  * take down a store write.
  */
 
-import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync } from "fs";
+import type { StateFirstDB } from "@feltdb/core";
+import { readdirSync, readFileSync, rmSync } from "fs";
 import { stateDir } from "./paths";
-import { writeFileAtomic, writeJsonAtomic } from "./shared/atomic-write";
+import { managedFeltDb } from "./managed-feltdb";
 import { broadcastToSession } from "./ws-hub";
 import {
 	WORKFLOW_LIMITS,
@@ -38,47 +34,95 @@ function workflowsDir(): string {
 	return process.env.OPENSESSION_WORKFLOWS_DIR || stateDir("workflows");
 }
 
-function runDir(runId: string): string {
-	return `${workflowsDir()}/${runId}`;
+type StoredWorkflow = { id: string; snapshot: WorkflowRunSnapshot; script: string };
+type StoredJournal = { id: string; runId: string; order: number; entry: WorkflowJournalRecord };
+const WORKFLOW_COLLECTION = "opensession_workflows";
+const JOURNAL_COLLECTION = "opensession_workflow_journal";
+const WORKFLOW_MIGRATION = "workflow-files-to-managed-feltdb-v1";
+let workflowDb: StateFirstDB | undefined;
+const workflows = new Map<string, StoredWorkflow>();
+const journals = new Map<string, StoredJournal[]>();
+let persistTail: Promise<void> = Promise.resolve();
+
+function queuePersist(work: (db: StateFirstDB) => Promise<unknown>): void {
+	const db = workflowDb ?? managedFeltDb();
+	const next = persistTail.then(async () => { await work(db); });
+	persistTail = next.catch((error) => console.error("[workflow] managed write failed:", error));
 }
 
-// readdir results for the list scan, invalidated on create and after a short
-// TTL (list is polled by the UI; the dirent scan is the only part worth
-// caching — run.json reads stay fresh).
-let direntCache: { dir: string; at: number; names: string[] } | null = null;
-const DIRENT_CACHE_MS = 2_000;
+export async function flushWorkflowWrites(): Promise<void> {
+	await persistTail;
+}
 
-function runIdsOnDisk(): string[] {
-	const dir = workflowsDir();
-	const now = Date.now();
-	if (
-		direntCache &&
-		direntCache.dir === dir &&
-		now - direntCache.at < DIRENT_CACHE_MS
-	) {
-		return direntCache.names;
-	}
+export async function initializeManagedWorkflows(
+	db: StateFirstDB = workflowDb ?? managedFeltDb(),
+	legacyDir = workflowsDir(),
+): Promise<void> {
+	await flushWorkflowWrites();
+	workflowDb = db;
+	const migrations = db.collection<{ id: string }>("opensession_migrations");
+	const migrationComplete = !!await migrations.get(WORKFLOW_MIGRATION);
+	const legacyRuns: StoredWorkflow[] = [];
+	const legacyJournals: StoredJournal[] = [];
 	let names: string[] = [];
-	try {
-		names = readdirSync(dir).filter((name) => name.startsWith("wf-"));
-	} catch {}
-	direntCache = { dir, at: now, names };
-	return names;
-}
-
-function readRunJson(runId: string): WorkflowRunSnapshot | undefined {
-	try {
-		return JSON.parse(
-			readFileSync(`${runDir(runId)}/run.json`, "utf-8"),
-		) as WorkflowRunSnapshot;
-	} catch {
-		return undefined;
+	try { names = readdirSync(legacyDir).filter((name) => name.startsWith("wf-")); } catch {}
+	for (const runId of names) {
+		try {
+			const snapshot = JSON.parse(readFileSync(`${legacyDir}/${runId}/run.json`, "utf8"));
+			const script = readFileSync(`${legacyDir}/${runId}/script.mjs`, "utf8");
+			legacyRuns.push({ id: runId, snapshot, script });
+		} catch { continue; }
+		try {
+			let order = 0;
+			for (const line of readFileSync(`${legacyDir}/${runId}/journal.jsonl`, "utf8").split("\n")) {
+				if (!line.trim()) continue;
+				try {
+					legacyJournals.push({ id: `${runId}-${order}`, runId, order, entry: JSON.parse(line) });
+					order++;
+				} catch {}
+			}
+		} catch {}
 	}
+	if (!migrationComplete || legacyRuns.length > 0) {
+		for (const record of legacyRuns) {
+			const runJournal = legacyJournals.filter((entry) => entry.runId === record.id);
+			await db.transaction((tx) => {
+				tx.collection<StoredWorkflow>(WORKFLOW_COLLECTION).set(record.id, record);
+			}, { transactionId: `opensession:workflow-import:${record.id}:${crypto.randomUUID()}` });
+			for (let offset = 0; offset < runJournal.length; offset += 100) {
+				const batch = runJournal.slice(offset, offset + 100);
+				await db.transaction((tx) => {
+					for (const entry of batch)
+						tx.collection<StoredJournal>(JOURNAL_COLLECTION).set(entry.id, entry);
+				}, { transactionId: `opensession:workflow-journal-import:${record.id}:${offset}:${crypto.randomUUID()}` });
+			}
+		}
+		if (!migrationComplete) await db.transaction((tx) => {
+			tx.collection("opensession_migrations").set(WORKFLOW_MIGRATION,
+				{ id: WORKFLOW_MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
+		}, { transactionId: `opensession:migration:${WORKFLOW_MIGRATION}` });
+	}
+	workflows.clear();
+	for (const record of await db.collection<StoredWorkflow>(WORKFLOW_COLLECTION).all())
+		workflows.set(record.id, record);
+	journals.clear();
+	for (const record of await db.collection<StoredJournal>(JOURNAL_COLLECTION).all()) {
+		const entries = journals.get(record.runId) ?? [];
+		entries.push(record);
+		journals.set(record.runId, entries);
+	}
+	for (const entries of journals.values()) entries.sort((a, b) => a.order - b.order);
+	rmSync(legacyDir, { recursive: true, force: true });
 }
 
 function persistSnapshot(snapshot: WorkflowRunSnapshot): void {
-	mkdirSync(runDir(snapshot.runId), { recursive: true });
-	writeJsonAtomic(`${runDir(snapshot.runId)}/run.json`, snapshot);
+	const existing = workflows.get(snapshot.runId);
+	if (!existing) throw new Error(`Managed workflow ${snapshot.runId} is missing`);
+	existing.snapshot = snapshot;
+	const record = structuredClone(existing);
+	queuePersist(async (db) => db.transaction((tx) => {
+		tx.collection<StoredWorkflow>(WORKFLOW_COLLECTION).set(record.id, record);
+	}, { transactionId: `opensession:workflow:${record.id}:${crypto.randomUUID()}` }));
 }
 
 function broadcastSnapshot(snapshot: WorkflowRunSnapshot): void {
@@ -148,9 +192,12 @@ export function createWorkflowRun(init: {
 		...(init.user !== undefined ? { user: init.user } : {}),
 		cwd: init.cwd,
 	};
-	persistSnapshot(snapshot);
-	writeFileAtomic(`${runDir(init.runId)}/script.mjs`, init.script);
-	direntCache = null;
+	const record: StoredWorkflow = { id: init.runId, snapshot, script: init.script };
+	workflows.set(init.runId, record);
+	queuePersist(async (db) => db.transaction((tx) => {
+		tx.collection<StoredWorkflow>(WORKFLOW_COLLECTION).set(record.id, structuredClone(record),
+			{ requireAbsent: true });
+	}, { transactionId: `opensession:workflow:create:${record.id}` }));
 	// Park the snapshot in the live map now; registerLiveWorkflow fills in the
 	// real cancel hook once the runner has one.
 	const existing = liveWorkflows.get(init.runId);
@@ -162,13 +209,12 @@ export function createWorkflowRun(init: {
 	return snapshot;
 }
 
-/** Apply a mutation, persist run.json, broadcast. Returns the snapshot, or
- *  undefined when the run doesn't exist (live or on disk). */
+/** Apply a mutation, persist the managed snapshot, and broadcast it. */
 export function updateWorkflowRun(
 	runId: string,
 	mutate: (s: WorkflowRunSnapshot) => void,
 ): WorkflowRunSnapshot | undefined {
-	const snapshot = liveWorkflows.get(runId)?.snapshot ?? readRunJson(runId);
+	const snapshot = liveWorkflows.get(runId)?.snapshot ?? workflows.get(runId)?.snapshot;
 	if (!snapshot) return undefined;
 	mutate(snapshot);
 	enforceSnapshotLimits(snapshot);
@@ -178,16 +224,12 @@ export function updateWorkflowRun(
 }
 
 export function getWorkflowRun(runId: string): WorkflowRunSnapshot | undefined {
-	return liveWorkflows.get(runId)?.snapshot ?? readRunJson(runId);
+	return liveWorkflows.get(runId)?.snapshot ?? workflows.get(runId)?.snapshot;
 }
 
-/** The run's script source (script.mjs), for resume without a new script. */
+/** The run's managed script source, for resume without a new script. */
 export function readWorkflowScript(runId: string): string | undefined {
-	try {
-		return readFileSync(`${runDir(runId)}/script.mjs`, "utf8");
-	} catch {
-		return undefined;
-	}
+	return workflows.get(runId)?.script;
 }
 
 /** All of a session's runs, newest first. */
@@ -195,8 +237,8 @@ export function listWorkflowRunsForSession(
 	sessionId: string,
 ): WorkflowRunSnapshot[] {
 	const runs: WorkflowRunSnapshot[] = [];
-	for (const runId of runIdsOnDisk()) {
-		const snapshot = liveWorkflows.get(runId)?.snapshot ?? readRunJson(runId);
+	for (const [runId, stored] of workflows) {
+		const snapshot = liveWorkflows.get(runId)?.snapshot ?? stored.snapshot;
 		if (snapshot?.sessionId === sessionId) runs.push(snapshot);
 	}
 	runs.sort((a, b) => (a.startedAt < b.startedAt ? 1 : -1));
@@ -207,26 +249,24 @@ export function appendWorkflowJournal(
 	runId: string,
 	entry: WorkflowJournalRecord,
 ): void {
-	mkdirSync(runDir(runId), { recursive: true });
-	appendFileSync(
-		`${runDir(runId)}/journal.jsonl`,
-		JSON.stringify(entry) + "\n",
-	);
+	const entries = journals.get(runId) ?? [];
+	const record: StoredJournal = {
+		id: crypto.randomUUID(),
+		runId,
+		order: entries.length,
+		entry: structuredClone(entry),
+	};
+	entries.push(record);
+	journals.set(runId, entries);
+	queuePersist(async (db) => db.transaction((tx) => {
+		tx.collection<StoredJournal>(JOURNAL_COLLECTION).set(record.id, record, { requireAbsent: true });
+	}, { transactionId: `opensession:workflow-journal:${record.id}` }));
 }
 
 /** Journal entries in append order; a partial/corrupt trailing line (crash
  *  mid-append) is skipped, not fatal. */
 export function readWorkflowJournal(runId: string): WorkflowJournalRecord[] {
-	const path = `${runDir(runId)}/journal.jsonl`;
-	if (!existsSync(path)) return [];
-	const entries: WorkflowJournalRecord[] = [];
-	for (const line of readFileSync(path, "utf-8").split("\n")) {
-		if (!line.trim()) continue;
-		try {
-			entries.push(JSON.parse(line) as WorkflowJournalRecord);
-		} catch {}
-	}
-	return entries;
+	return (journals.get(runId) ?? []).map((record) => structuredClone(record.entry));
 }
 
 export function registerLiveWorkflow(runId: string, cancel: () => void): void {
@@ -235,7 +275,7 @@ export function registerLiveWorkflow(runId: string, cancel: () => void): void {
 		existing.cancel = cancel;
 		return;
 	}
-	const snapshot = readRunJson(runId);
+	const snapshot = workflows.get(runId)?.snapshot;
 	if (snapshot) liveWorkflows.set(runId, { snapshot, cancel });
 }
 
@@ -255,15 +295,14 @@ export function cancelLiveWorkflow(runId: string): boolean {
 	return true;
 }
 
-/** Boot pass: a run.json still "running" with no live entry died with the
+/** Boot pass: a managed run still "running" with no live entry died with the
  *  previous process — mark it interrupted so the UI doesn't show a zombie.
  *  (Callers guard this behind the boot flag; the function itself is safe to
  *  re-run.) */
 export function markInterruptedWorkflows(): void {
-	direntCache = null;
-	for (const runId of runIdsOnDisk()) {
+	for (const [runId, stored] of workflows) {
 		if (liveWorkflows.has(runId)) continue;
-		const snapshot = readRunJson(runId);
+		const snapshot = stored.snapshot;
 		if (!snapshot || snapshot.status !== "running") continue;
 		snapshot.status = "interrupted";
 		snapshot.endedAt = new Date().toISOString();

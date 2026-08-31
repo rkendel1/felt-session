@@ -2,6 +2,7 @@ import { afterAll, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
+import { createFeltDB } from "@feltdb/core";
 import {
 	cancelWorkflow,
 	checkScriptSyntax,
@@ -9,7 +10,7 @@ import {
 	startWorkflow,
 	type StartWorkflowOpts,
 } from "./workflow-runner";
-import { getWorkflowRun, readWorkflowJournal } from "./workflow-store";
+import { getWorkflowRun, initializeManagedWorkflows, readWorkflowJournal } from "./workflow-store";
 import {
 	WORKFLOW_LIMITS,
 	isMcpJournalEntry,
@@ -25,10 +26,14 @@ import type { WorkflowMcpHost } from "./workflow-mcp";
 const savedEnv = process.env.OPENSESSION_WORKFLOWS_DIR;
 const dirs: string[] = [];
 
-beforeEach(() => {
+beforeEach(async () => {
 	const dir = mkdtempSync(join(tmpdir(), "wf-runner-test-"));
 	dirs.push(dir);
 	process.env.OPENSESSION_WORKFLOWS_DIR = dir;
+	await initializeManagedWorkflows(
+		createFeltDB({ namespace: crypto.randomUUID(), memory: true }),
+		dir,
+	);
 });
 
 afterAll(() => {

@@ -1,15 +1,19 @@
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
-import { appendFileSync, existsSync, mkdtempSync, readFileSync, rmSync } from "fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
+import { createFeltDB } from "@feltdb/core";
 import { tmpdir } from "os";
 import { join } from "path";
 import {
 	appendWorkflowJournal,
 	cancelLiveWorkflow,
 	createWorkflowRun,
+	flushWorkflowWrites,
 	getWorkflowRun,
+	initializeManagedWorkflows,
 	listWorkflowRunsForSession,
 	markInterruptedWorkflows,
 	readWorkflowJournal,
+	readWorkflowScript,
 	registerLiveWorkflow,
 	unregisterLiveWorkflow,
 	updateWorkflowRun,
@@ -19,11 +23,14 @@ import { WORKFLOW_LIMITS, type WorkflowJournalEntry } from "./workflow-types";
 const savedEnv = process.env.OPENSESSION_WORKFLOWS_DIR;
 const dirs: string[] = [];
 let runCounter = 0;
+let workflowDb: ReturnType<typeof createFeltDB>;
 
-beforeEach(() => {
+beforeEach(async () => {
 	const dir = mkdtempSync(join(tmpdir(), "wf-store-test-"));
 	dirs.push(dir);
 	process.env.OPENSESSION_WORKFLOWS_DIR = dir;
+	workflowDb = createFeltDB({ namespace: crypto.randomUUID(), memory: true });
+	await initializeManagedWorkflows(workflowDb, dir);
 });
 
 afterAll(() => {
@@ -58,11 +65,11 @@ function journalEntry(seq: number, prompt = `prompt ${seq}`): WorkflowJournalEnt
 }
 
 describe("workflow store", () => {
-	test("createWorkflowRun persists run.json + script.mjs and is readable back", () => {
+	test("createWorkflowRun persists its snapshot and script in the managed projection", () => {
 		const snapshot = makeRun({ description: "a test", user: "alex" });
 		const dir = join(process.env.OPENSESSION_WORKFLOWS_DIR!, snapshot.runId);
-		expect(existsSync(join(dir, "run.json"))).toBe(true);
-		expect(readFileSync(join(dir, "script.mjs"), "utf-8")).toContain("test-workflow");
+		expect(existsSync(dir)).toBe(false);
+		expect(readWorkflowScript(snapshot.runId)).toContain("test-workflow");
 
 		const live = getWorkflowRun(snapshot.runId);
 		expect(live?.name).toBe("test-workflow");
@@ -72,7 +79,7 @@ describe("workflow store", () => {
 		expect(live?.phases).toEqual(["Phase 1"]);
 		expect(live?.totals).toEqual({ agents: 0, tokensIn: 0, tokensOut: 0 });
 
-		// Still readable from disk once no longer live.
+		// Still readable from managed state once no longer live.
 		unregisterLiveWorkflow(snapshot.runId);
 		expect(getWorkflowRun(snapshot.runId)?.name).toBe("test-workflow");
 	});
@@ -119,20 +126,50 @@ describe("workflow store", () => {
 		);
 	});
 
-	test("journal append/read roundtrip tolerates a corrupt trailing line", () => {
+	test("journal append/read roundtrip preserves order", () => {
 		const snapshot = makeRun();
 		appendWorkflowJournal(snapshot.runId, journalEntry(0));
 		appendWorkflowJournal(snapshot.runId, journalEntry(1));
-		// Simulate a crash mid-append: torn, unparsable trailing line.
-		appendFileSync(
-			join(process.env.OPENSESSION_WORKFLOWS_DIR!, snapshot.runId, "journal.jsonl"),
-			'{"seq":2,"hash":"tru',
-		);
 		const entries = readWorkflowJournal(snapshot.runId) as WorkflowJournalEntry[];
 		expect(entries.length).toBe(2);
 		expect(entries[0].prompt).toBe("prompt 0");
 		expect(entries[1].outcome.text).toBe("result 1");
 		expect(readWorkflowJournal("wf-none")).toEqual([]);
+	});
+
+	test("reloads snapshots, scripts, and journals from FeltDB", async () => {
+		const snapshot = makeRun();
+		appendWorkflowJournal(snapshot.runId, journalEntry(0));
+		updateWorkflowRun(snapshot.runId, (run) => { run.currentPhase = "persisted"; });
+		await flushWorkflowWrites();
+		unregisterLiveWorkflow(snapshot.runId);
+
+		const emptyLegacy = mkdtempSync(join(tmpdir(), "wf-store-empty-"));
+		dirs.push(emptyLegacy);
+		await initializeManagedWorkflows(workflowDb, emptyLegacy);
+
+		expect(getWorkflowRun(snapshot.runId)?.currentPhase).toBe("persisted");
+		expect(readWorkflowScript(snapshot.runId)).toContain("test-workflow");
+		expect(readWorkflowJournal(snapshot.runId)).toEqual([journalEntry(0)]);
+	});
+
+	test("imports the former workflow directory and removes it", async () => {
+		const legacyDir = mkdtempSync(join(tmpdir(), "wf-store-legacy-"));
+		dirs.push(legacyDir);
+		const runId = "wf-legacy";
+		mkdirSync(join(legacyDir, runId), { recursive: true });
+		const snapshot = makeRun({ runId });
+		writeFileSync(join(legacyDir, runId, "run.json"), JSON.stringify(snapshot));
+		writeFileSync(join(legacyDir, runId, "script.mjs"), "return 'legacy';");
+		writeFileSync(join(legacyDir, runId, "journal.jsonl"), `${JSON.stringify(journalEntry(0))}\n{broken`);
+		await initializeManagedWorkflows(
+			createFeltDB({ namespace: crypto.randomUUID(), memory: true }),
+			legacyDir,
+		);
+		expect(getWorkflowRun(runId)?.name).toBe("test-workflow");
+		expect(readWorkflowScript(runId)).toBe("return 'legacy';");
+		expect(readWorkflowJournal(runId)).toHaveLength(1);
+		expect(existsSync(legacyDir)).toBe(false);
 	});
 
 	test("listWorkflowRunsForSession filters by session, newest first", () => {

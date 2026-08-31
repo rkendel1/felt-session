@@ -22,7 +22,7 @@ import {
 	readPiNativeTranscript,
 } from "../pi-native-transcript";
 
-// Boot pass: flip any run.json still "running" with no live worker to
+// Boot pass: flip any managed run still "running" with no live worker to
 // "interrupted" (the orchestration state died with the previous process).
 // routes/index.ts is imported once at boot, which gives us this hook without
 // touching opensession.ts; the globalThis flag keeps hot reloads (which
@@ -99,7 +99,7 @@ export async function handleWorkflowsRoutes(
 			if (!getWorkflowRun(runId))
 				return Response.json({ error: "Workflow not found" }, { status: 404 });
 			const snap = getWorkflowRun(runId)?.agents.find((a) => a.seq === seq);
-			// mcp.* records share journal.jsonl and number their own seq space,
+			// mcp.* records share the ordered journal and number their own seq space,
 			// so an agent lookup MUST skip them or it can match the wrong record.
 			const journal = agentJournalEntries(runId).find((e) => e.seq === seq);
 			const engineSessionId =
