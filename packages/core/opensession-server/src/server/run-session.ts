@@ -40,7 +40,6 @@ import {
 } from "./fork-handoff";
 import { getGitStatus, gitPush } from "./git-status";
 import { onSessionIdle as onHumanAsksSessionIdle } from "./human-asks";
-import { parseTranscriptAsync } from "./jsonl-parser";
 import {
 	contextWindowFor,
 	interactiveFallbackModel,
@@ -2487,9 +2486,7 @@ async function runSessionPromptInner(
 				model: s.model,
 				// Async: an attached session's transcript can be multi-MB — the
 				// sync parse held the event loop for the whole read.
-				entries: s.transcriptPath
-					? await parseTranscriptAsync(s.transcriptPath)
-					: [],
+				entries: await mergedSessionTranscriptAsync(s),
 			});
 		}
 		for (const c of attachedDigests) inlinedSessionIds.add(c.id);

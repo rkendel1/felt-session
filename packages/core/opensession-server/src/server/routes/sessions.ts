@@ -109,7 +109,7 @@ import { getStatusOverride, isManualStatus, setStatusOverride } from "../status-
 import { getSubagentTranscript, listSubagents } from "../subagents";
 import { getTitleOverride, setTitleOverride } from "../title-overrides";
 import { getGeneratedTitle } from "../generated-titles";
-import { buildWorkspaceOverview, resolveTranscriptImage, } from "../workspace-overview";
+import { buildWorkspaceOverview } from "../workspace-overview";
 import { type Workspace, deleteWorkspace, getWorkspace, workspaceName, } from "../workspaces";
 import { prHostFor } from "../pr-host";
 import { getRepo, NO_REPO, removeWorktree, repoForPath } from "../worktree";
@@ -1251,16 +1251,10 @@ export async function handleSessionsRoutes(
 				return Response.json({ error: "Session not found" }, { status: 404 });
 			const entryId = decodeURIComponent(m[2]);
 			const idx = parseInt(m[3], 10);
-			let img = session.transcriptPath
-				? await resolveTranscriptImage(session.transcriptPath, entryId, idx)
-				: null;
-			// Transcript v2 fallback (docs/transcripts.md §1): entries
-			// >32KB are stored with images[] replaced by "os-blob:<uuid>/<i>"
-			// markers; the real data-URLs live in the store's full entry. When the
-			// mirror can't resolve the image, decode it from there. Guarded on the
-			// DB file existing — not the flag — so images keep serving through
-			// kill-switch windows.
-			if (!img) {
+			let img: { bytes: ArrayBuffer; contentType: string } | { redirect: string } | null = null;
+			// Managed transcript entries over 32KB replace images with blob markers;
+			// the actor store exposes the full image data here.
+			{
 				try {
 					const src = (await transcript.getFullEntry(session.id, entryId))
 						?.images?.[idx];

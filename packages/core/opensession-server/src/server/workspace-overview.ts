@@ -14,7 +14,6 @@
  */
 
 import { existsSync } from "fs";
-import { parseTranscriptAsync } from "./jsonl-parser";
 import { getRecentCommitsForSessions } from "./recent-commits";
 import { mergedSessionTranscriptAsync } from "./sessions";
 import type { TranscriptEntry, UnifiedSession } from "./types";
@@ -191,33 +190,4 @@ export async function buildWorkspaceOverview(
     ),
     media: media.slice(0, MEDIA_CAP),
   };
-}
-
-/**
- * Resolve one transcript image back to servable bytes. Returns null when the
- * entry/index doesn't exist, or a redirect target when the image is already a
- * plain URL.
- */
-export async function resolveTranscriptImage(
-  transcriptPath: string,
-  entryId: string,
-  idx: number,
-): Promise<{ bytes: ArrayBuffer; contentType: string } | { redirect: string } | null> {
-  const entry = (await parseTranscriptAsync(transcriptPath)).find(
-    (e) => e.id === entryId,
-  );
-  const src = entry?.images?.[idx];
-  if (!src) return null;
-  if (!src.startsWith("data:")) return { redirect: src };
-  const m = src.match(/^data:([^;,]+);base64,(.*)$/s);
-  if (!m) return null;
-  try {
-    const buf = Buffer.from(m[2], "base64");
-    return {
-      bytes: buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer,
-      contentType: m[1],
-    };
-  } catch {
-    return null;
-  }
 }
