@@ -8,10 +8,11 @@
  */
 
 import { createHash, randomBytes, timingSafeEqual } from "crypto";
-import { existsSync, readFileSync } from "fs";
+import { existsSync, readFileSync, unlinkSync } from "fs";
 import { randomUUIDv7 } from "bun";
 import { statePath } from "./paths";
-import { writeJsonAtomic } from "./shared/atomic-write";
+import type { StateFirstDB } from "@feltdb/core";
+import { managedFeltDb } from "./managed-feltdb";
 import {
 	isTailnetAddress,
 	normalizeAddress,
@@ -108,25 +109,69 @@ export type Runner = {
 	workloads?: Array<{ sessionId?: string; operation?: string; startedAt?: string }>;
 };
 
-type Store = { runners: Runner[] };
+type Store = { id: string; runners: Runner[]; __version?: number };
 type Pairing = { code: string; expiresAt: number; createdBy?: string; migration?: RunnerMigration };
 
 function storePath(): string {
 	return statePath(".opensession-runners.json");
 }
 
-function load(): Store {
-	if (!existsSync(storePath())) return { runners: [] };
-	try {
-		const parsed = JSON.parse(readFileSync(storePath(), "utf8"));
-		return Array.isArray(parsed?.runners) ? { runners: parsed.runners.map(normalizeRunner) } : { runners: [] };
-	} catch {
-		return { runners: [] };
+const RUNNERS_ID = "runners";
+const RUNNERS_COLLECTION = "opensession_runners";
+const RUNNERS_MIGRATION = "runners-file-to-managed-feltdb-v1";
+let runnersDb: StateFirstDB | undefined;
+let cachedStore: Store | undefined;
+let mutationTail: Promise<void> = Promise.resolve();
+
+export async function initializeManagedRunners(
+	db: StateFirstDB = runnersDb ?? managedFeltDb(),
+	legacyPath = storePath(),
+): Promise<void> {
+	runnersDb = db;
+	const migrations = db.collection<{ id: string }>("opensession_migrations");
+	if (!await migrations.get(RUNNERS_MIGRATION)) {
+		let runners: Runner[] = [];
+		if (existsSync(legacyPath)) {
+			const parsed = JSON.parse(readFileSync(legacyPath, "utf8"));
+			if (Array.isArray(parsed?.runners)) runners = parsed.runners.map(normalizeRunner);
+		}
+		await db.transaction((tx) => {
+			tx.collection<Store>(RUNNERS_COLLECTION).set(RUNNERS_ID, { id: RUNNERS_ID, runners }, { requireAbsent: true });
+			tx.collection("opensession_migrations").set(RUNNERS_MIGRATION,
+				{ id: RUNNERS_MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
+		}, { transactionId: `opensession:migration:${RUNNERS_MIGRATION}` });
 	}
+	if (existsSync(legacyPath)) unlinkSync(legacyPath);
+	const loaded = await db.collection<Store>(RUNNERS_COLLECTION).get(RUNNERS_ID);
+	if (!loaded) throw new Error("Managed runner registry is missing");
+	cachedStore = { ...loaded, runners: loaded.runners.map(normalizeRunner) };
 }
 
-function save(store: Store): void {
-	writeJsonAtomic(storePath(), store);
+function load(): Store {
+	if (!cachedStore) throw new Error("Managed runner registry has not been initialized");
+	return cachedStore;
+}
+
+async function save(store: Store): Promise<void> {
+	const db = runnersDb ?? managedFeltDb();
+	await db.transaction((tx) => {
+		tx.collection<Store>(RUNNERS_COLLECTION).set(RUNNERS_ID, store,
+			store.__version ? { ifVersion: store.__version } : { requireAbsent: true });
+	}, { transactionId: `opensession:runners:${crypto.randomUUID()}` });
+	const saved = await db.collection<Store>(RUNNERS_COLLECTION).get(RUNNERS_ID);
+	if (!saved) throw new Error("Managed runner registry disappeared after save");
+	cachedStore = saved;
+}
+
+function mutateStore<T>(mutation: (store: Store) => T | Promise<T>): Promise<T> {
+	const run = mutationTail.then(async () => {
+		const store = load();
+		const result = await mutation(store);
+		await save(store);
+		return result;
+	});
+	mutationTail = run.then(() => undefined, () => undefined);
+	return run;
 }
 
 function cleanStrings(value: unknown, max = 64): string[] {
@@ -296,48 +341,48 @@ export type RegisterRunnerInput = {
 	softwareVersion?: string;
 };
 
-export function registerRunner(input: RegisterRunnerInput): { ok: true; runner: Runner; token: string } | { ok: false; error: string } {
+export async function registerRunner(input: RegisterRunnerInput): Promise<{ ok: true; runner: Runner; token: string } | { ok: false; error: string }> {
 	if (!isTailnetAddress(input.address)) return { ok: false, error: "Runners must connect from the tailnet." };
 	const pairing = redeemPairing(input.code);
 	if (!pairing) return { ok: false, error: "Pairing code is invalid or expired." };
 	const name = input.name.trim();
 	if (!name || name.length > 120) return { ok: false, error: "Runner name is required." };
 	const token = randomBytes(32).toString("hex");
-	const store = load();
-	const existingIndex = store.runners.findIndex((runner) => runner.name === name && runner.platform === input.platform);
-	const existing = existingIndex >= 0 ? store.runners[existingIndex] : undefined;
-	const capabilityInput = Array.isArray(input.capabilities) ? { toolchains: input.capabilities } : input.capabilities ?? {};
-	const runner = normalizeRunner({
-		id: existing?.id ?? `runner-${randomUUIDv7()}`,
-		name,
-		platform: input.platform,
-		arch: input.arch.trim() || "unknown",
-		address: normalizeAddress(input.address),
-		tokenHash: hashToken(token),
-		createdAt: existing?.createdAt ?? new Date().toISOString(),
-		createdBy: pairing.createdBy,
-		label: input.label?.trim() || existing?.label,
-		description: input.description?.trim() || existing?.description,
-		softwareVersion: input.softwareVersion?.trim() || existing?.softwareVersion,
-		capabilities: {
+	return mutateStore((store) => {
+		const existingIndex = store.runners.findIndex((runner) => runner.name === name && runner.platform === input.platform);
+		const existing = existingIndex >= 0 ? store.runners[existingIndex] : undefined;
+		const capabilityInput = Array.isArray(input.capabilities) ? { toolchains: input.capabilities } : input.capabilities ?? {};
+		const runner = normalizeRunner({
+			id: existing?.id ?? `runner-${randomUUIDv7()}`,
+			name,
 			platform: input.platform,
-			toolchains: cleanStrings(capabilityInput.toolchains),
-			tags: cleanStrings(capabilityInput.tags),
-			...(normalizeResources(capabilityInput.hardware) ? { hardware: normalizeResources(capabilityInput.hardware) } : {}),
-		},
-		resources: input.resources,
-		permissions: existing?.permissions ?? defaultPermissions(),
-		allowedUsers: existing?.allowedUsers ?? [],
-		allowedRepos: existing?.allowedRepos ?? [],
-		workspaceRoots: existing?.workspaceRoots ?? [],
-		migration: pairing.migration ?? existing?.migration,
-		localInferencePolicy: existing?.localInferencePolicy,
-		maintenance: existing?.maintenance,
+			arch: input.arch.trim() || "unknown",
+			address: normalizeAddress(input.address),
+			tokenHash: hashToken(token),
+			createdAt: existing?.createdAt ?? new Date().toISOString(),
+			createdBy: pairing.createdBy,
+			label: input.label?.trim() || existing?.label,
+			description: input.description?.trim() || existing?.description,
+			softwareVersion: input.softwareVersion?.trim() || existing?.softwareVersion,
+			capabilities: {
+				platform: input.platform,
+				toolchains: cleanStrings(capabilityInput.toolchains),
+				tags: cleanStrings(capabilityInput.tags),
+				...(normalizeResources(capabilityInput.hardware) ? { hardware: normalizeResources(capabilityInput.hardware) } : {}),
+			},
+			resources: input.resources,
+			permissions: existing?.permissions ?? defaultPermissions(),
+			allowedUsers: existing?.allowedUsers ?? [],
+			allowedRepos: existing?.allowedRepos ?? [],
+			workspaceRoots: existing?.workspaceRoots ?? [],
+			migration: pairing.migration ?? existing?.migration,
+			localInferencePolicy: existing?.localInferencePolicy,
+			maintenance: existing?.maintenance,
+		});
+		if (existingIndex >= 0) store.runners[existingIndex] = runner;
+		else store.runners.push(runner);
+		return { ok: true as const, runner, token };
 	});
-	if (existingIndex >= 0) store.runners[existingIndex] = runner;
-	else store.runners.push(runner);
-	save(store);
-	return { ok: true, runner, token };
 }
 
 export function authenticateRunner(id: string, token: string): Runner | undefined {
@@ -354,85 +399,85 @@ export type RunnerPatch = Partial<Pick<Runner, "label" | "description" | "locati
 	capabilities?: Partial<RunnerCapabilities>;
 };
 
-export function updateRunner(id: string, patch: RunnerPatch): Runner | undefined {
-	const store = load();
-	const index = store.runners.findIndex((runner) => runner.id === id);
-	if (index < 0) return undefined;
-	const current = store.runners[index];
-	store.runners[index] = normalizeRunner({ ...current, ...patch, workspaceRetention: patch.workspaceRetention === "delete" ? "delete" : patch.workspaceRetention === "retain" ? "retain" : current.workspaceRetention ?? "retain", permissions: { ...current.permissions, ...patch.permissions }, capabilities: { ...current.capabilities, ...patch.capabilities } });
-	save(store);
-	return store.runners[index];
+export function updateRunner(id: string, patch: RunnerPatch): Promise<Runner | undefined> {
+	return mutateStore((store) => {
+		const index = store.runners.findIndex((runner) => runner.id === id);
+		if (index < 0) return undefined;
+		const current = store.runners[index];
+		store.runners[index] = normalizeRunner({ ...current, ...patch, workspaceRetention: patch.workspaceRetention === "delete" ? "delete" : patch.workspaceRetention === "retain" ? "retain" : current.workspaceRetention ?? "retain", permissions: { ...current.permissions, ...patch.permissions }, capabilities: { ...current.capabilities, ...patch.capabilities } });
+		return store.runners[index];
+	});
 }
 
-export function touchRunner(id: string, patch: Partial<Pick<Runner, "softwareVersion" | "capabilities" | "resources">> = {}): void {
-	const store = load();
-	const runner = store.runners.find((candidate) => candidate.id === id);
-	if (!runner) return;
-	runner.lastSeenAt = new Date().toISOString();
-	if (patch.softwareVersion) runner.softwareVersion = patch.softwareVersion;
-	if (patch.capabilities) runner.capabilities = normalizeRunner({ ...runner, capabilities: patch.capabilities }).capabilities;
-	if (patch.resources) runner.resources = normalizeResources(patch.resources);
-	save(store);
+export async function touchRunner(id: string, patch: Partial<Pick<Runner, "softwareVersion" | "capabilities" | "resources">> = {}): Promise<void> {
+	await mutateStore((store) => {
+		const runner = store.runners.find((candidate) => candidate.id === id);
+		if (!runner) return;
+		runner.lastSeenAt = new Date().toISOString();
+		if (patch.softwareVersion) runner.softwareVersion = patch.softwareVersion;
+		if (patch.capabilities) runner.capabilities = normalizeRunner({ ...runner, capabilities: patch.capabilities }).capabilities;
+		if (patch.resources) runner.resources = normalizeResources(patch.resources);
+	});
 }
 
-export function setRunnerWorkload(id: string, workload?: Runner["workload"], clearSessionId?: string): void {
-	const store = load();
-	const runner = store.runners.find((candidate) => candidate.id === id);
-	if (!runner) return;
-	const previous = runner.workloads ?? (runner.workload ? [runner.workload] : []);
-	const next = workload?.sessionId
-		? [...previous.filter((item) => item.sessionId !== workload.sessionId), workload]
-		: clearSessionId ? previous.filter((item) => item.sessionId !== clearSessionId) : [];
-	runner.workloads = next;
-	runner.workload = next[0];
-	if (!next.length) { delete runner.workload; delete runner.workloads; }
-	save(store);
-}
-
-/** Atomically check and claim one capacity slot. The registry is single-writer
- * in this server process, so this synchronous load/mutate/save sequence cannot
- * interleave with another turn between eligibility and reservation. */
-export function claimRunnerWorkload(id: string, input: { user?: string; repo?: string; sessionId: string; operation: string }): Runner | undefined {
-	const store = load();
-	const runner = store.runners.find((candidate) => candidate.id === id);
-	if (!runner || !runnerAvailableForSession(runner, input)) return undefined;
-	const previous = runner.workloads ?? (runner.workload ? [runner.workload] : []);
-	if (!previous.some((workload) => workload.sessionId === input.sessionId)) {
-		const next = [...previous, { sessionId: input.sessionId, operation: input.operation, startedAt: new Date().toISOString() }];
+export async function setRunnerWorkload(id: string, workload?: Runner["workload"], clearSessionId?: string): Promise<void> {
+	await mutateStore((store) => {
+		const runner = store.runners.find((candidate) => candidate.id === id);
+		if (!runner) return;
+		const previous = runner.workloads ?? (runner.workload ? [runner.workload] : []);
+		const next = workload?.sessionId
+			? [...previous.filter((item) => item.sessionId !== workload.sessionId), workload]
+			: clearSessionId ? previous.filter((item) => item.sessionId !== clearSessionId) : [];
 		runner.workloads = next;
 		runner.workload = next[0];
-		save(store);
-	}
-	return runner;
+		if (!next.length) { delete runner.workload; delete runner.workloads; }
+	});
 }
 
-export function reserveRunner(id: string, input: Omit<RunnerReservation, "expiresAt"> & { durationMinutes?: number }): Runner | undefined {
-	const store = load();
-	const runner = store.runners.find((candidate) => candidate.id === id);
-	if (!runner || runner.maintenance) return undefined;
-	const now = Date.now();
-	if (runner.reservation && Date.parse(runner.reservation.expiresAt) > now && runner.reservation.reservedBy !== input.reservedBy) return undefined;
-	const minutes = Math.min(Math.max(input.durationMinutes ?? 60, 1), 24 * 60);
-	runner.reservation = { sessionId: input.sessionId, reason: input.reason.trim().slice(0, 240), reservedBy: input.reservedBy, expiresAt: new Date(now + minutes * 60_000).toISOString() };
-	save(store);
-	return runner;
+/** Atomically check and claim one capacity slot. Managed mutations are
+ * serialized so eligibility and reservation cannot interleave. */
+export function claimRunnerWorkload(id: string, input: { user?: string; repo?: string; sessionId: string; operation: string }): Promise<Runner | undefined> {
+	return mutateStore((store) => {
+		const runner = store.runners.find((candidate) => candidate.id === id);
+		if (!runner || !runnerAvailableForSession(runner, input)) return undefined;
+		const previous = runner.workloads ?? (runner.workload ? [runner.workload] : []);
+		if (!previous.some((workload) => workload.sessionId === input.sessionId)) {
+			const next = [...previous, { sessionId: input.sessionId, operation: input.operation, startedAt: new Date().toISOString() }];
+			runner.workloads = next;
+			runner.workload = next[0];
+		}
+		return runner;
+	});
 }
 
-export function releaseRunnerReservation(id: string, reservedBy?: string): Runner | undefined {
-	const store = load();
-	const runner = store.runners.find((candidate) => candidate.id === id);
-	if (!runner || (reservedBy && runner.reservation?.reservedBy && runner.reservation.reservedBy !== reservedBy)) return undefined;
-	delete runner.reservation;
-	save(store);
-	return runner;
+export function reserveRunner(id: string, input: Omit<RunnerReservation, "expiresAt"> & { durationMinutes?: number }): Promise<Runner | undefined> {
+	return mutateStore((store) => {
+		const runner = store.runners.find((candidate) => candidate.id === id);
+		if (!runner || runner.maintenance) return undefined;
+		const now = Date.now();
+		if (runner.reservation && Date.parse(runner.reservation.expiresAt) > now && runner.reservation.reservedBy !== input.reservedBy) return undefined;
+		const minutes = Math.min(Math.max(input.durationMinutes ?? 60, 1), 24 * 60);
+		runner.reservation = { sessionId: input.sessionId, reason: input.reason.trim().slice(0, 240), reservedBy: input.reservedBy, expiresAt: new Date(now + minutes * 60_000).toISOString() };
+		return runner;
+	});
 }
 
-export function removeRunner(id: string): boolean {
-	const store = load();
-	const runners = store.runners.filter((runner) => runner.id !== id);
-	if (runners.length === store.runners.length) return false;
-	save({ runners });
-	return true;
+export function releaseRunnerReservation(id: string, reservedBy?: string): Promise<Runner | undefined> {
+	return mutateStore((store) => {
+		const runner = store.runners.find((candidate) => candidate.id === id);
+		if (!runner || (reservedBy && runner.reservation?.reservedBy && runner.reservation.reservedBy !== reservedBy)) return undefined;
+		delete runner.reservation;
+		return runner;
+	});
+}
+
+export function removeRunner(id: string): Promise<boolean> {
+	return mutateStore((store) => {
+		const runners = store.runners.filter((runner) => runner.id !== id);
+		if (runners.length === store.runners.length) return false;
+		store.runners = runners;
+		return true;
+	});
 }
 
 export function runnerAllowed(runner: Runner, input: { user?: string; repo?: string; permission: keyof RunnerExecutionPermissions }): boolean {

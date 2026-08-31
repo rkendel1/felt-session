@@ -57,13 +57,13 @@ export function createRunnersMcpServer(context: { user?: string; sessionId?: str
 			tool("reserve_runner", "Reserve a scarce trusted Runner for this session. This does not bypass permissions or turn it into a Sandbox.", { runner: z.string(), reason: z.string(), durationMinutes: z.number().optional() }, async (args: { runner: string; reason: string; durationMinutes?: number }) => {
 				const resolved = resolveRunner(args.runner);
 				if ("error" in resolved) return text(resolved.error ?? "Runner not found.");
-				const reserved = reserveRunner(resolved.runner.id, { reason: args.reason, reservedBy: context.user, sessionId: context.sessionId, durationMinutes: args.durationMinutes });
+				const reserved = await reserveRunner(resolved.runner.id, { reason: args.reason, reservedBy: context.user, sessionId: context.sessionId, durationMinutes: args.durationMinutes });
 				return reserved ? text(`${reserved.name} is reserved until ${reserved.reservation?.expiresAt}.`) : text(`${resolved.runner.name} is unavailable or already reserved.`);
 			}),
 			tool("release_runner_reservation", "Release this user's reservation on a Runner.", { runner: z.string() }, async ({ runner }: { runner: string }) => {
 				const resolved = resolveRunner(runner);
 				if ("error" in resolved) return text(resolved.error ?? "Runner not found.");
-				return releaseRunnerReservation(resolved.runner.id, context.user) ? text(`Released ${resolved.runner.name}.`) : text(`Could not release ${resolved.runner.name}.`);
+				return await releaseRunnerReservation(resolved.runner.id, context.user) ? text(`Released ${resolved.runner.name}.`) : text(`Could not release ${resolved.runner.name}.`);
 			}),
 		],
 	});

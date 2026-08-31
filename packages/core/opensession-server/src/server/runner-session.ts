@@ -80,7 +80,7 @@ export async function maybeLaunchRunnerRun(
 	const registeredRunner = getRunner(target.id);
 	if (!registeredRunner)
 		throw new Error("This Runner is no longer available for this session");
-	const runner = claimRunnerWorkload(registeredRunner.id, { user: opts.user, repo: session.repo, sessionId: session.id, operation: "full session" });
+	const runner = await claimRunnerWorkload(registeredRunner.id, { user: opts.user, repo: session.repo, sessionId: session.id, operation: "full session" });
 	if (!runner) throw new Error("This Runner is no longer available for this session");
 
 	const hostId = opts.hostId || `rh-${Bun.randomUUIDv7()}`;
@@ -272,7 +272,7 @@ export async function maybeLaunchRunnerRun(
 			} finally {
         if (sourceCompleted && sawTerminal) await journalClear(run.runKey);
 				else if (sourceCompleted) await journalRecordAbnormalCompletion(run);
-				setRunnerWorkload(runner.id, undefined, session.id);
+				await setRunnerWorkload(runner.id, undefined, session.id);
 			}
 		})() as RunnerEvents;
 		events.runnerId = runner.id;
@@ -297,7 +297,7 @@ export async function maybeLaunchRunnerRun(
 				{ run, reason: "ambiguous_runner_launch", notify: false },
 			]);
 		}
-		setRunnerWorkload(runner.id, undefined, session.id);
+		await setRunnerWorkload(runner.id, undefined, session.id);
 		throw error;
 	}
 }
@@ -405,17 +405,17 @@ export async function resumeRunnerRun(
 			});
 		},
 	};
-	setRunnerWorkload(run.runnerId, { sessionId: session.id, operation: "full session", startedAt: run.startedAt });
+	await setRunnerWorkload(run.runnerId, { sessionId: session.id, operation: "full session", startedAt: run.startedAt });
 	const handle = new HostHandle(candidate.dir, spec, callbacks, launcher, run.runKey);
 	try {
 		await handle.connectWithWait(20_000);
 		return (async function* (): AsyncGenerator<StreamEvent> {
 			try { yield* handle.events(); }
-			finally { setRunnerWorkload(run.runnerId!, undefined, session.id); }
+			finally { await setRunnerWorkload(run.runnerId!, undefined, session.id); }
 		})();
 	} catch (error) {
 		handle.abandon();
-		setRunnerWorkload(run.runnerId, undefined, session.id);
+		await setRunnerWorkload(run.runnerId, undefined, session.id);
 		throw error;
 	}
 }

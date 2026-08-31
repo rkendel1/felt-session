@@ -13,6 +13,7 @@ import { initializeManagedGithubLimits } from "./src/server/github-limit";
 import { initializeManagedCommitSessions } from "./src/server/commit-sessions";
 import { initializeManagedMcpConfig } from "./src/server/connections";
 import { initializeManagedKeychain } from "./src/server/keychain";
+import { initializeManagedRunners } from "./src/server/runners";
 import { initializeManagedAutomationInputs } from "./src/server/automation-inputs";
 import { initializeManagedAutomationOutputs } from "./src/server/automation-outputs";
 import { initializeManagedAutomationIntents, initializeManagedAutomations } from "./src/server/automations";
@@ -213,6 +214,7 @@ if (!g.__opensessionBooted) {
 	await initializeManagedCommitSessions(db);
 	await initializeManagedMcpConfig(db);
 	await initializeManagedKeychain(db);
+	await initializeManagedRunners(db);
 	await initializeManagedAutomationInputs(db);
 	await initializeManagedAutomationOutputs(db);
 	await initializeManagedAutomations(db);

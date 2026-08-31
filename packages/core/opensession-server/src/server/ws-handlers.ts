@@ -499,7 +499,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 
 	async message(ws, message) {
 		if (sandboxWsMessage(ws, message as any)) return;
-		if (runnerWsMessage(ws, message as any)) return;
+		if (await runnerWsMessage(ws, message as any)) return;
 		if (sandboxPortalRelayMessage(ws, message as any)) return;
 		let msg: any;
 		try {

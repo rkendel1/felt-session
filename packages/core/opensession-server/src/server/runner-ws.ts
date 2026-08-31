@@ -292,12 +292,11 @@ export function runnerWsOpen(ws: any): boolean {
 	const runner = getRunner(runnerId);
 	if (!runner) { ws.close(1008, "revoked"); return true; }
 	connections.set(runnerId, { ws, connectedAt: Date.now(), protocolVersion: 0, capabilities: runner.capabilities, resources: runner.resources, pending: new Map() });
-	touchRunner(runnerId);
 	console.log(`[runners] ${runner.name} attached (${runnerId})`);
 	return true;
 }
 
-export function runnerWsMessage(ws: any, raw: string | Buffer): boolean {
+export async function runnerWsMessage(ws: any, raw: string | Buffer): Promise<boolean> {
 	const runnerId = ws.data?.kind === "runner" ? ws.data.runnerId : undefined;
 	if (!runnerId) return false;
 	const connection = connections.get(runnerId);
@@ -316,11 +315,11 @@ export function runnerWsMessage(ws: any, raw: string | Buffer): boolean {
 			const resources = message.resources && typeof message.resources === "object" ? message.resources : runner.resources;
 			connection.capabilities = capabilities;
 			connection.resources = resources;
-			touchRunner(runnerId, { capabilities, resources, softwareVersion: typeof message.softwareVersion === "string" ? message.softwareVersion : undefined });
+			await touchRunner(runnerId, { capabilities, resources, softwareVersion: typeof message.softwareVersion === "string" ? message.softwareVersion : undefined });
 			return true;
 		}
 		case "heartbeat":
-			touchRunner(runnerId, { capabilities: message.capabilities, resources: message.resources, softwareVersion: typeof message.softwareVersion === "string" ? message.softwareVersion : undefined });
+			await touchRunner(runnerId, { capabilities: message.capabilities, resources: message.resources, softwareVersion: typeof message.softwareVersion === "string" ? message.softwareVersion : undefined });
 			return true;
 		case "out": {
 			const pending = connection.pending.get(String(message.id));
