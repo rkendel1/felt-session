@@ -47,7 +47,7 @@ import {
   inviteBotToChannel,
   getWorktreeDirForChannel,
 } from "./worktree-channels";
-import { interruptQueuesForRestart, loadQueueFromDisk, sessionQueues } from "./queue";
+import { interruptQueuesForRestart, loadQueue, sessionQueues } from "./queue";
 import {
   enqueueMessage,
   getOrCreateQueue,
@@ -437,7 +437,7 @@ Please address this feedback:
 5. Respond to each individual review comment on the PR by posting replies via: gh api repos/${defaultRepo().ghRepo}/pulls/${prNumber}/comments/{comment_id}/replies -f body="<your response>"
 6. Summarize what you changed in response to the review`;
 
-      enqueueMessage(sessionKey, {
+      await enqueueMessage(sessionKey, {
         prompt,
         channel: reviewChannelId,
         threadTs: msgTs || "",
@@ -791,7 +791,7 @@ export class SlackAgent implements AgentModule {
 
     await loadActiveSessionsOnStartup();
     await loadWorktreeChannels();
-    await loadQueueFromDisk();
+    await loadQueue();
     loadProcessedEvents();
 
     // Fetch team ID and bot user ID for streaming APIs
@@ -827,9 +827,9 @@ export class SlackAgent implements AgentModule {
   async shutdown(): Promise<void> {
     slackEventInbox.stop();
     // A server restart must not masquerade as a person's Stop action. Keep the
-    // queue head on disk and let startup continue it against the saved engine
+    // queue head in FeltDB and let startup continue it against the saved engine
     // session; handlers render the existing card as "Restarting".
-    const interrupted = interruptQueuesForRestart();
+    const interrupted = await interruptQueuesForRestart();
     console.log(`[slack] Agent shut down (${interrupted} run(s) preserved for restart)`);
   }
 

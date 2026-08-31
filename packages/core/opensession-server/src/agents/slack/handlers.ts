@@ -1307,7 +1307,7 @@ export async function handleMessageEvent(event: any): Promise<void> {
     console.log(`[slack] Continuing session: ${sessionKey}`);
     session.lastActivity = new Date().toISOString();
 
-    enqueueMessage(sessionKey, {
+    await enqueueMessage(sessionKey, {
       prompt: text,
       cardTitle: text,
       channel,
@@ -1347,7 +1347,7 @@ I'm now in a worktree (branch: ${branch}) for this task. Please analyze what nee
       return;
     }
 
-    enqueueMessage(sessionKey, {
+    await enqueueMessage(sessionKey, {
       prompt,
       cardTitle: text,
       channel,
@@ -1577,7 +1577,7 @@ Their message: "${cleanText}"
 Please help with this request. Start by exploring the codebase to understand what's relevant.`;
     }
 
-    enqueueMessage(sessionKey, {
+    await enqueueMessage(sessionKey, {
       prompt,
       cardTitle: cleanText,
       channel,
@@ -1667,7 +1667,7 @@ Please help with this request. Start by exploring the codebase to understand wha
       ? `${userName} asked me in a Slack thread (with context):\n\n---\n${context}\n---\n\nTheir question: "${cleanText}"`
       : `${userName} asked me in Slack: "${cleanText}"`;
     const repoNote = askCwd ? ` I'm in the ${repo.id} repo's checkout for this.` : "";
-    enqueueMessage(sessionKey, {
+    await enqueueMessage(sessionKey, {
       prompt: `${intro}\n\nThis is a question/discussion, not a coding task — don't create a branch or change code. Read the codebase as needed for context and answer concisely.${repoNote}`,
       cardTitle: cleanText,
       channel,
@@ -1697,7 +1697,7 @@ Please help with this request. Start by exploring the codebase to understand wha
     const intro = context
       ? `${userName} tagged me in a Slack thread with this context:\n\n---\n${context}\n---\n\nTheir message: "${cleanText}"`
       : `${userName} tagged me in a Slack channel with this message: "${cleanText}"`;
-    enqueueMessage(sessionKey, {
+    await enqueueMessage(sessionKey, {
       prompt: `${intro}\n\nPlease help with this request.`,
       cardTitle: cleanText,
       channel,
@@ -1755,7 +1755,7 @@ ${where} Please help with this request. Start by exploring the codebase to under
     return;
   }
 
-  enqueueMessage(sessionKey, {
+  await enqueueMessage(sessionKey, {
     prompt,
     cardTitle: cleanText,
     channel,

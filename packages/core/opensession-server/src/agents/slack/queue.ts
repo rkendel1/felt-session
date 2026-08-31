@@ -2,7 +2,8 @@
  * Message queue system for the Slack agent.
  *
  * Each Slack session (channel+thread) gets its own FIFO queue.
- * Messages are persisted to disk so they survive restarts.
+ * Messages are committed to managed FeltDB before processing so they survive
+ * restarts without a local durability authority.
  */
 
 import { processMessage } from "./handlers";
@@ -11,11 +12,16 @@ import {
   removeReaction,
   MESSAGES,
 } from "./slack-api";
-import { writeJsonAtomic } from "../../server/shared/atomic-write";
+import { createHash } from "node:crypto";
+import { existsSync, unlinkSync } from "node:fs";
+import { managedFeltDb } from "../../server/managed-feltdb";
 import type { SlackFileRef } from "./slack-api";
 
 const SESSION_DIR = `${process.env.HOME}/.slack-sessions`;
 const QUEUE_FILE = `${SESSION_DIR}/message-queue.json`;
+const QUEUE_COLLECTION = "opensession_slack_message_queue";
+const QUEUE_MIGRATIONS_COLLECTION = "opensession_migrations";
+const QUEUE_MIGRATION_ID = "slack-message-queue-json-to-managed-feltdb-v1";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -56,11 +62,32 @@ export interface SessionQueue {
   restartInterrupted?: boolean;
 }
 
+type DurableQueuedMessage = {
+  id: string;
+  sessionKey: string;
+  message: QueuedMessage;
+  status: "pending" | "completed";
+  enqueuedAt: number;
+  updatedAt: number;
+  __version?: number;
+};
+
 // ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
 
 export const sessionQueues = new Map<string, SessionQueue>();
+const durableVersions = new Map<string, number>();
+
+function durableId(sessionKey: string, messageTs: string): string {
+  return `slack_queue_${createHash("sha256")
+    .update(`${sessionKey}\0${messageTs}`)
+    .digest("hex")}`;
+}
+
+function queueCollection() {
+  return managedFeltDb().collection<DurableQueuedMessage>(QUEUE_COLLECTION);
+}
 
 /** Deliberately distinct from an ordinary AbortError: handlers use this to
  * render a restart state rather than the misleading "Cancelled by user". */
@@ -72,17 +99,20 @@ export function isRestartAbort(signal: AbortSignal): boolean {
 
 /** Stop driving live Slack turns during process shutdown while retaining the
  * head message in each queue. Startup reloads and continues those messages. */
-export function interruptQueuesForRestart(): number {
+export async function interruptQueuesForRestart(): Promise<number> {
   let interrupted = 0;
-  for (const sq of sessionQueues.values()) {
+  const writes: Promise<void>[] = [];
+  for (const [sessionKey, sq] of sessionQueues) {
     if (!sq.abortController || sq.abortController.signal.aborted) continue;
     sq.restartInterrupted = true;
     // Boot must continue the interrupted turn, not submit the person's Slack
     // message as a new turn. This marker survives with the durable queue item.
     if (sq.queue[0]) sq.queue[0].restartRecovery = true;
     sq.abortController.abort(RESTART_ABORT_REASON);
+    writes.push(persistQueue(sessionKey, sq));
     interrupted++;
   }
+  await Promise.all(writes);
   return interrupted;
 }
 
@@ -100,42 +130,152 @@ export function getOrCreateQueue(sessionKey: string): SessionQueue {
 }
 
 // ---------------------------------------------------------------------------
-// Disk persistence
+// Managed persistence
 // ---------------------------------------------------------------------------
 
-export async function saveQueueToDisk(): Promise<void> {
-  const data: Record<string, QueuedMessage[]> = {};
-  for (const [key, sq] of sessionQueues) {
-    if (sq.queue.length > 0) {
-      data[key] = sq.queue;
-    }
+async function insertDurable(sessionKey: string, message: QueuedMessage): Promise<boolean> {
+  const id = durableId(sessionKey, message.messageTs);
+  const now = Date.now();
+  const record: DurableQueuedMessage = {
+    id,
+    sessionKey,
+    message,
+    status: "pending",
+    enqueuedAt: now,
+    updatedAt: now,
+  };
+  try {
+    await managedFeltDb().transaction((tx) => {
+      tx.collection<DurableQueuedMessage>(QUEUE_COLLECTION).set(id, record, {
+        requireAbsent: true,
+      });
+    }, { transactionId: `opensession:slack-queue:enqueue:${id}` });
+  } catch (error) {
+    if (!await queueCollection().get(id)) throw error;
   }
-  writeJsonAtomic(QUEUE_FILE, data);
+  const stored = await queueCollection().get(id);
+  if (!stored || !Number.isSafeInteger(stored.__version))
+    throw new Error(`Slack queue record ${id} has no FeltDB authority version`);
+  durableVersions.set(id, stored.__version!);
+  return stored.status === "pending";
 }
 
-export async function loadQueueFromDisk(): Promise<void> {
+async function persistQueue(sessionKey: string, sq: SessionQueue): Promise<void> {
+  for (const message of sq.queue) {
+    const id = durableId(sessionKey, message.messageTs);
+    let version = durableVersions.get(id);
+    let stored = version === undefined ? await queueCollection().get(id) : undefined;
+    if (version === undefined && !stored) {
+      await insertDurable(sessionKey, message);
+      continue;
+    }
+    version ??= stored?.__version;
+    if (!Number.isSafeInteger(version))
+      throw new Error(`Slack queue record ${id} has no FeltDB authority version`);
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const result = await queueCollection().updateIfVersion(id, version!, {
+        message,
+        updatedAt: Date.now(),
+      });
+      if (result.updated) {
+        const current = await queueCollection().get(id);
+        if (!current || !Number.isSafeInteger(current.__version))
+          throw new Error(`Updated Slack queue record ${id} is missing`);
+        durableVersions.set(id, current.__version!);
+        break;
+      }
+      stored = await queueCollection().get(id);
+      if (!stored || !Number.isSafeInteger(stored.__version))
+        throw new Error(`Slack queue record ${id} disappeared during update`);
+      version = stored.__version;
+      if (attempt === 4) throw new Error(`Slack queue record ${id} remained contended`);
+    }
+  }
+}
+
+async function removeDurable(sessionKey: string, message: QueuedMessage): Promise<void> {
+  const id = durableId(sessionKey, message.messageTs);
+  const stored = await queueCollection().get(id);
+  if (!stored) {
+    durableVersions.delete(id);
+    return;
+  }
+  if (!Number.isSafeInteger(stored.__version))
+    throw new Error(`Slack queue record ${id} has no FeltDB authority version`);
+  const result = await queueCollection().updateIfVersion(id, stored.__version!, {
+    status: "completed",
+    updatedAt: Date.now(),
+  });
+  if (!result.updated) throw new Error(`Slack queue record ${id} changed during completion`);
+  durableVersions.delete(id);
+}
+
+export async function loadQueue(): Promise<void> {
   try {
-    const file = Bun.file(QUEUE_FILE);
-    if (await file.exists()) {
-      const data = JSON.parse(await file.text()) as Record<
-        string,
-        QueuedMessage[]
-      >;
-      let total = 0;
-      for (const [sessionKey, messages] of Object.entries(data)) {
-        if (messages.length > 0) {
-          total += messages.length;
-          for (const msg of messages) {
-            enqueueMessage(sessionKey, msg);
+    const migration = managedFeltDb().collection<{ id: string }>(QUEUE_MIGRATIONS_COLLECTION);
+    if (!await migration.get(QUEUE_MIGRATION_ID)) {
+      const file = Bun.file(QUEUE_FILE);
+      if (await file.exists()) {
+        const data = JSON.parse(await file.text()) as Record<string, QueuedMessage[]>;
+        for (const [sessionKey, messages] of Object.entries(data)) {
+          for (const message of messages) {
+            message.promptEntryId ??= crypto.randomUUID();
+            await insertDurable(sessionKey, message);
           }
         }
       }
-      if (total > 0) {
-        console.log(`[slack] Restored ${total} queued message(s) from disk`);
+      await managedFeltDb().transaction((tx) => {
+        tx.collection(QUEUE_MIGRATIONS_COLLECTION).set(QUEUE_MIGRATION_ID, {
+          id: QUEUE_MIGRATION_ID,
+          completedAt: Date.now(),
+        }, { requireAbsent: true });
+      }, { transactionId: `opensession:migration:${QUEUE_MIGRATION_ID}` });
+      if (existsSync(QUEUE_FILE)) unlinkSync(QUEUE_FILE);
+    } else if (existsSync(QUEUE_FILE)) {
+      unlinkSync(QUEUE_FILE);
+    }
+
+    let cursor: string | undefined;
+    let total = 0;
+    do {
+      const page = await managedFeltDb().query<DurableQueuedMessage>({
+        collection: QUEUE_COLLECTION,
+        where: [{ field: "status", eq: "pending" }],
+        orderBy: [{ field: "enqueuedAt", direction: "asc" }],
+        limit: 500,
+        ...(cursor ? { cursor } : {}),
+      });
+      for (const record of page.records) {
+        if (!record.id || !record.sessionKey || !record.message?.messageTs)
+          throw new Error("Managed Slack queue contains an invalid record");
+        const sq = getOrCreateQueue(record.sessionKey);
+        if (!sq.queue.some((message) => message.messageTs === record.message.messageTs)) {
+          sq.queue.push(record.message);
+          total++;
+        }
+        if (!Number.isSafeInteger(record.__version))
+          throw new Error(`Slack queue record ${record.id} has no authority version`);
+        durableVersions.set(record.id, record.__version!);
+      }
+      cursor = page.exhausted ? undefined : page.nextCursor;
+      if (!page.exhausted && !cursor) throw new Error("FeltDB Slack queue cursor is missing");
+    } while (cursor);
+    for (const [sessionKey, sq] of sessionQueues) {
+      sq.queue.sort((left, right) => left.messageTs.localeCompare(right.messageTs));
+      if (!sq.processing && sq.queue.length) {
+        sq.processing = true;
+        void processQueue(sessionKey).catch((error) => {
+          console.error(`[slack] Queue processing error for ${sessionKey}:`, error);
+          sq.processing = false;
+        });
       }
     }
+    if (total > 0) {
+      console.log(`[slack] Restored ${total} queued message(s) from managed FeltDB`);
+    }
   } catch (e) {
-    console.warn("[slack] Failed to load message queue:", e);
+    console.warn("[slack] Failed to load managed message queue:", e);
+    throw e;
   }
 }
 
@@ -143,7 +283,7 @@ export async function loadQueueFromDisk(): Promise<void> {
 // Enqueue / process
 // ---------------------------------------------------------------------------
 
-export function enqueueMessage(sessionKey: string, msg: QueuedMessage): void {
+export async function enqueueMessage(sessionKey: string, msg: QueuedMessage): Promise<void> {
   const sq = getOrCreateQueue(sessionKey);
 
   // Dedup: don't enqueue the same Slack message twice (by messageTs)
@@ -157,14 +297,14 @@ export function enqueueMessage(sessionKey: string, msg: QueuedMessage): void {
   // The same Slack event can cross provider boundaries or a process restart.
   // Keep one transcript uuid so every attempt addresses the original row.
   msg.promptEntryId ??= crypto.randomUUID();
+  if (!await insertDurable(sessionKey, msg)) {
+    console.log(`[slack] Skipping completed message ${msg.messageTs} for ${sessionKey}`);
+    return;
+  }
   sq.queue.push(msg);
+  sq.queue.sort((left, right) => left.messageTs.localeCompare(right.messageTs));
   console.log(
     `[slack] Enqueued message for ${sessionKey} (queue length: ${sq.queue.length})`
-  );
-
-  // Persist to disk
-  saveQueueToDisk().catch((e) =>
-    console.warn("[slack] Failed to save queue:", e)
   );
 
   if (!sq.processing) {
@@ -201,9 +341,7 @@ export async function processQueue(sessionKey: string): Promise<void> {
     if (sq.restartInterrupted) {
       sq.processing = false;
       sq.abortController = null;
-      await saveQueueToDisk().catch((e) =>
-        console.warn("[slack] Failed to save restart-interrupted queue:", e)
-      );
+      await persistQueue(sessionKey, sq);
       console.log(`[slack] Preserved interrupted message for ${sessionKey} across restart`);
       return;
     }
@@ -214,17 +352,11 @@ export async function processQueue(sessionKey: string): Promise<void> {
     // removes only what we actually handled and leaves anything new to run next.
     const doneIdx = sq.queue.findIndex((m) => m.messageTs === msg.messageTs);
     if (doneIdx !== -1) sq.queue.splice(doneIdx, 1);
-    await saveQueueToDisk().catch((e) =>
-      console.warn("[slack] Failed to save queue:", e)
-    );
+    await removeDurable(sessionKey, msg);
     // Remove eyes reaction after processing each message
     await removeReaction(msg.channel, msg.messageTs, "eyes").catch(() => {});
   }
 
   sq.processing = false;
   sq.abortController = null;
-  // Clean up empty queue from disk
-  saveQueueToDisk().catch((e) =>
-    console.warn("[slack] Failed to save queue:", e)
-  );
 }
