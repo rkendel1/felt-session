@@ -136,7 +136,7 @@ export async function handlePrefsRoutes(
 					if (typeof body[k] === "number") patch[k] = body[k];
 				}
 				if (typeof body.memory === "string") patch.memory = body.memory;
-				setPreviewPoolConfig(repoId, patch);
+				await setPreviewPoolConfig(repoId, patch);
 				return Response.json({ repos: previewPoolStatus() });
 			}
 			if (m[2] && req.method === "POST") {

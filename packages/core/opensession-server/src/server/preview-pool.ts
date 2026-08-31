@@ -38,13 +38,13 @@
  */
 
 import { $ } from "bun";
+import type { StateFirstDB } from "@feltdb/core";
 import {
   existsSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
-  renameSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -59,6 +59,7 @@ import { isDevInstance } from "./dev-mode";
 import { sandboxConfig } from "./sandbox/config";
 import { injectCloneCredential, shellQuoteWord } from "./sandbox/adapters/bootstrap";
 import { redactUrl } from "./shared/redact";
+import { managedFeltDb } from "./managed-feltdb";
 
 // ── Config ───────────────────────────────────────────────────────────────────
 
@@ -117,10 +118,31 @@ function configFile(): string {
   return join(poolDir(), "config.json");
 }
 
+type PreviewPoolConfigStore = { repos: Record<string, Partial<PreviewPoolRepoConfig>> };
+type StoredPreviewPoolConfig = PreviewPoolConfigStore & { id: string };
+type StoredPreviewPoolState = { id: string; repoId: string; state: PoolState };
+const CONFIG_COLLECTION = "opensession_preview_pool_config";
+const STATE_COLLECTION = "opensession_preview_pool_state";
+const CONFIG_ID = "config";
+const MIGRATION = "preview-pool-json-to-managed-feltdb-v1";
+let previewPoolDb: StateFirstDB | undefined;
+const previewManagedState = ((globalThis as typeof globalThis & {
+  __opensessionPreviewManagedState?: {
+    config: PreviewPoolConfigStore;
+    states: Map<string, PoolState>;
+    persistTail: Promise<void>;
+  };
+}).__opensessionPreviewManagedState ??= {
+  config: { repos: {} } as PreviewPoolConfigStore,
+  states: new Map(),
+  persistTail: Promise.resolve(),
+});
+
+const stateRecordId = (repoId: string) => `repo_${Buffer.from(repoId).toString("base64url")}`;
+
 export function previewPoolConfig(repoId: string): PreviewPoolRepoConfig {
   try {
-    const raw = JSON.parse(readFileSync(configFile(), "utf-8"));
-    const r = raw?.repos?.[repoId] ?? {};
+    const r = previewManagedState.config.repos[repoId] ?? {};
     return {
       enabled: r.enabled === true,
       backend: r.backend === "daytona" || r.backend === "microvm" ? r.backend : "docker",
@@ -137,15 +159,14 @@ export function previewPoolConfig(repoId: string): PreviewPoolRepoConfig {
   }
 }
 
-export function setPreviewPoolConfig(repoId: string, patch: Partial<PreviewPoolRepoConfig>): void {
-  mkdirSync(poolDir(), { recursive: true });
-  let raw: { repos?: Record<string, unknown> } = {};
-  try {
-    raw = JSON.parse(readFileSync(configFile(), "utf-8"));
-  } catch {}
-  raw.repos ??= {};
-  raw.repos[repoId] = { ...(raw.repos[repoId] as object), ...patch };
-  writeFileSync(configFile(), JSON.stringify(raw, null, 2));
+export async function setPreviewPoolConfig(repoId: string, patch: Partial<PreviewPoolRepoConfig>): Promise<void> {
+  const db = previewPoolDb ?? managedFeltDb();
+  const next: PreviewPoolConfigStore = structuredClone(previewManagedState.config);
+  next.repos[repoId] = { ...next.repos[repoId], ...patch };
+  await db.transaction((tx) => {
+    tx.collection<StoredPreviewPoolConfig>(CONFIG_COLLECTION).set(CONFIG_ID, { id: CONFIG_ID, ...next });
+  }, { transactionId: `opensession:preview-pool:config:${crypto.randomUUID()}` });
+  previewManagedState.config = next;
 }
 
 function clampInt(v: unknown, min: number, max: number, dflt: number): number {
@@ -213,24 +234,78 @@ function stateFile(repoId: string): string {
   return join(poolDir(), `state-${repoId}.json`);
 }
 
-function readState(repoId: string): PoolState {
-  try {
-    const s = JSON.parse(readFileSync(stateFile(repoId), "utf-8"));
-    return {
-      golden: s.golden,
-      branchRebuildPending: s.branchRebuildPending === true,
-      containers: s.containers ?? {},
-    };
-  } catch {
-    return { containers: {} };
+function normalizePoolState(value: any): PoolState {
+  return {
+    ...(value?.golden ? { golden: value.golden } : {}),
+    ...(value?.branchRebuildPending === true ? { branchRebuildPending: true } : {}),
+    containers: value?.containers && typeof value.containers === "object" ? value.containers : {},
+  };
+}
+
+export async function initializeManagedPreviewPool(
+  db: StateFirstDB = previewPoolDb ?? managedFeltDb(),
+  legacyDir = poolDir(),
+): Promise<void> {
+  previewPoolDb = db;
+  const legacyConfig = join(legacyDir, "config.json");
+  const legacyStates = existsSync(legacyDir)
+    ? readdirSync(legacyDir).flatMap((file) => {
+        const repoId = file.match(/^state-(.+)\.json$/)?.[1];
+        return repoId ? [{ repoId, path: join(legacyDir, file) }] : [];
+      })
+    : [];
+  const migrations = db.collection<{ id: string }>("opensession_migrations");
+  if (!await migrations.get(MIGRATION)) {
+    let config: PreviewPoolConfigStore = { repos: {} };
+    if (existsSync(legacyConfig)) {
+      const raw = JSON.parse(readFileSync(legacyConfig, "utf8"));
+      config = { repos: raw?.repos && typeof raw.repos === "object" ? raw.repos : {} };
+    }
+    const states = legacyStates.map(({ repoId, path }) => ({
+      repoId,
+      state: normalizePoolState(JSON.parse(readFileSync(path, "utf8"))),
+    }));
+    await db.transaction((tx) => {
+      tx.collection<StoredPreviewPoolConfig>(CONFIG_COLLECTION).set(CONFIG_ID, { id: CONFIG_ID, ...config });
+      for (const { repoId, state } of states) {
+        const id = stateRecordId(repoId);
+        tx.collection<StoredPreviewPoolState>(STATE_COLLECTION).set(id, { id, repoId, state });
+      }
+      tx.collection("opensession_migrations").set(MIGRATION,
+        { id: MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
+    }, { transactionId: `opensession:migration:${MIGRATION}` });
   }
+  const [config, states] = await Promise.all([
+    db.collection<StoredPreviewPoolConfig>(CONFIG_COLLECTION).get(CONFIG_ID),
+    db.collection<StoredPreviewPoolState>(STATE_COLLECTION).all(),
+  ]);
+  previewManagedState.config = { repos: config?.repos || {} };
+  previewManagedState.states.clear();
+  for (const record of states) previewManagedState.states.set(record.repoId, normalizePoolState(record.state));
+  for (const path of [legacyConfig, ...legacyStates.map(({ path }) => path)])
+    if (existsSync(path)) rmSync(path, { force: true });
+}
+
+export async function flushPreviewPoolWrites(): Promise<void> {
+  await previewManagedState.persistTail;
+}
+
+function readState(repoId: string): PoolState {
+  return structuredClone(previewManagedState.states.get(repoId) ?? { containers: {} });
 }
 
 function writeState(repoId: string, state: PoolState): void {
-  mkdirSync(poolDir(), { recursive: true });
-  const tmp = `${stateFile(repoId)}.tmp`;
-  writeFileSync(tmp, JSON.stringify(state, null, 2));
-  renameSync(tmp, stateFile(repoId));
+  const snapshot = structuredClone(state);
+  previewManagedState.states.set(repoId, snapshot);
+  const db = previewPoolDb ?? managedFeltDb();
+  previewManagedState.persistTail = previewManagedState.persistTail.catch(() => {}).then(async () => {
+    await db.transaction((tx) => {
+    const id = stateRecordId(repoId);
+    tx.collection<StoredPreviewPoolState>(STATE_COLLECTION).set(id, { id, repoId, state: snapshot });
+    }, { transactionId: `opensession:preview-pool:state:${crypto.randomUUID()}` });
+  }).catch((error) => {
+    console.error("[preview-pool] Failed to persist managed state:", error);
+  });
 }
 
 function patchContainer(repoId: string, name: string, patch: Partial<PoolContainer> | null): void {
