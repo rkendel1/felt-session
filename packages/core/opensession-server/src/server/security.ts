@@ -3,7 +3,7 @@
  * across the registered repos, plus reusable "scan profiles" that tailor the
  * threat model. Devin-DeepSec-style, wrapped around vercel-labs/deepsec.
  *
- * Records live in ~/.opensession-security/{scans,profiles}/<id>.json. Each
+ * Records live in managed FeltDB collections. Each
  * headless scan creates one normal opensession session per target repo (so runs
  * show up in the sessions list with live transcripts); interactive scans are
  * a single collaborative session created through the SessionControl registry.
@@ -14,8 +14,9 @@
  * as automations too (single source of scheduling truth).
  */
 import { randomUUIDv7 } from "bun";
-import { mkdirSync, readdirSync, readFileSync, existsSync, unlinkSync } from "fs";
-import { writeJsonAtomic } from "./shared/atomic-write";
+import { readdirSync, readFileSync, existsSync, rmdirSync, unlinkSync } from "node:fs";
+import type { StateFirstDB } from "@feltdb/core";
+import { managedFeltDb } from "./managed-feltdb";
 import { runAgent } from "./agent-runner";
 import { declaredRunFailure, hasRunStatusDeclaration } from "./runner-shared";
 import { createWorktree, listWorktrees, REPOS, getRepo, type Repo } from "./worktree";
@@ -32,9 +33,12 @@ import { shellQuoteWord } from "./sandbox/adapters/bootstrap";
 const SECURITY_DIR = stateDir("security");
 const SCANS_DIR = `${SECURITY_DIR}/scans`;
 const PROFILES_DIR = `${SECURITY_DIR}/profiles`;
-
-mkdirSync(SCANS_DIR, { recursive: true });
-mkdirSync(PROFILES_DIR, { recursive: true });
+const SCANS_COLLECTION = "opensession_security_scans";
+const PROFILES_COLLECTION = "opensession_security_profiles";
+const MIGRATION = "security-json-to-managed-feltdb-v1";
+let securityDb: StateFirstDB | undefined;
+const scans = new Map<string, SecurityScan>();
+const profiles = new Map<string, ScanProfile>();
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -78,6 +82,7 @@ export interface SecurityScan {
 
 function listDir<T>(dir: string): T[] {
   const out: T[] = [];
+  if (!existsSync(dir)) return out;
   for (const file of readdirSync(dir)) {
     if (!file.endsWith(".json")) continue;
     try {
@@ -88,53 +93,47 @@ function listDir<T>(dir: string): T[] {
 }
 
 export function listScans(): SecurityScan[] {
-  return listDir<SecurityScan>(SCANS_DIR).sort((a, b) =>
+  return [...scans.values()].map((scan) => structuredClone(scan)).sort((a, b) =>
     b.createdAt.localeCompare(a.createdAt),
   );
 }
 
 export function getScan(id: string): SecurityScan | null {
-  const path = `${SCANS_DIR}/${id}.json`;
-  if (!existsSync(path)) return null;
-  try {
-    return JSON.parse(readFileSync(path, "utf-8"));
-  } catch {
-    return null;
-  }
+  return scans.has(id) ? structuredClone(scans.get(id)!) : null;
 }
 
-export function saveScan(s: SecurityScan): void {
-  writeJsonAtomic(`${SCANS_DIR}/${s.id}.json`, s);
+export async function saveScan(s: SecurityScan): Promise<void> {
+  const db = securityDb ?? managedFeltDb();
+  await db.transaction((tx) => {
+    tx.collection<SecurityScan>(SCANS_COLLECTION).set(s.id, s);
+  }, { transactionId: `opensession:security-scan:put:${crypto.randomUUID()}` });
+  scans.set(s.id, structuredClone(s));
 }
 
-export function deleteScan(id: string): boolean {
-  const path = `${SCANS_DIR}/${id}.json`;
-  if (!existsSync(path)) return false;
-  unlinkSync(path);
+export async function deleteScan(id: string): Promise<boolean> {
+  if (!scans.has(id)) return false;
+  const db = securityDb ?? managedFeltDb();
+  await db.transaction((tx) => { tx.collection<SecurityScan>(SCANS_COLLECTION).delete(id); },
+    { transactionId: `opensession:security-scan:delete:${crypto.randomUUID()}` });
+  scans.delete(id);
   return true;
 }
 
 export function listProfiles(): ScanProfile[] {
-  return listDir<ScanProfile>(PROFILES_DIR).sort((a, b) =>
+  return [...profiles.values()].map((profile) => structuredClone(profile)).sort((a, b) =>
     a.name.localeCompare(b.name),
   );
 }
 
 export function getProfile(id: string): ScanProfile | null {
-  const path = `${PROFILES_DIR}/${id}.json`;
-  if (!existsSync(path)) return null;
-  try {
-    return JSON.parse(readFileSync(path, "utf-8"));
-  } catch {
-    return null;
-  }
+  return profiles.has(id) ? structuredClone(profiles.get(id)!) : null;
 }
 
-export function createProfile(input: {
+export async function createProfile(input: {
   name: string;
   prompt: string;
   createdBy: string;
-}): ScanProfile | { error: string } {
+}): Promise<ScanProfile | { error: string }> {
   if (!input.name?.trim()) return { error: "Name is required" };
   if (!input.prompt?.trim()) return { error: "Profile prompt is required" };
   const p: ScanProfile = {
@@ -144,14 +143,17 @@ export function createProfile(input: {
     createdBy: input.createdBy || "Anonymous",
     createdAt: new Date().toISOString(),
   };
-  writeJsonAtomic(`${PROFILES_DIR}/${p.id}.json`, p);
+  const db = securityDb ?? managedFeltDb();
+  await db.transaction((tx) => { tx.collection<ScanProfile>(PROFILES_COLLECTION).set(p.id, p, { requireAbsent: true }); },
+    { transactionId: `opensession:security-profile:create:${p.id}` });
+  profiles.set(p.id, structuredClone(p));
   return p;
 }
 
-export function updateProfile(
+export async function updateProfile(
   id: string,
   patch: { name?: string; prompt?: string },
-): ScanProfile | { error: string } {
+): Promise<ScanProfile | { error: string }> {
   const p = getProfile(id);
   if (!p) return { error: "Profile not found" };
   const next = {
@@ -159,15 +161,44 @@ export function updateProfile(
     ...(patch.name?.trim() ? { name: patch.name.trim() } : {}),
     ...(patch.prompt?.trim() ? { prompt: patch.prompt.trim() } : {}),
   };
-  writeJsonAtomic(`${PROFILES_DIR}/${id}.json`, next);
+  const db = securityDb ?? managedFeltDb();
+  await db.transaction((tx) => { tx.collection<ScanProfile>(PROFILES_COLLECTION).set(id, next); },
+    { transactionId: `opensession:security-profile:update:${crypto.randomUUID()}` });
+  profiles.set(id, structuredClone(next));
   return next;
 }
 
-export function deleteProfile(id: string): boolean {
-  const path = `${PROFILES_DIR}/${id}.json`;
-  if (!existsSync(path)) return false;
-  unlinkSync(path);
+export async function deleteProfile(id: string): Promise<boolean> {
+  if (!profiles.has(id)) return false;
+  const db = securityDb ?? managedFeltDb();
+  await db.transaction((tx) => { tx.collection<ScanProfile>(PROFILES_COLLECTION).delete(id); },
+    { transactionId: `opensession:security-profile:delete:${crypto.randomUUID()}` });
+  profiles.delete(id);
   return true;
+}
+
+export async function initializeManagedSecurity(db: StateFirstDB = securityDb ?? managedFeltDb()): Promise<void> {
+  securityDb = db;
+  if (!await db.collection<{ id: string }>("opensession_migrations").get(MIGRATION)) {
+    for (const scan of listDir<SecurityScan>(SCANS_DIR)) await db.transaction((tx) => {
+      tx.collection<SecurityScan>(SCANS_COLLECTION).set(scan.id, scan);
+    }, { transactionId: `opensession:security-scan:migrate:${scan.id}` });
+    for (const profile of listDir<ScanProfile>(PROFILES_DIR)) await db.transaction((tx) => {
+      tx.collection<ScanProfile>(PROFILES_COLLECTION).set(profile.id, profile);
+    }, { transactionId: `opensession:security-profile:migrate:${profile.id}` });
+    await db.transaction((tx) => { tx.collection("opensession_migrations").set(MIGRATION,
+      { id: MIGRATION, completedAt: Date.now() }, { requireAbsent: true }); },
+      { transactionId: `opensession:migration:${MIGRATION}` });
+  }
+  for (const dir of [SCANS_DIR, PROFILES_DIR]) if (existsSync(dir)) {
+    for (const file of readdirSync(dir)) if (file.endsWith(".json")) unlinkSync(`${dir}/${file}`);
+    if (readdirSync(dir).length === 0) rmdirSync(dir);
+  }
+  if (existsSync(SECURITY_DIR) && readdirSync(SECURITY_DIR).length === 0) rmdirSync(SECURITY_DIR);
+  scans.clear();
+  for (const scan of await db.collection<SecurityScan>(SCANS_COLLECTION).all()) scans.set(scan.id, scan);
+  profiles.clear();
+  for (const profile of await db.collection<ScanProfile>(PROFILES_COLLECTION).all()) profiles.set(profile.id, profile);
 }
 
 // ── Scan targets ─────────────────────────────────────────────
@@ -265,10 +296,10 @@ function slug(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 30);
 }
 
-function updateScanSession(scanId: string, repoId: string, patch: Partial<ScanSessionRef>): void {
+async function updateScanSession(scanId: string, repoId: string, patch: Partial<ScanSessionRef>): Promise<void> {
   const fresh = getScan(scanId);
   if (!fresh) return;
-  saveScan({
+  await saveScan({
     ...fresh,
     sessions: fresh.sessions.map((s) => (s.repo === repoId ? { ...s, ...patch } : s)),
   });
@@ -331,7 +362,7 @@ export async function executeScan(
       };
       persistSession();
 
-      updateScanSession(scan.id, repo.id, { sessionId: bksId, status: "running" });
+      await updateScanSession(scan.id, repo.id, { sessionId: bksId, status: "running" });
       opts?.onSessionCreated?.(bksId);
       console.log(`[security] Scan ${scan.id}: ${repo.id} → ${bksId}`);
 
@@ -400,7 +431,7 @@ export async function executeScan(
       errorMsg = e?.message || String(e);
       console.error(`[security] Scan ${scan.id} failed on ${repo.id}:`, e);
     }
-    updateScanSession(scan.id, repo.id, {
+    await updateScanSession(scan.id, repo.id, {
       status: errorMsg ? "error" : "ok",
       error: errorMsg || undefined,
     });
@@ -409,7 +440,7 @@ export async function executeScan(
   const fresh = getScan(scan.id);
   if (fresh) {
     const anyError = fresh.sessions.some((s) => s.status === "error");
-    saveScan({
+    await saveScan({
       ...fresh,
       status: anyError ? "error" : "done",
       error: anyError
@@ -422,7 +453,7 @@ export async function executeScan(
 }
 
 /** Create the scan record for a headless scan (caller fires executeScan). */
-export function createScanRecord(input: {
+export async function createScanRecord(input: {
   repos: string[];
   profileId?: string;
   instructions?: string;
@@ -430,7 +461,7 @@ export function createScanRecord(input: {
   createdBy: string;
   /** For interactive scans: the pre-created session id. */
   sessionId?: string;
-}): SecurityScan {
+}): Promise<SecurityScan> {
   const profile = input.profileId ? getProfile(input.profileId) : null;
   const scan: SecurityScan = {
     id: `scan-${randomUUIDv7()}`,
@@ -446,6 +477,6 @@ export function createScanRecord(input: {
       ? [{ repo: input.repos[0], sessionId: input.sessionId || "", status: "running" }]
       : input.repos.map((r) => ({ repo: r, sessionId: "", status: "running" as const })),
   };
-  saveScan(scan);
+  await saveScan(scan);
   return scan;
 }
