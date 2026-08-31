@@ -45,7 +45,7 @@ async function connectionPayload(ctx: Pick<RouteContext, "authUser">) {
   };
 }
 
-function qualificationOperation(provider: Parameters<typeof qualifySandboxConnection>[0]) {
+async function qualificationOperation(provider: Parameters<typeof qualifySandboxConnection>[0]) {
   return startSandboxOperation(
     { kind: "qualification", provider },
     (update) => qualifySandboxConnection(provider, update),
@@ -148,7 +148,7 @@ export async function handleSandboxesRoutes(
               ? (body.settings as SandboxConnectionSettings)
               : undefined,
         });
-        const operation = qualificationOperation(provider);
+        const operation = await qualificationOperation(provider);
         return Response.json({ ...(await connectionPayload(ctx)), operation }, { status: 202 });
       } catch (error) {
         return errorResponse(error);
@@ -174,7 +174,7 @@ export async function handleSandboxesRoutes(
 
     if ((action === "test" || action === "repair") && req.method === "POST") {
       if (!getSandboxConnection(provider)) return errorResponse(`${provider} is not connected`, 404);
-      const operation = qualificationOperation(provider);
+      const operation = await qualificationOperation(provider);
       return Response.json({ ...(await connectionPayload(ctx)), operation }, { status: 202 });
     }
 
