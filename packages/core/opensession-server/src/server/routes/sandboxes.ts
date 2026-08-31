@@ -159,7 +159,7 @@ export async function handleSandboxesRoutes(
       const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
       if (!body) return errorResponse("expected a JSON body");
       try {
-        updateSandboxConnection(provider, {
+        await updateSandboxConnection(provider, {
           enabled: typeof body.enabled === "boolean" ? body.enabled : undefined,
           settings:
             body.settings && typeof body.settings === "object"

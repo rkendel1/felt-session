@@ -10,7 +10,7 @@
  * sandboxesEnabled() instead of assuming it, so a dev box with the switch on
  * still passes.
  */
-import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { createFeltDB } from "@feltdb/core";
 import { mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
@@ -34,6 +34,7 @@ import {
   setSandboxConnectionQualification,
 } from "./connections";
 import { initializeManagedWorkspaceSecrets } from "../workspace-secrets";
+import { initializeManagedSandboxConnections } from "./connections";
 
 let scratch: string;
 let prevEnvConfig: string | undefined;
@@ -53,7 +54,12 @@ beforeAll(async () => {
   process.env.OPENSESSION_CONFIG = instanceCfgPath();
   delete process.env.E2B_API_KEY;
   process.env.OPENSESSION_WORKSPACE_SECRETS_STORE = join(scratch, "secrets.json");
-  await initializeManagedWorkspaceSecrets(createFeltDB({ namespace: crypto.randomUUID(), memory: true }));
+});
+
+beforeEach(async () => {
+  const db = createFeltDB({ namespace: crypto.randomUUID(), memory: true });
+  await initializeManagedWorkspaceSecrets(db);
+  await initializeManagedSandboxConnections(db);
 });
 
 afterEach(() => {
@@ -85,7 +91,7 @@ const ready = async (provider: "docker" | "daytona" | "box" | "modal" | "microvm
         ? { tokenId: "test-modal-id", tokenSecret: "test-modal-secret" }
         : {},
   );
-  setSandboxConnectionQualification(provider, { status: "ready" });
+  await setSandboxConnectionQualification(provider, { status: "ready" });
 };
 
 describe("sandboxCapabilityStatus (the /api/sandbox/status payload)", () => {
@@ -375,7 +381,7 @@ describe("resolveRequestedSandbox (create-path validation)", () => {
   test("failed qualification stays configured but cannot be selected by either create path", async () => {
     write({ provider: "docker" });
     await connectSandboxProvider("docker", {});
-    setSandboxConnectionQualification("docker", {
+    await setSandboxConnectionQualification("docker", {
       status: "failed",
       failureCode: "DOCKER_DAEMON_UNAVAILABLE",
       failureSummary: "Start Docker.",

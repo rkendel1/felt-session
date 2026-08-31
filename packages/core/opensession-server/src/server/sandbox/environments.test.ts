@@ -15,6 +15,7 @@ import {
   prepareSandboxEnvironment,
 } from "./environments";
 import { initializeManagedWorkspaceSecrets } from "../workspace-secrets";
+import { initializeManagedSandboxConnections } from "./connections";
 
 let scratch = "";
 const previous: Record<string, string | undefined> = {};
@@ -30,7 +31,9 @@ beforeEach(async () => {
   process.env.OPENSESSION_SANDBOX_CONFIG = join(scratch, "sandbox.json");
   process.env.OPENSESSION_WORKSPACE_SECRETS_STORE = join(scratch, "secrets.json");
   process.env.OPENSESSION_SANDBOX_ENVIRONMENTS_STORE = join(scratch, "environments.json");
-  await initializeManagedWorkspaceSecrets(createFeltDB({ namespace: crypto.randomUUID(), memory: true }));
+  const db = createFeltDB({ namespace: crypto.randomUUID(), memory: true });
+  await initializeManagedWorkspaceSecrets(db);
+  await initializeManagedSandboxConnections(db);
 });
 
 afterEach(() => {
@@ -45,7 +48,7 @@ describe("sandbox project environments", () => {
   test("Docker is prepared per session and disabling its connection removes readiness", async () => {
     const repo = Object.keys(REPOS)[0]!;
     await connectSandboxProvider("docker", {});
-    setSandboxConnectionQualification("docker", {
+    await setSandboxConnectionQualification("docker", {
       status: "ready",
       checkedAt: new Date().toISOString(),
     });
@@ -56,7 +59,7 @@ describe("sandbox project environments", () => {
       ),
     ).toMatchObject({ state: "ready", mode: "per_session" });
 
-    updateSandboxConnection("docker", { enabled: false });
+    await updateSandboxConnection("docker", { enabled: false });
     expect(
       (await listSandboxEnvironments()).find(
         (environment) => environment.repo === repo && environment.provider === "docker",
@@ -66,7 +69,7 @@ describe("sandbox project environments", () => {
 
   test("rejects unknown repositories before allocating provider work", async () => {
     await connectSandboxProvider("docker", {});
-    setSandboxConnectionQualification("docker", { status: "ready" });
+    await setSandboxConnectionQualification("docker", { status: "ready" });
     await expect(
       prepareSandboxEnvironment("not-a-repository", "docker"),
     ).rejects.toMatchObject({ code: "REPO_UNKNOWN" });
@@ -75,13 +78,13 @@ describe("sandbox project environments", () => {
   test("rejects invalid project machine settings before allocating provider work", async () => {
     const repo = Object.keys(REPOS)[0]!;
     await connectSandboxProvider("modal", { tokenId: "test-id", tokenSecret: "test-secret" });
-    setSandboxConnectionQualification("modal", { status: "ready" });
+    await setSandboxConnectionQualification("modal", { status: "ready" });
     await expect(
       prepareSandboxEnvironment(repo, "modal", { settings: { cpu: 0 } }),
     ).rejects.toMatchObject({ code: "MACHINE_SETTINGS_INVALID" });
 
     await connectSandboxProvider("box", { secret: "test-box-key" });
-    setSandboxConnectionQualification("box", { status: "ready" });
+    await setSandboxConnectionQualification("box", { status: "ready" });
     await expect(
       prepareSandboxEnvironment(repo, "box", {
         settings: { cpu: 4, memoryMb: 8_192, diskGb: 40 },
@@ -89,7 +92,7 @@ describe("sandbox project environments", () => {
     ).rejects.toMatchObject({ code: "MACHINE_SETTINGS_INVALID" });
 
     await connectSandboxProvider("microvm", {});
-    setSandboxConnectionQualification("microvm", { status: "ready" });
+    await setSandboxConnectionQualification("microvm", { status: "ready" });
     await expect(
       prepareSandboxEnvironment(repo, "microvm", {
         settings: { cpu: 3, memoryMb: 4_096, diskGb: 25 },

@@ -1,15 +1,15 @@
 /** Workspace-owned sandbox connections.
  *
- * Normalized records live in sandbox.json. Account secrets live behind opaque
+ * Normalized records live in managed FeltDB. Account secrets live behind opaque
  * references in workspace-secrets.ts; raw provider blocks and environment
  * credentials are intentionally not part of this product surface.
  */
 
-import { existsSync, mkdirSync, readFileSync } from "fs";
-import { dirname } from "path";
+import { existsSync, readFileSync, unlinkSync } from "node:fs";
+import type { StateFirstDB } from "@feltdb/core";
 import { audit } from "../audit";
+import { managedFeltDb } from "../managed-feltdb";
 import { stateDir } from "../paths";
-import { writeJsonAtomic } from "../shared/atomic-write";
 import {
   deleteWorkspaceSecret,
   putWorkspaceSecret,
@@ -60,6 +60,7 @@ export interface SandboxConnection {
   qualification?: SandboxConnectionQualification;
   createdAt: string;
   updatedAt: string;
+  __version?: number;
 }
 
 export interface SafeSandboxConnection extends Omit<SandboxConnection, "credentialRef"> {
@@ -80,20 +81,10 @@ function configPath(): string {
   return process.env.OPENSESSION_SANDBOX_CONFIG || stateDir("sandbox.json");
 }
 
-function readRaw(): RawSandboxConfig {
-  try {
-    if (!existsSync(configPath())) return {};
-    const raw = JSON.parse(readFileSync(configPath(), "utf-8"));
-    return raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
-  } catch {
-    return {};
-  }
-}
-
-function writeRaw(raw: RawSandboxConfig): void {
-  mkdirSync(dirname(configPath()), { recursive: true });
-  writeJsonAtomic(configPath(), raw);
-}
+const COLLECTION = "opensession_sandbox_connections";
+const MIGRATION = "sandbox-connections-json-to-managed-feltdb-v1";
+let connectionsDb: StateFirstDB | undefined;
+const connections = new Map<WorkspaceSandboxProvider, SandboxConnection>();
 
 export function isWorkspaceSandboxProvider(value: unknown): value is WorkspaceSandboxProvider {
   return (
@@ -173,18 +164,32 @@ function parseConnection(value: unknown): SandboxConnection | undefined {
 }
 
 export function listStoredSandboxConnections(): SandboxConnection[] {
-  const raw = readRaw().connections;
-  const values = Array.isArray(raw)
-    ? raw
-    : raw && typeof raw === "object"
-      ? Object.values(raw)
-      : [];
-  const byProvider = new Map<WorkspaceSandboxProvider, SandboxConnection>();
-  for (const value of values) {
-    const connection = parseConnection(value);
-    if (connection) byProvider.set(connection.provider, connection);
+  return [...connections.values()];
+}
+
+export async function initializeManagedSandboxConnections(db: StateFirstDB = connectionsDb ?? managedFeltDb()): Promise<void> {
+  connectionsDb = db;
+  if (!await db.collection<{ id: string }>("opensession_migrations").get(MIGRATION)) {
+    let legacy: RawSandboxConfig = {};
+    try { if (existsSync(configPath())) legacy = JSON.parse(readFileSync(configPath(), "utf8")); } catch {}
+    const values = Array.isArray(legacy.connections) ? legacy.connections :
+      legacy.connections && typeof legacy.connections === "object" ? Object.values(legacy.connections) : [];
+    for (const value of values) {
+      const connection = parseConnection(value);
+      if (!connection) continue;
+      await db.transaction((tx) => { tx.collection<SandboxConnection>(COLLECTION).set(connection.provider, connection); },
+        { transactionId: `opensession:sandbox-connection:migrate:${connection.provider}` });
+    }
+    await db.transaction((tx) => { tx.collection("opensession_migrations").set(
+      MIGRATION, { id: MIGRATION, completedAt: Date.now() }, { requireAbsent: true }); },
+    { transactionId: `opensession:migration:${MIGRATION}` });
   }
-  return [...byProvider.values()];
+  if (existsSync(configPath())) unlinkSync(configPath());
+  connections.clear();
+  for (const value of await db.collection<SandboxConnection>(COLLECTION).all()) {
+    const connection = parseConnection(value);
+    if (connection) connections.set(connection.provider, { ...connection, __version: value.__version });
+  }
 }
 
 export function getSandboxConnection(
@@ -245,14 +250,13 @@ export function safeSandboxConnections(): SafeSandboxConnection[] {
   });
 }
 
-function replaceConnection(connection: SandboxConnection): void {
-  const raw = readRaw();
-  const all = listStoredSandboxConnections().filter(
-    (candidate) => candidate.provider !== connection.provider,
-  );
-  all.push(connection);
-  raw.connections = all;
-  writeRaw(raw);
+async function replaceConnection(connection: SandboxConnection): Promise<void> {
+  const previous = connections.get(connection.provider);
+  const db = connectionsDb ?? managedFeltDb();
+  await db.transaction((tx) => { tx.collection<SandboxConnection>(COLLECTION).set(
+    connection.provider, connection, previous ? { ifVersion: previous.__version } : { requireAbsent: true }); },
+  { transactionId: `opensession:sandbox-connection:put:${connection.provider}:${crypto.randomUUID()}` });
+  connections.set(connection.provider, { ...connection, __version: (previous?.__version ?? 0) + 1 });
 }
 
 export interface ConnectSandboxInput {
@@ -308,21 +312,15 @@ export async function connectSandboxProvider(
     createdAt: previous?.createdAt || now,
     updatedAt: now,
   };
-  const raw = readRaw();
-  const all = listStoredSandboxConnections().filter(
-    (candidate) => candidate.provider !== provider,
-  );
-  all.push(connection);
-  raw.connections = all;
-  writeRaw(raw);
+  await replaceConnection(connection);
   audit({ kind: "sandbox_connection_connected", provider, connection_id: connection.id });
   return connection;
 }
 
-export function updateSandboxConnection(
+export async function updateSandboxConnection(
   provider: WorkspaceSandboxProvider,
   patch: { enabled?: boolean; settings?: SandboxConnectionSettings },
-): SandboxConnection {
+): Promise<SandboxConnection> {
   const previous = getSandboxConnection(provider);
   if (!previous) throw new Error(`${provider} is not connected`);
   const next: SandboxConnection = {
@@ -331,13 +329,7 @@ export function updateSandboxConnection(
     settings: { ...previous.settings, ...settings(patch.settings) },
     updatedAt: new Date().toISOString(),
   };
-  const raw = readRaw();
-  const all = listStoredSandboxConnections().filter(
-    (candidate) => candidate.provider !== provider,
-  );
-  all.push(next);
-  raw.connections = all;
-  writeRaw(raw);
+  await replaceConnection(next);
   audit({
     kind: next.enabled ? "sandbox_connection_updated" : "sandbox_connection_disabled",
     provider,
@@ -346,10 +338,10 @@ export function updateSandboxConnection(
   return next;
 }
 
-export function setSandboxConnectionQualification(
+export async function setSandboxConnectionQualification(
   provider: WorkspaceSandboxProvider,
   result: Omit<SandboxConnectionQualification, "adapterSignature">,
-): SandboxConnection {
+): Promise<SandboxConnection> {
   const previous = getSandboxConnection(provider);
   if (!previous) throw new Error(`${provider} is not connected`);
   const next: SandboxConnection = {
@@ -360,18 +352,18 @@ export function setSandboxConnectionQualification(
     },
     updatedAt: new Date().toISOString(),
   };
-  replaceConnection(next);
+  await replaceConnection(next);
   return next;
 }
 
 export async function disconnectSandboxProvider(provider: WorkspaceSandboxProvider): Promise<boolean> {
   const connection = getSandboxConnection(provider);
   if (!connection) return false;
-  const raw = readRaw();
-  raw.connections = listStoredSandboxConnections().filter(
-    (candidate) => candidate.provider !== provider,
-  );
-  writeRaw(raw);
+  const db = connectionsDb ?? managedFeltDb();
+  await db.transaction((tx) => { tx.collection<SandboxConnection>(COLLECTION).delete(
+    provider, { ifVersion: connection.__version }); },
+  { transactionId: `opensession:sandbox-connection:delete:${provider}:${connection.__version}` });
+  connections.delete(provider);
   if (connection.credentialRef) await deleteWorkspaceSecret(connection.credentialRef);
   audit({
     kind: "sandbox_connection_disconnected",

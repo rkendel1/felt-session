@@ -23,6 +23,7 @@ import { OPENSESSION_SESSIONS_DIR } from "../paths";
 import { stateDir } from "../paths";
 import { writeJsonAtomic } from "../shared/atomic-write";
 import type { SandboxProviderId, SandboxProviderUsability } from "./provider";
+import { getSandboxConnection } from "./connections";
 
 export const DEFAULT_SANDBOX_PREVIEW_PORTS = [3300, 3301, 3302] as const;
 
@@ -689,10 +690,9 @@ function sandboxConfigPresent(): boolean {
   }
 }
 
-/** A normalized connection is authoritative when present. Kept as a small
- * raw read here (rather than importing connections.ts) to avoid a config ↔
- * connection parsing cycle. Secret existence is enforced by the connection
- * API/default layer and again when an SDK client is constructed. */
+/** A normalized managed connection is authoritative when present. Secret
+ * existence is enforced by the connection API/default layer and again when
+ * an SDK client is constructed. */
 interface NormalizedConnectionSelection {
   enabled: boolean;
   qualification?: "checking" | "ready" | "failed";
@@ -701,25 +701,14 @@ interface NormalizedConnectionSelection {
 function normalizedConnectionSelection(
   id: RunnableSandboxProviderId,
 ): NormalizedConnectionSelection | undefined {
-  try {
-    const raw = JSON.parse(readFileSync(configPath(), "utf-8"));
-    const values = Array.isArray(raw?.connections)
-      ? raw.connections
-      : raw?.connections && typeof raw.connections === "object"
-        ? Object.values(raw.connections)
-        : [];
-    const connection = values.find((value: any) => value?.provider === id) as any;
-    if (!connection) return undefined;
-    const qualification = connection.qualification?.status;
-    return {
-      enabled: connection.enabled !== false,
-      ...(qualification === "checking" || qualification === "ready" || qualification === "failed"
-        ? { qualification }
-        : {}),
-    };
-  } catch {
+  if (id !== "docker" && id !== "daytona" && id !== "box" && id !== "modal" && id !== "microvm")
     return undefined;
-  }
+  const connection = getSandboxConnection(id);
+  if (!connection) return undefined;
+  return {
+    enabled: connection.enabled,
+    ...(connection.qualification ? { qualification: connection.qualification.status } : {}),
+  };
 }
 
 function normalizedConnectionConfigured(id: RunnableSandboxProviderId): boolean | undefined {

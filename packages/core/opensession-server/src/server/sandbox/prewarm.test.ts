@@ -27,6 +27,7 @@ import { join } from "path";
 import { __setSessionsDirForTest } from "../paths";
 import { sandboxesEnabled } from "./config";
 import { initializeManagedWorkspaceSecrets } from "../workspace-secrets";
+import { initializeManagedSandboxConnections } from "./connections";
 import {
   connectSandboxProvider,
   setSandboxConnectionQualification,
@@ -101,7 +102,9 @@ afterAll(() => {
 });
 
 beforeEach(async () => {
-	await initializeManagedWorkspaceSecrets(createFeltDB({ namespace: crypto.randomUUID(), memory: true }));
+	const db = createFeltDB({ namespace: crypto.randomUUID(), memory: true });
+	await initializeManagedWorkspaceSecrets(db);
+	await initializeManagedSandboxConnections(db);
   _resetPrewarmForTest();
   rmSync(prewarmDir(), { recursive: true, force: true });
   rmSync(environmentsPath(), { force: true });
@@ -133,7 +136,7 @@ async function writeConfig(overrides: Record<string, unknown>): Promise<void> {
     secret: "test-key",
     settings: { snapshot },
   });
-  setSandboxConnectionQualification("daytona", { status: "ready" });
+  await setSandboxConnectionQualification("daytona", { status: "ready" });
 }
 
 /** Fake adapter whose driver satisfies the real dial-back + bootstrap-marker

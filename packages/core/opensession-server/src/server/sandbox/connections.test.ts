@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { createFeltDB } from "@feltdb/core";
 import {
+  existsSync,
   mkdtempSync,
-  readFileSync,
   rmSync,
   writeFileSync,
 } from "fs";
@@ -12,6 +12,7 @@ import {
   connectSandboxProvider,
   disconnectSandboxProvider,
   getSandboxConnection,
+  initializeManagedSandboxConnections,
   safeSandboxConnections,
   sandboxConnectionReady,
   sandboxProviderCredential,
@@ -29,7 +30,9 @@ beforeEach(async () => {
   oldSecrets = process.env.OPENSESSION_WORKSPACE_SECRETS_STORE;
   process.env.OPENSESSION_SANDBOX_CONFIG = join(scratch, "sandbox.json");
   process.env.OPENSESSION_WORKSPACE_SECRETS_STORE = join(scratch, "secrets.json");
-  await initializeManagedWorkspaceSecrets(createFeltDB({ namespace: crypto.randomUUID(), memory: true }));
+  const db = createFeltDB({ namespace: crypto.randomUUID(), memory: true });
+  await initializeManagedWorkspaceSecrets(db);
+  await initializeManagedSandboxConnections(db);
 });
 
 afterEach(() => {
@@ -47,9 +50,7 @@ describe("workspace sandbox connections", () => {
       settings: { apiUrl: "https://daytona.example.test", snapshot: "team-large" },
     });
 
-    const configText = readFileSync(process.env.OPENSESSION_SANDBOX_CONFIG!, "utf-8");
-    expect(configText).not.toContain("daytona-secret-value");
-    expect(configText).toContain("wssec-");
+    expect(existsSync(process.env.OPENSESSION_SANDBOX_CONFIG!)).toBe(false);
     expect(sandboxProviderCredential("daytona")).toEqual({
       apiKey: "daytona-secret-value",
     });
@@ -66,8 +67,7 @@ describe("workspace sandbox connections", () => {
       secret: "box-secret-value",
       settings: { apiUrl: "https://box.example.test/v1" },
     });
-    const configText = readFileSync(process.env.OPENSESSION_SANDBOX_CONFIG!, "utf-8");
-    expect(configText).not.toContain("box-secret-value");
+    expect(existsSync(process.env.OPENSESSION_SANDBOX_CONFIG!)).toBe(false);
     expect(sandboxProviderCredential("box")).toEqual({ apiKey: "box-secret-value" });
     expect(safeSandboxConnections().find((value) => value.provider === "box")).toMatchObject({
       hasCredentials: true,
@@ -101,7 +101,7 @@ describe("workspace sandbox connections", () => {
   test("only enabled, successfully qualified connections become Ready", async () => {
     await connectSandboxProvider("docker", { settings: { cpu: 4, memoryMb: 8192 } });
     expect(sandboxConnectionReady("docker")).toBe(false);
-    setSandboxConnectionQualification("docker", {
+    await setSandboxConnectionQualification("docker", {
       status: "ready",
       checkedAt: "2026-08-11T00:00:00.000Z",
     });
@@ -113,16 +113,10 @@ describe("workspace sandbox connections", () => {
 
   test("a runner pin change does not invalidate provider qualification", async () => {
     await connectSandboxProvider("daytona", { secret: "daytona-secret" });
-    setSandboxConnectionQualification("daytona", {
+    await setSandboxConnectionQualification("daytona", {
       status: "ready",
       checkedAt: "2026-08-11T00:00:00.000Z",
     });
-    const path = process.env.OPENSESSION_SANDBOX_CONFIG!;
-    const raw = JSON.parse(readFileSync(path, "utf-8"));
-    raw.connections[0].qualification.adapterSignature =
-      "daytona:connection-v1:old-runner-pin+node@24.18.1+workspace-runtime-v7";
-    writeFileSync(path, JSON.stringify(raw));
-
     expect(sandboxConnectionReady("daytona")).toBe(true);
     expect(
       safeSandboxConnections().find((value) => value.provider === "daytona")?.state,
@@ -131,14 +125,19 @@ describe("workspace sandbox connections", () => {
 
   test("an adapter signature change makes a previous qualification stale", async () => {
     await connectSandboxProvider("docker", {});
-    setSandboxConnectionQualification("docker", {
+    await setSandboxConnectionQualification("docker", {
       status: "ready",
       checkedAt: "2026-08-11T00:00:00.000Z",
     });
-    const path = process.env.OPENSESSION_SANDBOX_CONFIG!;
-    const raw = JSON.parse(readFileSync(path, "utf-8"));
-    raw.connections[0].qualification.adapterSignature = "docker:old-adapter";
-    writeFileSync(path, JSON.stringify(raw));
+    const legacy = {
+      connections: [{ ...getSandboxConnection("docker"), qualification: {
+        ...getSandboxConnection("docker")!.qualification,
+        adapterSignature: "docker:old-adapter",
+      } }],
+    };
+    const nextDb = createFeltDB({ namespace: crypto.randomUUID(), memory: true });
+    writeFileSync(process.env.OPENSESSION_SANDBOX_CONFIG!, JSON.stringify(legacy));
+    await initializeManagedSandboxConnections(nextDb);
 
     expect(sandboxConnectionReady("docker")).toBe(false);
     expect(

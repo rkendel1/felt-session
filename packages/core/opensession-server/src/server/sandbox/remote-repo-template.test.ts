@@ -5,6 +5,7 @@ import { join } from "path";
 import { tmpdir } from "os";
 import { connectSandboxProvider, updateSandboxConnection } from "./connections";
 import { initializeManagedWorkspaceSecrets } from "../workspace-secrets";
+import { initializeManagedSandboxConnections } from "./connections";
 
 let scratch = "";
 
@@ -13,7 +14,9 @@ beforeEach(async () => {
   process.env.OPENSESSION_SESSIONS_DIR = `${scratch}/sessions`;
   process.env.OPENSESSION_SANDBOX_CONFIG = `${scratch}/sandbox.json`;
   process.env.OPENSESSION_WORKSPACE_SECRETS_STORE = `${scratch}/secrets.json`;
-  await initializeManagedWorkspaceSecrets(createFeltDB({ namespace: crypto.randomUUID(), memory: true }));
+  const db = createFeltDB({ namespace: crypto.randomUUID(), memory: true });
+  await initializeManagedWorkspaceSecrets(db);
+  await initializeManagedSandboxConnections(db);
   await Bun.write(
     process.env.OPENSESSION_SANDBOX_CONFIG,
     JSON.stringify({ runnerSha: "abc" }),
@@ -58,7 +61,7 @@ describe("remote repo template index", () => {
   test("create-shape changes invalidate the local artifact mapping", async () => {
     const mod = await import(`./remote-repo-template?shape=${Math.random()}`);
     mod.writeRemoteRepoTemplate("modal", "app", "im-1");
-    updateSandboxConnection("modal", { settings: { image: "base:v2" } });
+    await updateSandboxConnection("modal", { settings: { image: "base:v2" } });
     expect(mod.readRemoteRepoTemplate("modal", "app")).toBeNull();
   });
 

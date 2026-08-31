@@ -180,7 +180,7 @@ export async function qualifySandboxConnection(
   provider: WorkspaceSandboxProvider,
   update: (patch: { stage: string; progress?: number; detail?: string }) => void = () => undefined,
 ): Promise<void> {
-  setSandboxConnectionQualification(provider, { status: "checking" });
+  await setSandboxConnectionQualification(provider, { status: "checking" });
   try {
     if (provider === "daytona" || provider === "box" || provider === "modal") {
       // Prove ingress before allocating paid provider compute.
@@ -200,7 +200,7 @@ export async function qualifySandboxConnection(
       const { qualifyModalConnection } = await import("./adapters/modal");
       await qualifyModalConnection();
     }
-    setSandboxConnectionQualification(provider, {
+    await setSandboxConnectionQualification(provider, {
       status: "ready",
       checkedAt: new Date().toISOString(),
     });
@@ -212,7 +212,7 @@ export async function qualifySandboxConnection(
     const summary = code === "QUALIFICATION_FAILED" && detail
       ? `Qualification failed: ${detail}`
       : genericSummary;
-    setSandboxConnectionQualification(provider, {
+    await setSandboxConnectionQualification(provider, {
       status: "failed",
       checkedAt: new Date().toISOString(),
       failureCode: code,
