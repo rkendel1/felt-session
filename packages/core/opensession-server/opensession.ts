@@ -17,6 +17,7 @@ import { startRunnerPortalReaper } from "./src/server/runner-portals";
 import { initializeManagedTodos, startTodoReminderTicker } from "./src/server/todos";
 import { loadActiveSessionsOnStartup as initializeManagedSlackSessions } from "./src/agents/slack/state";
 import { initializeManagedLinearSessions } from "./src/agents/linear/session";
+import { loadTokens as initializeManagedLinearOauth } from "./src/agents/linear/oauth";
 import { startGeneratedTitleSweep } from "./src/server/generated-titles";
 import { startLiveActivitySync } from "./src/server/live-activities";
 import { startRuntimeInvestigationHandoffConsumer } from "./src/server/runtime-investigation-handoffs";
@@ -157,6 +158,7 @@ if (!g.__opensessionBooted) {
 	await initializeManagedTodos(db);
 	await initializeManagedSlackSessions(db);
 	await initializeManagedLinearSessions(db);
+	await initializeManagedLinearOauth(db);
 }
 
 // Listeners the server owns. Deliberately started HERE and not as module side

@@ -3,7 +3,9 @@
  */
 import { connectResultPage } from "../../server/connect-result-page";
 import { fetchWithTimeout } from "../../server/shared/fetch-with-timeout";
-import { writeJsonAtomic } from "../../server/shared/atomic-write";
+import { managedFeltDb } from "../../server/managed-feltdb";
+import type { StateFirstDB } from "@feltdb/core";
+import { existsSync, readFileSync, unlinkSync } from "node:fs";
 import { randomBytes, timingSafeEqual } from "crypto";
 import {
   configuredIntegration,
@@ -14,6 +16,8 @@ import {
 const LINEAR_CLIENT_ID = process.env.LINEAR_CLIENT_ID || "";
 const LINEAR_CLIENT_SECRET = process.env.LINEAR_CLIENT_SECRET || "";
 const TOKENS_FILE = `${process.env.HOME}/.linear-agent-tokens.json`;
+const TOKEN_COLLECTION = "opensession_linear_oauth";
+const TOKEN_RECORD = "linear_oauth_tokens";
 const STATE_COOKIE = "__Host-linear-oauth-state";
 const STATE_TTL_SECONDS = 10 * 60;
 
@@ -32,11 +36,23 @@ export interface LinearTokens {
   };
 }
 
-export async function loadTokens(): Promise<LinearTokens> {
+type StoredLinearTokens = {
+  id: string;
+  tokens: LinearTokens;
+  updatedAt: number;
+  __version?: number;
+};
+
+export async function loadTokens(db: StateFirstDB = managedFeltDb()): Promise<LinearTokens> {
   try {
-    const file = Bun.file(TOKENS_FILE);
-    if (await file.exists()) {
-      return JSON.parse(await file.text());
+    const collection = db.collection<StoredLinearTokens>(TOKEN_COLLECTION);
+    const stored = await collection.get(TOKEN_RECORD);
+    if (stored) return stored.tokens;
+    if (existsSync(TOKENS_FILE)) {
+      const tokens = JSON.parse(readFileSync(TOKENS_FILE, "utf8")) as LinearTokens;
+      await saveTokens(tokens, db);
+      unlinkSync(TOKENS_FILE);
+      return tokens;
     }
     return {};
   } catch {
@@ -44,8 +60,30 @@ export async function loadTokens(): Promise<LinearTokens> {
   }
 }
 
-export async function saveTokens(tokens: LinearTokens): Promise<void> {
-  writeJsonAtomic(TOKENS_FILE, tokens);
+export async function saveTokens(
+  tokens: LinearTokens,
+  db: StateFirstDB = managedFeltDb(),
+): Promise<void> {
+  const collection = db.collection<StoredLinearTokens>(TOKEN_COLLECTION);
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const current = await collection.get(TOKEN_RECORD);
+    const value: StoredLinearTokens = { id: TOKEN_RECORD, tokens, updatedAt: Date.now() };
+    if (!current) {
+      try {
+        await db.transaction((tx) => {
+          tx.collection<StoredLinearTokens>(TOKEN_COLLECTION)
+            .set(TOKEN_RECORD, value, { requireAbsent: true });
+        }, { transactionId: `opensession:linear-oauth:create:${crypto.randomUUID()}` });
+        return;
+      } catch (error) {
+        if (!await collection.get(TOKEN_RECORD)) throw error;
+        continue;
+      }
+    }
+    if (!Number.isSafeInteger(current.__version)) throw new Error("Linear OAuth record has no FeltDB authority version");
+    if ((await collection.updateIfVersion(TOKEN_RECORD, current.__version!, value)).updated) return;
+  }
+  throw new Error("Linear OAuth tokens remained contended");
 }
 
 export async function refreshToken(orgId: string, tokens: LinearTokens): Promise<boolean> {
