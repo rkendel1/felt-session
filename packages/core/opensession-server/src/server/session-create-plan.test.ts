@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { createFeltDB } from "@feltdb/core";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -9,6 +10,8 @@ import {
   createPlanWorkspaceId,
   type DurableCreatePlan,
   readCreatePlan,
+  flushCreatePlanWrites,
+  initializeManagedCreatePlans,
   pruneCreatePlans,
   restoreResolvedCreate,
   snapshotOpeningCreate,
@@ -79,11 +82,12 @@ describe("durable create plan", () => {
     expect(restored.accountId).toBeUndefined();
   });
 
-  test("prunes only terminal plans with bounded retention", () => {
+  test("prunes only terminal plans with bounded retention", async () => {
     const root = mkdtempSync(join(tmpdir(), "create-plan-prune-"));
     roots.push(root);
     const previous = __setSessionsDirForTest(root);
     const store = new SessionKernelStore(":memory:");
+    const db = createFeltDB({ namespace: crypto.randomUUID(), memory: true });
     try {
       const plan = writeLegacyPlan(root, {
         version: 1,
@@ -91,6 +95,7 @@ describe("durable create plan", () => {
         identity: "request",
         createdAt: new Date().toISOString(),
       });
+      await initializeManagedCreatePlans(db, join(root, "create-plans"));
       store.acceptCommand({
         sessionId: plan.sessionId,
         requestId: plan.identity,
@@ -111,6 +116,7 @@ describe("durable create plan", () => {
         identity: "retry",
         createdAt: new Date().toISOString(),
       });
+      await initializeManagedCreatePlans(db, join(root, "create-plans"));
       store.acceptCommand({
         sessionId: retryable.sessionId,
         requestId: retryable.identity,
@@ -135,10 +141,11 @@ describe("durable create plan", () => {
     }
   });
 
-  test("keeps branch and workspace choices across a retry", () => {
+  test("keeps branch and workspace choices across a retry", async () => {
     const root = mkdtempSync(join(tmpdir(), "create-plan-"));
     roots.push(root);
     const previous = __setSessionsDirForTest(root);
+    const db = createFeltDB({ namespace: crypto.randomUUID(), memory: true });
     try {
       const first = writeLegacyPlan(root, {
         version: 1,
@@ -159,12 +166,15 @@ describe("durable create plan", () => {
           openingPrompt: "stable context",
         },
       });
+      await initializeManagedCreatePlans(db, join(root, "create-plans"));
       expect(readCreatePlan("os-create", "same")).toEqual(first);
       expect(() => readCreatePlan("os-create", "different")).toThrow(
         "reused with another payload",
       );
       clearCreatePlan("os-create");
+      await flushCreatePlanWrites();
       expect(readCreatePlan("os-create", "same")).toBeUndefined();
+      expect(await db.collection("opensession_legacy_session_create_plans").all()).toEqual([]);
     } finally {
       __setSessionsDirForTest(previous);
     }

@@ -68,6 +68,7 @@ import { flushRemoteSandboxStateWrites, initializeManagedRemoteSandboxState } fr
 import { initializeManagedRemoteRepoTemplates } from "./src/server/sandbox/remote-repo-template";
 import { flushPrewarmWrites, initializeManagedPrewarms } from "./src/server/sandbox/prewarm";
 import { initializeManagedWarmTemplates } from "./src/server/warm-template";
+import { flushCreatePlanWrites, initializeManagedCreatePlans } from "./src/server/session-create-plan";
 import { initializeManagedWorkloadIdentity } from "./src/server/workload-identity";
 import { initializeManagedPapercuts } from "./src/server/papercuts";
 import { initializeManagedSecurity } from "./src/server/security";
@@ -280,6 +281,7 @@ if (!g.__opensessionBooted) {
 	await initializeManagedRemoteRepoTemplates(db);
 	await initializeManagedPrewarms(db);
 	await initializeManagedWarmTemplates(db);
+	await initializeManagedCreatePlans(db);
 	await initializeManagedWorkloadIdentity(db);
 	await initializeManagedPapercuts(db);
 	await initializeManagedSecurity(db);
@@ -1293,6 +1295,7 @@ if (!g.__opensessionBooted) {
 		await flushSandboxPreviewPortWrites();
 		await flushRemoteSandboxStateWrites();
 		await flushPrewarmWrites();
+		await flushCreatePlanWrites();
 		// Keep HTTP available while runs drain. Stopping the listener before the
 		// bounded wait made Caddy return 502 for the full drain window on every
 		// deploy. Shutdown-aware intake above already parks new agent work.
