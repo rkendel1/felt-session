@@ -8,6 +8,8 @@ import { afterAll, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
+import { createFeltDB } from "@feltdb/core";
+import { initializeManagedMemory } from "./memory-v2";
 
 import { __setMemoryDirForTest, activeMemories, saveScope, type MemoryEntry } from "../agents/slack/memory";
 import {
@@ -32,6 +34,8 @@ const SCOPES = [REPO, TEAM];
 
 beforeEach(async () => {
 	__setMemoryDirForTest(DIR);
+	process.env.OPENSESSION_MEMORY_DB = join(DIR, "legacy.sqlite");
+	await initializeManagedMemory(createFeltDB({ namespace: crypto.randomUUID(), memory: true }));
 	invalidateMemorySnapshot();
 	await saveScope(REPO.key, []);
 	await saveScope(TEAM.key, []);

@@ -1,6 +1,6 @@
 import { audit } from "../audit";
 import { neutralizeContextSentinels, wrapContext } from "../prompt-context";
-import { ensureMemoryV2Ready, memoryRolloutMode } from "./runtime";
+import { ensureMemoryV2Ready } from "./runtime";
 import {
   RETRIEVED_MEMORY_BUDGET_BYTES,
   renderAmbientMemory,
@@ -65,9 +65,6 @@ function asRetrievalRecords(records: MemoryRecord[]): RetrievalRecord[] {
 export async function renderAmbientMemoryForPrompt(
   scopes: PromptMemoryScopes,
 ): Promise<PromptMemoryResult> {
-  if (memoryRolloutMode() === "legacy") {
-    return { text: "", ids: [], bytes: 0, omitted: 0 };
-  }
   const { store } = await ensureMemoryV2Ready();
   await store.expireDue();
   const selected = renderAmbientMemory(asRetrievalRecords(pinnedRecords(store, scopes.scopeKeys)), {
@@ -93,7 +90,7 @@ export async function retrieveMemoryForPrompt(
   query: string,
   scopes: PromptMemoryScopes,
 ): Promise<PromptMemoryResult> {
-  if (memoryRolloutMode() === "legacy" || !query.trim()) {
+  if (!query.trim()) {
     return { text: "", ids: [], bytes: 0, omitted: 0 };
   }
   const { store } = await ensureMemoryV2Ready();

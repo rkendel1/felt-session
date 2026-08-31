@@ -162,14 +162,14 @@ describe("memory v2 routes", () => {
 		expect(response?.status).toBe(404);
 	});
 
-	test("keeps the legacy rollback route usable but requires archive before delete", async () => {
-		process.env.OPENSESSION_MEMORY_MODE = "legacy";
+	test("requires archive before permanent managed deletion", async () => {
 		const created = await (await handleMemoryRoutes(context("/api/memory", {
 			method: "POST",
 			headers: { "content-type": "application/json" },
 			body: JSON.stringify({
 				scopeKey: "repo-opensession",
 				summary: "A rollback-compatible fact.",
+				kind: "reference",
 			}),
 		})))!.json();
 		const id = created.entry.id;
@@ -191,12 +191,11 @@ describe("memory v2 routes", () => {
 		expect(removed?.status).toBe(200);
 	});
 
-	test("applies private-scope authorization to legacy creates and merges", async () => {
+	test("applies private-scope authorization to managed creates and merges", async () => {
 		const team = configuredIdentity().team;
 		const viewer = team[0];
 		const other = team.find((member) => member.slackId && member.github !== viewer?.github);
 		if (!viewer?.github || !other?.slackId) return;
-		process.env.OPENSESSION_MEMORY_MODE = "legacy";
 		for (const [path, body] of [
 			["/api/memory", {
 				scopeKey: `user-${other.slackId}`,

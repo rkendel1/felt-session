@@ -13,7 +13,7 @@ import { importLegacyMemoryDirectory, type LegacyImportResult } from "./legacy-i
 import { ManagedMemoryStore } from "./managed-store";
 import { MemoryStore as LegacySqliteMemoryStore } from "./store";
 
-export type MemoryRolloutMode = "legacy" | "shadow" | "v2";
+export type MemoryRolloutMode = "v2";
 
 interface RuntimeStore {
   store: ManagedMemoryStore;
@@ -37,12 +37,10 @@ function removeLegacyMemoryFiles(sourceDirs: string[]): void {
 }
 
 /**
- * Memory rollout mode. V2 is the default; legacy and shadow exist as fast
- * rollback and comparison seams while an instance is being migrated.
+ * Managed FeltDB memory is the only runtime mode.
  */
 export function memoryRolloutMode(): MemoryRolloutMode {
-  const value = process.env.OPENSESSION_MEMORY_MODE?.trim().toLowerCase();
-  return value === "legacy" || value === "shadow" ? value : "v2";
+  return "v2";
 }
 
 export function memoryDatabasePath(): string {
@@ -137,20 +135,18 @@ export async function ensureMemoryV2Ready(): Promise<{
       result.mapped === result.discovered - result.skipped;
     result.sourceDigest = digest.digest("hex");
 
-    if (memoryRolloutMode() === "v2") {
-      if (!result.complete) {
-        throw new Error(
-          `Memory v2 migration is incomplete: ${result.mapped}/${result.discovered - result.skipped} valid rows mapped, ${result.errors.length} errors.`,
-        );
-      }
-      await store.setMetadata(LEGACY_MIGRATION_SEAL, JSON.stringify({
-        ...result,
-        errors: [],
-        migrationVersion: LEGACY_MIGRATION_VERSION,
-        sourceDirs,
-        sealedAt: new Date().toISOString(),
-      }));
+    if (!result.complete) {
+      throw new Error(
+        `Memory migration is incomplete: ${result.mapped}/${result.discovered - result.skipped} valid rows mapped, ${result.errors.length} errors.`,
+      );
     }
+    await store.setMetadata(LEGACY_MIGRATION_SEAL, JSON.stringify({
+      ...result,
+      errors: [],
+      migrationVersion: LEGACY_MIGRATION_VERSION,
+      sourceDirs,
+      sealedAt: new Date().toISOString(),
+    }));
 
     if (result.complete) {
       clearMemoryImportDirty(sourceDirs);
@@ -168,19 +164,11 @@ export async function ensureMemoryV2Ready(): Promise<{
       errors: result.errors.length,
       complete: result.complete,
       source_digest: result.sourceDigest,
-      sealed: memoryRolloutMode() === "v2" && result.complete,
+      sealed: result.complete,
     });
     return result;
   })();
   return { store, migration: await runtime.migration };
-}
-
-/** Shadow writes land in JSON first. Drop only the cached import result so the
- * next comparison sees that write without closing the shared SQLite handle. */
-export async function refreshMemoryV2Shadow(): Promise<void> {
-  if (memoryRolloutMode() !== "shadow") return;
-  if (runtime) runtime.migration = undefined;
-  await ensureMemoryV2Ready();
 }
 
 /** Test seam for a repointed state root or database. */

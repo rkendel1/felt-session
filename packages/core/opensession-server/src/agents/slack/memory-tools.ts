@@ -10,7 +10,6 @@ import { z } from "zod";
 import { createSdkMcpServer, tool } from "../../server/inprocess-mcp";
 import {
   ensureMemoryV2Ready,
-  memoryRolloutMode,
   type MemoryRecord,
   type MemoryState,
 } from "../../server/memory-v2";
@@ -107,7 +106,6 @@ function parse<T>(schema: z.ZodType<T>, value: unknown): T | string {
 }
 
 export function createMemoryMcpServer(ctx: MemoryToolContext) {
-  if (memoryRolloutMode() !== "v2") return createLegacyMemoryMcpServer(ctx);
   let storesThisRun = 0;
   const tools = [
     tool(
@@ -357,91 +355,4 @@ export function createMemoryMcpServer(ctx: MemoryToolContext) {
   ];
 
   return createSdkMcpServer({ name: "opensession-memory", version: "2.0.0", tools });
-}
-
-function createLegacyMemoryMcpServer(ctx: MemoryToolContext) {
-  const currentScopes = () => scopesFor(ctx);
-  const tools = [
-    tool(
-      "store_memory",
-      "Store a durable fact in the legacy memory store.",
-      {
-        text: z.string().trim().min(1),
-        scope: z.enum(["repo", "user", "team"]).optional(),
-        repo: z.string().optional(),
-        supersedes: z.array(z.string()).optional(),
-      },
-      async (args) => {
-        const kind = args.scope || "repo";
-        const scopes = currentScopes();
-        const target = kind === "repo"
-          ? args.repo
-            ? scopes.find((scope) => scope.kind === "repo" && scope.label === args.repo)
-            : scopes.find((scope) => scope.kind === "repo")
-          : scopes.find((scope) => scope.kind === kind);
-        if (!target) return text("That memory scope is not available in this session.");
-        if (target.kind === "team" && !ctx.allowTeamWrites) {
-          return text("Team memory affects every teammate. Add it from Memory settings.");
-        }
-        const entry = await addSessionMemory(target, args.text, ctx.user || "session", {
-          supersedes: args.supersedes,
-          scopes,
-        });
-        invalidateMemorySnapshot(ctx.sessionId);
-        return text(`Remembered [${entry.id}] in ${target.kind}: ${entry.text}`);
-      },
-    ),
-    tool(
-      "search_memory",
-      "Search the legacy memory visible to this session.",
-      { query: z.string().trim().min(1), limit: z.number().int().min(1).max(50).optional() },
-      async (args) => {
-        const hits = await searchSessionMemory(currentScopes(), args.query, { limit: args.limit });
-        return text(hits.length
-          ? hits.map((hit) => `- [${hit.entry.id}] (${hit.scope.kind}) ${hit.entry.text}`).join("\n")
-          : "No matching memory.");
-      },
-    ),
-    tool(
-      "list_memory",
-      "List a bounded set of legacy memory summaries.",
-      { limit: z.number().int().min(1).max(50).optional() },
-      async (args) => {
-        const entries = (await listSessionMemory(currentScopes()))
-          .flatMap(({ scope, entries }) => entries.map((entry) => ({ scope, entry })))
-          .slice(0, args.limit ?? 20);
-        return text(entries.length
-          ? entries.map(({ scope, entry }) => `- [${entry.id}] (${scope.kind}) ${entry.text}`).join("\n")
-          : "No memory in this session's scopes.");
-      },
-    ),
-    tool(
-      "supersede_memory",
-      "Archive obsolete legacy memories without deleting them.",
-      { ids: z.array(z.string()).min(1).max(50) },
-      async (args) => {
-        const writableScopes = currentScopes().filter((scope) => ctx.allowTeamWrites || scope.kind !== "team");
-        const result = await archiveMemories(writableScopes, args.ids);
-        invalidateMemorySnapshot(ctx.sessionId);
-        return text(`Archived ${result.archived.length} memories.`);
-      },
-    ),
-    tool(
-      "forget_memory",
-      "Permanently remove one legacy memory.",
-      { id: z.string().trim().min(1) },
-      async (args) => {
-        const writableScopes = currentScopes().filter((scope) => ctx.allowTeamWrites || scope.kind !== "team");
-        const result = await forgetSessionMemory(writableScopes, args.id);
-        invalidateMemorySnapshot(ctx.sessionId);
-        return text(result.ok ? `Forgot [${args.id}].` : result.error);
-      },
-    ),
-  ];
-  return createSdkMcpServer({ name: "opensession-memory", version: "1.0.0", tools });
-}
-
-/** Legacy prompt seam retained until all run paths switch to prompt-aware v2 retrieval. */
-export async function renderMemoryNoteFor(ctx: MemoryToolContext): Promise<string> {
-  return renderSessionMemoryNote(scopesFor(ctx), { tools: true });
 }

@@ -158,11 +158,11 @@ export class ManagedMemoryStore {
     return true;
   }
 
-  async archive(id: string, now = new Date()): Promise<MemoryRecord> {
+  async archive(id: string, now = new Date(), supersededBy?: string): Promise<MemoryRecord> {
     const record = this.require(id);
     if (record.state !== "active" && record.state !== "expired")
       throw new Error("Only active or expired memories can be archived.");
-    const next = { ...record, state: "archived" as const, updatedAt: now.toISOString() };
+    const next = { ...record, state: "archived" as const, updatedAt: now.toISOString(), supersededBy };
     await this.put(next, "archive"); return clone(next);
   }
 

@@ -6,7 +6,6 @@ import {
 	MEMORY_KINDS,
 	MEMORY_STATES,
 	MemoryNotFoundError,
-	memoryRolloutMode,
 	renderAmbientMemory,
 	RETRIEVED_MEMORY_BUDGET_BYTES,
 	type MemoryKind,
@@ -123,7 +122,6 @@ export async function handleMemoryRoutes(
 	if (!path.startsWith("/api/memory")) return undefined;
 	const denied = requireWorkspaceAdmin(ctx);
 	if (denied) return denied;
-	if (memoryRolloutMode() !== "v2") return handleLegacyMemoryRoutes(ctx);
 
 	try {
 		const { store } = await ensureMemoryV2Ready();

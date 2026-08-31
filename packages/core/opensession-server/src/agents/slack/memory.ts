@@ -14,9 +14,7 @@
  * remember / list_memory / forget admin tools.
  */
 
-import { randomUUID } from "crypto";
 import { existsSync } from "fs";
-import { writeFileAtomic, writeJsonAtomic } from "../../server/shared/atomic-write";
 import { join } from "path";
 import { unlinkSync } from "fs";
 import { stateDir } from "../../server/paths";
@@ -47,7 +45,7 @@ export function memoryImportDirs(): string[] {
 const MEMORY_V2_DIRTY_MARKER = ".memory-v2-dirty";
 
 export function markMemoryImportDirty(): void {
-  writeFileAtomic(join(memoryDir(), MEMORY_V2_DIRTY_MARKER), new Date().toISOString());
+  throw new Error("Legacy memory writes are disabled; managed FeltDB is authoritative");
 }
 
 export function memoryImportIsDirty(sourceDirs: string[]): boolean {
@@ -103,10 +101,6 @@ export interface MemoryContext {
   isPrivate: boolean;
 }
 
-interface ScopeStore {
-  entries: MemoryEntry[];
-}
-
 /** Where this context reads from / writes to. */
 function resolveScopes(ctx: MemoryContext): {
   writable: string;
@@ -118,30 +112,63 @@ function resolveScopes(ctx: MemoryContext): {
   return { writable: "workspace", sharedReadonly: null };
 }
 
-function scopeFile(scope: string): string {
-  return `${memoryDir()}/${scope}.json`;
-}
-
 /** Exported for session-memory.ts (repo/user/team scopes share this store). */
 export async function loadScope(scope: string): Promise<MemoryEntry[]> {
-  try {
-    const file = Bun.file(scopeFile(scope));
-    if (await file.exists()) {
-      const data = JSON.parse(await file.text()) as ScopeStore;
-      return Array.isArray(data.entries) ? data.entries : [];
-    }
-  } catch (e) {
-    console.warn(`[memory] failed to read scope ${scope}:`, e);
-  }
-  return [];
+  const { store } = await (await import("../../server/memory-v2/runtime")).ensureMemoryV2Ready();
+  const entries: MemoryEntry[] = [];
+  let cursor: string | undefined;
+  do {
+    const page = store.list({ scopeKeys: [scope], states: ["active", "archived", "superseded", "expired"] },
+      { cursor, limit: 100 });
+    entries.push(...page.items.map((record) => ({
+      id: record.id,
+      text: record.details || record.summary,
+      by: record.source.actor || record.source.type,
+      at: record.createdAt,
+      supersedes: record.supersedes.length ? record.supersedes : undefined,
+      supersededBy: record.supersededBy,
+      archivedAt: record.state === "active" ? undefined : record.updatedAt,
+    })));
+    cursor = page.nextCursor;
+  } while (cursor);
+  return entries.sort((a, b) => a.at.localeCompare(b.at));
 }
 
 export async function saveScope(scope: string, entries: MemoryEntry[]): Promise<void> {
-  const runtime = await import("../../server/memory-v2/runtime");
-  const mode = runtime.memoryRolloutMode();
-  if (mode === "legacy" || mode === "shadow") markMemoryImportDirty();
-  writeJsonAtomic(scopeFile(scope), { entries });
-  if (mode === "shadow") await runtime.refreshMemoryV2Shadow();
+  const { store } = await (await import("../../server/memory-v2/runtime")).ensureMemoryV2Ready();
+  const desired = new Map(entries.map((entry) => [entry.id, entry]));
+  const current = store.list({ scopeKeys: [scope], states: ["active", "archived", "superseded", "expired"] },
+    { limit: 1000 }).items;
+  for (const record of current) if (!desired.has(record.id)) await store.delete(record.id);
+  for (const entry of entries) {
+    const record = store.get(entry.id);
+    if (!record) {
+      const { legacySummary } = await import("../../server/memory-v2/legacy-import");
+      const summary = legacySummary(entry.text);
+      await store.create({
+        id: entry.id,
+        scopeKey: scope,
+        summary,
+        ...(summary === entry.text.trim() ? {} : { details: entry.text }),
+        kind: "reference",
+        tier: "pinned",
+        source: { type: "agent-verified", actor: entry.by },
+        createdAt: Number.isFinite(Date.parse(entry.at)) ? entry.at : new Date().toISOString(),
+        supersedes: entry.supersedes,
+        tags: [],
+      });
+      if (entry.archivedAt) await store.archive(entry.id, new Date(entry.archivedAt), entry.supersededBy);
+      continue;
+    }
+    const { legacySummary } = await import("../../server/memory-v2/legacy-import");
+    const summary = legacySummary(entry.text);
+    if (record.summary !== summary || (record.details || "") !== (summary === entry.text.trim() ? "" : entry.text))
+      await store.update(record.id, { summary, details: summary === entry.text.trim() ? null : entry.text,
+        source: { ...record.source, actor: entry.by } });
+    if (entry.archivedAt && record.state === "active")
+      await store.archive(record.id, new Date(entry.archivedAt), entry.supersededBy);
+    if (!entry.archivedAt && record.state === "archived") await store.restore(record.id);
+  }
 }
 
 /** Save a new fact to the writable store for this context. */
@@ -151,8 +178,7 @@ export async function addMemory(
   by: string
 ): Promise<MemoryEntry> {
   const { writable } = resolveScopes(ctx);
-  const { memoryRolloutMode } = await import("../../server/memory-v2/runtime");
-  if (memoryRolloutMode() === "v2") {
+  {
     const { ensureMemoryV2Ready, legacySummary } = await import("../../server/memory-v2");
     const { store } = await ensureMemoryV2Ready();
     const summary = legacySummary(text);
@@ -172,16 +198,6 @@ export async function addMemory(
       at: record.createdAt,
     };
   }
-  const entries = await loadScope(writable);
-  const entry: MemoryEntry = {
-    id: randomUUID().slice(0, 8),
-    text: text.trim(),
-    by: by || "someone",
-    at: new Date().toISOString(),
-  };
-  entries.push(entry);
-  await saveScope(writable, entries);
-  return entry;
 }
 
 export interface MemoryView {
@@ -195,8 +211,7 @@ export interface MemoryView {
 
 export async function listMemory(ctx: MemoryContext): Promise<MemoryView> {
   const { writable, sharedReadonly } = resolveScopes(ctx);
-  const { memoryRolloutMode } = await import("../../server/memory-v2/runtime");
-  if (memoryRolloutMode() === "v2") {
+  {
     const { ensureMemoryV2Ready } = await import("../../server/memory-v2");
     const { store } = await ensureMemoryV2Ready();
     const read = (scopeKey: string): MemoryEntry[] => {
@@ -223,11 +238,6 @@ export async function listMemory(ctx: MemoryContext): Promise<MemoryView> {
       localIsWorkspace: writable === "workspace",
     };
   }
-  // Archived entries are excluded everywhere a human or a prompt reads memory;
-  // only the maintenance surfaces ask for them explicitly.
-  const local = activeMemories(await loadScope(writable));
-  const shared = sharedReadonly ? activeMemories(await loadScope(sharedReadonly)) : [];
-  return { local, shared, localIsWorkspace: writable === "workspace" };
 }
 
 export type ForgetResult =
@@ -240,8 +250,7 @@ export async function forgetMemory(
   id: string
 ): Promise<ForgetResult> {
   const { writable, sharedReadonly } = resolveScopes(ctx);
-  const { memoryRolloutMode } = await import("../../server/memory-v2/runtime");
-  if (memoryRolloutMode() === "v2") {
+  {
     const { ensureMemoryV2Ready } = await import("../../server/memory-v2");
     const { store } = await ensureMemoryV2Ready();
     const record = store.get(id);
@@ -266,26 +275,6 @@ export async function forgetMemory(
       },
     };
   }
-  const entries = await loadScope(writable);
-  const idx = entries.findIndex((e) => e.id === id);
-  if (idx === -1) {
-    // Help the model understand *why* a visible id can't be forgotten here.
-    if (sharedReadonly) {
-      const shared = await loadScope(sharedReadonly);
-      if (shared.some((e) => e.id === id)) {
-        return {
-          ok: false,
-          error:
-            "That entry is workspace memory (shared from public channels) and is read-only here. " +
-            "It can only be edited or forgotten from a public channel.",
-        };
-      }
-    }
-    return { ok: false, error: `No memory entry with id "${id}" in this scope.` };
-  }
-  const [removed] = entries.splice(idx, 1);
-  await saveScope(writable, entries);
-  return { ok: true, removed };
 }
 
 /** Render prompt-matched memory as fenced turn context. */
@@ -293,9 +282,7 @@ export async function renderMemoryForPrompt(
   ctx: MemoryContext,
   query = "",
 ): Promise<string> {
-  const { memoryRolloutMode } = await import("../../server/memory-v2/runtime");
-  const mode = memoryRolloutMode();
-  if (mode === "v2") {
+  {
     const { writable, sharedReadonly } = resolveScopes(ctx);
     const { retrieveMemoryForPrompt } = await import("../../server/memory-v2");
     return (
@@ -304,30 +291,4 @@ export async function renderMemoryForPrompt(
       })
     ).text;
   }
-  if (mode === "shadow") {
-    const { writable, sharedReadonly } = resolveScopes(ctx);
-    const { retrieveMemoryForPrompt } = await import("../../server/memory-v2");
-    void retrieveMemoryForPrompt(query, {
-      scopeKeys: [writable, ...(sharedReadonly ? [sharedReadonly] : [])],
-    }).catch(() => {});
-  }
-  const { local, shared, localIsWorkspace } = await listMemory(ctx);
-  if (local.length === 0 && shared.length === 0) return "";
-
-  const lines: string[] = [
-    "\n\n## Channel memory",
-    "Facts remembered for this " +
-      (ctx.isDM ? "DM" : localIsWorkspace ? "workspace (public channels)" : "channel") +
-      ". Treat these as standing context. The user can change them via the remember/forget tools.",
-  ];
-  const fmt = (e: MemoryEntry) => `- [${e.id}] ${e.text}`;
-  if (local.length) {
-    lines.push(localIsWorkspace ? "\nWorkspace memory:" : "\nThis channel:");
-    lines.push(...local.map(fmt));
-  }
-  if (shared.length) {
-    lines.push("\nWorkspace memory (shared, read-only here):");
-    lines.push(...shared.map(fmt));
-  }
-  return lines.join("\n");
 }

@@ -1413,31 +1413,22 @@ export async function runAutomation(
     // standing context). Channel-watch runs already carry the workspace store
     // via the channel memory above, so skip the team scope for them.
     try {
-      const { renderSessionMemoryNote, sessionMemoryScopes } = await import(
+      const { sessionMemoryScopes } = await import(
         "./session-memory"
       );
       const scopes = sessionMemoryScopes({
         repos: [getRepo(automation.repo).id],
         includeTeam: !automation.slackWatch,
       });
-      const { memoryRolloutMode, retrieveMemoryForPrompt } = await import(
+      const { retrieveMemoryForPrompt } = await import(
         "./memory-v2"
       );
-      const mode = memoryRolloutMode();
-      const note = mode === "v2"
-        ? (
-            await retrieveMemoryForPrompt(memoryQuery, {
-              scopeKeys: scopes.map((scope) => scope.key),
-              primaryRepoKey: scopes.find((scope) => scope.kind === "repo")?.key,
-            })
-          ).text
-        : await renderSessionMemoryNote(scopes);
-      if (mode === "shadow") {
-        void retrieveMemoryForPrompt(memoryQuery, {
+      const note = (
+        await retrieveMemoryForPrompt(memoryQuery, {
           scopeKeys: scopes.map((scope) => scope.key),
           primaryRepoKey: scopes.find((scope) => scope.kind === "repo")?.key,
-        }).catch(() => {});
-      }
+        })
+      ).text;
       if (note) prompt += `\n\n${note}`;
     } catch {}
 
