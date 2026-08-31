@@ -1,33 +1,18 @@
-import { afterAll, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "fs";
-import { tmpdir } from "os";
+import { beforeEach, describe, expect, test } from "bun:test";
 import { createFeltDB } from "@feltdb/core";
 import {
-	__draftFileForTest,
+	__draftUserKeyForTest,
 	getDrafts,
 	initializeManagedDrafts,
 	purgeDraftsForSessions,
 	upsertDraft,
 } from "./drafts";
 
-// The store resolves its dir per call, so pointing the state root at a scratch
-// dir keeps these off the real ~/.opensession-drafts.
-const root = mkdtempSync(`${tmpdir()}/drafts-test-`);
-const previousRoot = process.env.OPENSESSION_STATE_DIR;
-process.env.OPENSESSION_STATE_DIR = root;
-
-afterAll(() => {
-	if (previousRoot === undefined) delete process.env.OPENSESSION_STATE_DIR;
-	else process.env.OPENSESSION_STATE_DIR = previousRoot;
-	rmSync(root, { recursive: true, force: true });
-});
-
 const EARLY = "2026-08-13T10:00:00.000Z";
 const LATE = "2026-08-13T10:05:00.000Z";
 
-describe("composer drafts store", () => {
+	describe("composer drafts store", () => {
 	beforeEach(async () => {
-		rmSync(`${root}/.opensession-drafts`, { recursive: true, force: true });
 		await initializeManagedDrafts(createFeltDB({ namespace: crypto.randomUUID(), memory: true }));
 	});
 
@@ -49,8 +34,8 @@ describe("composer drafts store", () => {
 		expect(getDrafts("Michiel")).toEqual({});
 	});
 
-	test("lossy filename characters cannot merge two users", () => {
-		expect(__draftFileForTest("a/b")).not.toBe(__draftFileForTest("a_b"));
+	test("lossy user-key characters cannot merge two users", () => {
+		expect(__draftUserKeyForTest("a/b")).not.toBe(__draftUserKeyForTest("a_b"));
 	});
 
 	test("empty text deletes the draft", async () => {

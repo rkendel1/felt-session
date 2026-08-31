@@ -1,14 +1,11 @@
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, readdirSync, unlinkSync } from "node:fs";
 import type { StateFirstDB } from "@feltdb/core";
 import { managedFeltDb } from "./managed-feltdb";
-import { stateDir } from "./paths";
 
 const LIVE_CAP = 200;
 const TOMBSTONE_CAP = 2_000;
 export const MAX_DRAFT_LENGTH = 32_000;
 const COLLECTION = "opensession_drafts";
-const MIGRATION = "drafts-json-to-managed-feltdb-v1";
 
 export interface StoredDraft { text: string; updatedAt: string; }
 export type DraftMap = Record<string, StoredDraft>;
@@ -21,7 +18,6 @@ type DraftRecord = {
 const records = new Map<string, DraftRecord>();
 let draftDb: StateFirstDB | undefined;
 const authority = () => draftDb ?? managedFeltDb();
-const draftsDir = () => stateDir("drafts");
 
 function sanitizeUser(user: string): string {
   const normalized = (user || "").trim() || "Anonymous";
@@ -29,28 +25,12 @@ function sanitizeUser(user: string): string {
   const hash = createHash("sha256").update(normalized.toLocaleLowerCase()).digest("hex").slice(0, 16);
   return `${cleaned || "Anonymous"}-${hash}`;
 }
-function legacyUserKey(user: string): string {
-  return (user || "").trim().replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 64) || "Anonymous";
-}
 function recordId(userKey: string, sessionId: string): string {
   return `draft_${createHash("sha256").update(`${userKey}:${sessionId}`).digest("hex")}`;
 }
-function cleanStored(input: unknown): DraftMap {
-  const out: DraftMap = {};
-  if (!input || typeof input !== "object") return out;
-  for (const [sessionId, raw] of Object.entries(input as Record<string, unknown>)) {
-    const value = raw as Partial<StoredDraft> | null;
-    if (!sessionId || typeof value?.updatedAt !== "string") continue;
-    out[sessionId] = {
-      text: typeof value.text === "string" ? value.text.slice(0, MAX_DRAFT_LENGTH) : "",
-      updatedAt: value.updatedAt,
-    };
-  }
-  return out;
-}
 function recordsFor(user: string): DraftRecord[] {
-  const keys = new Set([sanitizeUser(user), legacyUserKey(user)]);
-  return [...records.values()].filter((record) => record.state === "active" && keys.has(record.userKey));
+  const key = sanitizeUser(user);
+  return [...records.values()].filter((record) => record.state === "active" && record.userKey === key);
 }
 
 export function getDrafts(user: string): DraftMap {
@@ -113,29 +93,6 @@ export async function purgeDraftsForSessions(ids: string[]): Promise<void> {
 
 export async function initializeManagedDrafts(db: StateFirstDB = managedFeltDb()): Promise<void> {
   draftDb = db;
-  const migrations = db.collection<{ id: string }>("opensession_migrations");
-  if (!await migrations.get(MIGRATION)) {
-    const files = existsSync(draftsDir()) ? readdirSync(draftsDir()).filter((file) => file.endsWith(".json")) : [];
-    for (const file of files) {
-      let drafts: DraftMap;
-      try { drafts = cleanStored(JSON.parse(readFileSync(`${draftsDir()}/${file}`, "utf8"))?.drafts); }
-      catch { continue; }
-      const userKey = file.slice(0, -5);
-      for (const [sessionId, draft] of Object.entries(drafts)) {
-        const id = recordId(userKey, sessionId);
-        const value: DraftRecord = {
-          id, userKey, sessionId, draft, state: "active", updatedAtMs: Date.parse(draft.updatedAt) || 0,
-        };
-        await db.transaction((tx) => {
-          tx.collection<DraftRecord>(COLLECTION).set(id, value);
-        }, { transactionId: `opensession:draft:migrate:${id}` });
-      }
-      unlinkSync(`${draftsDir()}/${file}`);
-    }
-    await db.transaction((tx) => {
-      tx.collection("opensession_migrations").set(MIGRATION, { id: MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
-    }, { transactionId: `opensession:migration:${MIGRATION}` });
-  }
   const loaded = db.runtime().runtime === "remote" ? await queryDrafts(db) : await db.collection<DraftRecord>(COLLECTION).all();
   records.clear();
   for (const record of loaded) records.set(record.id, record);
@@ -154,6 +111,6 @@ async function queryDrafts(db: StateFirstDB): Promise<DraftRecord[]> {
   } while (cursor);
   return loaded;
 }
-export function __draftFileForTest(user: string): string {
-  return `${draftsDir()}/${sanitizeUser(user)}.json`;
+export function __draftUserKeyForTest(user: string): string {
+  return sanitizeUser(user);
 }

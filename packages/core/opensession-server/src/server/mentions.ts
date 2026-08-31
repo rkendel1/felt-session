@@ -15,15 +15,11 @@
  */
 
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, readdirSync, unlinkSync } from "fs";
-import { stateDir } from "./paths";
 import { mentionedUsers } from "./people";
 import { managedFeltDb } from "./managed-feltdb";
 import type { StateFirstDB } from "@feltdb/core";
 
-const MENTIONS_DIR = stateDir("mentions");
 const COLLECTION = "opensession_mentions";
-const MIGRATION = "mentions-json-to-managed-feltdb-v1";
 
 /** Plenty for a badge list, and a hard bound on an unattended file. */
 const MAX_STORED = 200;
@@ -65,31 +61,6 @@ export async function initializeManagedMentions(
 	authority: StateFirstDB = managedFeltDb(),
 ): Promise<void> {
 	mentionDb = authority;
-	const migrations = authority.collection<{ id: string }>("opensession_migrations");
-	if (!await migrations.get(MIGRATION)) {
-		const files = existsSync(MENTIONS_DIR) ? readdirSync(MENTIONS_DIR).filter((file) => file.endsWith(".json")) : [];
-		for (const file of files) {
-			let legacy: unknown[] = [];
-			try {
-				const raw = JSON.parse(readFileSync(`${MENTIONS_DIR}/${file}`, "utf8"));
-				if (Array.isArray(raw?.mentions)) legacy = raw.mentions;
-			} catch { continue; }
-			const person = file.slice(0, -5).toLocaleLowerCase();
-			for (const value of legacy) {
-				const mention = value as Mention;
-				if (!mention?.sessionId || typeof mention.by !== "string" || typeof mention.ts !== "number") continue;
-				const id = recordId(person, mention.sessionId);
-				const stored: StoredMention = { ...mention, id, person, state: "active", updatedAt: Date.now() };
-				await authority.transaction((tx) => {
-					tx.collection<StoredMention>(COLLECTION).set(id, stored);
-				}, { transactionId: `opensession:mention:migrate:${id}` });
-			}
-			unlinkSync(`${MENTIONS_DIR}/${file}`);
-		}
-		await authority.transaction((tx) => {
-			tx.collection("opensession_migrations").set(MIGRATION, { id: MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
-		}, { transactionId: `opensession:migration:${MIGRATION}` });
-	}
 	const loaded = authority.runtime().runtime === "remote"
 		? await queryMentions(authority)
 		: await authority.collection<StoredMention>(COLLECTION).all();

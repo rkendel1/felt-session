@@ -4,8 +4,6 @@
  * Managed FeltDB owns the listing and a SessionKernel timer owns delivery.
  */
 import { randomUUIDv7 } from "bun";
-import { existsSync, readFileSync, unlinkSync } from "fs";
-import { stateDir } from "./paths";
 import { managedFeltDb } from "./managed-feltdb";
 import type { StateFirstDB } from "@feltdb/core";
 import {
@@ -14,17 +12,9 @@ import {
 } from "./session-kernel";
 import { getSessionControl } from "./session-control";
 
-let STORE_PATH = stateDir("scheduled-prompts.json");
 let scheduledPromptDb: StateFirstDB | undefined;
-
-export function __setScheduledPromptStoreForTest(path: string): string {
-	const previous = STORE_PATH;
-	STORE_PATH = path;
-	return previous;
-}
 const TIMER_KIND = "scheduled_prompt";
 const COLLECTION = "opensession_scheduled_prompts";
-const MIGRATION = "scheduled-prompts-json-to-managed-feltdb-v1";
 
 export interface ScheduledPrompt {
 	id: string;
@@ -95,7 +85,6 @@ registerSessionTimerHandler(TIMER_KIND, async (timer) => {
 
 export async function initializeManagedScheduledPrompts(authority: StateFirstDB = managedFeltDb()): Promise<number> {
 	scheduledPromptDb = authority;
-	await migrateLegacyScheduledPrompts(authority);
 	const records = authority.runtime().runtime === "remote"
 		? await queryScheduledPrompts(authority)
 		: (await authority.collection<StoredScheduledPrompt>(COLLECTION).all()).filter((item) => item.state === "active");
@@ -176,32 +165,4 @@ async function queryScheduledPrompts(authority: StateFirstDB): Promise<StoredSch
 		if (!page.exhausted && !cursor) throw new Error("FeltDB scheduled prompt cursor is missing");
 	} while (cursor);
 	return records;
-}
-
-async function migrateLegacyScheduledPrompts(authority: StateFirstDB): Promise<void> {
-	const migrations = authority.collection<{ id: string }>("opensession_migrations");
-	if (await migrations.get(MIGRATION)) return;
-	let prompts: ScheduledPrompt[] = [];
-	if (existsSync(STORE_PATH)) {
-		try {
-			const raw = JSON.parse(readFileSync(STORE_PATH, "utf8"));
-			if (Array.isArray(raw.prompts)) prompts = raw.prompts;
-		} catch {}
-	}
-	for (const prompt of prompts) {
-		const value: StoredScheduledPrompt = {
-			...prompt, state: "active", dueAt: Date.parse(prompt.at), updatedAt: Date.now(),
-		};
-		try {
-			await authority.transaction((tx) => {
-				tx.collection<StoredScheduledPrompt>(COLLECTION).set(prompt.id, value, { requireAbsent: true });
-			}, { transactionId: `opensession:scheduled-prompt:migrate:${prompt.id}` });
-		} catch (error) {
-			if (!await authority.collection(COLLECTION).get(prompt.id)) throw error;
-		}
-	}
-	await authority.transaction((tx) => {
-		tx.collection("opensession_migrations").set(MIGRATION, { id: MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
-	}, { transactionId: `opensession:migration:${MIGRATION}` });
-	if (existsSync(STORE_PATH)) unlinkSync(STORE_PATH);
 }
