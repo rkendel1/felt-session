@@ -13,10 +13,9 @@
  * for runs THEY drive, so runs driven from the web UI must sync the store
  * themselves.
  *
- * Writes are surgical: only existing files are patched (never created), only
- * the engine-session fields are touched, and the shape matches what the
- * owners write (atomic JSON; slack/linear files carry the pi id in the
- * claude slot). Pi engine ids get their own `piSessionId` slot — pi uuids are
+ * Writes are surgical: only existing managed records are patched and only
+ * the engine-session fields are touched. Pi engine ids get their own
+ * `piSessionId` slot — pi uuids are
  * shape-indistinguishable from claude ids, so the claude slot alone can't
  * say which engine owns the id (the run-start arm in run-session resolved
  * undefined and minted a fresh pi session every web-UI turn) — while a
@@ -26,20 +25,17 @@
  * before its next disk load doesn't resurrect the stale id.
  */
 
-import { existsSync, readFileSync } from "fs";
-import { writeJsonAtomic } from "./shared/atomic-write";
-import { statePath } from "./paths";
 import {
 	activeSessions as slackActiveSessions,
 	getSessionKey as slackSessionKey,
 	loadSession as loadSlackSession,
 	saveSession as saveSlackSession,
 } from "../agents/slack/state";
+import {
+	loadSessionInfo as loadLinearSession,
+	saveSessionInfo as saveLinearSession,
+} from "../agents/linear/session";
 import type { UnifiedSession } from "./types";
-
-// statePath: isolated under OPENSESSION_STATE_DIR for dev/demo instances,
-// $HOME when unset (production, unchanged) — see sessions.ts's store block.
-const LINEAR_SESSION_DIR = statePath(".linear-sessions");
 
 export interface EngineSessionPatch {
 	engineSessionId?: string;
@@ -48,39 +44,6 @@ export interface EngineSessionPatch {
 	 *  over engineSessionId when the run's provider is "pi". */
 	piSessionId?: string;
 	model?: string;
-}
-
-function patchFile(path: string, patch: EngineSessionPatch, activityField: string): boolean {
-	if (!existsSync(path)) return false;
-	try {
-		const data = JSON.parse(readFileSync(path, "utf-8"));
-		let changed = false;
-		if (patch.engineSessionId && data.claudeSessionId !== patch.engineSessionId) {
-			data.claudeSessionId = patch.engineSessionId;
-			changed = true;
-		}
-		if (patch.piSessionId) {
-			if (data.piSessionId !== patch.piSessionId) {
-				data.piSessionId = patch.piSessionId;
-				changed = true;
-			}
-			if (data.claudeSessionId !== patch.piSessionId) {
-				data.claudeSessionId = patch.piSessionId;
-				changed = true;
-			}
-		}
-		if (patch.model && data.model !== patch.model) {
-			data.model = patch.model;
-			changed = true;
-		}
-		if (!changed) return false;
-		data[activityField] = new Date().toISOString();
-		writeJsonAtomic(path, data);
-		return true;
-	} catch (e) {
-		console.error(`[agent-session-sync] failed to patch ${path}:`, e);
-		return false;
-	}
 }
 
 /**
@@ -132,11 +95,19 @@ export async function syncAgentSessionEngine(
 
 	if (session.source === "linear") {
 		if (!session.branch) return false;
-		return patchFile(
-			`${LINEAR_SESSION_DIR}/${session.branch}.json`,
-			patch,
-			"updatedAt",
-		);
+		const stored = await loadLinearSession(session.branch);
+		if (!stored) return false;
+		const nextEngineId = patch.piSessionId || patch.engineSessionId;
+		const changed =
+			(!!nextEngineId && stored.claudeSessionId !== nextEngineId) ||
+			(!!patch.model && stored.model !== patch.model);
+		if (!changed) return false;
+		await saveLinearSession(session.branch, {
+			...(nextEngineId ? { claudeSessionId: nextEngineId } : {}),
+			...(patch.piSessionId ? { piSessionId: patch.piSessionId } : {}),
+			...(patch.model ? { model: patch.model } : {}),
+		});
+		return true;
 	}
 
 	return false;

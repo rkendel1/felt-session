@@ -546,7 +546,7 @@ Help with whatever they're asking. You have a worktree ready at ${session.worktr
     const branch = await generateBranchName(agentSession.issue.title, agentSession.issue.identifier);
     try {
       deleteWorktree(branch);
-      deleteSessionFile(branch);
+      await deleteSessionFile(branch);
       activeSessions.delete(agentSession.id);
     } catch (e) {
       console.log(`[linear] Could not delete worktree ${branch}: ${e}`);

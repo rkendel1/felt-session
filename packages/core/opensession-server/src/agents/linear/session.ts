@@ -11,19 +11,23 @@ import {
   productName,
 } from "../../server/config";
 import { getDefaultModel, toPiModel } from "../../server/models";
-import { writeJsonAtomic } from "../../server/shared/atomic-write";
+import { managedFeltDb } from "../../server/managed-feltdb";
+import type { StateFirstDB } from "@feltdb/core";
 import {
   createWorktree as createRepoWorktree,
   removeWorktree,
 } from "../../server/worktree";
-import { unlinkSync } from "fs";
-import { homeDir } from "../../server/paths";
+import { createHash } from "node:crypto";
+import { existsSync, readFileSync, readdirSync, statSync, unlinkSync } from "node:fs";
+import { homeDir, statePath } from "../../server/paths";
 import { gitIdentityFor, gitIdentityEnv } from "../../server/shared/user-mappings";
 import { createAgentActivity } from "./api";
 import type { LinearTokens } from "./oauth";
 import { getValidToken } from "./oauth";
 
-const SESSION_DIR = `${process.env.HOME}/.linear-sessions`;
+const SESSION_DIR = statePath(".linear-sessions");
+const LINEAR_SESSIONS_COLLECTION = "opensession_linear_sessions";
+const LINEAR_SESSIONS_MIGRATION = "linear-session-json-to-managed-feltdb-v1";
 
 /** Sessions with no activity for this long aren't restored on startup. */
 const STALE_SESSION_MS = 7 * 24 * 60 * 60 * 1000;
@@ -66,6 +70,7 @@ export interface StoredSession {
   issueCreator: Participant | null;
   /** Model id for this session's runs (from the session file); unset = default. */
   model?: string;
+  piSessionId?: string;
   updatedAt?: string;
 }
 
@@ -84,6 +89,8 @@ export interface ActiveSession extends StoredSession {
 
 /** In-memory active sessions: linearSessionId -> ActiveSession */
 export const activeSessions = new Map<string, ActiveSession>();
+export const persistedLinearSessions: Map<string, StoredSession> = ((globalThis as any)
+  .__linearPersistedSessions ??= new Map());
 
 /** Dedup set for webhook sessions */
 export const processedSessions = new Set<string>();
@@ -215,6 +222,7 @@ function storedFromFile(branch: string, raw: Record<string, any>): StoredSession
     lastActiveUser: raw.lastActiveUser ?? null,
     issueCreator: raw.issueCreator ?? null,
     model: raw.model ?? undefined,
+    piSessionId: raw.piSessionId ?? undefined,
     updatedAt: raw.updatedAt,
   };
 }
@@ -226,42 +234,87 @@ function storedFromFile(branch: string, raw: Record<string, any>): StoredSession
  */
 export async function saveSessionInfo(
   branch: string,
-  patch: Partial<StoredSession>
+  patch: Partial<StoredSession>,
+  db: StateFirstDB = managedFeltDb(),
 ): Promise<void> {
   const defined = Object.fromEntries(
     Object.entries(patch).filter(([, v]) => v !== undefined)
   ) as Partial<StoredSession>;
 
-  const existing = await loadSessionInfo(branch);
-  const data: StoredSession = {
-    ...emptyStored(branch),
-    ...(existing || {}),
-    ...defined,
-    branch,
-    updatedAt: new Date().toISOString(),
-  };
-  writeJsonAtomic(`${SESSION_DIR}/${branch}.json`, data);
-}
-
-export async function loadSessionInfo(branch: string): Promise<StoredSession | null> {
-  try {
-    const file = Bun.file(`${SESSION_DIR}/${branch}.json`);
-    if (await file.exists()) {
-      return storedFromFile(branch, JSON.parse(await file.text()));
+  const id = linearSessionRecordId(branch);
+  const collection = db.collection<StoredLinearSession>(LINEAR_SESSIONS_COLLECTION);
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const current = await collection.get(id);
+    const data: StoredSession = {
+      ...emptyStored(branch), ...(current?.payload || {}), ...defined, branch,
+      updatedAt: new Date().toISOString(),
+    };
+    const record: StoredLinearSession = {
+      id, branch, payload: data, state: "active",
+      updatedAtMs: Date.parse(data.updatedAt!),
+    };
+    if (!current) {
+      try {
+        await db.transaction((tx) => {
+          tx.collection<StoredLinearSession>(LINEAR_SESSIONS_COLLECTION)
+            .set(id, record, { requireAbsent: true });
+        }, { transactionId: `opensession:linear-session:create:${id}` });
+        persistedLinearSessions.set(branch, data);
+        return;
+      } catch (error) {
+        if (!await collection.get(id)) throw error;
+        continue;
+      }
     }
-    return null;
+    if (!Number.isSafeInteger(current.__version)) throw new Error(`Linear session ${branch} has no FeltDB authority version`);
+    const result = await collection.updateIfVersion(id, current.__version!, record);
+    if (result.updated) {
+      persistedLinearSessions.set(branch, data);
+      return;
+    }
+  }
+  throw new Error(`Linear session ${branch} remained contended`);
+}
+
+type StoredLinearSession = {
+  id: string;
+  branch: string;
+  payload: StoredSession;
+  state: "active" | "deleted";
+  updatedAtMs: number;
+  __version?: number;
+};
+
+function linearSessionRecordId(branch: string): string {
+  return `linear_session_${createHash("sha256").update(branch).digest("hex")}`;
+}
+
+export async function loadSessionInfo(
+  branch: string,
+  db: StateFirstDB = managedFeltDb(),
+): Promise<StoredSession | null> {
+  try {
+    const record = await db.collection<StoredLinearSession>(LINEAR_SESSIONS_COLLECTION)
+      .get(linearSessionRecordId(branch));
+    return record?.state === "active" ? record.payload : null;
   } catch {
     return null;
   }
 }
 
-export function deleteSessionFile(branch: string): void {
-  try {
-    unlinkSync(`${SESSION_DIR}/${branch}.json`);
-    console.log(`[linear] Deleted session file: ${SESSION_DIR}/${branch}.json`);
-  } catch {
-    // File might not exist
-  }
+export async function deleteSessionFile(
+  branch: string,
+  db: StateFirstDB = managedFeltDb(),
+): Promise<void> {
+  const collection = db.collection<StoredLinearSession>(LINEAR_SESSIONS_COLLECTION);
+  const current = await collection.get(linearSessionRecordId(branch));
+  if (!current || current.state === "deleted") return;
+  if (!Number.isSafeInteger(current.__version)) throw new Error(`Linear session ${branch} has no FeltDB authority version`);
+  const result = await collection.updateIfVersion(current.id, current.__version!, {
+    state: "deleted", updatedAtMs: Date.now(),
+  });
+  if (!result.updated) throw new Error(`Linear session ${branch} changed during deletion`);
+  persistedLinearSessions.delete(branch);
 }
 
 export function deleteWorktree(branch: string): void {
@@ -556,11 +609,11 @@ ${participantsLine ? `\n${participantsLine}\n` : ""}
 // --- Startup ---
 
 export async function loadActiveSessionsOnStartup(tokens: LinearTokens): Promise<void> {
-  console.log("[linear] Loading active sessions from disk...");
+  console.log("[linear] Loading active sessions from managed FeltDB...");
 
   try {
-    const { readdirSync } = await import("fs");
-    const files = readdirSync(SESSION_DIR).filter((f) => f.endsWith(".json"));
+    const db = managedFeltDb();
+    const records = await initializeManagedLinearSessions(db);
 
     // Single-workspace install: every session belongs to the one authorized org.
     const orgId = Object.keys(tokens)[0];
@@ -569,11 +622,9 @@ export async function loadActiveSessionsOnStartup(tokens: LinearTokens): Promise
     if (!accessToken) return;
 
     let skippedStale = 0;
-    for (const file of files) {
+    for (const record of records) {
       try {
-        const branch = file.replace(".json", "");
-        const stored = await loadSessionInfo(branch);
-
+        const { branch, payload: stored } = record;
         if (
           stored &&
           stored.linearSessionId &&
@@ -605,7 +656,7 @@ export async function loadActiveSessionsOnStartup(tokens: LinearTokens): Promise
           );
         }
       } catch (e) {
-        console.error(`[linear] Error loading session ${file}:`, e);
+        console.error(`[linear] Error loading session ${record.branch}:`, e);
       }
     }
     if (skippedStale > 0) {
@@ -614,4 +665,66 @@ export async function loadActiveSessionsOnStartup(tokens: LinearTokens): Promise
   } catch {
     console.log("[linear] No active sessions to load");
   }
+}
+
+export async function initializeManagedLinearSessions(
+  db: StateFirstDB = managedFeltDb(),
+): Promise<StoredLinearSession[]> {
+  await migrateLegacyLinearSessions(db);
+  const records = await loadStoredLinearSessions(db);
+  persistedLinearSessions.clear();
+  for (const record of records) persistedLinearSessions.set(record.branch, record.payload);
+  return records;
+}
+
+async function loadStoredLinearSessions(db: StateFirstDB): Promise<StoredLinearSession[]> {
+  if (db.runtime().runtime !== "remote")
+    return (await db.collection<StoredLinearSession>(LINEAR_SESSIONS_COLLECTION).all())
+      .filter((record) => record.state === "active");
+  const records: StoredLinearSession[] = [];
+  let cursor: string | undefined;
+  do {
+    const page = await db.query<StoredLinearSession>({
+      collection: LINEAR_SESSIONS_COLLECTION,
+      where: [{ field: "state", eq: "active" }],
+      orderBy: [{ field: "updatedAtMs", direction: "desc" }],
+      limit: 500,
+      ...(cursor ? { cursor } : {}),
+    });
+    records.push(...page.records);
+    cursor = page.exhausted ? undefined : page.nextCursor;
+    if (!page.exhausted && !cursor) throw new Error("FeltDB Linear session cursor is missing");
+  } while (cursor);
+  return records;
+}
+
+async function migrateLegacyLinearSessions(db: StateFirstDB): Promise<void> {
+  const migrations = db.collection<{ id: string }>("opensession_migrations");
+  if (await migrations.get(LINEAR_SESSIONS_MIGRATION)) return;
+  const files = existsSync(SESSION_DIR) ? readdirSync(SESSION_DIR).filter((file) => file.endsWith(".json")) : [];
+  for (const file of files) {
+    const path = `${SESSION_DIR}/${file}`;
+    const branch = file.slice(0, -5);
+    let raw: Record<string, unknown>;
+    try { raw = JSON.parse(readFileSync(path, "utf8")); } catch { continue; }
+    const payload = storedFromFile(branch, raw);
+    payload.updatedAt ||= new Date(statSync(path).mtimeMs).toISOString();
+    const id = linearSessionRecordId(branch);
+    try {
+      await db.transaction((tx) => {
+        tx.collection<StoredLinearSession>(LINEAR_SESSIONS_COLLECTION)
+          .set(id, { id, branch, payload, state: "active", updatedAtMs: Date.parse(payload.updatedAt!) }, { requireAbsent: true });
+      }, { transactionId: `opensession:linear-session:migrate:${id}` });
+    } catch (error) {
+      if (!await db.collection(LINEAR_SESSIONS_COLLECTION).get(id)) throw error;
+    }
+    unlinkSync(path);
+  }
+  await db.transaction((tx) => {
+    tx.collection("opensession_migrations").set(
+      LINEAR_SESSIONS_MIGRATION,
+      { id: LINEAR_SESSIONS_MIGRATION, completedAt: Date.now() },
+      { requireAbsent: true },
+    );
+  }, { transactionId: `opensession:migration:${LINEAR_SESSIONS_MIGRATION}` });
 }

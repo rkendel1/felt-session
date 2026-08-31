@@ -44,8 +44,6 @@ import {
 } from "./pr-cache";
 import type {
   UnifiedSession,
-  SlackSessionFile,
-  LinearSessionFile,
   CLISessionFile,
   NativeSessionFile,
   SessionPrRef,
@@ -56,6 +54,10 @@ import {
   deleteSession as deleteSlackSession,
   persistedSlackSessions,
 } from "../agents/slack/state";
+import {
+  deleteSessionFile as deleteLinearSession,
+  persistedLinearSessions,
+} from "../agents/linear/session";
 
 // The GitHub PR bulk cache lives in pr-cache.ts (extracted from this module);
 // re-export its public surface so existing consumers keep importing from here.
@@ -83,7 +85,6 @@ export {
 // dev/demo instance listed the operator's real Slack/Linear history next to
 // its own — 159 live threads showed up in a demo instance meant to hold 9
 // synthetic sessions (2026-08-05).
-const LINEAR_SESSIONS_DIR = statePath(".linear-sessions");
 const CLI_SESSIONS_DIR = statePath(".claude/sessions");
 const SESSIONS_DIR = OPENSESSION_SESSIONS_DIR;
 const CLAUDE_PROJECTS_DIR = statePath(".claude/projects");
@@ -778,14 +779,7 @@ function scanSlackSessions(): UnifiedSession[] {
 }
 
 function* linearSessionRows(): Generator<UnifiedSession> {
-  if (!existsSync(LINEAR_SESSIONS_DIR)) return [];
-
-  for (const file of readdirSync(LINEAR_SESSIONS_DIR)) {
-    if (!file.endsWith(".json")) continue;
-    const data = readJsonSafe<LinearSessionFile>(
-      `${LINEAR_SESSIONS_DIR}/${file}`
-    );
-    if (!data) continue;
+  for (const [storedBranch, data] of persistedLinearSessions) {
 
     const rawName =
       data.participants?.[0]?.name ||
@@ -798,23 +792,23 @@ function* linearSessionRows(): Generator<UnifiedSession> {
 
     const title = data.issueIdentifier
       ? `${data.issueIdentifier}: ${data.issueTitle || data.branch}`
-      : data.branch;
+      : data.branch || storedBranch;
 
-    const id = `linear-${data.branch}`;
+    const branch = data.branch || storedBranch;
+    const id = `linear-${branch}`;
     const archived = isArchivedId(id);
 
     yield overlaySidecarExtras({
       id,
       claudeSessionId: data.claudeSessionId,
       source: "linear",
-      branch: data.branch,
+      branch,
       worktreeDir: data.worktreeDir || null,
       createdBy: startedBy,
       startedBy,
       title,
-      lastActivity:
-        data.updatedAt || getFileMtime(`${LINEAR_SESSIONS_DIR}/${file}`),
-      createdAt: getFileMtime(`${LINEAR_SESSIONS_DIR}/${file}`),
+      lastActivity: data.updatedAt || new Date(0).toISOString(),
+      createdAt: data.updatedAt || new Date(0).toISOString(),
       isRunning: false,
       transcriptPath: null,
       linearIssue: data.issueIdentifier
@@ -1369,10 +1363,7 @@ async function removeSessionArtifacts(session: UnifiedSession): Promise<void> {
       break;
     }
     case "linear": {
-      // ID format: linear-{branch}
-      const branch = session.id.replace(/^linear-/, "");
-      const path = `${LINEAR_SESSIONS_DIR}/${branch}.json`;
-      if (existsSync(path)) unlinkSync(path);
+      await deleteLinearSession(session.id.replace(/^linear-/, ""));
       break;
     }
     case "opensession": {
