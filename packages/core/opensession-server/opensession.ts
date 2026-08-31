@@ -69,6 +69,7 @@ import { initializeManagedRemoteRepoTemplates } from "./src/server/sandbox/remot
 import { flushPrewarmWrites, initializeManagedPrewarms } from "./src/server/sandbox/prewarm";
 import { initializeManagedWarmTemplates } from "./src/server/warm-template";
 import { flushCreatePlanWrites, initializeManagedCreatePlans } from "./src/server/session-create-plan";
+import { initializeManagedSandboxConfig } from "./src/server/sandbox/config";
 import { initializeManagedWorkloadIdentity } from "./src/server/workload-identity";
 import { initializeManagedPapercuts } from "./src/server/papercuts";
 import { initializeManagedSecurity } from "./src/server/security";
@@ -273,6 +274,7 @@ if (!g.__opensessionBooted) {
 	await initializeManagedMcpOauth(db);
 	await initializeManagedWorkspaceSecrets(db);
 	await initializeManagedSandboxConnections(db);
+	await initializeManagedSandboxConfig(db);
 	await initializeManagedSandboxOperations(db);
 	await initializeManagedSandboxEnvironments(db);
 	await initializeManagedDockerSandboxState(db);

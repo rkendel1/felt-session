@@ -24,7 +24,7 @@ import {
 import { tmpdir } from "os";
 import { join } from "path";
 import { __setSessionsDirForTest } from "../paths";
-import { sandboxesEnabled } from "./config";
+import { initializeManagedSandboxConfig, sandboxesEnabled } from "./config";
 import { initializeManagedWorkspaceSecrets } from "../workspace-secrets";
 import { initializeManagedSandboxConnections } from "./connections";
 import { initializeManagedSandboxEnvironments } from "./environments";
@@ -137,6 +137,7 @@ async function writeConfig(overrides: Record<string, unknown>): Promise<void> {
       ...runtimeOverrides,
     }),
   );
+  await initializeManagedSandboxConfig(prewarmDb, cfgPath());
   await connectSandboxProvider("daytona", {
     secret: "test-key",
     settings: { snapshot },

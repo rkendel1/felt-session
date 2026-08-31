@@ -73,10 +73,10 @@ function assertAvailable(value: string): asserts value is RunnableSandboxProvide
   }
 }
 
-export function saveWorkspaceSandboxDefault(value: string): SandboxDefaultsStatus {
+export async function saveWorkspaceSandboxDefault(value: string): Promise<SandboxDefaultsStatus> {
   const normalized = value.trim().toLowerCase();
   if (normalized !== "none") assertAvailable(normalized);
-  setWorkspaceSandboxDefault(normalized);
+  await setWorkspaceSandboxDefault(normalized);
   return sandboxDefaultsStatus("Anonymous");
 }
 

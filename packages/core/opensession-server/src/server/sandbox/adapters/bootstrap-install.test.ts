@@ -2,7 +2,9 @@ import {afterEach, describe, expect, test} from "bun:test";
 import {mkdtempSync, rmSync, writeFileSync} from "fs";
 import {tmpdir} from "os";
 import {join} from "path";
+import {createFeltDB} from "@feltdb/core";
 import {bootstrapRemoteSandbox, bootstrapSignature, remoteRunnerHostCommand, REMOTE_REPO, REMOTE_RUNNER_BINARY, type RemoteDriver} from "./bootstrap";
+import {initializeManagedSandboxConfig} from "../config";
 
 const originalConfig = process.env.OPENSESSION_SANDBOX_CONFIG;
 const scratch: string[] = [];
@@ -61,6 +63,10 @@ describe("remote runner bootstrap", () => {
       }),
     );
     process.env.OPENSESSION_SANDBOX_CONFIG = config;
+    await initializeManagedSandboxConfig(
+      createFeltDB({namespace: crypto.randomUUID(), memory: true}),
+      config,
+    );
 
     const commands: string[] = [];
     const driver: RemoteDriver = {

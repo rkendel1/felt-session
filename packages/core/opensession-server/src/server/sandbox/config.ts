@@ -1,36 +1,32 @@
 /**
  * Sandbox configuration (sandbox rollout Phase 0).
  *
- * `~/.opensession-sandbox.json` (dual-read fallback to `~/.opensession-sandbox.json`)
- * picks the provider, e.g.
+ * Managed FeltDB state picks the provider, e.g.
  *   {"provider": "docker", "image": "opensession-runner:latest",
  *    "idleStopMinutes": 30, "perRepo": {"app": {"provider": "docker"}}}
  *
- * Read fresh on every call (same pattern as codexTransport() reading
- * ~/.opensession-codex-transport.json) so a config flip applies to the next run
- * without a restart. Missing/invalid config = provider "local" = exactly
- * today's behavior.
+ * The former JSON configuration is imported once at boot and removed. Runtime
+ * reads and writes use only the managed FeltDB record. Missing configuration
+ * means provider "local", preserving the original behavior.
  *
  * Kill switch: `touch <sessions-dir>/disable-sandboxes` forces "local" for
  * new runs regardless of config — mirroring host-client's disable-run-hosts.
  */
 
-import { existsSync, mkdirSync, readFileSync } from "fs";
-import { dirname } from "path";
+import type { StateFirstDB } from "@feltdb/core";
+import { existsSync, readFileSync, rmSync } from "fs";
 import { configuredIngress } from "../config";
 import { getDefaultModel, providerFor, resolveModel } from "../models";
 import { OPENSESSION_SESSIONS_DIR } from "../paths";
 import { stateDir } from "../paths";
-import { writeJsonAtomic } from "../shared/atomic-write";
+import { managedFeltDb } from "../managed-feltdb";
 import type { SandboxProviderId, SandboxProviderUsability } from "./provider";
 import { getSandboxConnection } from "./connections";
 
 export const DEFAULT_SANDBOX_PREVIEW_PORTS = [3300, 3301, 3302] as const;
 
-// Env-overridable so the verify suite (and unit tests) can point a scratch
-// config at a scratch docker setup without touching the live file (which is
-// read fresh per run). Read per call, not at module load, so a test can flip
-// the env var without re-importing this module.
+// Env-overridable migration source so verification and unit tests can import a
+// scratch legacy configuration without touching the live former path.
 function configPath(): string {
   return (
     process.env.OPENSESSION_SANDBOX_CONFIG ||
@@ -40,6 +36,42 @@ function configPath(): string {
 
 export function sandboxConfigPath(): string {
   return configPath();
+}
+type StoredSandboxConfig = { id: "default"; value: Record<string, unknown> };
+const CONFIG_COLLECTION = "opensession_sandbox_config";
+const CONFIG_MIGRATION = "sandbox-config-json-to-managed-feltdb-v1";
+let sandboxConfigDb: StateFirstDB | undefined;
+const managedSandboxConfig = ((globalThis as typeof globalThis & {
+  __opensessionManagedSandboxConfig?: { present: boolean; raw: Record<string, unknown> };
+}).__opensessionManagedSandboxConfig ??= { present: false, raw: {} });
+
+export async function initializeManagedSandboxConfig(
+  db: StateFirstDB = sandboxConfigDb ?? managedFeltDb(),
+  legacyPath = configPath(),
+): Promise<void> {
+  sandboxConfigDb = db;
+  const migrations = db.collection<{ id: string }>("opensession_migrations");
+  const migrationComplete = !!await migrations.get(CONFIG_MIGRATION);
+  let legacy: Record<string, unknown> | undefined;
+  if (existsSync(legacyPath)) {
+    try {
+      const parsed = JSON.parse(readFileSync(legacyPath, "utf8"));
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        const { connections: _legacyConnections, ...baseConfig } = parsed;
+        legacy = baseConfig;
+      }
+    } catch {}
+  }
+  if (legacy || !migrationComplete) await db.transaction((tx) => {
+    if (legacy) tx.collection<StoredSandboxConfig>(CONFIG_COLLECTION).set(
+      "default", { id: "default", value: legacy });
+    if (!migrationComplete) tx.collection("opensession_migrations").set(CONFIG_MIGRATION,
+      { id: CONFIG_MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
+  }, { transactionId: `opensession:migration:${CONFIG_MIGRATION}:${crypto.randomUUID()}` });
+  const stored = await db.collection<StoredSandboxConfig>(CONFIG_COLLECTION).get("default");
+  managedSandboxConfig.present = !!stored;
+  managedSandboxConfig.raw = structuredClone(stored?.value ?? {});
+  rmSync(legacyPath, { force: true });
 }
 const DISABLE_FILE = `${OPENSESSION_SESSIONS_DIR}/disable-sandboxes`;
 
@@ -286,12 +318,11 @@ export function sandboxesEnabled(): boolean {
   return !existsSync(DISABLE_FILE);
 }
 
-/** Current config, read fresh per call. Never throws; falls back to local. */
+/** Current config from the managed in-process projection. */
 export function sandboxConfig(): SandboxConfig {
   try {
-    const path = configPath();
-    if (existsSync(path)) {
-      const raw = JSON.parse(readFileSync(path, "utf-8"));
+    if (managedSandboxConfig.present) {
+      const raw = managedSandboxConfig.raw as any;
       const perRepo: Record<string, SandboxRepoOverride> = {};
       if (raw?.perRepo && typeof raw.perRepo === "object") {
         for (const [repoId, o] of Object.entries<any>(raw.perRepo)) {
@@ -619,9 +650,9 @@ export function sandboxProviderCertified(id: RunnableSandboxProviderId): boolean
 
 /** Persist the Workspace-wide default without rewriting any provider secrets
  * or other sandbox configuration. "none" is both the UI and storage default. */
-export function setWorkspaceSandboxDefault(
+export async function setWorkspaceSandboxDefault(
   value: string,
-): RunnableSandboxProviderId | "none" {
+): Promise<RunnableSandboxProviderId | "none"> {
   const normalized = value.trim().toLowerCase();
   if (normalized !== "none" && !isRunnableSandboxProvider(normalized)) {
     throw new Error(`Unknown sandbox provider "${value}"`);
@@ -632,18 +663,16 @@ export function setWorkspaceSandboxDefault(
   ) {
     throw new Error(`Sandbox provider "${normalized}" is not currently available`);
   }
-  const path = configPath();
-  // Absence already means None; do not create a config file merely to record
-  // the default, because config-file presence is the sandbox feature gate.
-  if (normalized === "none" && !existsSync(path)) return "none";
-  let raw: Record<string, unknown> = {};
-  try {
-    const parsed = JSON.parse(readFileSync(path, "utf-8"));
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) raw = parsed;
-  } catch {}
+  if (normalized === "none" && !managedSandboxConfig.present) return "none";
+  const raw = structuredClone(managedSandboxConfig.raw);
   raw.sessionDefault = normalized;
-  mkdirSync(dirname(path), { recursive: true });
-  writeJsonAtomic(path, raw);
+  const db = sandboxConfigDb ?? managedFeltDb();
+  await db.transaction((tx) => {
+    tx.collection<StoredSandboxConfig>(CONFIG_COLLECTION).set(
+      "default", { id: "default", value: raw });
+  }, { transactionId: `opensession:sandbox-config:${crypto.randomUUID()}` });
+  managedSandboxConfig.present = true;
+  managedSandboxConfig.raw = raw;
   return normalized as RunnableSandboxProviderId | "none";
 }
 
@@ -677,17 +706,10 @@ export function usesOutboundSandboxPortalRelay(v: unknown): boolean {
 	return v === "daytona" || v === "e2b" || v === "box" || v === "modal" || v === "lambda-microvm";
 }
 
-/** True when a sandbox config file exists and parses — the operator has set
- *  sandboxing up at all. Without it every provider is unconfigured. */
+/** True when managed sandbox configuration exists. Without it every provider
+ * is unconfigured. */
 function sandboxConfigPresent(): boolean {
-  try {
-    const path = configPath();
-    if (!existsSync(path)) return false;
-    JSON.parse(readFileSync(path, "utf-8"));
-    return true;
-  } catch {
-    return false;
-  }
+  return managedSandboxConfig.present;
 }
 
 /** A normalized managed connection is authoritative when present. Secret

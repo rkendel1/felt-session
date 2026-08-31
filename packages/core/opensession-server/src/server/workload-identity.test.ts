@@ -16,9 +16,10 @@ writeFileSync(
 );
 
 const identity = await import("./workload-identity");
-await identity.initializeManagedWorkloadIdentity(
-  createFeltDB({ namespace: crypto.randomUUID(), memory: true }),
-);
+const identityDb = createFeltDB({ namespace: crypto.randomUUID(), memory: true });
+const { initializeManagedSandboxConfig } = await import("./sandbox/config");
+await initializeManagedSandboxConfig(identityDb, process.env.OPENSESSION_SANDBOX_CONFIG);
+await identity.initializeManagedWorkloadIdentity(identityDb);
 
 function claims(token: string): Record<string, unknown> {
   return JSON.parse(Buffer.from(token.split(".")[1]!, "base64url").toString("utf8"));

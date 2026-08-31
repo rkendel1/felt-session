@@ -5,7 +5,7 @@
  * credentials are intentionally not part of this product surface.
  */
 
-import { existsSync, readFileSync, unlinkSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import type { StateFirstDB } from "@feltdb/core";
 import { audit } from "../audit";
 import { managedFeltDb } from "../managed-feltdb";
@@ -184,7 +184,6 @@ export async function initializeManagedSandboxConnections(db: StateFirstDB = con
       MIGRATION, { id: MIGRATION, completedAt: Date.now() }, { requireAbsent: true }); },
     { transactionId: `opensession:migration:${MIGRATION}` });
   }
-  if (existsSync(configPath())) unlinkSync(configPath());
   connections.clear();
   for (const value of await db.collection<SandboxConnection>(COLLECTION).all()) {
     const connection = parseConnection(value);

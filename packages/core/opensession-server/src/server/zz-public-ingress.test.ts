@@ -13,6 +13,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
+import { createFeltDB } from "@feltdb/core";
 
 // Deferred imports: public-ingress → run-ws → run-rpc → paths resolves
 // OPENSESSION_SESSIONS_DIR/HOME at module load (see zz-run-ws.test.ts).
@@ -26,9 +27,12 @@ let configPath = "";
 let prevConfigEnv: string | undefined;
 let handle: import("./public-ingress").PublicIngressHandle | null = null;
 let BASE = "";
+let configDb: ReturnType<typeof createFeltDB>;
+let initializeConfig: typeof import("./sandbox/config").initializeManagedSandboxConfig;
 
-function writeConfig(cfg: unknown): void {
+async function writeConfig(cfg: unknown): Promise<void> {
   writeFileSync(configPath, JSON.stringify(cfg));
+  if (initializeConfig) await initializeConfig(configDb, configPath);
 }
 
 beforeAll(async () => {
@@ -36,7 +40,10 @@ beforeAll(async () => {
   configPath = join(scratch, "sandbox-config.json");
   prevConfigEnv = process.env.OPENSESSION_SANDBOX_CONFIG;
   process.env.OPENSESSION_SANDBOX_CONFIG = configPath;
-  writeConfig({ provider: "local", publicIngress: { enabled: true } });
+  await writeConfig({ provider: "local", publicIngress: { enabled: true } });
+  configDb = createFeltDB({ namespace: crypto.randomUUID(), memory: true });
+  ({ initializeManagedSandboxConfig: initializeConfig } = await import("./sandbox/config"));
+  await initializeConfig(configDb, configPath);
   ingress = await import("./public-ingress");
   runWs = await import("./run-ws");
   portalRelay = await import("./sandbox-portal-relay");
@@ -224,16 +231,16 @@ describe("always-available loopback ingress", () => {
   test("starts on loopback before a public URL is configured", async () => {
     ingress.stopPublicIngress();
     try {
-      writeConfig({ provider: "local" });
+      await writeConfig({ provider: "local" });
       const absent = ingress.startPublicIngress({ port: 0 });
       expect(absent?.hostname).toBe("127.0.0.1");
       absent?.stop(true);
-      writeConfig({ provider: "local", publicIngress: { enabled: false } });
+      await writeConfig({ provider: "local", publicIngress: { enabled: false } });
       const disabled = ingress.startPublicIngress({ port: 0 });
       expect(disabled?.hostname).toBe("127.0.0.1");
       disabled?.stop(true);
     } finally {
-      writeConfig({ provider: "local", publicIngress: { enabled: true } });
+      await writeConfig({ provider: "local", publicIngress: { enabled: true } });
       handle = ingress.startPublicIngress({ port: 0, host: "127.0.0.1" });
       BASE = `127.0.0.1:${handle!.port}`;
     }

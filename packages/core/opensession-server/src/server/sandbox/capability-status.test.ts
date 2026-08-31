@@ -4,15 +4,15 @@
  * so this IS the endpoint's behavior) and for resolveRequestedSandbox, the
  * create-path validator behind the per-session provider picker.
  *
- * Config is pointed at a scratch file via OPENSESSION_SANDBOX_CONFIG (read fresh
- * per call), saved/restored so the rest of the suite never sees it. The
+ * Legacy config fixtures are imported into an isolated managed FeltDB, with
+ * the environment saved/restored so the rest of the suite never sees it. The
  * kill-switch file lives under OPENSESSION_SESSIONS_DIR; expectations read the live
  * sandboxesEnabled() instead of assuming it, so a dev box with the switch on
  * still passes.
  */
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { createFeltDB } from "@feltdb/core";
-import { mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "fs";
+import { mkdtempSync, rmSync, unlinkSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import {
@@ -27,6 +27,7 @@ import {
   sandboxProviderUsability,
   sandboxesEnabled,
   setWorkspaceSandboxDefault,
+  initializeManagedSandboxConfig,
 } from "./config";
 import { resolveInteractiveSandbox } from "./defaults";
 import {
@@ -43,6 +44,7 @@ let prevSecretsStore: string | undefined;
 let prevInstanceConfig: string | undefined;
 const cfgPath = () => join(scratch, "sandbox.json");
 const instanceCfgPath = () => join(scratch, "config.json");
+let configDb: ReturnType<typeof createFeltDB>;
 
 beforeAll(async () => {
   scratch = mkdtempSync(join(tmpdir(), "bks-sandbox-status-"));
@@ -57,9 +59,10 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
-  const db = createFeltDB({ namespace: crypto.randomUUID(), memory: true });
-  await initializeManagedWorkspaceSecrets(db);
-  await initializeManagedSandboxConnections(db);
+  configDb = createFeltDB({ namespace: crypto.randomUUID(), memory: true });
+  await initializeManagedSandboxConfig(configDb, cfgPath());
+  await initializeManagedWorkspaceSecrets(configDb);
+  await initializeManagedSandboxConnections(configDb);
 });
 
 afterEach(() => {
@@ -79,7 +82,10 @@ afterAll(() => {
   rmSync(scratch, { recursive: true, force: true });
 });
 
-const write = (cfg: object) => writeFileSync(cfgPath(), JSON.stringify(cfg));
+const write = async (cfg: object) => {
+  writeFileSync(cfgPath(), JSON.stringify(cfg));
+  await initializeManagedSandboxConfig(configDb, cfgPath());
+};
 const writeIngress = (publicBaseUrl: string) =>
   writeFileSync(instanceCfgPath(), JSON.stringify({ ingress: { publicBaseUrl, exposure: "custom" } }));
 const ready = async (provider: "docker" | "daytona" | "box" | "modal" | "microvm") => {
@@ -104,11 +110,13 @@ describe("sandboxCapabilityStatus (the /api/sandbox/status payload)", () => {
 	});
 
 	test("workspace default persists without replacing provider configuration", async () => {
-		write({ provider: "docker", image: "runner:test", nested: { keep: true } });
+		await write({ provider: "docker", image: "runner:test", nested: { keep: true } });
 		await ready("docker");
-		expect(setWorkspaceSandboxDefault("docker")).toBe("docker");
-		const stored = JSON.parse(readFileSync(cfgPath(), "utf-8"));
-		expect(stored).toMatchObject({
+		expect(await setWorkspaceSandboxDefault("docker")).toBe("docker");
+		const stored = await configDb.collection<{ value: Record<string, unknown> }>(
+			"opensession_sandbox_config",
+		).get("default");
+		expect(stored?.value).toMatchObject({
 			provider: "docker",
 			image: "runner:test",
 			nested: { keep: true },
@@ -142,7 +150,7 @@ describe("sandboxCapabilityStatus (the /api/sandbox/status payload)", () => {
   });
 
   test("a raw Docker block is not a usable workspace connection", async () => {
-    write({ provider: "docker", image: "opensession-runner:latest" });
+    await write({ provider: "docker", image: "opensession-runner:latest" });
     const s = sandboxCapabilityStatus();
     expect(s.enabled).toBe(true);
     expect(s.defaultProvider).toBe("local");
@@ -159,7 +167,7 @@ describe("sandboxCapabilityStatus (the /api/sandbox/status payload)", () => {
   });
 
   test("remote provider without a dial-back URL carries a pointed note", async () => {
-    write({ provider: "docker", e2b: { apiKey: "e2b_x" } });
+    await write({ provider: "docker", e2b: { apiKey: "e2b_x" } });
     await ready("daytona");
     const s = sandboxCapabilityStatus();
     const d = s.providers.find((p) => p.id === "daytona")!;
@@ -171,7 +179,7 @@ describe("sandboxCapabilityStatus (the /api/sandbox/status payload)", () => {
   });
 
   test("healthy remote provider (public ingress configured) carries no note", async () => {
-    write({ provider: "docker" });
+    await write({ provider: "docker" });
     writeIngress("https://example.ts.net");
     await ready("daytona");
     const d = sandboxCapabilityStatus().providers.find((p) => p.id === "daytona")!;
@@ -180,9 +188,9 @@ describe("sandboxCapabilityStatus (the /api/sandbox/status payload)", () => {
   });
 
   test("Modal requires both normalized workspace token credentials", async () => {
-    write({ provider: "modal" });
+    await write({ provider: "modal" });
     await expect(connectSandboxProvider("modal", { tokenId: "ak-one-sided" })).rejects.toThrow();
-    write({
+    await write({
       provider: "modal",
       callbackBaseUrl: "wss://os.example.ts.net",
     });
@@ -193,9 +201,9 @@ describe("sandboxCapabilityStatus (the /api/sandbox/status payload)", () => {
   });
 
   test("lambda microvm requires an image identifier", async () => {
-    write({ provider: "lambda-microvm", awsLambdaMicrovm: {} });
+    await write({ provider: "lambda-microvm", awsLambdaMicrovm: {} });
     expect(sandboxProviderConfigured("lambda-microvm")).toBe(false);
-    write({
+    await write({
       provider: "lambda-microvm",
       awsLambdaMicrovm: { imageIdentifier: "arn:aws:lambda:us-east-1:123:microvm-image/test" },
       callbackBaseUrl: "wss://os.example.ts.net",
@@ -207,7 +215,7 @@ describe("sandboxCapabilityStatus (the /api/sandbox/status payload)", () => {
   });
 
   test("lambda microvm lifecycle values are bounded", async () => {
-    write({
+    await write({
       provider: "lambda-microvm",
       awsLambdaMicrovm: {
         imageIdentifier: "arn:aws:lambda:us-east-1:123:microvm-image:test",
@@ -224,7 +232,7 @@ describe("sandboxCapabilityStatus (the /api/sandbox/status payload)", () => {
   });
 
   test("local Firecracker microvm requires explicit config and a clean golden", async () => {
-    write({ provider: "microvm", firecrackerMicrovm: { enabled: false } });
+    await write({ provider: "microvm", firecrackerMicrovm: { enabled: false } });
     expect(sandboxProviderConfigured("microvm")).toBe(false);
     expect(
       sandboxCapabilityStatus().providers.find((p) => p.id === "microvm")
@@ -233,7 +241,7 @@ describe("sandboxCapabilityStatus (the /api/sandbox/status payload)", () => {
   });
 
   test("an explicit callbackBaseUrl also counts as dial-back configured", async () => {
-    write({
+    await write({
       provider: "docker",
       e2b: { apiKey: "e2b_x" },
       callbackBaseUrl: "wss://os.example.ts.net",
@@ -245,7 +253,7 @@ describe("sandboxCapabilityStatus (the /api/sandbox/status payload)", () => {
   });
 
   test("a disabled publicIngress block does not count as dial-back configured", async () => {
-    write({
+    await write({
       provider: "docker",
       publicIngress: { enabled: false, publicBaseUrl: "wss://example.ts.net" },
     });
@@ -296,7 +304,7 @@ describe("provider-independent model-family sandboxability", () => {
 
 describe("resolveRequestedSandbox (create-path validation)", () => {
 	test("omitted interactive choice uses defaults; explicit Host still wins", async () => {
-		write({ provider: "docker", sessionDefault: "docker" });
+		await write({ provider: "docker", sessionDefault: "docker" });
 		await ready("docker");
 		expect(
 			resolveInteractiveSandbox(undefined, "sandbox-default-test-user", undefined, "claude-fable-5"),
@@ -313,9 +321,9 @@ describe("resolveRequestedSandbox (create-path validation)", () => {
   });
 
   test("true = config default provider (today's boolean behavior)", async () => {
-    write({ provider: "docker" });
+    await write({ provider: "docker" });
     await ready("docker");
-    const r = resolveRequestedSandbox(true);
+    const r = resolveRequestedSandbox(true, undefined, "claude-fable-5");
     expect(r.ok).toBe(true);
     // Kill-switch-aware like effectiveSandboxProvider — on a switched-off box
     // this resolves to local, matching the boolean path's existing semantics.
@@ -323,7 +331,7 @@ describe("resolveRequestedSandbox (create-path validation)", () => {
   });
 
   test("explicit configured and certified provider is accepted", async () => {
-    write({
+    await write({
       provider: "docker",
       awsLambdaMicrovm: { imageIdentifier: "arn:aws:lambda:us-east-1:123:microvm-image/test" },
     });
@@ -335,17 +343,17 @@ describe("resolveRequestedSandbox (create-path validation)", () => {
       configured: true,
       usable: true,
     });
-    expect(resolveRequestedSandbox("docker")).toEqual({ ok: true, provider: "docker" });
-    expect(resolveRequestedSandbox("daytona")).toEqual({ ok: true, provider: "daytona" });
-    expect(resolveRequestedSandbox("modal")).toEqual({ ok: true, provider: "modal" });
-    const lambda = resolveRequestedSandbox("lambda-microvm");
+    expect(resolveRequestedSandbox("docker", undefined, "claude-fable-5")).toEqual({ ok: true, provider: "docker" });
+    expect(resolveRequestedSandbox("daytona", undefined, "claude-fable-5")).toEqual({ ok: true, provider: "daytona" });
+    expect(resolveRequestedSandbox("modal", undefined, "claude-fable-5")).toEqual({ ok: true, provider: "modal" });
+    const lambda = resolveRequestedSandbox("lambda-microvm", undefined, "claude-fable-5");
     expect(lambda.ok).toBe(false);
     if (!lambda.ok) expect(lambda.error).toContain("not live-certified");
-    expect(resolveRequestedSandbox("DOCKER")).toEqual({ ok: true, provider: "docker" });
+    expect(resolveRequestedSandbox("DOCKER", undefined, "claude-fable-5")).toEqual({ ok: true, provider: "docker" });
   });
 
   test("configured adapters without a live certification are cut from new sessions", async () => {
-    write({
+    await write({
       provider: "e2b",
       e2b: { apiKey: "e2b_x" },
       awsLambdaMicrovm: { imageIdentifier: "image-x" },
@@ -369,7 +377,7 @@ describe("resolveRequestedSandbox (create-path validation)", () => {
   });
 
   test("explicit unconfigured provider fails with a pointed error", async () => {
-    write({ provider: "docker" }); // no daytona/e2b keys
+    await write({ provider: "docker" }); // no daytona/e2b keys
     const r = resolveRequestedSandbox("daytona");
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error).toContain("daytona");
@@ -379,7 +387,7 @@ describe("resolveRequestedSandbox (create-path validation)", () => {
   });
 
   test("failed qualification stays configured but cannot be selected by either create path", async () => {
-    write({ provider: "docker" });
+    await write({ provider: "docker" });
     await connectSandboxProvider("docker", {});
     await setSandboxConnectionQualification("docker", {
       status: "failed",
@@ -402,7 +410,7 @@ describe("resolveRequestedSandbox (create-path validation)", () => {
       expect(resolved.ok).toBe(false);
       if (!resolved.ok) expect(resolved.error).toContain("has not passed workspace qualification");
     }
-    expect(() => setWorkspaceSandboxDefault("docker")).toThrow("not currently available");
+    await expect(setWorkspaceSandboxDefault("docker")).rejects.toThrow("not currently available");
   });
 
   test("docker without any config file fails", async () => {
@@ -412,7 +420,7 @@ describe("resolveRequestedSandbox (create-path validation)", () => {
   });
 
   test("unknown provider string fails; 'local' means host", async () => {
-    write({ provider: "docker" });
+    await write({ provider: "docker" });
     const r = resolveRequestedSandbox("fly");
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error).toContain("Unknown sandbox provider");
@@ -420,7 +428,7 @@ describe("resolveRequestedSandbox (create-path validation)", () => {
   });
 
   test("model-family sandboxability is enforced at create, not just in the UI", async () => {
-    write({ provider: "docker" });
+    await write({ provider: "docker" });
     await ready("docker");
     await ready("daytona");
     // Supported combos pass through.
@@ -446,7 +454,7 @@ describe("resolveRequestedSandbox (create-path validation)", () => {
   });
 
   test("pi models pass the create-gate on configured providers", async () => {
-    write({ provider: "docker" });
+    await write({ provider: "docker" });
     await ready("docker");
     await ready("daytona");
     expect(

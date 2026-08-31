@@ -106,7 +106,7 @@ export async function handleSandboxesRoutes(
       if (body.scope === "workspace") {
         const forbidden = requireWorkspaceAdmin(ctx);
         if (forbidden) return forbidden;
-        saveWorkspaceSandboxDefault(body.value);
+        await saveWorkspaceSandboxDefault(body.value);
       } else if (body.scope === "personal") {
         await savePersonalSandboxDefault(user, body.value);
       } else {

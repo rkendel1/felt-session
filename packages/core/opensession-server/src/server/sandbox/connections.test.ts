@@ -19,6 +19,7 @@ import {
   setSandboxConnectionQualification,
 } from "./connections";
 import { initializeManagedWorkspaceSecrets } from "../workspace-secrets";
+import { initializeManagedSandboxConfig } from "./config";
 
 let scratch = "";
 let oldConfig: string | undefined;
@@ -33,6 +34,7 @@ beforeEach(async () => {
   const db = createFeltDB({ namespace: crypto.randomUUID(), memory: true });
   await initializeManagedWorkspaceSecrets(db);
   await initializeManagedSandboxConnections(db);
+  await initializeManagedSandboxConfig(db);
 });
 
 afterEach(() => {
@@ -138,6 +140,7 @@ describe("workspace sandbox connections", () => {
     const nextDb = createFeltDB({ namespace: crypto.randomUUID(), memory: true });
     writeFileSync(process.env.OPENSESSION_SANDBOX_CONFIG!, JSON.stringify(legacy));
     await initializeManagedSandboxConnections(nextDb);
+    await initializeManagedSandboxConfig(nextDb);
 
     expect(sandboxConnectionReady("docker")).toBe(false);
     expect(
