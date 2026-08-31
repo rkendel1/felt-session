@@ -1,16 +1,9 @@
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, unlinkSync } from "node:fs";
 import type { StateFirstDB } from "@feltdb/core";
 import { managedFeltDb } from "../../server/managed-feltdb";
-import { statePath } from "../../server/paths";
-
-export function githubDeliveriesStore(): string {
-  return statePath(".slack-sessions/github-deliveries.json");
-}
 const GITHUB_DELIVERY_TTL_MS = 24 * 60 * 60 * 1000;
 const MAX_GITHUB_DELIVERIES = 500;
 const COLLECTION = "opensession_github_deliveries";
-const MIGRATION = "github-deliveries-json-to-managed-feltdb-v1";
 type DeliveryRecord = { id: string; deliveryId: string; expiresAt: number; acceptedAt: number };
 const githubDeliveryExpiry: Map<string, number> = ((globalThis as any).__githubDeliveryExpiry ??= new Map());
 let deliveryDb: StateFirstDB | undefined;
@@ -30,26 +23,6 @@ export async function loadGithubDeliveries(
   db: StateFirstDB = deliveryDb ?? managedFeltDb(),
 ): Promise<void> {
   deliveryDb = db;
-  const migrations = db.collection<{ id: string }>("opensession_migrations");
-  if (!await migrations.get(MIGRATION)) {
-    let entries: [string, number][] = [];
-    try {
-      if (existsSync(githubDeliveriesStore())) entries = JSON.parse(readFileSync(githubDeliveriesStore(), "utf8"));
-    } catch {}
-    for (const [deliveryId, expiresAt] of entries) {
-      if (typeof deliveryId !== "string" || !Number.isFinite(expiresAt)) continue;
-      const id = recordId(deliveryId);
-      await db.transaction((tx) => {
-        tx.collection<DeliveryRecord>(COLLECTION).set(id, {
-          id, deliveryId, expiresAt, acceptedAt: expiresAt - GITHUB_DELIVERY_TTL_MS,
-        });
-      }, { transactionId: `opensession:github-delivery:migrate:${id}` });
-    }
-    await db.transaction((tx) => {
-      tx.collection("opensession_migrations").set(MIGRATION, { id: MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
-    }, { transactionId: `opensession:migration:${MIGRATION}` });
-    if (existsSync(githubDeliveriesStore())) unlinkSync(githubDeliveriesStore());
-  }
   const now = Date.now();
   const loaded = db.runtime().runtime === "remote" ? await queryDeliveries(db, now) :
     (await db.collection<DeliveryRecord>(COLLECTION).all()).filter((record) => record.expiresAt > now);

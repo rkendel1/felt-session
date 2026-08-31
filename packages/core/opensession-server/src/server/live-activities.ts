@@ -5,11 +5,10 @@
  * transitions are aggregated per authenticated person into one Live Activity,
  * so a burst of workers never floods the Lock Screen with separate cards.
  */
-import { existsSync, readFileSync, unlinkSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import type { StateFirstDB } from "@feltdb/core";
 import { connect } from "node:http2";
 import { importPkcs8Pem } from "./codestorage/auth";
-import { stateDir } from "./paths";
 import { managedFeltDb } from "./managed-feltdb";
 import { getReads, isUnread } from "./reads";
 import { getCachedSessions } from "./session-cache";
@@ -17,10 +16,8 @@ import { onSessionStateChange } from "./session-state-events";
 import { userMatchesAny } from "./shared/user-mappings";
 import type { UnifiedSession } from "./types";
 
-const STORE_PATH = `${stateDir("live-activities")}/registrations.json`;
 const COLLECTION = "opensession_live_activity_registrations";
 const STORE_ID = "registrations";
-const MIGRATION = "live-activities-json-to-managed-feltdb-v1";
 const MAX_VISIBLE_SESSIONS = 3;
 const MAX_ACTIVITY_TOKENS = 4;
 const TOKEN_PATTERN = /^[a-f0-9]{32,512}$/i;
@@ -146,18 +143,6 @@ async function writeStore(store: RegistrationStore): Promise<void> {
 
 export async function initializeManagedLiveActivities(db: StateFirstDB = registrationsDb ?? managedFeltDb()): Promise<void> {
   registrationsDb = db;
-  if (!await db.collection<{ id: string }>("opensession_migrations").get(MIGRATION)) {
-    let legacy: RegistrationStore | null = null;
-    try { if (existsSync(STORE_PATH)) legacy = JSON.parse(readFileSync(STORE_PATH, "utf8")); } catch {}
-    if (legacy?.devices) await db.transaction((tx) => {
-      tx.collection<RegistrationStore>(COLLECTION).set(STORE_ID, legacy!);
-    }, { transactionId: "opensession:live-activities:migrate" });
-    await db.transaction((tx) => {
-      tx.collection("opensession_migrations").set(MIGRATION,
-        { id: MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
-    }, { transactionId: `opensession:migration:${MIGRATION}` });
-  }
-  if (existsSync(STORE_PATH)) unlinkSync(STORE_PATH);
   registrationStore = await db.collection<RegistrationStore>(COLLECTION).get(STORE_ID) ?? { devices: [] };
 }
 
