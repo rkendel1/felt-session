@@ -447,11 +447,11 @@ export class ModalProvider implements SandboxProvider {
             sandbox = await create(template?.artifactId);
           } catch (templateError) {
             if (!template || !modalArtifactNotFound(templateError)) throw templateError;
-            invalidateRemoteRepoTemplate("modal", repo.id);
+            await invalidateRemoteRepoTemplate("modal", repo.id);
             sandbox = await create();
           }
         } else if (template) {
-          invalidateRemoteRepoTemplate("modal", repo.id);
+          await invalidateRemoteRepoTemplate("modal", repo.id);
           console.warn(
             `[sandbox:modal] repo template ${template.artifactId} is unavailable; retrying cold`,
           );
@@ -669,7 +669,7 @@ export const modalPrewarmAdapter: PrewarmAdapter = {
       sandbox = await create(template?.artifactId);
     } catch (error) {
       if (!template || !modalArtifactNotFound(error)) throw error;
-      invalidateRemoteRepoTemplate("modal", repoId);
+      await invalidateRemoteRepoTemplate("modal", repoId);
       restoredFromTemplate = false;
       sandbox = await create();
     }
@@ -688,7 +688,7 @@ export const modalPrewarmAdapter: PrewarmAdapter = {
       timeoutMs: 10 * 60_000,
       ttlMs: REMOTE_REPO_TEMPLATE_TTL_MS,
     });
-    const { previous } = writeRemoteRepoTemplate("modal", repo.id, image.imageId);
+    const { previous } = await writeRemoteRepoTemplate("modal", repo.id, image.imageId);
     if (previous?.artifactId && previous.artifactId !== image.imageId) {
       await client.images.delete(previous.artifactId).catch(() => {});
     }

@@ -65,6 +65,7 @@ import { initializeManagedSandboxEnvironments } from "./src/server/sandbox/envir
 import { flushDockerSandboxStateWrites, initializeManagedDockerSandboxState } from "./src/server/sandbox/docker";
 import { flushSandboxPreviewPortWrites, initializeManagedSandboxPreviewPorts } from "./src/server/sandbox/preview-ports";
 import { flushRemoteSandboxStateWrites, initializeManagedRemoteSandboxState } from "./src/server/sandbox/adapters/bootstrap";
+import { initializeManagedRemoteRepoTemplates } from "./src/server/sandbox/remote-repo-template";
 import { initializeManagedWorkloadIdentity } from "./src/server/workload-identity";
 import { initializeManagedPapercuts } from "./src/server/papercuts";
 import { initializeManagedSecurity } from "./src/server/security";
@@ -274,6 +275,7 @@ if (!g.__opensessionBooted) {
 	await initializeManagedDockerSandboxState(db);
 	await initializeManagedSandboxPreviewPorts(db);
 	await initializeManagedRemoteSandboxState(db);
+	await initializeManagedRemoteRepoTemplates(db);
 	await initializeManagedWorkloadIdentity(db);
 	await initializeManagedPapercuts(db);
 	await initializeManagedSecurity(db);

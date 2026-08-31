@@ -909,7 +909,7 @@ export class BoxProvider implements SandboxProvider {
         created = await create(template?.artifactId);
       } catch (error) {
         if (!template || !isNotFound(error)) throw error;
-        invalidateRemoteRepoTemplate("box", repo.id);
+        await invalidateRemoteRepoTemplate("box", repo.id);
         console.warn(
           `[sandbox:box] repo template ${template.artifactId} is unavailable; retrying cold`,
         );
@@ -1180,7 +1180,7 @@ async function recoverBoxRepoTemplate(
     snapshot = await getNamedSnapshot(cfg, name);
   }
   if (snapshot?.status !== "ready") return null;
-  writeRemoteRepoTemplate("box", repoId, name);
+  await writeRemoteRepoTemplate("box", repoId, name);
   console.log(`[sandbox:box] recovered completed repo template ${name}`);
   return readRemoteRepoTemplate("box", repoId);
 }
@@ -1255,7 +1255,7 @@ export const boxPrewarmAdapter: PrewarmAdapter = {
       response = await create(template?.artifactId);
     } catch (error) {
       if (!template || !isNotFound(error)) throw error;
-      invalidateRemoteRepoTemplate("box", repoId);
+      await invalidateRemoteRepoTemplate("box", repoId);
       restoredFromTemplate = false;
       response = await create();
     }
@@ -1287,7 +1287,7 @@ export const boxPrewarmAdapter: PrewarmAdapter = {
       // stuck longer than 20 minutes is deleted and rebuilt below instead of
       // blocking every rebuild on the same dead operation forever.
       await waitForNamedSnapshot(cfg, name);
-      writeRemoteRepoTemplate("box", repo.id, name);
+      await writeRemoteRepoTemplate("box", repo.id, name);
       console.log(`[sandbox:box] recovered in-flight post-setup repo template ${name}`);
       return;
     }
@@ -1302,7 +1302,7 @@ export const boxPrewarmAdapter: PrewarmAdapter = {
     }
     await boxApi(cfg, "POST", "/named-snapshots", { boxId: sandboxId, name }, 60_000);
     await waitForNamedSnapshot(cfg, name);
-    writeRemoteRepoTemplate("box", repo.id, name);
+    await writeRemoteRepoTemplate("box", repo.id, name);
     console.log(`[sandbox:box] published post-setup repo template ${name}`);
   },
 

@@ -301,7 +301,7 @@ async function removeTemplate(
   provider: WorkspaceSandboxProvider,
 ): Promise<void> {
   if (provider === "daytona" || provider === "box" || provider === "modal") {
-    const previous = invalidateRemoteRepoTemplate(provider, repo);
+    const previous = await invalidateRemoteRepoTemplate(provider, repo);
     if (previous?.artifactId) {
       if (provider === "daytona") {
         const { deleteDaytonaTemplateArtifact } = await import("./adapters/daytona");

@@ -11,10 +11,11 @@
 
 import { createHash, randomUUID } from "crypto";
 import { spawnSync } from "child_process";
-import { existsSync, mkdirSync, readFileSync, unlinkSync } from "fs";
+import type { StateFirstDB } from "@feltdb/core";
+import { existsSync, readFileSync, readdirSync, rmSync } from "fs";
 import { join } from "path";
 import { OPENSESSION_SESSIONS_DIR } from "../paths";
-import { writeJsonAtomic } from "../shared/atomic-write";
+import { managedFeltDb } from "../managed-feltdb";
 import { sandboxConfig } from "./config";
 import {
   bootstrapSignature,
@@ -213,8 +214,54 @@ function dir(): string {
   return `${process.env.OPENSESSION_SESSIONS_DIR || OPENSESSION_SESSIONS_DIR}/sandbox-repo-templates`;
 }
 
-function file(provider: RemoteTemplateProvider, repoId: string): string {
-  return `${dir()}/${provider}-${clean(repoId)}.json`;
+type StoredRemoteRepoTemplate = RemoteRepoTemplate & { id: string };
+const TEMPLATE_COLLECTION = "opensession_remote_repo_templates";
+const TEMPLATE_MIGRATION = "remote-repo-template-json-to-managed-feltdb-v1";
+let templateDb: StateFirstDB | undefined;
+const templateState = ((globalThis as typeof globalThis & {
+  __opensessionRemoteRepoTemplates?: Map<string, RemoteRepoTemplate>;
+}).__opensessionRemoteRepoTemplates ??= new Map<string, RemoteRepoTemplate>());
+const templateKey = (provider: RemoteTemplateProvider, repoId: string) => `${provider}:${repoId}`;
+const templateId = (provider: RemoteTemplateProvider, repoId: string) =>
+  `template_${Buffer.from(templateKey(provider, repoId)).toString("base64url")}`;
+
+export async function initializeManagedRemoteRepoTemplates(
+  db: StateFirstDB = templateDb ?? managedFeltDb(),
+  legacyDir = dir(),
+): Promise<void> {
+  templateDb = db;
+  const legacy: Array<{ path: string; value: RemoteRepoTemplate }> = [];
+  if (existsSync(legacyDir)) for (const name of readdirSync(legacyDir)) {
+    if (!name.endsWith(".json")) continue;
+    const path = `${legacyDir}/${name}`;
+    const value = JSON.parse(readFileSync(path, "utf8")) as RemoteRepoTemplate;
+    if (value.provider && value.repoId && value.artifactId) legacy.push({ path, value });
+  }
+  const migrations = db.collection<{ id: string }>("opensession_migrations");
+  const migrationComplete = !!await migrations.get(TEMPLATE_MIGRATION);
+  const existing = await db.collection<StoredRemoteRepoTemplate>(TEMPLATE_COLLECTION).all();
+  const byKey = new Map(existing.map((value) => [templateKey(value.provider, value.repoId), value]));
+  const imports = legacy.map(({ value }) => value).filter((value) => {
+    if (!migrationComplete) return true;
+    const current = byKey.get(templateKey(value.provider, value.repoId));
+    return !current || Date.parse(value.createdAt) > Date.parse(current.createdAt);
+  });
+  for (let offset = 0; offset < imports.length; offset += 100) {
+    await db.transaction((tx) => {
+      for (const value of imports.slice(offset, offset + 100)) {
+        const id = templateId(value.provider, value.repoId);
+        tx.collection<StoredRemoteRepoTemplate>(TEMPLATE_COLLECTION).set(id, { id, ...value });
+      }
+    }, { transactionId: `opensession:remote-repo-template:import:${crypto.randomUUID()}` });
+  }
+  if (!migrationComplete) await db.transaction((tx) => {
+    tx.collection("opensession_migrations").set(TEMPLATE_MIGRATION,
+      { id: TEMPLATE_MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
+  }, { transactionId: `opensession:migration:${TEMPLATE_MIGRATION}` });
+  templateState.clear();
+  for (const { id: _, ...value } of await db.collection<StoredRemoteRepoTemplate>(TEMPLATE_COLLECTION).all())
+    templateState.set(templateKey(value.provider, value.repoId), value);
+  for (const { path } of legacy) rmSync(path, { force: true });
 }
 
 /** Includes every create-time input whose change makes an artifact unsafe to
@@ -260,9 +307,9 @@ export function readRemoteRepoTemplate(
   _now = Date.now(),
 ): RemoteRepoTemplate | null {
   try {
-    const path = file(provider, repoId);
-    if (!existsSync(path)) return null;
-    const entry = JSON.parse(readFileSync(path, "utf-8")) as RemoteRepoTemplate;
+    const stored = templateState.get(templateKey(provider, repoId));
+    if (!stored) return null;
+    const entry = structuredClone(stored);
     const projectSignature = projectPreparationSignature(repoId);
     if (
       entry.provider !== provider ||
@@ -271,14 +318,10 @@ export function readRemoteRepoTemplate(
       entry.signature !== remoteRepoTemplateSignature(provider) ||
       (entry.projectSignature != null && entry.projectSignature !== projectSignature)
     ) {
-      try {
-        unlinkSync(path);
-      } catch {}
       return null;
     }
     if (!entry.projectSignature) {
       entry.projectSignature = projectSignature;
-      writeJsonAtomic(path, entry);
     }
     return entry;
   } catch {
@@ -286,17 +329,13 @@ export function readRemoteRepoTemplate(
   }
 }
 
-export function writeRemoteRepoTemplate(
+export async function writeRemoteRepoTemplate(
   provider: RemoteTemplateProvider,
   repoId: string,
   artifactId: string,
   now = Date.now(),
-): { current: RemoteRepoTemplate; previous: RemoteRepoTemplate | null } {
-  const path = file(provider, repoId);
-  let previous: RemoteRepoTemplate | null = null;
-  try {
-    previous = JSON.parse(readFileSync(path, "utf-8")) as RemoteRepoTemplate;
-  } catch {}
+): Promise<{ current: RemoteRepoTemplate; previous: RemoteRepoTemplate | null }> {
+  const previous = templateState.get(templateKey(provider, repoId)) ?? null;
   const current: RemoteRepoTemplate = {
     provider,
     repoId,
@@ -305,22 +344,26 @@ export function writeRemoteRepoTemplate(
     projectSignature: projectPreparationSignature(repoId),
     createdAt: new Date(now).toISOString(),
   };
-  mkdirSync(dir(), { recursive: true });
-  writeJsonAtomic(path, current);
+  const db = templateDb ?? managedFeltDb();
+  const id = templateId(provider, repoId);
+  await db.transaction((tx) => {
+    tx.collection<StoredRemoteRepoTemplate>(TEMPLATE_COLLECTION).set(id, { id, ...current });
+  }, { transactionId: `opensession:remote-repo-template:write:${crypto.randomUUID()}` });
+  templateState.set(templateKey(provider, repoId), structuredClone(current));
   return { current, previous };
 }
 
-export function invalidateRemoteRepoTemplate(
+export async function invalidateRemoteRepoTemplate(
   provider: RemoteTemplateProvider,
   repoId: string,
-): RemoteRepoTemplate | null {
-  const path = file(provider, repoId);
-  let previous: RemoteRepoTemplate | null = null;
-  try {
-    previous = JSON.parse(readFileSync(path, "utf-8")) as RemoteRepoTemplate;
-  } catch {}
-  try {
-    unlinkSync(path);
-  } catch {}
+): Promise<RemoteRepoTemplate | null> {
+  const key = templateKey(provider, repoId);
+  const previous = templateState.get(key) ?? null;
+  if (!previous) return null;
+  const db = templateDb ?? managedFeltDb();
+  await db.transaction((tx) => {
+    tx.collection(TEMPLATE_COLLECTION).delete(templateId(provider, repoId));
+  }, { transactionId: `opensession:remote-repo-template:delete:${crypto.randomUUID()}` });
+  templateState.delete(key);
   return previous;
 }

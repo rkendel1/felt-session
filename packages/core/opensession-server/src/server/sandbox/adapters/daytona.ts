@@ -221,7 +221,7 @@ async function recoverDaytonaRepoTemplate(
     }
   }
   if (!snapshot || !daytonaSnapshotIsRecoverable(snapshot)) return null;
-  writeRemoteRepoTemplate("daytona", repoId, name);
+  await writeRemoteRepoTemplate("daytona", repoId, name);
   console.log(`[sandbox:daytona] recovered completed repo template ${name}`);
   return readRemoteRepoTemplate("daytona", repoId);
 }
@@ -483,7 +483,7 @@ export class DaytonaProvider implements SandboxProvider {
         // Provider artifacts can be deleted independently of the local index.
         // Drop only a confirmed-missing mapping. A timeout, conflict, or rate
         // limit must not destroy a valid fleet-wide fast path.
-        invalidateRemoteRepoTemplate("daytona", repo.id);
+        await invalidateRemoteRepoTemplate("daytona", repo.id);
         console.warn(
           `[sandbox:daytona] repo template ${template.artifactId} is unavailable; retrying cold`,
         );
@@ -685,7 +685,7 @@ export const daytonaPrewarmAdapter: PrewarmAdapter = {
       sbx = await create(template?.artifactId || cfg.daytona?.snapshot);
     } catch (error) {
       if (!template || !daytonaNotFound(error)) throw error;
-      invalidateRemoteRepoTemplate("daytona", repoId);
+      await invalidateRemoteRepoTemplate("daytona", repoId);
       restoredFromTemplate = false;
       sbx = await create(cfg.daytona?.snapshot);
     }
@@ -713,7 +713,7 @@ export const daytonaPrewarmAdapter: PrewarmAdapter = {
     // Full repository templates are materially larger than Daytona's base
     // images; the live Open Session template takes about six minutes to seal.
     await sbx._experimental_createSnapshot(name, 900);
-    const { previous } = writeRemoteRepoTemplate("daytona", repo.id, name);
+    const { previous } = await writeRemoteRepoTemplate("daytona", repo.id, name);
     if (previous?.artifactId && previous.artifactId !== name) {
       try {
         const stale = await client.snapshot.get(previous.artifactId);
