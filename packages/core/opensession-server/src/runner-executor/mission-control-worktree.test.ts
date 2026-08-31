@@ -16,6 +16,7 @@ import {
 } from "./durable-agent-run-registry";
 import type { MissionControlWorktree } from "./mission-control-worktree";
 import type { MissionControlAgentRun } from "./mission-control-agent-run";
+import { testFeltDb } from "./test-feltdb";
 
 let testDir: string;
 let testCounter = 0;
@@ -33,7 +34,7 @@ afterEach(() => {
 
 describe("DurableWorktreeRegistry", () => {
   it("should create and retrieve a worktree", async () => {
-    const registry = openDurableWorktreeRegistry(testDir);
+    const registry = openDurableWorktreeRegistry(testFeltDb(testDir));
 
     const worktree = createStandardWorktree(
       `wt-${randomUUIDv7()}`,
@@ -54,7 +55,7 @@ describe("DurableWorktreeRegistry", () => {
   });
 
   it("should list worktrees by project", async () => {
-    const registry = openDurableWorktreeRegistry(testDir);
+    const registry = openDurableWorktreeRegistry(testFeltDb(testDir));
 
     const wt1 = createStandardWorktree(
       `wt-${randomUUIDv7()}`,
@@ -94,7 +95,7 @@ describe("DurableWorktreeRegistry", () => {
   });
 
   it("should list worktrees by repository", async () => {
-    const registry = openDurableWorktreeRegistry(testDir);
+    const registry = openDurableWorktreeRegistry(testFeltDb(testDir));
 
     const wt1 = createStandardWorktree(
       `wt-${randomUUIDv7()}`,
@@ -123,7 +124,7 @@ describe("DurableWorktreeRegistry", () => {
   });
 
   it("should list active worktrees by agent", async () => {
-    const registry = openDurableWorktreeRegistry(testDir);
+    const registry = openDurableWorktreeRegistry(testFeltDb(testDir));
 
     const wt1 = createStandardWorktree(
       `wt-${randomUUIDv7()}`,
@@ -155,7 +156,7 @@ describe("DurableWorktreeRegistry", () => {
   });
 
   it("should record and retrieve worktree files", async () => {
-    const registry = openDurableWorktreeRegistry(testDir);
+    const registry = openDurableWorktreeRegistry(testFeltDb(testDir));
 
     const worktree = createStandardWorktree(
       `wt-${randomUUIDv7()}`,
@@ -196,7 +197,7 @@ describe("DurableWorktreeRegistry", () => {
   });
 
   it("should record and retrieve change sets", async () => {
-    const registry = openDurableWorktreeRegistry(testDir);
+    const registry = openDurableWorktreeRegistry(testFeltDb(testDir));
 
     const worktree = createStandardWorktree(
       `wt-${randomUUIDv7()}`,
@@ -230,7 +231,7 @@ describe("DurableWorktreeRegistry", () => {
   });
 
   it("should update worktree head commit", async () => {
-    const registry = openDurableWorktreeRegistry(testDir);
+    const registry = openDurableWorktreeRegistry(testFeltDb(testDir));
 
     const worktree = createStandardWorktree(
       `wt-${randomUUIDv7()}`,
@@ -250,7 +251,7 @@ describe("DurableWorktreeRegistry", () => {
   });
 
   it("should update worktree status", async () => {
-    const registry = openDurableWorktreeRegistry(testDir);
+    const registry = openDurableWorktreeRegistry(testFeltDb(testDir));
 
     const worktree = createStandardWorktree(
       `wt-${randomUUIDv7()}`,
@@ -271,7 +272,7 @@ describe("DurableWorktreeRegistry", () => {
   });
 
   it("should delete worktree and cascade cleanup", async () => {
-    const registry = openDurableWorktreeRegistry(testDir);
+    const registry = openDurableWorktreeRegistry(testFeltDb(testDir));
 
     const worktree = createStandardWorktree(
       `wt-${randomUUIDv7()}`,
@@ -307,7 +308,7 @@ describe("DurableWorktreeRegistry", () => {
 
 describe("DurableAgentRunRegistry", () => {
   it("should create and retrieve an agent run", async () => {
-    const registry = openDurableAgentRunRegistry(testDir);
+    const registry = openDurableAgentRunRegistry(testFeltDb(testDir));
 
     const run = createStandardAgentRun(
       `run-${randomUUIDv7()}`,
@@ -326,7 +327,7 @@ describe("DurableAgentRunRegistry", () => {
   });
 
   it("should list runs by agent", async () => {
-    const registry = openDurableAgentRunRegistry(testDir);
+    const registry = openDurableAgentRunRegistry(testFeltDb(testDir));
 
     const run1 = createStandardAgentRun(
       `run-${randomUUIDv7()}`,
@@ -353,7 +354,7 @@ describe("DurableAgentRunRegistry", () => {
   });
 
   it("should list runs by task", async () => {
-    const registry = openDurableAgentRunRegistry(testDir);
+    const registry = openDurableAgentRunRegistry(testFeltDb(testDir));
 
     const run1 = createStandardAgentRun(
       `run-${randomUUIDv7()}`,
@@ -382,7 +383,7 @@ describe("DurableAgentRunRegistry", () => {
   });
 
   it("should mark run as started", async () => {
-    const registry = openDurableAgentRunRegistry(testDir);
+    const registry = openDurableAgentRunRegistry(testFeltDb(testDir));
 
     const run = createStandardAgentRun(
       `run-${randomUUIDv7()}`,
@@ -401,7 +402,7 @@ describe("DurableAgentRunRegistry", () => {
   });
 
   it("should mark run as completed with output", async () => {
-    const registry = openDurableAgentRunRegistry(testDir);
+    const registry = openDurableAgentRunRegistry(testFeltDb(testDir));
 
     const run = createStandardAgentRun(
       `run-${randomUUIDv7()}`,
@@ -426,7 +427,7 @@ describe("DurableAgentRunRegistry", () => {
   });
 
   it("should record run output", async () => {
-    const registry = openDurableAgentRunRegistry(testDir);
+    const registry = openDurableAgentRunRegistry(testFeltDb(testDir));
 
     const run = createStandardAgentRun(
       `run-${randomUUIDv7()}`,
@@ -467,7 +468,7 @@ describe("DurableAgentRunRegistry", () => {
   });
 
   it("should record and retrieve run environment", async () => {
-    const registry = openDurableAgentRunRegistry(testDir);
+    const registry = openDurableAgentRunRegistry(testFeltDb(testDir));
 
     const run = createStandardAgentRun(
       `run-${randomUUIDv7()}`,
@@ -501,7 +502,7 @@ describe("DurableAgentRunRegistry", () => {
   });
 
   it("should list failed runs by project", async () => {
-    const registry = openDurableAgentRunRegistry(testDir);
+    const registry = openDurableAgentRunRegistry(testFeltDb(testDir));
 
     const run1 = createStandardAgentRun(
       `run-${randomUUIDv7()}`,
@@ -537,7 +538,7 @@ describe("DurableAgentRunRegistry", () => {
   });
 
   it("should list runs by worktree", async () => {
-    const registry = openDurableAgentRunRegistry(testDir);
+    const registry = openDurableAgentRunRegistry(testFeltDb(testDir));
 
     const run1 = createStandardAgentRun(
       `run-${randomUUIDv7()}`,

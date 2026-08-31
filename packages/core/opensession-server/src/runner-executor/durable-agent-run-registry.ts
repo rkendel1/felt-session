@@ -5,7 +5,7 @@
  * enabling debugging, rollback, and performance analysis.
  */
 
-import { createFeltDB, getTelemetryClient } from "@feltdb/core";
+import type { StateFirstDB } from "@feltdb/core";
 import type {
   MissionControlAgentRun,
   AgentRunStatus,
@@ -45,7 +45,7 @@ interface StoredAgentRunEnvironmentRow {
   id: string;
   agentRunId: string;
   workingDirectory: string;
-  environmentVariables: string; // JSON
+  environmentVariables: Record<string, string>;
   gitBranch: string;
   gitCommit: string;
   gitStatus: "clean" | "dirty";
@@ -131,14 +131,7 @@ export interface DurableAgentRunRegistry {
   getRunEnvironment(runId: string): Promise<AgentRunEnvironment | null>;
 }
 
-export function openDurableAgentRunRegistry(path: string): DurableAgentRunRegistry {
-  const telemetry = getTelemetryClient();
-  telemetry.disable();
-
-  const db = createFeltDB({
-    path,
-    namespace: "mission-control-agent-runs",
-  });
+export function openDurableAgentRunRegistry(db: StateFirstDB): DurableAgentRunRegistry {
 
   return {
     async createRun(run: MissionControlAgentRun): Promise<void> {
@@ -303,7 +296,7 @@ export function openDurableAgentRunRegistry(path: string): DurableAgentRunRegist
         id: env.id,
         agentRunId: env.agentRunId,
         workingDirectory: env.workingDirectory,
-        environmentVariables: JSON.stringify(env.environmentVariables),
+        environmentVariables: env.environmentVariables,
         gitBranch: env.gitBranch,
         gitCommit: env.gitCommit,
         gitStatus: env.gitStatus,
@@ -329,7 +322,7 @@ export function openDurableAgentRunRegistry(path: string): DurableAgentRunRegist
         id: row.id,
         agentRunId: row.agentRunId,
         workingDirectory: row.workingDirectory,
-        environmentVariables: JSON.parse(row.environmentVariables),
+        environmentVariables: row.environmentVariables,
         gitBranch: row.gitBranch,
         gitCommit: row.gitCommit,
         gitStatus: row.gitStatus,

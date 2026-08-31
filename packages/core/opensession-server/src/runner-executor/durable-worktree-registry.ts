@@ -5,7 +5,7 @@
  * enabling agents to work isolated from each other.
  */
 
-import { createFeltDB, getTelemetryClient } from "@feltdb/core";
+import type { StateFirstDB } from "@feltdb/core";
 import type {
   MissionControlWorktree,
   WorktreeStatus,
@@ -118,14 +118,7 @@ export interface DurableWorktreeRegistry {
   updateWorktreeHead(worktreeId: string, commitSha: string): Promise<void>;
 }
 
-export function openDurableWorktreeRegistry(path: string): DurableWorktreeRegistry {
-  const telemetry = getTelemetryClient();
-  telemetry.disable();
-
-  const db = createFeltDB({
-    path,
-    namespace: "mission-control-worktrees",
-  });
+export function openDurableWorktreeRegistry(db: StateFirstDB): DurableWorktreeRegistry {
 
   return {
     async createWorktree(worktree: MissionControlWorktree): Promise<void> {
