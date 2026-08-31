@@ -1,4 +1,5 @@
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
+import { createFeltDB } from "@feltdb/core";
 import { mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -15,6 +16,9 @@ writeFileSync(
 );
 
 const identity = await import("./workload-identity");
+await identity.initializeManagedWorkloadIdentity(
+  createFeltDB({ namespace: crypto.randomUUID(), memory: true }),
+);
 
 function claims(token: string): Record<string, unknown> {
   return JSON.parse(Buffer.from(token.split(".")[1]!, "base64url").toString("utf8"));

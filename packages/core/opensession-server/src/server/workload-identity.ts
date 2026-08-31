@@ -14,13 +14,17 @@
  */
 
 import { randomUUID, timingSafeEqual } from "crypto";
-import { existsSync, readFileSync } from "fs";
+import { existsSync, readFileSync, unlinkSync } from "node:fs";
+import type { StateFirstDB } from "@feltdb/core";
+import { managedFeltDb } from "./managed-feltdb";
 import { stateDir } from "./paths";
-import { writeJsonAtomic } from "./shared/atomic-write";
 import { remoteSandboxCallbackBaseUrl } from "./sandbox/config";
 
 const IDENTITY_PATH = "/workload-identity";
 const KEY_PATH = stateDir("workload-identity-key.json");
+const KEY_COLLECTION = "opensession_workload_identity";
+const KEY_ID = "signing-key";
+const KEY_MIGRATION = "workload-identity-key-json-to-managed-feltdb-v1";
 const DEFAULT_TOKEN_TTL_SECONDS = 10 * 60;
 const MIN_TOKEN_TTL_SECONDS = 60;
 const MAX_TOKEN_TTL_SECONDS = 60 * 60;
@@ -61,6 +65,7 @@ const g = globalThis as typeof globalThis & {
   __opensessionWorkloadIdentityLeases?: Map<string, Lease>;
   __opensessionWorkloadIdentityKey?: Promise<StoredKey>;
 };
+let identityDb: StateFirstDB | undefined;
 
 function leases(): Map<string, Lease> {
   return (g.__opensessionWorkloadIdentityLeases ??= new Map());
@@ -96,20 +101,12 @@ function keyId(publicKey: JsonWebKey): string {
   ).slice(0, 32);
 }
 
-async function loadKey(): Promise<StoredKey> {
-  if (existsSync(KEY_PATH)) {
-    try {
-      const parsed = JSON.parse(readFileSync(KEY_PATH, "utf8")) as StoredKey;
-      if (parsed.privateKey?.kty === "RSA" && parsed.publicKey?.kty === "RSA" && parsed.kid) {
-        return parsed;
-      }
-    } catch {
-      // A corrupt key must not be silently replaced: that would invalidate a
-      // published issuer without an operator noticing.
-      throw new Error(`Cannot read workload identity signing key at ${KEY_PATH}`);
-    }
-    throw new Error(`Invalid workload identity signing key at ${KEY_PATH}`);
-  }
+function validStoredKey(value: unknown): value is StoredKey {
+  const parsed = value as StoredKey | undefined;
+  return parsed?.privateKey?.kty === "RSA" && parsed.publicKey?.kty === "RSA" && !!parsed.kid;
+}
+
+async function generateKey(): Promise<StoredKey> {
   const pair = await crypto.subtle.generateKey(
     {
       name: "RSASSA-PKCS1-v1_5",
@@ -122,13 +119,47 @@ async function loadKey(): Promise<StoredKey> {
   );
   const publicKey = await crypto.subtle.exportKey("jwk", pair.publicKey);
   const privateKey = await crypto.subtle.exportKey("jwk", pair.privateKey);
-  const stored = { privateKey, publicKey, kid: keyId(publicKey) };
-  writeJsonAtomic(KEY_PATH, stored, true, 0o600);
-  return stored;
+  return { privateKey, publicKey, kid: keyId(publicKey) };
+}
+
+export async function initializeManagedWorkloadIdentity(
+  db: StateFirstDB = identityDb ?? managedFeltDb(),
+): Promise<void> {
+  identityDb = db;
+  if (!await db.collection<{ id: string }>("opensession_migrations").get(KEY_MIGRATION)) {
+    let legacy: StoredKey | undefined;
+    if (existsSync(KEY_PATH)) {
+      try {
+        const parsed = JSON.parse(readFileSync(KEY_PATH, "utf8"));
+        if (!validStoredKey(parsed)) throw new Error("invalid key");
+        legacy = parsed;
+      } catch {
+        throw new Error(`Cannot read workload identity signing key at ${KEY_PATH}`);
+      }
+    }
+    if (legacy) await db.transaction((tx) => {
+      tx.collection<StoredKey>(KEY_COLLECTION).set(KEY_ID, legacy, { requireAbsent: true });
+    }, { transactionId: "opensession:workload-identity:migrate-key" });
+    await db.transaction((tx) => {
+      tx.collection("opensession_migrations").set(KEY_MIGRATION,
+        { id: KEY_MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
+    }, { transactionId: `opensession:migration:${KEY_MIGRATION}` });
+  }
+  if (existsSync(KEY_PATH)) unlinkSync(KEY_PATH);
+  let stored = await db.collection<StoredKey>(KEY_COLLECTION).get(KEY_ID);
+  if (!stored) {
+    stored = await generateKey();
+    await db.transaction((tx) => {
+      tx.collection<StoredKey>(KEY_COLLECTION).set(KEY_ID, stored!, { requireAbsent: true });
+    }, { transactionId: "opensession:workload-identity:create-key" });
+  }
+  if (!validStoredKey(stored)) throw new Error("Invalid managed workload identity signing key");
+  g.__opensessionWorkloadIdentityKey = Promise.resolve(stored);
 }
 
 async function signingKey(): Promise<StoredKey> {
-  return (g.__opensessionWorkloadIdentityKey ??= loadKey());
+  if (!g.__opensessionWorkloadIdentityKey) await initializeManagedWorkloadIdentity();
+  return g.__opensessionWorkloadIdentityKey!;
 }
 
 function constantTimeEqual(left: string, right: string): boolean {
