@@ -135,13 +135,9 @@ export function startSessionKernelActorWorker(): void {
     (feltDbTimers ??= new FeltDbTimerStore(decisionStore()));
   const outboxStore = (): FeltDbOutboxStore =>
     (feltDbOutbox ??= new FeltDbOutboxStore(decisionStore()));
-  const managedFeltDbConfigured = () =>
-    !!(process.env.OPENSESSION_FELTDB_URL ||
-      process.env.OPENSESSION_FELTDB_SERVER_URL);
   const ensureManagedHead = async (sessionId: string, create: boolean) => {
-    if (!managedFeltDbConfigured()) return undefined;
     const existing = await decisionStore().head(sessionId);
-    if (existing || !create || host.hasLegacySession(sessionId)) return existing;
+    if (existing || !create) return existing;
     const migrationId = `opensession-kernel-native-v1:${sessionId}`;
     try {
       return await decisionStore().activateSession({
@@ -185,6 +181,8 @@ export function startSessionKernelActorWorker(): void {
         const managedHead = managedKind && sessionId
           ? await ensureManagedHead(sessionId, !isReadReducer(command))
           : undefined;
+        if (managedKind && sessionId && !managedHead)
+          throw new Error(`Managed FeltDB session ${sessionId} has not been activated`);
         if (!managedHead && !isReadReducer(command) && sessionId) {
           const quarantine = host.quarantinedSession(sessionId);
           if (quarantine) throw new SessionQuarantinedError(sessionId, quarantine.reason);
@@ -428,9 +426,11 @@ export function startSessionKernelActorWorker(): void {
         const managedHead = sessionId
           ? await ensureManagedHead(
               sessionId,
-              route.mutation && request.method === "appendChange",
+              route.mutation,
             )
           : undefined;
+        if (sessionId && !managedHead)
+          throw new Error(`Managed FeltDB session ${sessionId} has not been activated`);
         if (
           !managedHead &&
           route.mutation &&
@@ -638,32 +638,13 @@ export function startSessionKernelActorWorker(): void {
   }
 
   async function managedRuntimeWork(request: Extract<KernelActorAsyncRequest, { t: "runtime_work" }>) {
-    const legacy = host.runtimeWork(
-      request.now,
-      request.timerKinds,
-      request.effectKinds,
-      request.limit,
-    );
-    if (!managedFeltDbConfigured()) return legacy;
-    const sessionIds = [...new Set([
-      ...legacy.timers.map((timer) => timer.sessionId),
-      ...legacy.outbox.map((item) => item.sessionId),
-    ])];
-    const managed = new Map(await Promise.all(sessionIds.map(async (sessionId) =>
-      [sessionId, !!(await decisionStore().head(sessionId))] as const)));
     const [timers, outbox] = await Promise.all([
       timerStore().due(request.now, request.limit * 2),
       outboxStore().due(request.now, request.limit * 2),
     ]);
     return {
-      timers: [
-        ...legacy.timers.filter((timer) => !managed.get(timer.sessionId)),
-        ...timers.filter((timer) => request.timerKinds.includes(timer.kind)),
-      ].slice(0, request.limit),
-      outbox: [
-        ...legacy.outbox.filter((item) => !managed.get(item.sessionId)),
-        ...outbox.filter((item) => request.effectKinds.includes(item.kind)),
-      ].slice(0, request.limit),
+      timers: timers.filter((timer) => request.timerKinds.includes(timer.kind)).slice(0, request.limit),
+      outbox: outbox.filter((item) => request.effectKinds.includes(item.kind)).slice(0, request.limit),
     };
   }
 
@@ -703,25 +684,20 @@ export function startSessionKernelActorWorker(): void {
         // every quarantined session into an endless client ack-retry loop that
         // surfaced to users as `Internal error handling "command_ack"` on
         // every reconnect for as long as the quarantine stood.
-        if (managedFeltDbConfigured()) {
           void decisionStore().head(request.sessionId).then(async (head) => {
-            if (head)
-              await new FeltDbCommandStore(decisionStore()).acknowledge(
-                `async-ack:${request.sessionId}:${request.requestId}`,
-                request.sessionId,
-                request.requestId,
-              );
-            else host.call("acknowledgeCommand", [request.sessionId, request.requestId]);
+            if (!head)
+              throw new Error(`Managed FeltDB session ${request.sessionId} has not been activated`);
+            await new FeltDbCommandStore(decisionStore()).acknowledge(
+              `async-ack:${request.sessionId}:${request.requestId}`,
+              request.sessionId,
+              request.requestId,
+            );
             post({ t: "acknowledge_result", rpcId: request.rpcId });
           }).catch((error) => post({
             t: "error",
             rpcId: request.rpcId,
             error: error instanceof Error ? error.message : String(error),
           }));
-        } else {
-          host.call("acknowledgeCommand", [request.sessionId, request.requestId]);
-          post({ t: "acknowledge_result", rpcId: request.rpcId });
-        }
       } else if (request.t === "stats") {
         post({ t: "stats_result", rpcId: request.rpcId, stats: host.stats() });
       } else if (request.t === "maintain") {
