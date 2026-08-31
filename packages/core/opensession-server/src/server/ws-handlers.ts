@@ -14,11 +14,11 @@ import { audit } from "./audit";
 import { pendingAskAwaitingAnswer } from "./asks";
 import { resendPendingSlackComposer } from "./slack-compose";
 import { notifyMentions } from "./mentions";
-import { startWatching, stopAllWatchesForClient, transcriptRev, } from "./file-watcher";
-import { INIT_WIRE_CLAMP_BYTES, entriesForWire, parseTranscriptAsync, parseTranscriptTail, parseTranscriptWindow, prepareEntriesForWire, } from "./jsonl-parser";
+import { stopAllWatchesForClient } from "./file-watcher";
+import { prepareEntriesForWire } from "./jsonl-parser";
 import { providerFor } from "./models";
 
-import { appendTranscriptEntries, clearTranscriptStoreDegraded, storeAppendUserLineEarly, transcriptLineRunnerNotice, transcriptLineUser } from "./transcript-persistence";
+import { appendTranscriptEntries, storeAppendUserLineEarly, transcriptLineRunnerNotice, transcriptLineUser } from "./transcript-persistence";
 import { deleteQueuedPrompt, editableSteerReceipt, liftUserStop, persistQueues, promoteQueuedPrompt, promptQueues, queueDisplayState, durableQueueItem, queueItem, reorderQueuedPrompt, steeredReceipts, stoppedSessions, takeQueuedPrompt, takeSteeredPrompt, updateQueuedPrompt } from "./queue-state";
 import { prepareAndSteerQueuedPrompt } from "./queued-steer";
 
@@ -36,7 +36,6 @@ import {
 	maybePersistEffort,
 	maybePersistFastMode,
 } from "./session-cache";
-import { mergedSessionTranscript, mergedSessionTranscriptAsync, v2MirrorFiles, v2TranscriptHasDrift, } from "./sessions";
 import { handleSlashCommand } from "./slash-commands";
 import { maybeRecapOnReturn } from "./recap";
 import { maybeSuggestRepliesOnReturn, resendReplySuggestions, } from "./reply-suggestions";
@@ -45,17 +44,14 @@ import { resizeTerminal, startSessionTerminal, stopAllTerminals, stopTerminal, w
 import { subscribeTranscript } from "./transcript-bus";
 import { resumeSessionFeed } from "./session-feed";
 import type { SeqEntry } from "./transcript-store";
-import {
-  importLegacyTranscript,
-  transcript,
-} from "./actor-transcript";
+import { transcript } from "./actor-transcript";
 import { startTranscriptWatch } from "./transcript-watch";
 import { clampV2InitEntries } from "./transcript-wire";
 import { MAX_UPLOAD_BYTES, WS_MAX_PAYLOAD_BYTES, asDataUrlList, parseImageDataUrls, } from "./uploads";
 import { githubReconnectRequired } from "./github-auth";
 import { refreshWebIdentity } from "./web-auth";
 import { BOOT_ID, allClients, broadcastToAll, broadcastToSession, globalPresenceFrame, joinSession, leaveSession, markClientSeen, setClientAway, setClientTyping, } from "./ws-hub";
-import { existsSync, statSync, watch } from "fs";
+import { watch } from "fs";
 import { lastRestartBy } from "./restart-state";
 import { isInternalKernelDispatch } from "./session-kernel/ws-command-bridge";
 import { withSessionMutationLock } from "./session-mutation-lock";
@@ -153,13 +149,8 @@ async function sendWatchExtras(
 	}
 }
 
-// ── Transcript v2 serve path (docs/transcripts.md §4) ──────────────
-// Capability-gated: the client sends `supportsSeq: true` on watch. Eligible
-// watches are served from the owned transcript store and fed live by the
-// in-process bus — no mirror file-watcher polling. The legacy offset/rev
-// watch below stays as the serve path for external CLI/tmux sessions and as
-// the code-level fallback whenever the v2 serve refuses or throws (the env
-// kill switch was retired with the mirror writes, 2026-07-23).
+// ── Managed transcript serve path ──────────────────────────────────
+// Every watch is served from FeltDB and fed live by the in-process bus.
 
 // Per-socket bus unsubscribe handles. Parked on globalThis so a hot reload
 // can still tear down subscriptions made by the previous module instance
@@ -169,10 +160,9 @@ const v2Unsubs: Map<unknown, () => void> = ((globalThis as any)
 
 /**
  * The ONE v2 teardown helper — called from all three paths that end a
- * socket's view of a session (mirroring stopAllWatchesForClient's contract):
+ * socket's view of a session (matching stopAllWatchesForClient's contract):
  * watch-switch (re-watch of a different session on the same socket), unwatch,
- * and close. Releases the bus subscription and clears the v2 mark so the
- * rotation re-watch (run-session.ts) treats the socket as legacy again.
+ * and close. Releases the bus subscription and clears the managed-view mark.
  */
 function releaseTranscriptV2(ws: any): void {
 	const unsub = v2Unsubs.get(ws);
@@ -185,19 +175,8 @@ function releaseTranscriptV2(ws: any): void {
 	if (ws?.data?.transcriptV2) ws.data.transcriptV2 = false;
 }
 
-/** Legacy transcripts above this mirror-file size import in the background
- *  (this watch serves legacy) instead of blocking the watch handshake — the
- *  §4 "import timeout → legacy + queued background import" behavior, applied
- *  proactively by size since the import itself is synchronous. */
-const V2_SYNC_IMPORT_MAX_BYTES = 2 * 1024 * 1024;
-
-/** Session ids with a background import scheduled (dedupe). */
-const v2BgImports: Set<string> = ((globalThis as any).__osTranscriptV2BgImports ??=
-	new Set());
-
 /**
- * What `prepareEntriesForWire` does for every legacy send site, for the v2
- * store path: strip injected context, classify how each entry reads, and say
+ * Strip injected context, classify how each entry reads, and say
  * what each tool call is. Store rows are RAW — the marker-derived
  * `noticeKind` is on them, but the `notice` a client renders from is not, and
  * delivery plumbing ("[Name] " prefixes,
@@ -232,150 +211,21 @@ async function sendTranscriptIndex(
 }
 
 /**
- * V2 snapshot/history pages use the same bounded previews as the legacy
- * transcript path. Live transcript_append frames keep the larger store form.
+ * Snapshot/history pages use bounded previews. Live transcript_append frames
+ * keep the larger store form.
  */
 
-/** Legacy (re-)import for a session (same routine as §3's import-first
- *  gate): merged cross-engine history → importLegacyTranscript (which marks
- *  the session imported; empty history marks 'live-only'). Watermark = the
- *  TOTAL size of the §8 drift candidate set (session transcript file + oc
- *  mirror — the exact set v2TranscriptHasDrift compares against; measuring
- *  only transcriptPath would leave pi sessions permanently
- *  grown-beyond-watermark). Also the drift RE-import: idempotent upserts, and
- *  a completed import releases the failure-side store-degraded marker. */
-async function v2ImportSession(
-	session: NonNullable<Awaited<ReturnType<typeof findSessionAsync>>>,
-): Promise<void> {
-	// Deliberately id-less ref: guarantees the legacy merge — an id-carrying
-	// ref would route mergedSessionTranscript back into the v2 store path,
-	// which on a drift re-import is exactly what we're refreshing.
-	const entries = mergedSessionTranscript({
-		transcriptPath: session.transcriptPath ?? null,
-	});
-	await v2FinishImport(session, entries);
-}
-
-/** v2ImportSession for the background queue: the merge parse yields to the
- *  event loop (mergedSessionTranscriptAsync), so a multi-MB legacy transcript
- *  — exactly what gets routed here by the sync-import size ceiling — no
- *  longer wedges the server for the duration of the parse. */
-async function v2ImportSessionAsync(
-	session: NonNullable<Awaited<ReturnType<typeof findSessionAsync>>>,
-): Promise<void> {
-	const entries = await mergedSessionTranscriptAsync({
-		transcriptPath: session.transcriptPath ?? null,
-	});
-	await v2FinishImport(session, entries);
-}
-
-async function v2FinishImport(
-	session: NonNullable<Awaited<ReturnType<typeof findSessionAsync>>>,
-	entries: ReturnType<typeof mergedSessionTranscript>,
-): Promise<void> {
-	let watermark: number | null = null;
-	try {
-		const files = v2MirrorFiles(session);
-		if (files.length) watermark = files.reduce((sum, f) => sum + f.size, 0);
-	} catch {}
-	await importLegacyTranscript(
-		session.id,
-		entries,
-		entries.length ? "merged" : "live-only",
-		watermark,
-	);
-	clearTranscriptStoreDegraded(
-		session.id,
-		session.claudeSessionId
-	);
-}
-
-/** Queue an off-handshake import. `reimport` = the session is already
- *  imported but drifted (serveTranscriptV2's §8 check) — run the import even
- *  though needsImport is false; without it only never-imported sessions load. */
-function v2QueueBackgroundImport(sessionId: string, reimport = false): void {
-	if (v2BgImports.has(sessionId)) return;
-	v2BgImports.add(sessionId);
-	setTimeout(async () => {
-		try {
-			const session = await findSessionAsync(sessionId);
-			if (session && (reimport || await transcript.needsImport(sessionId)))
-				await v2ImportSessionAsync(session);
-		} catch (e) {
-			console.warn(`[ws] v2 background import failed for ${sessionId}:`, e);
-		} finally {
-			v2BgImports.delete(sessionId);
-		}
-	}, 0);
-}
-
 /**
- * Serve a watch from the v2 store + bus. Returns true when the watch was
- * fully served (caller sends the watch extras and stops); false = not
- * eligible / import deferred / flag off — fall through to the untouched
- * legacy path.
+ * Serve a watch from the managed store and bus. Missing migrations fail closed.
  */
 async function serveTranscriptV2(
 	ws: any,
 	sessionId: string,
-	session: NonNullable<Awaited<ReturnType<typeof findSessionAsync>>>,
 	msg: any,
 ): Promise<boolean> {
-	if (msg.supportsSeq !== true) return false;
-	// Plain loop runs don't thread a unified session id to the runner (§3), so
-	// their store rows would be forever partial — refuse v2, keep legacy.
-	// (Linear runs DO since transcriptSessionId landed; they lazy-import here
-	// like any other session, and appends from runs started before the
-	// enabling restart degrade safely via the §8 store-degraded/drift path.)
-	if (sessionId.startsWith("plain-")) return false;
-	// Externally-owned runs (CLI/tmux: running via PID but not in our
-	// activeRuns — session-control's observe-only signal) write only their
-	// transcript file. The file-watcher feeds parsed appends into the store
-	// (file-watcher.ts feedTranscriptStore), but that feed only runs while
-	// some legacy watch exists — a v2-only viewer set would have no feeder,
-	// so v2 here would render silently stale mid-run. The refusal stays until
-	// a socket-independent feed lifecycle exists — the one remaining step of
-	// mirror retirement (design doc §11); mirror writes themselves are gone.
-	if (
-		session.isRunning &&
-		!isAgentSessionBusy(session.claudeSessionId, session.codexThreadId, session.id,)
-	)
-		return false;
-
 	const store = transcript;
-	try {
-		if (await store.needsImport(sessionId)) {
-			// Lazy import: small legacy transcripts import synchronously inside
-			// the watch; big ones import in the background and THIS watch serves
-			// legacy (the next one upgrades). The ceiling measures the WHOLE §8
-			// candidate set (session transcript file + oc mirror) — transcriptPath
-			// alone undercounts pi sessions, whose history mostly lives in
-			// the mirror.
-			let mirrorSize = 0;
-			try {
-				for (const f of v2MirrorFiles(session)) mirrorSize += f.size;
-			} catch {}
-			if (mirrorSize > V2_SYNC_IMPORT_MAX_BYTES) {
-				v2QueueBackgroundImport(sessionId);
-				return false;
-			}
-			await v2ImportSession(session);
-		} else if (await v2TranscriptHasDrift(store, sessionId, session)) {
-			// Imported but stale (§8): the mirror grew in a way the store can't
-			// explain — external CLI/tmux runs while we were idle, unmapped oc
-			// ids, failed store appends, kill-switch windows — or the failure-side
-			// store-degraded flag is set. The bus never fires for those entries,
-			// so serving v2 would render silently stale. Queue the background
-			// re-import (idempotent upserts; clears the flag) and fall through to
-			// the legacy file-watcher path for THIS watch — live external appends
-			// keep streaming; the next watch upgrades to v2.
-			v2QueueBackgroundImport(sessionId, true);
-			return false;
-		}
-	} catch (e) {
-		console.warn(`[ws] v2 import failed for ${sessionId} — legacy path:`, e);
-		return false;
-	}
+	if (await store.needsImport(sessionId))
+		throw new Error(`Managed transcript is not migrated for ${sessionId}`);
 
 	// From here this socket is a v2 viewer for this session. The extracted
 	// protocol subscribes BEFORE reading and treats bus events as wake-ups for
@@ -861,103 +711,21 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 					maybeSuggestRepliesOnReturn(sessionId, data.user || undefined);
 				}
 
-				// Transcript v2 (flag + supportsSeq gated): eligible watches are
-				// served from the owned store + bus with seq cursors — no mirror
-				// file-watcher. Ineligible/flag-off falls through byte-identical.
-				// The call itself is guarded: a throw anywhere in the v2 path must
-				// degrade to the legacy watch, never kill the watch silently (a
-				// cold-boot binding failure did exactly that on 2026-07-23 — the
-				// client got no init and no error).
-				let v2Served = false;
+				// Managed FeltDB is the only transcript authority. A missing migration
+				// fails closed instead of silently serving a JSONL mirror.
 				try {
-					v2Served = await serveTranscriptV2(ws, sessionId, session, msg);
+					await serveTranscriptV2(ws, sessionId, msg);
 				} catch (e) {
 					console.error(
-						`[ws] transcript v2 serve threw for ${sessionId} — falling back to legacy watch:`,
+						`[ws] managed transcript serve failed for ${sessionId}:`,
 						e,
 					);
-				}
-				if (v2Served) {
-					await sendWatchExtras(ws, sessionId, session);
+					ws.send(JSON.stringify({
+						type: "error",
+						message: "Managed transcript unavailable",
+					}));
 					break;
 				}
-
-				// Reconnect resume: a client that still holds this session's entries
-				// re-watches with the byte cursor of the last transcript frame it
-				// received (sinceOffset + sinceRev from transcript_init/append). When
-				// the cursor still matches the live mirror file — same rev (the
-				// transcript didn't rotate to a new engine id) and an offset the file
-				// still covers — skip the full-tail transcript_init replace and let
-				// the file-watcher's gap-fill replay exactly the missed entries from
-				// the jsonl (the client's id-keyed upsert absorbs any overlap). The
-				// jsonl IS the replay buffer: append-only, restart-proof, and it
-				// covers entries written while nobody was watching. Any mismatch
-				// falls through to the full snapshot below.
-				const sinceOffset =
-					typeof msg.sinceOffset === "number" && msg.sinceOffset > 0
-						? msg.sinceOffset
-						: undefined;
-				if (
-					sinceOffset !== undefined &&
-					typeof msg.sinceRev === "string" &&
-					session.transcriptPath &&
-					msg.sinceRev === transcriptRev(session.transcriptPath) &&
-					existsSync(session.transcriptPath) &&
-					sinceOffset <= statSync(session.transcriptPath).size
-				) {
-					startWatching(session.transcriptPath, ws, sinceOffset, sessionId);
-					await sendWatchExtras(ws, sessionId, session);
-					break;
-				}
-
-				// Send one bounded transcript tail so the loading state transitions to
-				// a complete conversation instead of first painting a screenful and
-				// prepending the rest a beat later. The tighter INIT wire clamp keeps
-				// that snapshot manageable: the UI eagerly renders only
-				// ~6KB of markdown per bubble and fetches the full entry on demand,
-				// so the fat 32KB clamp only bought transfer time (a heavy tail hit
-				// 1.7MB on the wire). `startOffset` is the pagination cursor for
-				// "load earlier".
-				let { entries, truncated, endOffset, startOffset } = session.transcriptPath
-					? parseTranscriptTail(session.transcriptPath)
-					: { entries: [], truncated: false, endOffset: 0, startOffset: 0 };
-				if (!entries.length) {
-					// No mirror file yet — a fresh session, or an engine-id rotation
-					// whose next run hasn't seeded the new id's file. Without this the
-					// thread renders blank until the next send (which seeds the file);
-					// serve history via the cross-engine fallback (old transcript file
-					// merged with Pi's SQLite store) instead. No byte cursor into
-					// a file here, so no "load earlier" paging — the next run's seeded
-					// file restores it.
-					const merged = await mergedSessionTranscriptAsync(session);
-					if (data.watchRequest !== watchRequest) return;
-					if (merged.length) {
-						truncated = merged.length > 120;
-						entries = truncated ? merged.slice(-120) : merged;
-						startOffset = 0;
-					}
-				}
-				ws.send(
-					JSON.stringify({
-						type: "transcript_init",
-						sessionId,
-						entries: entriesForWire(entries, INIT_WIRE_CLAMP_BYTES),
-						truncated,
-						startOffset,
-						// Resume cursor (see the sinceOffset branch above): where this
-						// snapshot ends in the mirror file, and which file that was.
-						...(session.transcriptPath
-							? { endOffset, rev: transcriptRev(session.transcriptPath) }
-							: {}),
-					}),
-				);
-
-				// Start file watcher from where the tail parse left off — bytes
-				// appended between the parse and the watch would otherwise be lost.
-				if (session.transcriptPath) {
-					startWatching(session.transcriptPath, ws, endOffset, sessionId);
-				}
-
 				await sendWatchExtras(ws, sessionId, session);
 				break;
 			}
@@ -1043,142 +811,32 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 			}
 
 			case "load_history": {
-				// "Load earlier history": one PAGE of history — the byte window just
-				// before the client's earliest offset (`beforeOffset`, threaded from
-				// transcript_init/transcript_history startOffset). The old behavior
-				// (re-send the ENTIRE transcript) hit ~15MB wire payloads and a
-				// 600-bubble render on big transcripts; it survives only as the
-				// fallback for clients that don't send an offset.
-				//
-				// Transcript v2 seq paging: a client in seq mode pages backwards
-				// with `beforeSeq` → one ~40-entry page from the store. Legacy
-				// offset paging below is untouched; a store failure falls
-				// through to it.
-				if (typeof msg.beforeSeq === "number" && msg.beforeSeq > 0) {
-					try {
-						// "Jump to the start" walks the entire backlog, so it asks for
-						// fatter pages: fewer round trips, and — the real cost — fewer
-						// whole-transcript reconciliations per entry recovered. Capped
-						// because each entry is only clamped to 8KB on the wire.
-						const page = await transcript.readBefore(
-							msg.sessionId,
-							Math.floor(msg.beforeSeq),
-							Math.min(Math.max(1, Math.floor(msg.limit ?? 40)), 200),
-						);
-						ws.send(
-							JSON.stringify({
-								type: "transcript_history",
-								sessionId: msg.sessionId,
-								// Backlog pages take the same init clamp as legacy history
-								// pages (see clampV2InitEntries).
-								entries: clampV2InitEntries(classifyV2Entries(page.entries)),
-								firstSeq: page.firstSeq,
-								lastSeq: page.lastSeq,
-								truncated: page.firstSeq > 1,
-								v2: true,
-							}),
-						);
-						break;
-					} catch (e) {
-						console.warn(`[ws] v2 load_history failed for ${msg.sessionId}:`, e,);
-					}
-				}
-				const session = await findSessionAsync(msg.sessionId);
-				if (!session?.transcriptPath) {
-					// Same no-mirror-file state as the watch fallback: serve the merged
-					// cross-engine history rather than blanking the client's view.
-					ws.send(
-						JSON.stringify({
-							type: "transcript_init",
-							sessionId: msg.sessionId,
-							entries: session
-								? entriesForWire(
-										await mergedSessionTranscriptAsync(session)
-									)
-								: [],
-							truncated: false,
-						}),
+				try {
+					const beforeSeq =
+						typeof msg.beforeSeq === "number" && msg.beforeSeq > 0
+							? Math.floor(msg.beforeSeq)
+							: (await transcript.getLastSeq(msg.sessionId)) + 1;
+					const page = await transcript.readBefore(
+						msg.sessionId,
+						beforeSeq,
+						Math.min(Math.max(1, Math.floor(msg.limit ?? 40)), 200),
 					);
-					return;
-				}
-				const before =
-					typeof msg.beforeOffset === "number" && msg.beforeOffset > 0
-						? msg.beforeOffset
-						: null;
-				if (before !== null) {
-					const rev = transcriptRev(session.transcriptPath);
-					let fileSize: number | null = null;
-					try {
-						if (existsSync(session.transcriptPath)) {
-							fileSize = statSync(session.transcriptPath).size;
-						}
-					} catch {
-						fileSize = null;
-					}
-					if (
-						msg.beforeRev !== rev ||
-						fileSize === null ||
-						before > fileSize
-					) {
-						if (fileSize === null) {
-							ws.send(
-								JSON.stringify({
-									type: "transcript_init",
-									sessionId: msg.sessionId,
-									entries: entriesForWire(
-										await mergedSessionTranscriptAsync(session),
-									),
-									truncated: false,
-								}),
-							);
-							break;
-						}
-						const tail = parseTranscriptTail(session.transcriptPath);
-						ws.send(
-							JSON.stringify({
-								type: "transcript_init",
-								sessionId: msg.sessionId,
-								entries: entriesForWire(tail.entries, INIT_WIRE_CLAMP_BYTES),
-								truncated: tail.truncated,
-								startOffset: tail.startOffset,
-								endOffset: tail.endOffset,
-								rev,
-							}),
-						);
-						break;
-					}
-					// ~40 entries per page; the 1MB soft window cap bounds the server
-					// read through fat tool-result regions, but the parser still
-					// guarantees ≥10 entries per page (see parseTranscriptWindow) —
-					// 2-entry pages made "load earlier" feel broken and kept the
-					// infinite-scroll sentinel in range, chaining loads every ~1.6s.
-					const page = parseTranscriptWindow(
-						session.transcriptPath,
-						before,
-						undefined,
-						40,
-						1024 * 1024,
-					);
-					ws.send(
-						JSON.stringify({
-							type: "transcript_history",
-							sessionId: msg.sessionId,
-							entries: entriesForWire(page.entries, INIT_WIRE_CLAMP_BYTES),
-							truncated: page.truncated,
-							startOffset: page.startOffset,
-						}),
-					);
-					break;
-				}
-				const entries = await parseTranscriptAsync(session.transcriptPath);
-				ws.send(
-					JSON.stringify({
-						type: "transcript_init",
+					ws.send(JSON.stringify({
+						type: "transcript_history",
 						sessionId: msg.sessionId,
-						entries: entriesForWire(entries),
-						truncated: false,
-					}),
-				);
+						entries: clampV2InitEntries(classifyV2Entries(page.entries)),
+						firstSeq: page.firstSeq,
+						lastSeq: page.lastSeq,
+						truncated: page.firstSeq > 1,
+						v2: true,
+					}));
+				} catch (e) {
+					console.warn(`[ws] managed load_history failed for ${msg.sessionId}:`, e);
+					ws.send(JSON.stringify({
+						type: "error",
+						message: "Managed transcript unavailable",
+					}));
+				}
 				break;
 			}
 
