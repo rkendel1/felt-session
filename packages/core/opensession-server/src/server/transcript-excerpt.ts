@@ -13,10 +13,10 @@
  * WHERE in the transcript they occur and return windows of real entries around
  * those positions, seq-anchored so the caller can page outward.
  *
- * Reads prefer the transcript store (transcript-store.ts): its rows are bounded
+ * Reads use the managed transcript store: its rows are bounded
  * (32KB) and cheap to scan, and only the entries we actually return get
- * hydrated back to full content via getFullEntry. Sessions the store never
- * imported (plain-*, pre-v2 leftovers) fall back to the merged legacy read.
+ * hydrated back to full content via getFullEntry. A missing managed transcript
+ * returns no excerpt instead of consulting a second transcript authority.
  */
 
 import { isContextInjection } from "@tellahq/opensession-protocol/notices";
@@ -46,7 +46,7 @@ export interface TranscriptExcerpt {
 	/** How many entries matched the query overall (not just those returned). */
 	matched: number;
 	windows: ExcerptWindow[];
-	source: "store" | "legacy" | "none";
+	source: "store" | "none";
 	/** Set when the scan hit MAX_SCAN and older entries were not searched. */
 	truncated?: boolean;
 }
@@ -64,8 +64,6 @@ export interface ExcerptStore {
 
 export interface ExcerptDeps {
 	store?: ExcerptStore | null;
-	/** Legacy fallback for sessions the store never imported. */
-	legacy?: (sessionId: string) => Promise<TranscriptEntry[]>;
 }
 
 export interface ExcerptOpts {
@@ -135,26 +133,9 @@ function pickMatches(
 	return picked;
 }
 
-/** Live wiring. The store singleton is lazy (importing transcript-store never
- *  opens the DB); session-cache/sessions are pulled in only when a session
- *  actually needs the legacy path, keeping this module cheap to import. */
+/** Live wiring uses only the managed transcript actor. */
 function defaultDeps(): ExcerptDeps {
-	return {
-		store: transcript as ExcerptStore,
-		legacy: async (sessionId: string) => {
-			try {
-				const [{ findSession }, { mergedSessionTranscriptAsync }] = await Promise.all([
-					import("./session-cache"),
-					import("./sessions"),
-				]);
-				const session = findSession(sessionId);
-				if (!session) return [];
-				return await mergedSessionTranscriptAsync(session);
-			} catch {
-				return [];
-			}
-		},
-	};
+	return { store: transcript as ExcerptStore };
 }
 
 /** Load the newest MAX_SCAN entries, store-first. Store rows are bounded, so
@@ -163,7 +144,7 @@ function defaultDeps(): ExcerptDeps {
 async function loadEntries(
 	sessionId: string,
 	deps: ExcerptDeps,
-): Promise<{ entries: ExcerptEntry[]; source: "store" | "legacy" | "none"; lastSeq: number; truncated: boolean }> {
+): Promise<{ entries: ExcerptEntry[]; source: "store" | "none"; lastSeq: number; truncated: boolean }> {
 	const store = deps.store;
 	if (store) {
 		try {
@@ -190,27 +171,12 @@ async function loadEntries(
 			}
 		} catch {
 			// An authoritative actor read failure is not evidence that the session
-			// is legacy. Falling through would hydrate its entire transcript through
+			// is unavailable. Falling through to another source would make that source
 			// mergedSessionTranscriptAsync and defeat this scan's hard row budget.
 			return { entries: [], source: "none", lastSeq: 0, truncated: true };
 		}
 	}
-	const legacy = deps.legacy ? await deps.legacy(sessionId) : [];
-	if (!legacy.length)
-		return { entries: [], source: "none", lastSeq: 0, truncated: false };
-	// Legacy entries carry no owned display order; index position is the only
-	// stable handle, and it is what aroundSeq will page against.
-	const start = Math.max(0, legacy.length - MAX_SCAN);
-	const entries = legacy
-		.slice(start)
-		.map((e, i) => ({ ...e, seq: e.seq ?? start + i + 1 }) as ExcerptEntry)
-		.filter((e) => !isContextInjection(e));
-	return {
-		entries,
-		source: "legacy",
-		lastSeq: entries[entries.length - 1]?.seq ?? 0,
-		truncated: start > 0,
-	};
+	return { entries: [], source: "none", lastSeq: 0, truncated: false };
 }
 
 async function hydrate(

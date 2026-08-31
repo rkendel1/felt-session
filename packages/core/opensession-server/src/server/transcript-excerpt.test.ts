@@ -32,8 +32,8 @@ function fakeStore(rows: Row[], full = new Map<string, TranscriptEntry>()): Exce
 	};
 }
 
-function deps(store: ExcerptStore | null, legacy: TranscriptEntry[] = []): ExcerptDeps {
-	return { store, legacy: async () => legacy };
+function deps(store: ExcerptStore | null): ExcerptDeps {
+	return { store };
 }
 
 describe("excerptTerms", () => {
@@ -186,41 +186,27 @@ describe("transcriptExcerpt", () => {
 		expect(limits.every((limit) => limit <= 200)).toBe(true);
 	});
 
-	it("does not replace a failed actor scan with an unbounded legacy read", async () => {
-		let legacyReads = 0;
+	it("does not replace a failed managed actor scan with another transcript source", async () => {
 		const store: ExcerptStore = {
 			getLastSeq: () => 500,
 			readSince: () => { throw new Error("actor unavailable"); },
 			getFullEntry: () => null,
 		};
-		const ex = await transcriptExcerpt("bks-failed", { query: "needle" }, {
-			store,
-			legacy: async () => {
-				legacyReads++;
-				return [entry(1, { content: "needle" })];
-			},
-		});
+		const ex = await transcriptExcerpt("bks-failed", { query: "needle" }, { store });
 		expect(ex).toMatchObject({ source: "none", truncated: true, windows: [] });
-		expect(legacyReads).toBe(0);
 	});
 
-	it("falls back to the legacy transcript when the store has nothing", async () => {
-		const legacy = [
-			{ id: "l1", type: "user", content: "old session question", timestamp: "2026-01-01T00:00:00Z" },
-			{ id: "l2", type: "assistant", content: "old answer", timestamp: "2026-01-01T00:01:00Z" },
-		] as TranscriptEntry[];
+	it("returns nothing when the managed store has no transcript", async () => {
 		const ex = await transcriptExcerpt(
 			"plain-1",
 			{ query: "old answer" },
-			deps(fakeStore([]), legacy),
+			deps(fakeStore([])),
 		);
-		expect(ex.source).toBe("legacy");
-		// Legacy entries carry no owned seq — position becomes the handle.
-		expect(ex.windows[0]!.entries.map((e) => e.seq)).toEqual([1, 2]);
+		expect(ex).toMatchObject({ source: "none", windows: [] });
 	});
 
 	it("reports nothing rather than inventing a window for an unknown session", async () => {
-		const ex = await transcriptExcerpt("bks-nope", {}, deps(fakeStore([]), []));
+		const ex = await transcriptExcerpt("bks-nope", {}, deps(fakeStore([])));
 		expect(ex.source).toBe("none");
 		expect(ex.windows).toHaveLength(0);
 		expect(formatExcerpt(ex)).toContain("No transcript entries");
