@@ -17,6 +17,7 @@ import {
   type TaskCodeContextManagerInterface,
 } from "./task-code-context";
 import type { RepositoryFile, FileRelationship, CommitFileChange } from "./mission-control-graph";
+import { testFeltDb } from "./test-feltdb";
 
 let testCounter = 0;
 let testDir: string;
@@ -34,7 +35,9 @@ beforeEach(() => {
     path.join(testDir, "files.db"),
   );
   analyzer = createGraphAnalyzer(fileRegistry);
-  contextManager = createTaskCodeContextManager(path.join(testDir, "context.db"));
+  contextManager = createTaskCodeContextManager(
+    testFeltDb(path.join(testDir, "context.db")),
+  );
 });
 
 afterEach(() => {

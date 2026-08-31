@@ -4,7 +4,7 @@
  * Links Mission Control tasks to repository code for impact analysis.
  */
 
-import { createFeltDB, getTelemetryClient } from "@feltdb/core";
+import type { StateFirstDB } from "@feltdb/core";
 import { randomUUIDv7 } from "bun";
 import type { TaskCodeContext } from "./mission-control-graph";
 import type {
@@ -18,8 +18,8 @@ interface StoredTaskCodeContext {
   id: string;
   taskId: string;
   projectId: string;
-  relevantFiles: string; // JSON
-  relatedTasks?: string; // JSON
+  relevantFiles: TaskCodeContext["relevantFiles"];
+  relatedTasks?: TaskCodeContext["relatedTasks"];
   estimatedScope: string;
   complexity: string;
   createdAt: string;
@@ -55,16 +55,9 @@ export interface TaskCodeContextManagerInterface {
  * Create a task code context manager.
  */
 export function createTaskCodeContextManager(
-  dbPath: string,
+  db: StateFirstDB,
   fileRegistry?: DurableRepositoryFileRegistry,
 ): TaskCodeContextManagerInterface {
-  const telemetry = getTelemetryClient();
-  telemetry.disable();
-
-  const db = createFeltDB({
-    path: dbPath,
-    namespace: "mission-control-task-context",
-  });
 
   const CONTEXTS_COLLECTION = "task_code_contexts";
 
@@ -74,10 +67,8 @@ export function createTaskCodeContextManager(
         id: `ctx-${randomUUIDv7()}`,
         taskId: context.taskId,
         projectId: context.projectId,
-        relevantFiles: JSON.stringify(context.relevantFiles),
-        relatedTasks: context.relatedTasks
-          ? JSON.stringify(context.relatedTasks)
-          : undefined,
+        relevantFiles: context.relevantFiles,
+        relatedTasks: context.relatedTasks,
         estimatedScope: context.estimatedScope,
         complexity: context.complexity,
         createdAt: new Date().toISOString(),
@@ -100,10 +91,8 @@ export function createTaskCodeContextManager(
       return {
         taskId: row.taskId,
         projectId: row.projectId,
-        relevantFiles: JSON.parse(row.relevantFiles),
-        relatedTasks: row.relatedTasks
-          ? JSON.parse(row.relatedTasks)
-          : undefined,
+        relevantFiles: row.relevantFiles,
+        relatedTasks: row.relatedTasks,
         estimatedScope: row.estimatedScope as any,
         complexity: row.complexity as any,
       };
@@ -120,10 +109,8 @@ export function createTaskCodeContextManager(
         id: `ctx-${randomUUIDv7()}`,
         taskId: context.taskId,
         projectId: context.projectId,
-        relevantFiles: JSON.stringify(context.relevantFiles),
-        relatedTasks: context.relatedTasks
-          ? JSON.stringify(context.relatedTasks)
-          : undefined,
+        relevantFiles: context.relevantFiles,
+        relatedTasks: context.relatedTasks,
         estimatedScope: context.estimatedScope,
         complexity: context.complexity,
         createdAt: new Date().toISOString(),
