@@ -1657,7 +1657,7 @@ export async function handleSessionsRoutes(
 					{ error: "No review request to accept" },
 					{ status: 400 },
 				);
-			setReviewAccepted(
+			await setReviewAccepted(
 				sessionId,
 				body.accept ? { by: by || "someone", at: new Date().toISOString() } : null,
 			);

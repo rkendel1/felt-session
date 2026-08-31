@@ -9,9 +9,9 @@
  * session in getAllSessions. Slack/Linear session files are read-only for
  * opensession, so the request can't live in the session file.
  */
-import { readFileSync, existsSync } from "fs";
-import { writeJsonAtomic } from "./shared/atomic-write";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
+import { ManagedValueRegistry } from "./managed-value-registry";
+import type { StateFirstDB } from "@feltdb/core";
 
 export interface ReviewRequest {
 	/** Reviewer's display name (the `backstage-user` value, e.g. "Kent"). */
@@ -30,49 +30,34 @@ export interface ReviewRequest {
 
 const REGISTRY_PATH = `${OPENSESSION_SESSIONS_DIR}/review-requests.json`;
 
-let cache: Record<string, ReviewRequest> | null = null;
-
-function load(): Record<string, ReviewRequest> {
-	if (cache) return cache;
-	try {
-		cache = existsSync(REGISTRY_PATH)
-			? JSON.parse(readFileSync(REGISTRY_PATH, "utf-8"))
-			: {};
-	} catch {
-		cache = {};
-	}
-	return cache!;
-}
-
-function save(registry: Record<string, ReviewRequest>): void {
-	cache = registry;
-	writeJsonAtomic(REGISTRY_PATH, registry);
+const registry = new ManagedValueRegistry<ReviewRequest>(
+	"opensession_review_requests",
+	"review-requests-json-to-managed-feltdb-v1",
+	REGISTRY_PATH,
+);
+export function initializeManagedReviewRequests(db?: StateFirstDB): Promise<void> {
+	return registry.initialize(db);
 }
 
 export function getReviewRequest(id: string): ReviewRequest | undefined {
-	return load()[id];
+	return registry.get(id);
 }
 
 /** Set (a reviewer) or clear (null) the review request for a session id. */
-export function setReviewRequest(id: string, req: ReviewRequest | null): void {
-	const registry = { ...load() };
-	if (req) registry[id] = req;
-	else delete registry[id];
-	save(registry);
+export async function setReviewRequest(id: string, req: ReviewRequest | null): Promise<void> {
+	await registry.set(id, req || undefined);
 }
 
 /** Mark the current request accepted (reviewer signed off) or reopen it (null),
  * preserving the original `to`/`by`/`at`. No-op if there's no request for `id`. */
-export function setReviewAccepted(
+export async function setReviewAccepted(
 	id: string,
 	accepted: { by: string; at: string } | null,
-): void {
-	const registry = { ...load() };
-	const existing = registry[id];
+): Promise<void> {
+	const existing = registry.get(id);
 	if (!existing) return;
 	const next: ReviewRequest = { ...existing };
 	if (accepted) next.accepted = accepted;
 	else delete next.accepted;
-	registry[id] = next;
-	save(registry);
+	await registry.set(id, next);
 }

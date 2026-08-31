@@ -10,9 +10,9 @@
  * getAllSessions. Slack/Linear session files are read-only for opensession and the
  * lane is computed at scan time, so the override can't live in the session file.
  */
-import { readFileSync, existsSync } from "fs";
-import { writeJsonAtomic } from "./shared/atomic-write";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
+import { ManagedValueRegistry } from "./managed-value-registry";
+import type { StateFirstDB } from "@feltdb/core";
 
 /** The manual lanes a session can be pinned into — mirrors the frontend's MineStatus. */
 export type ManualStatus =
@@ -36,33 +36,20 @@ export function isManualStatus(v: unknown): v is ManualStatus {
 
 const REGISTRY_PATH = `${OPENSESSION_SESSIONS_DIR}/status-overrides.json`;
 
-let cache: Record<string, ManualStatus> | null = null;
-
-function load(): Record<string, ManualStatus> {
-	if (cache) return cache;
-	try {
-		cache = existsSync(REGISTRY_PATH)
-			? JSON.parse(readFileSync(REGISTRY_PATH, "utf-8"))
-			: {};
-	} catch {
-		cache = {};
-	}
-	return cache!;
-}
-
-function save(registry: Record<string, ManualStatus>): void {
-	cache = registry;
-	writeJsonAtomic(REGISTRY_PATH, registry);
+const registry = new ManagedValueRegistry<ManualStatus>(
+	"opensession_status_overrides",
+	"status-overrides-json-to-managed-feltdb-v1",
+	REGISTRY_PATH,
+);
+export function initializeManagedStatusOverrides(db?: StateFirstDB): Promise<void> {
+	return registry.initialize(db);
 }
 
 export function getStatusOverride(id: string): ManualStatus | undefined {
-	return load()[id];
+	return registry.get(id);
 }
 
 /** Set (a valid lane) or clear (null/invalid) the manual lane for a session id. */
-export function setStatusOverride(id: string, status: ManualStatus | null): void {
-	const registry = { ...load() };
-	if (status && isManualStatus(status)) registry[id] = status;
-	else delete registry[id];
-	save(registry);
+export async function setStatusOverride(id: string, status: ManualStatus | null): Promise<void> {
+	await registry.set(id, status && isManualStatus(status) ? status : undefined);
 }

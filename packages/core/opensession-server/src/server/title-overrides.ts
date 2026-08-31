@@ -5,41 +5,27 @@
  * lives in a server-owned registry keyed by unified session id, applied over
  * the derived title in getAllSessions — exactly like the archive registry.
  */
-import { readFileSync, existsSync } from "fs";
-import { writeJsonAtomic } from "./shared/atomic-write";
-import { homeDir, OPENSESSION_SESSIONS_DIR } from "./paths";
+import { OPENSESSION_SESSIONS_DIR } from "./paths";
+import { ManagedValueRegistry } from "./managed-value-registry";
+import type { StateFirstDB } from "@feltdb/core";
 
-const HOME = homeDir();
 const REGISTRY_PATH = `${OPENSESSION_SESSIONS_DIR}/title-overrides.json`;
+const registry = new ManagedValueRegistry<string>(
+	"opensession_title_overrides",
+	"title-overrides-json-to-managed-feltdb-v1",
+	REGISTRY_PATH,
+);
 
-let cache: Record<string, string> | null = null;
-
-function load(): Record<string, string> {
-	if (cache) return cache;
-	try {
-		cache = existsSync(REGISTRY_PATH)
-			? JSON.parse(readFileSync(REGISTRY_PATH, "utf-8"))
-			: {};
-	} catch {
-		cache = {};
-	}
-	return cache!;
-}
-
-function save(registry: Record<string, string>): void {
-	cache = registry;
-	writeJsonAtomic(REGISTRY_PATH, registry);
+export function initializeManagedTitleOverrides(db?: StateFirstDB): Promise<void> {
+	return registry.initialize(db);
 }
 
 export function getTitleOverride(id: string): string | undefined {
-	return load()[id];
+	return registry.get(id);
 }
 
 /** Set (non-empty) or clear (empty/null) the manual title for a session id. */
-export function setTitleOverride(id: string, title: string | null): void {
-	const registry = { ...load() };
+export async function setTitleOverride(id: string, title: string | null): Promise<void> {
 	const trimmed = title?.trim();
-	if (trimmed) registry[id] = trimmed;
-	else delete registry[id];
-	save(registry);
+	await registry.set(id, trimmed || undefined);
 }
