@@ -292,6 +292,13 @@ export class SessionKernelStoreHost {
     return this.openIsolated(sessionId);
   }
 
+  hasLegacySession(sessionId: string): boolean {
+    return this.centralOperation(
+      () => !!this.central.sessionPlacement(sessionId) ||
+        this.central.hasSessionDurableState(sessionId),
+    );
+  }
+
   transcript<T extends TranscriptActorRequest>(
     request: T,
   ): TranscriptActorResult<T> {

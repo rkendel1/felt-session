@@ -126,6 +126,29 @@ export function startSessionKernelActorWorker(): void {
     (feltDbTimers ??= new FeltDbTimerStore(decisionStore()));
   const outboxStore = (): FeltDbOutboxStore =>
     (feltDbOutbox ??= new FeltDbOutboxStore(decisionStore()));
+  const managedFeltDbConfigured = () =>
+    !!(process.env.OPENSESSION_FELTDB_URL ||
+      process.env.OPENSESSION_FELTDB_SERVER_URL);
+  const ensureManagedHead = async (sessionId: string, create: boolean) => {
+    if (!managedFeltDbConfigured()) return undefined;
+    const existing = await decisionStore().head(sessionId);
+    if (existing || !create || host.hasLegacySession(sessionId)) return existing;
+    const migrationId = `opensession-kernel-native-v1:${sessionId}`;
+    try {
+      return await decisionStore().activateSession({
+        sessionId,
+        migrationId,
+        owner: "opensession-session-kernel",
+        leaseId: "native-session-v1",
+        leaseDurationMs: 10 * 365 * 24 * 60 * 60_000,
+      });
+    } catch (error) {
+      if (!(error instanceof ConditionalConflictError)) throw error;
+      const raced = await decisionStore().head(sessionId);
+      if (!raced || raced.migrationId !== migrationId) throw error;
+      return raced;
+    }
+  };
   function post(message: KernelActorResponse): void {
     // Internal worker telemetry is consumed by the parent service and stripped
     // before the actor response crosses the HTTP boundary.
@@ -150,9 +173,8 @@ export function startSessionKernelActorWorker(): void {
           command.kind === "run_event" || command.kind === "creation_event" ||
           (["ask", "delivery", "gateway", "timer", "turn"].includes(command.kind) &&
             !!sessionId) || command.kind === "core";
-        const managedHead = managedKind && sessionId &&
-            process.env.OPENSESSION_FELTDB_SERVER_URL
-          ? await decisionStore().head(sessionId)
+        const managedHead = managedKind && sessionId
+          ? await ensureManagedHead(sessionId, !isReadReducer(command))
           : undefined;
         if (!managedHead && !isReadReducer(command) && sessionId) {
           const quarantine = host.quarantinedSession(sessionId);
@@ -394,8 +416,11 @@ export function startSessionKernelActorWorker(): void {
         const route = routedStoreCall(request.method, request.args, host);
         const { sessionId } = route;
         requestSessionId = sessionId;
-        const managedHead = sessionId && process.env.OPENSESSION_FELTDB_SERVER_URL
-          ? await decisionStore().head(sessionId)
+        const managedHead = sessionId
+          ? await ensureManagedHead(
+              sessionId,
+              route.mutation && request.method === "appendChange",
+            )
           : undefined;
         if (
           !managedHead &&
@@ -600,7 +625,7 @@ export function startSessionKernelActorWorker(): void {
       request.effectKinds,
       request.limit,
     );
-    if (!process.env.OPENSESSION_FELTDB_SERVER_URL) return legacy;
+    if (!managedFeltDbConfigured()) return legacy;
     const sessionIds = [...new Set([
       ...legacy.timers.map((timer) => timer.sessionId),
       ...legacy.outbox.map((item) => item.sessionId),
@@ -659,7 +684,7 @@ export function startSessionKernelActorWorker(): void {
         // every quarantined session into an endless client ack-retry loop that
         // surfaced to users as `Internal error handling "command_ack"` on
         // every reconnect for as long as the quarantine stood.
-        if (process.env.OPENSESSION_FELTDB_SERVER_URL) {
+        if (managedFeltDbConfigured()) {
           void decisionStore().head(request.sessionId).then(async (head) => {
             if (head)
               await new FeltDbCommandStore(decisionStore()).acknowledge(

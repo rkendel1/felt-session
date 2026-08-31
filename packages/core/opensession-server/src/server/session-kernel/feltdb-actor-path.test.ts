@@ -181,6 +181,10 @@ authorityTest("Session Kernel actor to FeltDB authority", () => {
         "SELECT COUNT(*) AS count FROM session_kernel_changes WHERE session_id = ?",
       ).get("ordered-session") as { count: number };
       expect(mirror.count).toBe(0);
+      const placement = sqlite.query(
+        "SELECT COUNT(*) AS count FROM session_kernel_placements WHERE session_id = ?",
+      ).get("ordered-session") as { count: number };
+      expect(placement.count).toBe(0);
     } finally {
       sqlite.close();
     }
@@ -202,6 +206,12 @@ authorityTest("Session Kernel actor to FeltDB authority", () => {
       "opensession_kernel_run_states",
     ).get("ordered-session");
     expect(state).toMatchObject({ changeSeq: 3, __version: 3 });
+    const head = await db.collection<{ migrationId: string }>(
+      "opensession_kernel_sessions",
+    ).get("ordered-session");
+    expect(head).toMatchObject({
+      migrationId: "opensession-kernel-native-v1:ordered-session",
+    });
   }, 30_000);
 
   test("keeps stale actor conflict typed and commits zero losing writes", async () => {
