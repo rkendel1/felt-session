@@ -1,6 +1,6 @@
 /**
- * Session history index — the sweeper that keeps ~/.opensession-search.db
- * (session-search-store.ts) current, and the runtime singleton the
+ * Session history index — the sweeper that keeps the managed FeltDB search
+ * projection current, and the runtime singleton the
  * opensession-search MCP tools + /api/search/history route query.
  *
  * Design (borrowed from Cerebras' knowledge-base writeup): don't index raw
@@ -23,8 +23,6 @@
  * interval — same shape as goal-runner's ticker.
  */
 
-import { stateDir } from "./paths";
-import { existsSync, unlinkSync } from "node:fs";
 import type { StateFirstDB } from "@feltdb/core";
 import {
 	getCachedSessions,
@@ -34,19 +32,12 @@ import { mergedSessionTranscriptAsync } from "./sessions";
 import { oneShot } from "./one-shot";
 import { audit } from "./audit";
 import { isDevInstance } from "./dev-mode";
-import {
-	SessionSearchStore,
-	type SearchHit,
-	type SearchRecord,
-} from "./session-search-store";
+import type { SearchHit, SearchRecord } from "./session-search-store";
 import { ManagedSessionSearchStore } from "./managed-session-search-store";
 import { foldContext, foldFamilies, type Folded } from "./session-family";
 import type { TranscriptEntry, UnifiedSession } from "./types";
 
 const g = globalThis as any;
-
-const DB_PATH =
-	process.env.OPENSESSION_SEARCH_DB || stateDir("search.db");
 
 const SWEEP_MS = 10 * 60_000;
 const FIRST_SWEEP_DELAY_MS = 90_000;
@@ -67,23 +58,9 @@ export function searchIndex(): ManagedSessionSearchStore {
 	return g.__sessionSearchStore;
 }
 
-const SEARCH_MIGRATION = "session-search-sqlite-to-managed-feltdb-v1";
-
 export async function initializeManagedSessionSearch(db: StateFirstDB): Promise<void> {
 	const store = new ManagedSessionSearchStore(db);
 	await store.initialize();
-	if (!await db.collection<{ id: string }>("opensession_migrations").get(SEARCH_MIGRATION)) {
-		if (existsSync(DB_PATH)) {
-			const legacy = new SessionSearchStore(DB_PATH);
-			try { await store.upsertMany(legacy.allRecords()); }
-			finally { legacy.close(); }
-		}
-		await db.transaction((tx) => {
-			tx.collection("opensession_migrations").set(SEARCH_MIGRATION,
-				{ id: SEARCH_MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
-		}, { transactionId: `opensession:migration:${SEARCH_MIGRATION}` });
-	}
-	for (const path of [DB_PATH, `${DB_PATH}-wal`, `${DB_PATH}-shm`]) if (existsSync(path)) unlinkSync(path);
 	g.__sessionSearchStore = store;
 }
 

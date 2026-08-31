@@ -14,12 +14,11 @@ import {
   validateOptionalDate,
   validateSource,
   validateSummary,
-} from "./store";
+} from "./validation";
 import { MEMORY_KINDS, MEMORY_STATES, MEMORY_TIERS, type CreateMemoryInput,
   type MemoryFilters, type MemoryPage, type MemoryRecord, type MemorySearchOptions,
   type MemoryState, type MemoryStats, type PageOptions, type RelatedCandidate,
   type UpdateMemoryInput } from "./types";
-import type { LegacySqliteMemorySnapshot } from "./store";
 
 const RECORDS = "opensession_memory_records";
 const ALIASES = "opensession_memory_legacy_aliases";
@@ -70,26 +69,6 @@ export class ManagedMemoryStore {
     for (const alias of await this.db.collection<LegacyAlias>(ALIASES).all()) this.aliases.set(alias.id, alias);
     this.meta.clear();
     for (const value of await this.db.collection<MetaRecord>(META).all()) this.meta.set(value.id, value);
-  }
-
-  async importSqliteSnapshot(snapshot: LegacySqliteMemorySnapshot): Promise<void> {
-    for (const record of snapshot.records) await this.db.transaction((tx) => {
-      tx.collection<MemoryRecord>(RECORDS).set(record.id, record);
-    }, { transactionId: `opensession:memory:sqlite-record:${record.id}` });
-    for (const item of snapshot.aliases) {
-      const id = aliasId(item.sourceKey, item.legacyId);
-      const alias: LegacyAlias = { id, ...item };
-      await this.db.transaction((tx) => {
-        tx.collection<LegacyAlias>(ALIASES).set(id, alias);
-      }, { transactionId: `opensession:memory:sqlite-alias:${id}` });
-    }
-    for (const item of snapshot.metadata) {
-      const record: MetaRecord = { id: item.key, value: item.value, updatedAt: item.updatedAt };
-      await this.db.transaction((tx) => {
-        tx.collection<MetaRecord>(META).set(item.key, record);
-      }, { transactionId: `opensession:memory:sqlite-meta:${Buffer.from(item.key).toString("base64url")}` });
-    }
-    await this.initialize();
   }
 
   get(id: string): MemoryRecord | null {

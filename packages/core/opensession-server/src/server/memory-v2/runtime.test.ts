@@ -4,7 +4,6 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { __setMemoryDirForTest, saveScope } from "../../agents/slack/memory";
-import { MemoryStore } from "./store";
 import {
 	closeMemoryRuntime,
 	ensureMemoryV2Ready,
@@ -41,23 +40,6 @@ afterEach(() => {
 });
 
 describe("memory v2 runtime migration", () => {
-	test("imports the SQLite authority and removes its database files", async () => {
-		closeMemoryRuntime();
-		const path = process.env.OPENSESSION_MEMORY_DB!;
-		const legacy = new MemoryStore(path);
-		const created = legacy.create({
-			scopeKey: "workspace",
-			summary: "A fact from the retired SQLite authority.",
-			kind: "reference",
-			tier: "retrievable",
-			source: { type: "settings" },
-		});
-		legacy.close();
-		await initializeManagedMemory(createFeltDB({ namespace: crypto.randomUUID(), memory: true }));
-		expect((await memoryStore()).get(created.id)?.summary).toBe(created.summary);
-		expect(Bun.file(path).exists()).resolves.toBe(false);
-	});
-
 	test("seals a verified import and survives JSON cleanup plus restart", async () => {
 		const file = join(legacyDir, "repo-opensession.json");
 		writeFileSync(file, JSON.stringify({ entries: [{

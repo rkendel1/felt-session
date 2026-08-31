@@ -33,7 +33,7 @@ let fakeEngineMod: typeof import("./testing/fake-engine");
 let ocTranscript: typeof import("./transcript-persistence");
 let transcriptStoreMod: typeof import("./transcript-store");
 let memoryV2: typeof import("./memory-v2/runtime");
-let testSessionListStore: import("./session-list-store").SessionListStore | null =
+let testSessionListStore: import("./managed-session-list-store").ManagedSessionListStore | null =
 	null;
 let restoreSessionListStore: (() => void) | null = null;
 let restoreSessionsDir: (() => void) | null = null;
@@ -66,9 +66,14 @@ beforeAll(async () => {
 	const prevDir = paths.__setSessionsDirForTest(tmp);
 	restoreSessionsDir = () => paths.__setSessionsDirForTest(prevDir);
 	const sessionListStoreMod = await import("./session-list-store");
-	testSessionListStore = new sessionListStoreMod.SessionListStore(
-		`${tmp}/session-list.sqlite`,
+	const [{ createFeltDB }, { ManagedSessionListStore }] = await Promise.all([
+		import("@feltdb/core"),
+		import("./managed-session-list-store"),
+	]);
+	testSessionListStore = new ManagedSessionListStore(
+		createFeltDB({ namespace: crypto.randomUUID(), memory: true }),
 	);
+	await testSessionListStore.initialize();
 	const previousSessionListStore =
 		sessionListStoreMod.__setSessionListStoreForTest(testSessionListStore);
 	restoreSessionListStore = () =>

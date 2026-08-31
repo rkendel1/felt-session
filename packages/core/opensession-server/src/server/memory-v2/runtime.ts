@@ -3,7 +3,6 @@ import { existsSync, readdirSync, unlinkSync } from "node:fs";
 import { audit } from "../audit";
 import { managedFeltDb } from "../managed-feltdb";
 import type { StateFirstDB } from "@feltdb/core";
-import { stateDir } from "../paths";
 import {
   clearMemoryImportDirty,
   memoryImportDirs,
@@ -11,7 +10,6 @@ import {
 } from "../../agents/slack/memory";
 import { importLegacyMemoryDirectory, type LegacyImportResult } from "./legacy-import";
 import { ManagedMemoryStore } from "./managed-store";
-import { MemoryStore as LegacySqliteMemoryStore } from "./store";
 
 export type MemoryRolloutMode = "v2";
 
@@ -25,7 +23,6 @@ let runtime: RuntimeStore | undefined;
 let configuredDb: StateFirstDB | undefined;
 const LEGACY_MIGRATION_SEAL = "legacy-migration-v2";
 const LEGACY_MIGRATION_VERSION = 2;
-const SQLITE_MIGRATION = "memory-v2-sqlite-to-managed-feltdb-v1";
 
 function removeLegacyMemoryFiles(sourceDirs: string[]): void {
   for (const directory of sourceDirs) {
@@ -43,10 +40,6 @@ export function memoryRolloutMode(): MemoryRolloutMode {
   return "v2";
 }
 
-export function memoryDatabasePath(): string {
-  return process.env.OPENSESSION_MEMORY_DB || `${stateDir("memory")}/memory-v2.sqlite`;
-}
-
 /** Lazily acquire the database. Importing this module has no live effects. */
 export async function memoryStore(): Promise<ManagedMemoryStore> {
   if (runtime) { await runtime.initialized; return runtime.store; }
@@ -61,22 +54,7 @@ export async function initializeManagedMemory(
 ): Promise<void> {
   closeMemoryRuntime();
   configuredDb = db;
-  const store = await memoryStore();
-  if (!await db.collection<{ id: string }>("opensession_migrations").get(SQLITE_MIGRATION)) {
-    const path = memoryDatabasePath();
-    if (existsSync(path)) {
-      const legacy = new LegacySqliteMemoryStore(path);
-      try { await store.importSqliteSnapshot(legacy.migrationSnapshot()); }
-      finally { legacy.close(); }
-    }
-    await db.transaction((tx) => {
-      tx.collection("opensession_migrations").set(SQLITE_MIGRATION,
-        { id: SQLITE_MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
-    }, { transactionId: `opensession:migration:${SQLITE_MIGRATION}` });
-  }
-  for (const path of [memoryDatabasePath(), `${memoryDatabasePath()}-wal`, `${memoryDatabasePath()}-shm`]) {
-    if (existsSync(path)) unlinkSync(path);
-  }
+  await memoryStore();
 }
 
 /**
