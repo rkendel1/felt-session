@@ -2017,7 +2017,7 @@ async function* withRunJournal(
     }
     sourceCompleted = true;
   } finally {
-    if (sourceCompleted && sawTerminal) journalClear(record.runKey);
+    if (sourceCompleted && sawTerminal) await journalClear(record.runKey);
     else if (sourceCompleted) await journalRecordAbnormalCompletion(record);
     touch();
   }
@@ -2140,7 +2140,7 @@ export function makeRemoteSandbox(parts: RemoteSandboxParts): Sandbox {
           // never-dispatched launch instead of reconciling an ended owner.
           handle?.ended === true
         ) {
-          journalClearIfLineage(record);
+          await journalClearIfLineage(record);
           handle?.abandon();
           unregisterRunToken(spec.rpcToken);
           unregisterRunWsHost(spec.hostId);

@@ -14,8 +14,8 @@
  * wait until a client reattaches, and the terminal state lands in meta.json so
  * a rebooting opensession can finish the bookkeeping even if this process is gone.
  *
- * The run journal is redirected to a per-host file (OPENSESSION_RUN_JOURNAL) so
- * concurrent hosts never read-modify-write the shared active-runs.json.
+ * The server owns durable run recovery in managed FeltDB. This detached worker
+ * keeps only an ephemeral FeltDB view for runner-local lifecycle bookkeeping.
  */
 
 import { existsSync, unlinkSync, writeFileSync } from "fs";
@@ -63,6 +63,13 @@ if (existsSync(`${hostDir}/cancelled`)) {
 process.env.OPENSESSION_RUN_JOURNAL ||=
   process.env.OPENSESSION_RUN_JOURNAL || `${hostDir}/journal.json`;
 process.env.OPENSESSION_RUN_JOURNAL = process.env.OPENSESSION_RUN_JOURNAL;
+
+const { createFeltDB } = await import("@feltdb/core");
+const { initializeManagedRunJournal } = await import("../server/run-journal");
+await initializeManagedRunJournal(createFeltDB({
+  namespace: `detached-run-host-${crypto.randomUUID()}`,
+  memory: true,
+}));
 
 const {
   runAgent,

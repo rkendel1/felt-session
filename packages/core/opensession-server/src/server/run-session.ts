@@ -223,9 +223,9 @@ if (!interruptExecutorGlobal.__opensessionTurnOutcomeProjectionExecutorRegistere
 if (!interruptExecutorGlobal.__opensessionInterruptExecutorRegistered) {
 	registerSessionEffectExecutor("delivery_interrupt_cancel", async (item) => {
     const { interruptId, dispatchId, runIds, runGeneration } = item.payload;
-    const retireConfirmedAbnormal = () => {
+    const retireConfirmedAbnormal = async () => {
       if (dispatchId)
-        journalRetireCancelledAbnormalAfterSettlement(
+        await journalRetireCancelledAbnormalAfterSettlement(
           item.sessionId,
           dispatchId,
         );
@@ -237,12 +237,12 @@ if (!interruptExecutorGlobal.__opensessionInterruptExecutorRegistered) {
 		);
     if (decision === "settled") return;
     if (decision === "confirmed") {
-      retireConfirmedAbnormal();
+      await retireConfirmedAbnormal();
       return;
     }
 		if (decision === "adopt_confirmed") {
 			await settlePromptInterrupt(item.sessionId, interruptId, "confirmed");
-      retireConfirmedAbnormal();
+      await retireConfirmedAbnormal();
 			return;
 		}
     const aborted = dispatchId
@@ -254,14 +254,14 @@ if (!interruptExecutorGlobal.__opensessionInterruptExecutorRegistered) {
     const outcome =
       aborted || decision === "retry" ? "confirmed" : "not_aborted";
 		await settlePromptInterrupt(item.sessionId, interruptId, outcome);
-    if (outcome === "confirmed") retireConfirmedAbnormal();
+    if (outcome === "confirmed") await retireConfirmedAbnormal();
 	});
 	interruptExecutorGlobal.__opensessionInterruptExecutorRegistered = true;
 }
 if (!interruptExecutorGlobal.__opensessionTurnCancelExecutorRegistered) {
   registerSessionEffectExecutor("turn_cancel", async (item) => {
     const { cancelId, dispatchId, runGeneration } = item.payload;
-    const retireAbsentInProcessOwner = () => {
+    const retireAbsentInProcessOwner = async () => {
       const owner = activeRunRecords().find(
         (run) => run.osSessionId === item.sessionId && run.runKey === dispatchId,
       );
@@ -271,7 +271,7 @@ if (!interruptExecutorGlobal.__opensessionTurnCancelExecutorRegistered) {
         !owner.runnerId &&
         !owner.sandboxId &&
         !isAgentRunTokenAdmitted(dispatchId)
-      ) journalClearIfLineage(owner);
+      ) await journalClearIfLineage(owner);
     };
     const decision = await sessionTurn({
       op: "begin_cancel_effect",
@@ -281,11 +281,11 @@ if (!interruptExecutorGlobal.__opensessionTurnCancelExecutorRegistered) {
     });
     if (decision === "missing") return;
     if (decision === "settled") {
-      journalRetireCancelledAbnormalAfterSettlement(
+      await journalRetireCancelledAbnormalAfterSettlement(
         item.sessionId,
         dispatchId,
       );
-      retireAbsentInProcessOwner();
+      await retireAbsentInProcessOwner();
       return;
     }
     const settle = async (outcome: "confirmed" | "not_aborted"): Promise<boolean> => {
@@ -296,7 +296,7 @@ if (!interruptExecutorGlobal.__opensessionTurnCancelExecutorRegistered) {
         outcome,
       });
       if (!settled) return false;
-      journalRetireCancelledAbnormalAfterSettlement(
+      await journalRetireCancelledAbnormalAfterSettlement(
         item.sessionId,
         dispatchId,
       );
@@ -322,7 +322,7 @@ if (!interruptExecutorGlobal.__opensessionTurnCancelExecutorRegistered) {
     // A pre-engine in-process journal cannot have survived this gateway boot.
     // Retire it only after actor settlement. Detached host/Runner/sandbox
     // records stay for their attached source to complete naturally.
-    retireAbsentInProcessOwner();
+    await retireAbsentInProcessOwner();
   });
   interruptExecutorGlobal.__opensessionTurnCancelExecutorRegistered = true;
 }

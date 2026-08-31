@@ -1102,7 +1102,7 @@ async function* withRunJournal(
     }
     sourceCompleted = true;
   } finally {
-    if (sourceCompleted && sawTerminal) journalClear(record.runKey);
+    if (sourceCompleted && sawTerminal) await journalClear(record.runKey);
     else if (sourceCompleted) await journalRecordAbnormalCompletion(record);
     touchStateActivity(record.sandboxId!);
     if (sawDone) schedulePostRunSnapshot(record.sandboxId!);
@@ -1222,7 +1222,7 @@ function makeDockerSandbox(
           // never-dispatched launch instead of reconciling an ended owner.
           handle?.ended === true;
         if (definitelyNotDispatched) {
-          journalClearIfLineage(record);
+          await journalClearIfLineage(record);
           handle?.abandon();
           unregisterRunToken(spec.rpcToken);
           if (spec.wsToken) unregisterRunWsHost(spec.hostId);

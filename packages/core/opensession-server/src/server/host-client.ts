@@ -467,7 +467,7 @@ async function* hostedEventsWithJournal(
     }
     sourceCompleted = true;
   } finally {
-    if (handle.ended && sourceCompleted && sawTerminal) journalClear(record.runKey);
+    if (handle.ended && sourceCompleted && sawTerminal) await journalClear(record.runKey);
     else if (handle.ended && sourceCompleted)
       await hostedKernelCall(spec, "abnormal_completion_journal", () =>
         journalRecordAbnormalCompletion(record),
@@ -609,7 +609,7 @@ async function spawnHostRun(
       // The HostHandle ctor registered its host-registry control. Drop it only
       // after absence is proven; uncertain launches must remain visibly busy.
       handle?.abandon();
-      journalClear(spec.hostId);
+      await journalClear(spec.hostId);
       unregisterRunToken(rpcToken);
       try {
         rmSync(dir, { recursive: true, force: true });
@@ -1768,7 +1768,7 @@ export async function resumeLocalHostRun(
         yield event;
       }
     } finally {
-      if (handle.ended) journalClear(run.runKey);
+      if (handle.ended) await journalClear(run.runKey);
     }
   })();
 }

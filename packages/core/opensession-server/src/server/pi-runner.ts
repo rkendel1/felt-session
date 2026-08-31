@@ -2856,7 +2856,7 @@ async function* runPiAttempt(
     // Journal survives ONLY a mid-turn teardown (boot's continuation
     // re-prompt); a reached terminal or a user cancel clears it.
     if (journal?.osSessionId && (reachedTerminal || abort.signal.aborted)) {
-      journalClear(runKey);
+      await journalClear(runKey);
     }
   }
 }

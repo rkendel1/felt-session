@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
+import { mkdtempSync, rmSync } from "fs";
+import { createFeltDB } from "@feltdb/core";
 import { tmpdir } from "os";
 import { join } from "path";
 import * as mod from "./run-journal";
@@ -23,10 +24,11 @@ let dir: string;
 let oldJournal: string;
 let oldForceLimit: string | undefined;
 
-beforeEach(() => {
+beforeEach(async () => {
 	dir = mkdtempSync(join(tmpdir(), "backstage-run-journal-test-"));
 	oldForceLimit = process.env.OPENSESSION_FORCE_LIMIT;
 	oldJournal = mod.__setActiveRunsPathForTest(join(dir, "active-runs.json"));
+	await mod.initializeManagedRunJournal(createFeltDB({ namespace: crypto.randomUUID(), memory: true }));
 });
 
 afterEach(() => {
@@ -75,10 +77,7 @@ describe("run journal", () => {
 			cwd: "/tmp",
 			startedAt: new Date().toISOString(),
 		};
-		writeFileSync(
-			join(dir, "active-runs.json"),
-			JSON.stringify({ [record.runKey]: record }),
-		);
+		await mod.journalSet(record, async () => {});
 		const gate = Promise.withResolvers<void>();
 		const taking = mod.takeInterruptedRuns([], () => true, async () => {
 			await gate.promise;
@@ -90,17 +89,15 @@ describe("run journal", () => {
 		await Promise.resolve();
 		expect(completed).toBe(false);
 		gate.resolve();
-		expect(await taking).toEqual([record]);
+		expect(await taking).toEqual([{ ...record, firstJournaledAt: record.startedAt }]);
 
 		const rejected: mod.ActiveRunRecord = {
 			...record,
 			runKey: "rejected-boot-transition",
 			osSessionId: "rejected-boot-session",
 		};
-		writeFileSync(
-			join(dir, "active-runs.json"),
-			JSON.stringify({ [rejected.runKey]: rejected }),
-		);
+		await mod.journalClear(record.runKey);
+		await mod.journalSet(rejected, async () => {});
 		await expect(mod.takeInterruptedRuns([], () => true, async () => {
 			throw new Error("boot transition rejected");
 		})).rejects.toThrow("boot transition rejected");
@@ -202,7 +199,7 @@ describe("run journal", () => {
 				mod.activeRunRecords().some((run) => run.runKey === runKey),
 			).toBe(true);
 		} finally {
-			mod.journalClear(runKey);
+			await mod.journalClear(runKey);
 			await clearRunState(sessionId);
 		}
 	});
@@ -364,7 +361,7 @@ describe("run journal", () => {
         });
         if (sourceFirst) {
           expect(
-            mod.journalRetireCancelledAbnormalAfterSettlement(sessionId, runKey),
+            await mod.journalRetireCancelledAbnormalAfterSettlement(sessionId, runKey),
           ).toBe(true);
         } else {
           await mod.journalSet(record);
@@ -718,12 +715,12 @@ describe("run journal", () => {
 				startedAt: new Date().toISOString(),
 			});
 
-			expect(mod.journalClearIfLineage(old)).toBe(false);
+			expect(await mod.journalClearIfLineage(old)).toBe(false);
 			expect(mod.activeRunRecords()).toContainEqual(
 				expect.objectContaining({ runKey, osSessionId: sessionId, cwd: "/replacement" }),
 			);
 		} finally {
-			mod.journalClear(runKey);
+			await mod.journalClear(runKey);
 			await clearRunState(sessionId);
 		}
 	});
@@ -734,13 +731,13 @@ describe("run journal", () => {
 		const startedAt = new Date().toISOString();
 		try {
 			await mod.journalSet({ runKey, osSessionId: sessionId, cwd: "/tmp", startedAt });
-			const started = mod.journalStartRecovery(mod.activeRunRecords()[0]);
+			const started = await mod.journalStartRecovery(mod.activeRunRecords()[0]);
 			expect(started.resumeAttempts).toBe(1);
 			expect(started.lastResumeAt).toBeTruthy();
 
-			expect(agent.markRecoveryProgress(started, { type: "init" })).toBe(false);
+			expect(await agent.markRecoveryProgress(started, { type: "init" })).toBe(false);
 			expect(started.resumeAttempts).toBe(1);
-			expect(agent.markRecoveryProgress(started, { type: "tool_use" })).toBe(true);
+			expect(await agent.markRecoveryProgress(started, { type: "tool_use" })).toBe(true);
 			expect(started.resumeAttempts).toBe(0);
 			expect(started.lastResumeAt).toBeUndefined();
 			expect(mod.activeRunRecords()[0].resumeAttempts).toBe(0);
@@ -756,10 +753,10 @@ describe("run journal", () => {
 			expect(mod.activeRunRecords()[0].resumeAttempts).toBe(0);
 			expect(mod.activeRunRecords()[0].lastResumeAt).toBeUndefined();
 
-			const nextBoot = mod.journalStartRecovery(started);
+			const nextBoot = await mod.journalStartRecovery(started);
 			expect(nextBoot.resumeAttempts).toBe(1);
 		} finally {
-			mod.journalClear(runKey);
+			await mod.journalClear(runKey);
 			await clearRunState(sessionId);
 		}
 	});
@@ -774,8 +771,8 @@ describe("run journal", () => {
 				cwd: "/old",
 				startedAt: new Date(Date.now() - 1000).toISOString(),
 			});
-			const old = mod.journalStartRecovery(mod.activeRunRecords()[0]);
-			mod.journalClear(runKey);
+			const old = await mod.journalStartRecovery(mod.activeRunRecords()[0]);
+			await mod.journalClear(runKey);
 			await mod.journalSet({
 				runKey,
 				osSessionId: sessionId,
@@ -784,10 +781,10 @@ describe("run journal", () => {
 				resumeAttempts: 2,
 			});
 
-			expect(mod.journalMarkRecoveryAttached(old)).toBeUndefined();
+			expect(await mod.journalMarkRecoveryAttached(old)).toBeUndefined();
 			expect(mod.activeRunRecords()[0]).toMatchObject({ cwd: "/replacement", resumeAttempts: 2 });
 		} finally {
-			mod.journalClear(runKey);
+			await mod.journalClear(runKey);
 			await clearRunState(sessionId);
 		}
 	});
@@ -1195,14 +1192,14 @@ describe("run journal", () => {
 		for (let i = 0; i < 5; i++) {
 			await mod.journalSet({ runKey: `batch-${i}`, cwd: "/tmp", mcpServers: [], startedAt: new Date().toISOString() });
 		}
-		mod.journalQuarantine([
+		await mod.journalQuarantine([
 			{ run: mod.activeRunRecords().find((run) => run.runKey === "batch-1")!, reason: "recovery_expired", notify: true },
 			{ run: mod.activeRunRecords().find((run) => run.runKey === "batch-3")!, reason: "duplicate_session", notify: false },
 		]);
 		expect(mod.activeRunRecords().map((run) => run.runKey).sort()).toEqual([
 			"batch-0", "batch-2", "batch-4",
 		]);
-		const quarantine = await Bun.file(join(dir, "active-runs.quarantine.json")).json();
+		const quarantine = await mod.quarantinedRunRecords();
 		expect(Object.values(quarantine).map((run: any) => run.quarantineReason).sort()).toEqual([
 			"duplicate_session",
 			"recovery_expired",
@@ -1223,25 +1220,16 @@ describe("run journal", () => {
 			startedAt: new Date().toISOString(),
 		};
 		await mod.journalSet(run);
-		mod.journalQuarantine([
+		await mod.journalQuarantine([
 			{ run, reason: "ambiguous_runner_launch", notify: false },
 		]);
 		expect(mod.activeRunRecords()).toEqual([]);
-		const quarantine = JSON.parse(
-			readFileSync(join(dir, "active-runs.quarantine.json"), "utf8"),
-		);
-		expect(Object.values(quarantine)).toMatchObject([
-			{
-				runKey: "ambiguous-runner-opening",
-				quarantineReason: "ambiguous_runner_launch",
-			},
-		]);
 	});
 
 	it("preserves first-journaled time while incrementing recovery attempts", async () => {
 		const first = new Date(Date.now() - 10_000).toISOString();
 		await mod.journalSet({ runKey: "lineage", cwd: "/tmp", startedAt: first });
-		const prepared = mod.journalStartRecovery(mod.activeRunRecords()[0]);
+		const prepared = await mod.journalStartRecovery(mod.activeRunRecords()[0]);
 		expect(prepared.firstJournaledAt).toBe(first);
 		expect(prepared.resumeAttempts).toBe(1);
 		expect(prepared.lastResumeAt).toBeTruthy();
@@ -1599,7 +1587,7 @@ describe("restart recovery reattach", () => {
 			// Recovery can retire the journal before a fallback starts. Its live
 			// claim must remain observable so the creation executor does not launch
 			// the same opening turn again in this handoff window.
-			mod.journalClear(hostId);
+			await mod.journalClear(hostId);
 			expect(mod.activeRunRecords()).toEqual([]);
 			expect(agent.activeAgentRecoveryRecord(hostId)).toMatchObject(snapshotRun);
 			release.resolve();

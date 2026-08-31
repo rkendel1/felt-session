@@ -814,7 +814,7 @@ export async function executeCreationOpeningEffect(
 			item.sessionId,
 			item.payload.openingPromptEntryId,
 		);
-		journalClearIfLineage(openingJournal);
+		await journalClearIfLineage(openingJournal);
 		return;
 	}
 	const localRecovery =
@@ -1713,7 +1713,7 @@ export async function openCreatedSession(
 				record.promptEntryId === openingPromptEntryId &&
 				record.terminalFailure
 			)
-				journalClearIfLineage(record);
+				await journalClearIfLineage(record);
 		}
 	}
 }

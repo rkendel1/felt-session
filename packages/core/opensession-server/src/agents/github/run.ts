@@ -319,7 +319,7 @@ async function discardGithubRunRecord(
     void cancelAgentRun(bksId, run.claudeSessionId, run.runKey);
     for await (const _event of events) {}
   }
-  journalClearIfLineage(run);
+  await journalClearIfLineage(run);
 }
 
 /** Stop a detached turn whose surrounding GitHub workflow is no longer recoverable. */
@@ -452,11 +452,11 @@ export async function runGithubAgent(opts: GithubRunOpts): Promise<GithubRunResu
         );
         Object.assign(
           recoveredRun,
-          journalMarkRecoveryAttached(recoveredRun) || {},
+          (await journalMarkRecoveryAttached(recoveredRun)) || {},
         );
         events = reattached;
       } else {
-        journalClearIfLineage(recoveredRun);
+        await journalClearIfLineage(recoveredRun);
         console.warn(
           `[github-run] Detached host ${recoveredRun.hostId} is gone; resuming ${bksId} from its engine session`,
         );
@@ -559,7 +559,7 @@ export async function runGithubAgent(opts: GithubRunOpts): Promise<GithubRunResu
   // recovery record until durable outcome projection completes.
   if (!recoveryUncertain) {
     await recordRunOutcome(bksId, errorMsg || null);
-    if (recoveredRun) journalClearIfLineage(recoveredRun);
+    if (recoveredRun) await journalClearIfLineage(recoveredRun);
   }
   return {
     bksId,

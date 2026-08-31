@@ -1304,7 +1304,7 @@ async function settleDurableCancelForAbsentOwner(run: ActiveRunRecord): Promise<
   // to retire it; without the host proof this would be unsafe.
   if (cancel?.runId !== run.runKey && getRunState(run.osSessionId) !== "stopped")
     return false;
-  journalClearIfLineage(run);
+  await journalClearIfLineage(run);
   return true;
 }
 
@@ -1368,7 +1368,7 @@ export async function resumeInterruptedRuns(
           source: "recovery_fallback_settlement",
         });
       }
-      journalClear(run.runKey);
+      await journalClear(run.runKey);
       settledRunKeys.add(run.runKey);
       if (!activeRecoveryWorkerRunKeys.has(run.runKey)) untrackRecovery(run);
       return true;
@@ -1422,7 +1422,7 @@ export async function resumeInterruptedRuns(
     // before clearing its journal; otherwise a queue successor can overlap a
     // still-running predecessor.
     if (detached) return false;
-    journalClearIfLineage(run);
+    await journalClearIfLineage(run);
     return true;
   };
   const checkpointStoppedRecovery = async (
@@ -1582,7 +1582,7 @@ export async function resumeInterruptedRuns(
     // sweep). Resuming them generically would double-drive an auto-fix loop.
     if (run.kind?.startsWith("github-")) {
       rememberHandledSession(run);
-      journalClear(run.runKey);
+      await journalClear(run.runKey);
       if (run.osSessionId) await transitionRunState(run.osSessionId, "turn_end");
       continue;
     }
@@ -1591,7 +1591,7 @@ export async function resumeInterruptedRuns(
     // generic resume would double-drive the turn with no streamer attached.
     if (run.kind?.startsWith("slack")) {
       rememberHandledSession(run);
-      journalClear(run.runKey);
+      await journalClear(run.runKey);
       if (run.osSessionId) await transitionRunState(run.osSessionId, "turn_end");
       continue;
     }
@@ -1601,7 +1601,7 @@ export async function resumeInterruptedRuns(
     // child agent without its script would be noise.
     if (run.kind?.startsWith("workflow")) {
       rememberHandledSession(run);
-      journalClear(run.runKey);
+      await journalClear(run.runKey);
       if (run.osSessionId) await transitionRunState(run.osSessionId, "turn_end");
       continue;
     }
@@ -1633,7 +1633,7 @@ export async function resumeInterruptedRuns(
           releaseQueueSlot();
           for await (const event of events) {
             if (await checkpointStoppedRecovery(run)) return;
-            markRecoveryProgress(run, event);
+            await markRecoveryProgress(run, event);
             if (event.type === "done" || event.type === "error") {
               terminalSeen = (await settleRecovery(run, event)) || terminalSeen;
             } else await emitRecoveryEvent(run, event);
@@ -1723,7 +1723,7 @@ export async function resumeInterruptedRuns(
           releaseQueueSlot();
           for await (const event of events) {
             if (await checkpointStoppedRecovery(run)) return;
-            markRecoveryProgress(run, event);
+            await markRecoveryProgress(run, event);
             if (event.type === "done" || event.type === "error") {
               terminalSeen = (await settleRecovery(run, event)) || terminalSeen;
               recordRecovery(event.type === "done" ? "ok" : "failed", event.type);
@@ -1794,7 +1794,7 @@ export async function resumeInterruptedRuns(
               { run_key: run.runKey },
             );
           if (reattached) {
-            Object.assign(run, journalMarkRecoveryAttached(run) || {});
+            Object.assign(run, (await journalMarkRecoveryAttached(run)) || {});
             // Reaching this point proves the detached host is connected and this
             // worker owns its stream. The turn can remain quiet for minutes while
             // the model is working, so do not hold the single boot-admission slot
@@ -1819,7 +1819,7 @@ export async function resumeInterruptedRuns(
               await transitionRunState(run.osSessionId, "resume_reprompt", { run_key: run.runKey });
             // The replacement reuses this proven-absent lineage key so terminal
             // projection remains fenced to the actor owner. Drop the host record.
-            journalClear(run.runKey);
+            await journalClear(run.runKey);
             console.log(
               `[runner] Local run host ${run.hostId} is gone; resuming ${run.osSessionId || run.runKey} in-process`,
             );
@@ -1865,7 +1865,7 @@ export async function resumeInterruptedRuns(
             // engine has started. A live host released the slot when attached.
             releaseQueueSlot();
             if (await checkpointStoppedRecovery(run)) return;
-            markRecoveryProgress(run, event);
+            await markRecoveryProgress(run, event);
             if (event.type === "done" || event.type === "error") {
               terminalSeen = (await settleRecovery(run, event)) || terminalSeen;
             } else await emitRecoveryEvent(run, event);
@@ -1922,7 +1922,7 @@ export async function resumeInterruptedRuns(
           // claimed record now (runAgent's intake journalSet is the very next step,
           // so the unprotected window is one generator start, not the whole
           // adoption+probe phase the old wipe-on-take left open).
-          journalClear(run.runKey);
+          await journalClear(run.runKey);
           for await (const event of runAgent({
             prompt: run.prompt!,
             promptEntryId: run.promptEntryId,
@@ -1963,7 +1963,7 @@ export async function resumeInterruptedRuns(
             // first event confirms the replacement engine is running.
             releaseQueueSlot();
             if (await checkpointStoppedRecovery(run)) return;
-            markRecoveryProgress(run, event);
+            await markRecoveryProgress(run, event);
             if (event.type === "done" || event.type === "error") {
               terminalSeen = (await settleRecovery(run, event)) || terminalSeen;
             } else await emitRecoveryEvent(run, event);
@@ -2005,7 +2005,7 @@ export async function resumeInterruptedRuns(
         // The continuation reuses this proven-absent lineage key. Drop the
         // claimed record only now, AFTER the reattach probe settled: dying
         // mid-probe used to lose the run to the wipe-on-take (2026-07-27).
-        journalClear(run.runKey);
+        await journalClear(run.runKey);
         for await (const event of runAgent({
           prompt: repairingRecoveredResult
             ? wrapContext(
@@ -2051,7 +2051,7 @@ export async function resumeInterruptedRuns(
           // the engine emits, later interrupted sessions may begin recovery.
           releaseQueueSlot();
           if (await checkpointStoppedRecovery(run)) return;
-          markRecoveryProgress(run, event);
+          await markRecoveryProgress(run, event);
           if (event.type === "done" || event.type === "error") {
             recoverySettled = (await settleRecovery(run, event)) || recoverySettled;
           } else await emitRecoveryEvent(run, event);
@@ -2118,7 +2118,7 @@ export function recoveryKind(kind: string | undefined, suffix: "resume" | "rerun
  * user-visible work. Reset the consecutive-failure fuse at that point so a
  * later service restart recovers the live turn rather than mistaking it for a
  * repeatedly failing boot loop. Transport init and notices do not count. */
-export function markRecoveryProgress(run: ActiveRunRecord, event: StreamEvent): boolean {
+export async function markRecoveryProgress(run: ActiveRunRecord, event: StreamEvent): Promise<boolean> {
   if (
     (run.resumeAttempts ?? 0) <= 0 ||
     (event.type !== "text_chunk" &&
@@ -2127,7 +2127,7 @@ export function markRecoveryProgress(run: ActiveRunRecord, event: StreamEvent): 
   ) {
     return false;
   }
-  const progressed = journalMarkRecoveryAttached(run);
+  const progressed = await journalMarkRecoveryAttached(run);
   if (!progressed) return false;
   Object.assign(run, progressed);
   return true;

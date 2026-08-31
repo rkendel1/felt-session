@@ -252,7 +252,7 @@ export function makeFakeEngine(
         usage: { ...DEFAULT_USAGE, ...turn.usage },
       };
     } finally {
-      if (runKey) journalClear(runKey);
+      if (runKey) await journalClear(runKey);
     }
   }
 

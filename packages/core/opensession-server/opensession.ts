@@ -15,6 +15,7 @@ import { startWorktreeReaper } from "./src/server/worktree-reaper";
 import { startPortalReaper } from "./src/server/portal-supervisor";
 import { startRunnerPortalReaper } from "./src/server/runner-portals";
 import { initializeManagedRunnerPortals } from "./src/server/runner-portals";
+import { initializeManagedRunJournal } from "./src/server/run-journal";
 import { initializeManagedTodos, startTodoReminderTicker } from "./src/server/todos";
 import { loadActiveSessionsOnStartup as initializeManagedSlackSessions } from "./src/agents/slack/state";
 import { initializeManagedLinearSessions } from "./src/agents/linear/session";
@@ -197,6 +198,7 @@ const g = globalThis as any;
 // startup failure; there is deliberately no local fallback.
 if (!g.__opensessionBooted) {
 	const db = await initializeManagedFeltDb();
+	await initializeManagedRunJournal(db);
 	await initializeManagedWorkspaces(db);
 	await initializeManagedTodos(db);
 	await initializeManagedSlackSessions(db);

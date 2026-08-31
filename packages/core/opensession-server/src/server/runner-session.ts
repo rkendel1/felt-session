@@ -270,7 +270,7 @@ export async function maybeLaunchRunnerRun(
 				}
 				sourceCompleted = true;
 			} finally {
-        if (sourceCompleted && sawTerminal) journalClear(run.runKey);
+        if (sourceCompleted && sawTerminal) await journalClear(run.runKey);
 				else if (sourceCompleted) await journalRecordAbnormalCompletion(run);
 				setRunnerWorkload(runner.id, undefined, session.id);
 			}
@@ -288,7 +288,7 @@ export async function maybeLaunchRunnerRun(
 			// sent. Fence retries durably before retiring the prepared journal.
 			launchState = { ...launchState, phase: "rejected" };
 			writeJsonAtomic(launchStatePath, launchState);
-      journalClearIfLineage(run);
+      await journalClearIfLineage(run);
 		} else {
 			// Once launch admission may have crossed the Runner connection, absence
 			// is not proof of non-execution. Remove the record from boot recovery but
