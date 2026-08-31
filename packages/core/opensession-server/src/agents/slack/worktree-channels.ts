@@ -6,7 +6,10 @@
  */
 
 import { sendSlackMessage } from "./slack-api";
-import { writeJsonAtomic } from "../../server/shared/atomic-write";
+import { createHash } from "node:crypto";
+import { existsSync, readFileSync, unlinkSync } from "node:fs";
+import type { StateFirstDB } from "@feltdb/core";
+import { managedFeltDb } from "../../server/managed-feltdb";
 import { fetchWithTimeout } from "../../server/shared/fetch-with-timeout";
 import {
   findGitHubUsersForBranch,
@@ -17,6 +20,11 @@ import { worktreePathFor } from "../../server/worktree";
 
 const SLACK_BOT_TOKEN = process.env.SLACK_BOT_TOKEN;
 const WORKTREE_CHANNELS_FILE = `${SESSION_DIR}/worktree-channels.json`;
+const COLLECTION = "opensession_slack_worktree_channels";
+const MIGRATION = "slack-worktree-channels-json-to-managed-feltdb-v1";
+type WorktreeChannelRecord = { id: string; channelId: string; branch: string; updatedAt: number };
+let worktreeDb: StateFirstDB | undefined;
+const recordId = (channelId: string) => `slack_worktree_${createHash("sha256").update(channelId).digest("hex")}`;
 
 // ---------------------------------------------------------------------------
 // State: channel <-> branch mappings
@@ -29,30 +37,55 @@ export const branchToChannel = new Map<string, string>(); // branch -> channelId
 // Persistence
 // ---------------------------------------------------------------------------
 
-export async function saveWorktreeChannels(): Promise<void> {
-  const data: Record<string, string> = {};
-  for (const [channelId, branch] of worktreeChannels) {
-    data[channelId] = branch;
-  }
-  writeJsonAtomic(WORKTREE_CHANNELS_FILE, data);
+export async function setWorktreeChannel(channelId: string, branch: string): Promise<void> {
+  const db = worktreeDb ?? managedFeltDb();
+  const record: WorktreeChannelRecord = { id: recordId(channelId), channelId, branch, updatedAt: Date.now() };
+  await db.transaction((tx) => {
+    tx.collection<WorktreeChannelRecord>(COLLECTION).set(record.id, record);
+  }, { transactionId: `opensession:slack-worktree:set:${record.id}:${record.updatedAt}` });
+  worktreeChannels.set(channelId, branch);
+  branchToChannel.set(branch, channelId);
 }
 
-export async function loadWorktreeChannels(): Promise<void> {
-  try {
-    const file = Bun.file(WORKTREE_CHANNELS_FILE);
-    if (await file.exists()) {
-      const data = JSON.parse(await file.text()) as Record<string, string>;
-      for (const [channelId, branch] of Object.entries(data)) {
-        worktreeChannels.set(channelId, branch);
-        branchToChannel.set(branch, channelId);
-      }
-      console.log(
-        `[slack] Loaded ${worktreeChannels.size} worktree channel mapping(s)`
-      );
+export async function removeWorktreeChannel(channelId: string): Promise<void> {
+  const db = worktreeDb ?? managedFeltDb();
+  const branch = worktreeChannels.get(channelId);
+  const id = recordId(channelId);
+  await db.transaction((tx) => {
+    tx.collection<WorktreeChannelRecord>(COLLECTION).delete(id);
+  }, { transactionId: `opensession:slack-worktree:delete:${id}:${Date.now()}` });
+  worktreeChannels.delete(channelId);
+  if (branch) branchToChannel.delete(branch);
+}
+
+export async function loadWorktreeChannels(db: StateFirstDB = worktreeDb ?? managedFeltDb()): Promise<void> {
+  worktreeDb = db;
+  const migrations = db.collection<{ id: string }>("opensession_migrations");
+  if (!await migrations.get(MIGRATION)) {
+    let legacy: Record<string, string> = {};
+    try {
+      if (existsSync(WORKTREE_CHANNELS_FILE)) legacy = JSON.parse(readFileSync(WORKTREE_CHANNELS_FILE, "utf8"));
+    } catch {}
+    for (const [channelId, branch] of Object.entries(legacy)) {
+      if (!channelId || typeof branch !== "string" || !branch) continue;
+      const record: WorktreeChannelRecord = { id: recordId(channelId), channelId, branch, updatedAt: Date.now() };
+      await db.transaction((tx) => {
+        tx.collection<WorktreeChannelRecord>(COLLECTION).set(record.id, record);
+      }, { transactionId: `opensession:slack-worktree:migrate:${record.id}` });
     }
-  } catch (e) {
-    console.warn("[slack] Failed to load worktree channels:", e);
+    await db.transaction((tx) => {
+      tx.collection("opensession_migrations").set(MIGRATION, { id: MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
+    }, { transactionId: `opensession:migration:${MIGRATION}` });
+    if (existsSync(WORKTREE_CHANNELS_FILE)) unlinkSync(WORKTREE_CHANNELS_FILE);
   }
+  const records = await db.collection<WorktreeChannelRecord>(COLLECTION).all();
+  worktreeChannels.clear();
+  branchToChannel.clear();
+  for (const record of records) {
+    worktreeChannels.set(record.channelId, record.branch);
+    branchToChannel.set(record.branch, record.channelId);
+  }
+  console.log(`[slack] Loaded ${worktreeChannels.size} worktree channel mapping(s)`);
 }
 
 // ---------------------------------------------------------------------------

@@ -40,7 +40,8 @@ import {
   branchToChannel,
   branchToChannelName,
   loadWorktreeChannels,
-  saveWorktreeChannels,
+  removeWorktreeChannel,
+  setWorktreeChannel,
   createSlackChannel,
   archiveSlackChannel,
   setChannelTopic,
@@ -690,9 +691,7 @@ export class SlackAgent implements AgentModule {
         );
 
         // Save mapping
-        worktreeChannels.set(channelId, branch);
-        branchToChannel.set(branch, channelId);
-        await saveWorktreeChannels();
+        await setWorktreeChannel(channelId, branch);
 
         console.log(
           `[slack] Created and linked #${channelName} (${channelId}) -> ${branch}`
@@ -753,9 +752,7 @@ export class SlackAgent implements AgentModule {
         await archiveSlackChannel(channelId);
 
         // Clean up mappings
-        worktreeChannels.delete(channelId);
-        branchToChannel.delete(branch);
-        await saveWorktreeChannels();
+        await removeWorktreeChannel(channelId);
 
         // Clean up any sessions for this channel
         const sessionKey = channelId;
