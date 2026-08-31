@@ -82,6 +82,42 @@ export class FeltDbAskStore {
     return head && record?.decisionEpoch === head.decisionEpoch ? record.record : undefined;
   }
 
+  async entries(): Promise<Array<[string, unknown]>> {
+    const [records, heads] = await Promise.all([
+      this.allRecords(),
+      this.allHeads(),
+    ]);
+    const active = new Map(heads.map((head) => [head.sessionId, head.decisionEpoch]));
+    return records
+      .filter((record) => active.get(record.sessionId) === record.decisionEpoch)
+      .map((record) => [record.sessionId, record.record]);
+  }
+
+  private async allRecords(): Promise<AskRecord[]> {
+    return this.queryAll<AskRecord>(KERNEL_COLLECTIONS.asks, "sessionId");
+  }
+
+  private async allHeads(): Promise<VersionedSessionDecisionHead[]> {
+    return this.queryAll<VersionedSessionDecisionHead>(KERNEL_COLLECTIONS.sessions, "sessionId");
+  }
+
+  private async queryAll<T>(collection: string, orderField: string): Promise<T[]> {
+    const records: T[] = [];
+    let cursor: string | undefined;
+    do {
+      const page = await this.decisions.runtime().query<T>({
+        collection,
+        orderBy: [{ field: orderField, direction: "asc" }],
+        limit: 500,
+        ...(cursor ? { cursor } : {}),
+      });
+      records.push(...page.records);
+      cursor = page.exhausted ? undefined : page.nextCursor;
+      if (!page.exhausted && !cursor) throw new Error(`FeltDB ${collection} cursor is missing`);
+    } while (cursor);
+    return records;
+  }
+
   async set(commandId: string, sessionId: string, value: unknown, now = Date.now()): Promise<void> {
     const [head, prior] = await Promise.all([
       this.decisions.head(sessionId),

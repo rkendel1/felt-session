@@ -86,7 +86,8 @@ function centralStoreFailure(error: unknown): Error & { code: string } {
  * the global wake index conservative and repairable after a crash.
  */
 export class SessionKernelStoreHost {
-  readonly central: SessionKernelStore;
+  private centralStore: SessionKernelStore | undefined;
+  private readonly centralProxy: SessionKernelStore;
   private readonly isolated = new Map<string, SessionKernelStore>();
   private readonly transcripts = new Map<string, TranscriptStore>();
   private runtimeCursor = "";
@@ -108,7 +109,25 @@ export class SessionKernelStoreHost {
   ) {
     if (!Number.isInteger(maxOpenSessionStores) || maxOpenSessionStores > 1_024)
       throw new Error("Invalid active session store bound");
-    this.central = new SessionKernelStore(centralPath);
+    this.centralProxy = new Proxy({} as SessionKernelStore, {
+      get: (_target, property) => {
+        const store = this.openCentral();
+        const value = Reflect.get(store, property, store);
+        return typeof value === "function" ? value.bind(store) : value;
+      },
+      set: (_target, property, value) =>
+        Reflect.set(this.openCentral(), property, value),
+      defineProperty: (_target, property, attributes) =>
+        Reflect.defineProperty(this.openCentral(), property, attributes),
+    });
+  }
+
+  get central(): SessionKernelStore {
+    return this.centralProxy;
+  }
+
+  private openCentral(): SessionKernelStore {
+    return (this.centralStore ??= new SessionKernelStore(this.centralPath));
   }
 
   metrics(): SessionKernelStoreHostMetrics {
@@ -129,7 +148,8 @@ export class SessionKernelStoreHost {
     this.transcripts.clear();
     for (const store of this.isolated.values()) store.close();
     this.isolated.clear();
-    this.central.close();
+    this.centralStore?.close();
+    this.centralStore = undefined;
   }
 
   private centralOperation<T>(operation: () => T): T {

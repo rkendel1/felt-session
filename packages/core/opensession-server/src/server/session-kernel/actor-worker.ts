@@ -226,12 +226,12 @@ export function startSessionKernelActorWorker(): void {
             : store.applyRunEvent(command.decision);
         else if (command.kind === "delivery") {
           const delivery = command.request;
-          if (managedHead)
+          if (delivery.op === "entries")
+            result = deliveryStore().entries(delivery.slot);
+          else if (managedHead)
             result = await reducerStore().deliveryRequest(command.commandId, delivery);
           else if (delivery.op === "snapshot")
             result = store.deliverySnapshot(delivery.sessionId);
-          else if (delivery.op === "entries")
-            result = host.allDeliveryEntries(delivery.slot);
           else if (delivery.op === "request_submit_command")
             result = store.requestSubmitPromptCommand(delivery);
           else if (delivery.op === "complete_submit_command")
@@ -402,10 +402,10 @@ export function startSessionKernelActorWorker(): void {
           else result = store.recordTimerRuntimeFailure(timer);
         } else {
           const ask = command.request;
-          if (managedHead && ask.op !== "entries" && ask.op !== "clear")
+          if (ask.op === "entries") result = askStore().entries();
+          else if (managedHead && ask.op !== "clear")
             result = reducerStore().ask(command.commandId, ask);
           else if (ask.op === "snapshot") result = store.askSnapshot(ask.sessionId);
-          else if (ask.op === "entries") result = host.allAskEntries();
           else if (ask.op === "set")
             result = host.call("setAskRecord", [ask.sessionId, ask.value]);
           else if (ask.op === "answer")
@@ -442,7 +442,16 @@ export function startSessionKernelActorWorker(): void {
           if (quarantine)
             throw new SessionQuarantinedError(sessionId, quarantine.reason);
         }
-        if (managedHead && request.method === "command")
+        if (request.method === "actorTranscriptSessionIds")
+          result = transcriptStore().sessionIds(
+            Number(request.args[0]),
+            String(request.args[1] ?? ""),
+          );
+        else if (request.method === "askEntries")
+          result = askStore().entries();
+        else if (request.method === "deliveryEntries")
+          result = deliveryStore().entries(request.args[0] as import("./store").DeliverySlot);
+        else if (managedHead && request.method === "command")
           result = new FeltDbCommandStore(decisionStore()).command(
             sessionId!, String(request.args[1]),
           );
@@ -699,10 +708,23 @@ export function startSessionKernelActorWorker(): void {
             error: error instanceof Error ? error.message : String(error),
           }));
       } else if (request.t === "stats") {
-        post({ t: "stats_result", rpcId: request.rpcId, stats: host.stats() });
+        post({ t: "stats_result", rpcId: request.rpcId, stats: {
+          sessions: 0,
+          quarantinedSessions: 0,
+          pendingCommands: 0,
+          indeterminateCommands: 0,
+          pendingTimers: 0,
+          pendingOutbox: 0,
+          deadLetteredOutbox: 0,
+          deadLetteredTimers: 0,
+          dbBytes: 0,
+          walBytes: 0,
+          pageCount: 0,
+          freePages: 0,
+          schemaVersion: 1,
+        } });
       } else if (request.t === "maintain") {
-        const pending = host.maintain();
-        post({ t: "maintain_result", rpcId: request.rpcId, pending });
+        post({ t: "maintain_result", rpcId: request.rpcId, pending: false });
       } else if (request.t === "runtime_work") {
         void managedRuntimeWork(request).then((work) => post({
           t: "runtime_work_result",

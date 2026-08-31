@@ -147,6 +147,17 @@ export class FeltDbTranscriptStore {
       .get(sessionId)) ?? undefined;
   }
 
+  async sessionIds(limit = 100, afterSessionId = ""): Promise<string[]> {
+    if (limit <= 0) return [];
+    const page = await this.db.query<StoredTranscriptHead>({
+      collection: KERNEL_COLLECTIONS.transcriptHeads,
+      where: afterSessionId ? [{ field: "sessionId", gt: afterSessionId }] : [],
+      orderBy: [{ field: "sessionId", direction: "asc" }],
+      limit: Math.min(100, Math.max(1, Math.floor(limit))),
+    });
+    return page.records.map((head) => head.sessionId);
+  }
+
   async applyMutation(
     request: LegacyMutation,
     now = Date.now(),

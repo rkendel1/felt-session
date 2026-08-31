@@ -96,6 +96,37 @@ export class FeltDbDeliveryStore {
     );
   }
 
+  async entries(slot: DeliverySlot): Promise<Array<[string, unknown]>> {
+    const records: StoredDelivery[] = [];
+    const heads: VersionedSessionDecisionHead[] = [];
+    for (const [collection, target] of [
+      [KERNEL_COLLECTIONS.delivery, records],
+      [KERNEL_COLLECTIONS.sessions, heads],
+    ] as const) {
+      let cursor: string | undefined;
+      do {
+        const page = await this.decisions.runtime().query<any>({
+          collection,
+          orderBy: [{ field: "sessionId", direction: "asc" }],
+          limit: 500,
+          ...(cursor ? { cursor } : {}),
+        });
+        target.push(...page.records as never[]);
+        cursor = page.exhausted ? undefined : page.nextCursor;
+        if (!page.exhausted && !cursor) throw new Error(`FeltDB ${collection} cursor is missing`);
+      } while (cursor);
+    }
+    const active = new Map(heads.map((head) => [head.sessionId, head.decisionEpoch]));
+    return records.flatMap((record): Array<[string, unknown]> => {
+      if (active.get(record.sessionId) !== record.decisionEpoch) return [];
+      const state = deliveryState(record);
+      const value = slot === "queued" ? state.queued : slot === "steered" ? state.steered : state.dispatch;
+      return value === undefined || (Array.isArray(value) && value.length === 0)
+        ? []
+        : [[record.sessionId, value]];
+    });
+  }
+
   private async mutate<Result>(input: {
     commandId: string;
     sessionId: string;
