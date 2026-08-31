@@ -130,7 +130,7 @@ export async function handleAuthRoutes(
 		}
 		if (result.status !== "ok") return Response.json(result);
 		if (!teamMemberForLogin(result.login)) {
-			removeGithubAccount(result.login);
+			await removeGithubAccount(result.login);
 			return Response.json({
 				status: "error",
 				error: `GitHub account @${result.login} is not a workspace member. Add it in Settings > Members before enabling sign-in.`,

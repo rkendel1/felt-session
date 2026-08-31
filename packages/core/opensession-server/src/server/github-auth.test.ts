@@ -8,11 +8,13 @@
  */
 
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { createFeltDB, type StateFirstDB } from "@feltdb/core";
 import {
+  __githubAccountsForTest,
+  __setGithubAccountsForTest,
   connectedGithubAccounts,
   GITHUB_RUN_AUTH_FILE_ENV,
   githubAuthEnv,
@@ -23,6 +25,7 @@ import {
   githubUserAuthActive,
   githubUserAuthSettings,
   githubUserLoginForRun,
+  initializeManagedGithubAuth,
   pollGithubDeviceFlow,
   refreshExpiringGithubTokens,
   removeGithubAccount,
@@ -61,8 +64,9 @@ for (const k of ENV_KEYS) saved[k] = process.env[k];
 
 let dir: string;
 let webSessionsDb: StateFirstDB;
+let githubAuthDb: StateFirstDB;
 
-beforeEach(() => {
+beforeEach(async () => {
   dir = mkdtempSync(join(tmpdir(), "bks-github-auth-test-"));
   for (const k of ENV_KEYS) delete process.env[k];
   // Isolate from the machine's real ~/.opensession/config.json (which may
@@ -71,6 +75,8 @@ beforeEach(() => {
   process.env.OPENSESSION_GITHUB_AUTH_STORE = join(dir, "github-auth.json");
   process.env.OPENSESSION_WEB_SESSIONS_STORE = join(dir, "web-sessions.json");
   webSessionsDb = createFeltDB({ namespace: crypto.randomUUID(), memory: true });
+  githubAuthDb = createFeltDB({ namespace: crypto.randomUUID(), memory: true });
+  await initializeManagedGithubAuth(githubAuthDb, process.env.OPENSESSION_GITHUB_AUTH_STORE);
 });
 
 afterEach(() => {
@@ -108,20 +114,17 @@ function enableFeature(memberName: string | null = "Alice Example"): void {
 }
 
 function seedToken(login = "alice", token = "gho_test123"): void {
-  writeFileSync(
-    process.env.OPENSESSION_GITHUB_AUTH_STORE!,
-    JSON.stringify({
-      users: {
-        [login.toLowerCase()]: {
-          login,
-          token,
-          source: "device",
-          connectedAt: "2026-07-18T00:00:00.000Z",
-        },
-      },
-    }),
-  );
+  __setGithubAccountsForTest({
+    [login.toLowerCase()]: {
+      login,
+      token,
+      source: "device",
+      connectedAt: "2026-07-18T00:00:00.000Z",
+    },
+  });
 }
+
+const seedUsers = (users: Record<string, any>): void => __setGithubAccountsForTest(users);
 
 
 describe("service credential boundary", () => {
@@ -172,6 +175,18 @@ describe("githubUserAuthSettings", () => {
 });
 
 describe("token lookups + runner env", () => {
+  test("imports the legacy credential store into managed FeltDB and removes it", async () => {
+    const legacyPath = join(dir, "legacy-github-auth.json");
+    writeFileSync(legacyPath, JSON.stringify({ users: {
+      alice: { login: "alice", token: "secret", source: "device", connectedAt: "2026-01-01T00:00:00Z" },
+    } }));
+    const db = createFeltDB({ namespace: crypto.randomUUID(), memory: true });
+    await initializeManagedGithubAuth(db, legacyPath);
+    expect(existsSync(legacyPath)).toBe(false);
+    const stored = await db.collection<{ users: Record<string, { token: string }> }>("opensession_github_user_auth").get("accounts");
+    expect(stored?.users.alice.token).toBe("secret");
+  });
+
   test("resolves the session user through the identity table", () => {
     enableFeature();
     seedToken();
@@ -251,10 +266,7 @@ describe("token lookups + runner env", () => {
     // access tokens for ~6 months, so leaking it is as bad as leaking the
     // token itself. It reached the API for a while because the public view
     // spread `...rest` and only named `token`.
-    writeFileSync(
-      process.env.OPENSESSION_GITHUB_AUTH_STORE!,
-      JSON.stringify({
-        users: {
+    seedUsers({
           alice: {
             login: "alice",
             token: "gho_test123",
@@ -264,9 +276,7 @@ describe("token lookups + runner env", () => {
             source: "device",
           connectedAt: "2026-07-18T00:00:00.000Z",
           },
-        },
-      }),
-    );
+    });
     const accounts = connectedGithubAccounts();
     expect(accounts).toHaveLength(1);
     expect(accounts[0].login).toBe("alice");
@@ -278,10 +288,7 @@ describe("token lookups + runner env", () => {
   });
 
   test("a dead refresh grant surfaces as needsReconnect", () => {
-    writeFileSync(
-      process.env.OPENSESSION_GITHUB_AUTH_STORE!,
-      JSON.stringify({
-        users: {
+    seedUsers({
           alice: {
             login: "alice",
             token: "gho_test123",
@@ -290,16 +297,14 @@ describe("token lookups + runner env", () => {
             source: "device",
           connectedAt: "2026-07-18T00:00:00.000Z",
           },
-        },
-      }),
-    );
+    });
     const [account] = connectedGithubAccounts();
     expect(account.needsReconnect).toBe(true);
     // The marker itself is internal — only the derived flag is public.
     expect((account as any).refreshFailedAt).toBeUndefined();
   });
 
-  test("a dead grant is what the sign-in gate refuses, and only that", () => {
+  test("a dead grant is what the sign-in gate refuses, and only that", async () => {
     // The gate blocks the whole app, so what it does NOT fire on matters as
     // much as what it does: a healthy grant, someone who never connected, and
     // an instance with the feature off all have to walk straight through.
@@ -309,10 +314,7 @@ describe("token lookups + runner env", () => {
     expect(githubReconnectRequired("bob")).toBe(false);
     expect(githubReconnectRequired(null)).toBe(false);
 
-    writeFileSync(
-      process.env.OPENSESSION_GITHUB_AUTH_STORE!,
-      JSON.stringify({
-        users: {
+    seedUsers({
           alice: {
             login: "alice",
             token: "gho_test123",
@@ -321,45 +323,32 @@ describe("token lookups + runner env", () => {
             source: "device",
           connectedAt: "2026-07-18T00:00:00.000Z",
           },
-        },
-      }),
-    );
+    });
     expect(githubReconnectRequired("alice")).toBe(true);
     expect(githubReconnectRequired("ALICE")).toBe(true); // logins are casefolded
     expect(githubReconnectRequired("bob")).toBe(false);
 
     // Reconnecting is the way out, and it works by replacing the row: the
     // fresh record carries no refreshFailedAt, so the gate opens again.
-    removeGithubAccount("alice");
+    await removeGithubAccount("alice");
     seedToken();
     expect(githubReconnectRequired("alice")).toBe(false);
   });
 
-  test("nobody is gated when the feature is off, or when the store is unreadable", () => {
-    // Fail-open, deliberately. A GitHub outage or a garbled store must not
-    // lock the team out of reading their own sessions; the credential getters
-    // are where this fails closed.
-    writeFileSync(
-      process.env.OPENSESSION_GITHUB_AUTH_STORE!,
-      JSON.stringify({
-        users: {
+  test("nobody is gated when the feature is off, or when managed state is empty", () => {
+    seedUsers({
           alice: { login: "alice", token: "t", refreshFailedAt: "2026-08-04T10:00:00.000Z", connectedAt: "x" },
-        },
-      }),
-    );
+    });
     expect(githubReconnectRequired("alice")).toBe(false); // feature off
     enableFeature();
     expect(githubReconnectRequired("alice")).toBe(true);
-    writeFileSync(process.env.OPENSESSION_GITHUB_AUTH_STORE!, "{ not json");
+    seedUsers({});
     expect(githubReconnectRequired("alice")).toBe(false);
   });
 
   test("accepts pre-source App grants but rejects old static bearer records", () => {
     enableFeature();
-    writeFileSync(
-      process.env.OPENSESSION_GITHUB_AUTH_STORE!,
-      JSON.stringify({
-        users: {
+    seedUsers({
           appuser: {
             login: "appuser",
             token: "app-user-token",
@@ -372,9 +361,7 @@ describe("token lookups + runner env", () => {
             token: "old-static-token",
             connectedAt: "2026-01-01T00:00:00.000Z",
           },
-        },
-      }),
-    );
+    });
     expect(githubCredentialForLogin("appuser")?.principal).toBe("user:appuser");
     expect(githubCredentialForLogin("staticuser")).toBeNull();
   });
@@ -420,8 +407,8 @@ describe("token lookups + runner env", () => {
     });
   });
 
-  test("removeGithubAccount on an unknown login is a no-op", () => {
-    expect(removeGithubAccount("nobody")).toBe(false);
+  test("removeGithubAccount on an unknown login is a no-op", async () => {
+    expect(await removeGithubAccount("nobody")).toBe(false);
   });
 });
 
@@ -756,10 +743,7 @@ describe("simple-mode credential (App connected, sign-in off)", () => {
   }
 
   function writeStore(users: Record<string, unknown>): void {
-    writeFileSync(
-      process.env.OPENSESSION_GITHUB_AUTH_STORE!,
-      JSON.stringify({ users }),
-    );
+    seedUsers(users);
   }
 
   test("refreshes a personal-app token even with sign-in off", async () => {
@@ -791,11 +775,11 @@ describe("simple-mode credential (App connected, sign-in off)", () => {
       return new Response("{}", { status: 404 });
     }) as unknown as typeof fetch;
     await refreshExpiringGithubTokens();
-    const after = JSON.parse(
-      readFileSync(process.env.OPENSESSION_GITHUB_AUTH_STORE!, "utf-8"),
-    );
-    expect(after.users.alice.token).toBe("new-token");
-    expect(after.users.alice.refreshToken).toBe("rt-2");
+    const after = __githubAccountsForTest();
+    expect(after.alice.token).toBe("new-token");
+    expect(after.alice.refreshToken).toBe("rt-2");
+    const durable = await githubAuthDb.collection<{ users: Record<string, { token: string }> }>("opensession_github_user_auth").get("accounts");
+    expect(durable?.users.alice.token).toBe("new-token");
   });
 
   test("reconnect authorizing a different account replaces, never strands two", async () => {
@@ -817,10 +801,8 @@ describe("simple-mode credential (App connected, sign-in off)", () => {
     }) as unknown as typeof fetch;
     const res = await pollGithubDeviceFlow("device-code");
     expect(res.status).toBe("ok");
-    const after = JSON.parse(
-      readFileSync(process.env.OPENSESSION_GITHUB_AUTH_STORE!, "utf-8"),
-    );
-    expect(Object.keys(after.users)).toEqual(["bob"]); // one account, not two
+    const after = __githubAccountsForTest();
+    expect(Object.keys(after)).toEqual(["bob"]); // one account, not two
     expect(soleGithubLogin()).toBe("bob"); // recoverable: DELETE can find it
     expect(soleGithubAccount()).not.toBeNull(); // repo ops resolve, no fallback to bot
   });

@@ -910,7 +910,7 @@ export async function handleConnectionsRoutes(
 				);
 			}
 		}
-		const removed = removeGithubAccount(login);
+		const removed = await removeGithubAccount(login);
 		if (!removed)
 			return Response.json({ error: "Not connected" }, { status: 404 });
 		// The child keeps a copied process environment. Stop it immediately

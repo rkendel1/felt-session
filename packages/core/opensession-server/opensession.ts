@@ -107,6 +107,7 @@ import { startMcpHttpServer, startRunRpcServer } from "./src/server/run-rpc";
 import { handleSandboxWsUpgrade, startTimerPoisonHeartbeat, timerPoisonRequestCheck } from "./src/server/run-ws";
 import {
 	githubReconnectRequired,
+	initializeManagedGithubAuth,
 	startGithubTokenRefresher,
 } from "./src/server/github-auth";
 import { startGoalTicker } from "./src/server/goal-runner";
@@ -213,6 +214,7 @@ const g = globalThis as any;
 // startup failure; there is deliberately no local fallback.
 if (!g.__opensessionBooted) {
 	const db = await initializeManagedFeltDb();
+	await initializeManagedGithubAuth(db);
 	await initializeManagedAudit(db);
 	await initializeManagedPiUsage(db);
 	await initializeManagedPrCache(db);

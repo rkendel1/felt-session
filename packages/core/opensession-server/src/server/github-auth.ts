@@ -25,7 +25,7 @@
  * app must have "Enable Device Flow" checked. Getting a token needs no client
  * secret; keeping one alive does, because the refresh grant below is
  * confidential. Tokens are stored per GitHub login
- * in ~/.opensession/github-auth.json (0600), are never returned by the API,
+ * in managed FeltDB, are never returned by the API,
  * and are injected only as GH_TOKEN/GITHUB_TOKEN into interactive,
  * non-least-privilege runs (see pi-runner.ts) — automation runs and
  * anything carrying deniedTools never see them, the same fail-closed posture
@@ -46,10 +46,11 @@
 
 import { stateDir } from "./paths";
 import { isDevInstance } from "./dev-mode";
-import { chmodSync, readFileSync, statSync } from "fs";
+import { existsSync, readFileSync, unlinkSync } from "fs";
+import type { StateFirstDB } from "@feltdb/core";
 import { audit } from "./audit";
 import { configuredIdentity, getConfig } from "./config";
-import { writeJsonAtomic } from "./shared/atomic-write";
+import { managedFeltDb } from "./managed-feltdb";
 import { fetchWithTimeout } from "./shared/fetch-with-timeout";
 import { githubGitCredentialEnv } from "./github-git-credential";
 
@@ -103,6 +104,37 @@ interface StoredAccount extends GithubConnectedAccount {
 
 interface Store {
   users: Record<string, StoredAccount>; // keyed by lowercased login
+}
+
+type StoredGithubAuth = Store & { id: string };
+const AUTH_COLLECTION = "opensession_github_user_auth";
+const AUTH_ID = "accounts";
+const AUTH_MIGRATION = "github-auth-json-to-managed-feltdb-v1";
+let authDb: StateFirstDB | undefined;
+let githubStore: Store = { users: {} };
+
+export async function initializeManagedGithubAuth(
+  db: StateFirstDB = authDb ?? managedFeltDb(),
+  legacyPath = storePath(),
+): Promise<void> {
+  authDb = db;
+  const migrations = db.collection<{ id: string }>("opensession_migrations");
+  if (!await migrations.get(AUTH_MIGRATION)) {
+    let legacy: Store = { users: {} };
+    if (existsSync(legacyPath)) {
+      const raw = JSON.parse(readFileSync(legacyPath, "utf8"));
+      legacy = { users: raw?.users && typeof raw.users === "object" ? raw.users : {} };
+    }
+    await db.transaction((tx) => {
+      tx.collection<StoredGithubAuth>(AUTH_COLLECTION).set(AUTH_ID, { id: AUTH_ID, ...legacy });
+      tx.collection("opensession_migrations").set(AUTH_MIGRATION,
+        { id: AUTH_MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
+    }, { transactionId: `opensession:migration:${AUTH_MIGRATION}` });
+    if (existsSync(legacyPath)) unlinkSync(legacyPath);
+  }
+  const stored = await db.collection<StoredGithubAuth>(AUTH_COLLECTION).get(AUTH_ID);
+  githubStore = { users: stored?.users || {} };
+  invalidateReconnectCache();
 }
 
 /** Refresh when a token is inside this window of its expiry (covers the
@@ -257,21 +289,25 @@ export function githubAppSettingsUrl(): string | null {
 }
 
 function readStore(): Store {
-  try {
-    const raw = JSON.parse(readFileSync(storePath(), "utf-8"));
-    const users = raw?.users && typeof raw.users === "object" ? raw.users : {};
-    return { users };
-  } catch {
-    return { users: {} };
-  }
+  return structuredClone(githubStore);
 }
 
-function writeStore(store: Store): void {
-  writeJsonAtomic(storePath(), store);
+async function writeStore(store: Store): Promise<void> {
+  const db = authDb ?? managedFeltDb();
+  await db.transaction((tx) => {
+    tx.collection<StoredGithubAuth>(AUTH_COLLECTION).set(AUTH_ID, { id: AUTH_ID, ...store });
+  }, { transactionId: `opensession:github-auth:${crypto.randomUUID()}` });
+  githubStore = store;
   invalidateReconnectCache();
-  try {
-    chmodSync(storePath(), 0o600);
-  } catch {}
+}
+
+export function __setGithubAccountsForTest(users: Record<string, any>): void {
+  githubStore = { users };
+  invalidateReconnectCache();
+}
+
+export function __githubAccountsForTest(): Record<string, any> {
+  return structuredClone(githubStore.users);
 }
 
 // ── Device flow ──────────────────────────────────────────────────────────────
@@ -560,7 +596,7 @@ async function identifyAndStoreToken(
   } else {
     store.users = { [login.toLowerCase()]: record };
   }
-  writeStore(store);
+  await writeStore(store);
   audit({ kind: "github_auth_connect", login, scopes: scope });
   return { status: "ok", login, ...(user.name ? { name: user.name } : {}) };
 }
@@ -570,12 +606,12 @@ async function identifyAndStoreToken(
 /** Flag an account whose refresh grant is unrecoverable. The stored tokens stay
  *  put (the getters already fail closed on the expired access token) — this only
  *  stops the sweep from retrying and lets the UI surface the reconnect. */
-function markRefreshDead(key: string, error: string): void {
+async function markRefreshDead(key: string, error: string): Promise<void> {
   const store = readStore();
   const account = store.users[key];
   if (!account || account.refreshFailedAt) return;
   store.users[key] = { ...account, refreshFailedAt: new Date().toISOString() };
-  writeStore(store);
+  await writeStore(store);
   audit({ kind: "github_auth_refresh_dead", login: account.login, error });
 }
 
@@ -595,7 +631,7 @@ export async function refreshGithubToken(login: string): Promise<boolean> {
     account.refreshTokenExpiresAt &&
     Date.parse(account.refreshTokenExpiresAt) <= Date.now()
   ) {
-    markRefreshDead(key, "refresh token expired");
+    await markRefreshDead(key, "refresh token expired");
     return false;
   }
   const res = await fetchWithTimeout("https://github.com/login/oauth/access_token", {
@@ -617,7 +653,7 @@ export async function refreshGithubToken(login: string): Promise<boolean> {
     // amount of retrying brings it back (it was retried every 20 minutes for
     // four days before this existed). Record it so the sweep gives up and the
     // Connections UI can ask for a reconnect instead of failing silently.
-    if (body.error === "bad_refresh_token") markRefreshDead(key, error);
+    if (body.error === "bad_refresh_token") await markRefreshDead(key, error);
     return false;
   }
   // Re-read inside the write to keep the window for clobbering a concurrent
@@ -627,7 +663,7 @@ export async function refreshGithubToken(login: string): Promise<boolean> {
   if (!current) return false;
   const { refreshFailedAt: _cleared, ...kept } = current;
   store.users[key] = { ...kept, token: body.access_token, ...grantExpiryFields(body) };
-  writeStore(store);
+  await writeStore(store);
   audit({ kind: "github_auth_refresh", login });
   return true;
 }
@@ -692,32 +728,21 @@ export function connectedGithubAccounts(): GithubConnectedAccount[] {
 
 // ── The reconnect gate ───────────────────────────────────────────────────────
 
-/** Cached because the sign-in gate asks on EVERY request (opensession.ts) and
- *  the store is a file read and a JSON parse. Validated by the store's path and
- *  mtime rather than by a TTL, so it is never stale by a window: a `stat` is
- *  what a request pays, and `writeStore` clears it outright, which is what
- *  makes a reconnect take effect in the same breath rather than a beat later. */
-let reconnectCache: { path: string; stamp: number; logins: Set<string> } | null =
-  null;
+/** Cached because the sign-in gate asks on every request. Managed mutations
+ * invalidate it immediately, so reconnect state changes without a stale window. */
+let reconnectCache: Set<string> | null = null;
 
 function invalidateReconnectCache(): void {
   reconnectCache = null;
 }
 
 function refreshDeadLogins(): Set<string> {
-  const path = storePath();
-  let stamp = 0;
-  try {
-    stamp = statSync(path).mtimeMs;
-  } catch {} // no store yet: nobody has connected, so nobody is dead
-  if (reconnectCache?.path === path && reconnectCache.stamp === stamp) {
-    return reconnectCache.logins;
-  }
+  if (reconnectCache) return reconnectCache;
   const logins = new Set<string>();
   for (const account of Object.values(readStore().users)) {
     if (account.refreshFailedAt) logins.add(account.login.toLowerCase());
   }
-  reconnectCache = { path, stamp, logins };
+  reconnectCache = logins;
   return logins;
 }
 
@@ -734,22 +759,20 @@ function refreshDeadLogins(): Set<string> {
  * Two limits are deliberate. Only a grant that WAS connected and is now dead
  * counts (`refreshFailedAt`); never-connected and deliberately-disconnected
  * people are a different state and are not worth blocking the app over. And it
- * fails open by construction, because `readStore` swallows an unreadable file
- * and returns no users. A GitHub outage must not lock the team out of reading
- * their own sessions. The security boundary stays downstream, where the getters
- * refuse to hand out a token that has expired.
+ * Managed state is hydrated before listeners bind. The security boundary stays
+ * downstream, where the getters refuse to hand out an expired token.
  */
 export function githubReconnectRequired(login: string | null | undefined): boolean {
   if (!login || !githubUserAuthActive()) return false;
   return refreshDeadLogins().has(login.toLowerCase());
 }
 
-export function removeGithubAccount(login: string): boolean {
+export async function removeGithubAccount(login: string): Promise<boolean> {
   const store = readStore();
   const key = login.toLowerCase();
   if (!store.users[key]) return false;
   delete store.users[key];
-  writeStore(store);
+  await writeStore(store);
   audit({ kind: "github_auth_disconnect", login });
   return true;
 }
