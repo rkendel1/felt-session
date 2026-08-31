@@ -28,6 +28,8 @@ import {
 } from "./feltdb-decision-store";
 import { FeltDbTranscriptStore } from "./feltdb-transcript-store";
 import { FeltDbAgentHostStore } from "./feltdb-agent-host-store";
+import { FeltDbRunStore } from "./feltdb-run-store";
+import { FeltDbCreationStore } from "./feltdb-creation-store";
 
 class SessionQuarantinedError extends Error {
   readonly code = "session_quarantined";
@@ -79,6 +81,8 @@ export function startSessionKernelActorWorker(): void {
   let feltDbDecisions: FeltDbSessionDecisionStore | undefined;
   let feltDbTranscripts: FeltDbTranscriptStore | undefined;
   let feltDbAgentHost: FeltDbAgentHostStore | undefined;
+  let feltDbRuns: FeltDbRunStore | undefined;
+  let feltDbCreation: FeltDbCreationStore | undefined;
   const changeStore = (): FeltDbKernelChangeStore =>
     (feltDbChanges ??= openFeltDbKernelChangeStore());
   const decisionStore = (): FeltDbSessionDecisionStore =>
@@ -87,6 +91,10 @@ export function startSessionKernelActorWorker(): void {
     (feltDbTranscripts ??= new FeltDbTranscriptStore(decisionStore()));
   const agentHostStore = (): FeltDbAgentHostStore =>
     (feltDbAgentHost ??= new FeltDbAgentHostStore(decisionStore()));
+  const runStore = (): FeltDbRunStore =>
+    (feltDbRuns ??= new FeltDbRunStore(decisionStore()));
+  const creationStore = (): FeltDbCreationStore =>
+    (feltDbCreation ??= new FeltDbCreationStore(decisionStore()));
   function post(message: KernelActorResponse): void {
     // Internal worker telemetry is consumed by the parent service and stripped
     // before the actor response crosses the HTTP boundary.
@@ -107,15 +115,17 @@ export function startSessionKernelActorWorker(): void {
         requestSessionId = sessionId;
         if (command.kind === "transcript")
           assertTranscriptActorRequest(command.request);
-        const managedTranscript = command.kind === "transcript" && sessionId &&
+        const managedKind = command.kind === "transcript" ||
+          command.kind === "run_event" || command.kind === "creation_event";
+        const managedHead = managedKind && sessionId &&
             process.env.OPENSESSION_FELTDB_SERVER_URL
           ? await decisionStore().head(sessionId)
           : undefined;
-        if (!managedTranscript && !isReadReducer(command) && sessionId) {
+        if (!managedHead && !isReadReducer(command) && sessionId) {
           const quarantine = host.quarantinedSession(sessionId);
           if (quarantine) throw new SessionQuarantinedError(sessionId, quarantine.reason);
         }
-        if (!managedTranscript && sessionId)
+        if (!managedHead && sessionId)
           store = host.storeForSession(
             sessionId,
             command.kind === "transcript" ? false : !isReadReducer(command),
@@ -123,14 +133,14 @@ export function startSessionKernelActorWorker(): void {
           );
         if (
           command.kind === "transcript" &&
-          !managedTranscript &&
+          !managedHead &&
           !isReadReducer(command) &&
           command.request.op !== "delete" &&
           store.isTombstoned(command.request.sessionId)
         ) throw new Error(`Session ${command.request.sessionId} is tombstoned`);
         else if (command.kind === "transcript") {
           const transcript = command.request;
-          if (!managedTranscript) result = host.transcript(transcript);
+          if (!managedHead) result = host.transcript(transcript);
           else if (transcript.op === "agent_append_destination") {
             await agentHostStore().assertTranscriptDestinationFence(transcript);
             result = transcriptStore().appendAgentDestination(transcript);
@@ -145,9 +155,13 @@ export function startSessionKernelActorWorker(): void {
           }
         }
         else if (command.kind === "creation_event")
-          result = store.applyCreationEvent(command.decision);
+          result = managedHead
+            ? creationStore().applyCreationEvent(command.commandId, command.decision)
+            : store.applyCreationEvent(command.decision);
         else if (command.kind === "run_event")
-          result = store.applyRunEvent(command.decision);
+          result = managedHead
+            ? runStore().applyRunEvent(command.commandId, command.decision)
+            : store.applyRunEvent(command.decision);
         else if (command.kind === "delivery") {
           const delivery = command.request;
           if (delivery.op === "snapshot")

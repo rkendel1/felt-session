@@ -15,6 +15,7 @@ import {
 } from "./feltdb-decision-store";
 
 type MigratedTurnRecord = {
+  decisionEpoch: number;
   cancel?: DurableTurnState["cancel"];
 };
 
@@ -134,7 +135,12 @@ export class FeltDbRunStore {
       KERNEL_COLLECTIONS.turns,
       kernelRecordId("turn", input.sessionId),
     );
-    const decision = decideFeltDbRunEvent(head, input, turn?.cancel, now);
+    const decision = decideFeltDbRunEvent(
+      head,
+      input,
+      turn?.decisionEpoch === head.decisionEpoch ? turn.cancel : undefined,
+      now,
+    );
     if (!decision.nextRun) return decision.result;
     return this.decisions.commitDecision({
       transactionId: `opensession:kernel:run:${input.sessionId}:${commandId}`,
