@@ -1124,7 +1124,7 @@ export async function handleConnectionsRoutes(
 		const { setRouterConfig } = await import(
 			"../../agents/plain/ticket-router"
 		);
-		const result = setRouterConfig(body);
+		const result = await setRouterConfig(body);
 		if ("error" in result) return Response.json(result, { status: 400 });
 		return Response.json(result);
 	}

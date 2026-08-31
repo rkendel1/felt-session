@@ -20,14 +20,21 @@
  * code so prompt tweaks can't break parsing.
  */
 import { stateDir } from "../../server/paths";
-import { existsSync, readFileSync } from "fs";
+import { existsSync, readFileSync, unlinkSync } from "node:fs";
+import type { StateFirstDB } from "@feltdb/core";
+import { managedFeltDb } from "../../server/managed-feltdb";
 import { oneShot } from "../../server/one-shot";
-import { writeJsonAtomic } from "../../server/shared/atomic-write";
 import { resolveModel } from "../../server/models";
 import { personaCompany, personaProduct } from "../../server/config";
 
 const ROUTER_MODEL = process.env.PLAIN_SPAM_CHECK_MODEL || "claude-haiku-4-5";
 const CONFIG_PATH = stateDir("plain-router.json");
+const CONFIG_COLLECTION = "opensession_plain_router_config";
+const CONFIG_ID = "router";
+const CONFIG_MIGRATION = "plain-router-config-json-to-managed-feltdb-v1";
+type StoredRouterConfig = { id: string; prompt?: string; basicModel?: string; __version?: number };
+let routerDb: StateFirstDB | undefined;
+let routerConfig: StoredRouterConfig = { id: CONFIG_ID };
 
 export type TicketRoute = "spam" | "basic" | "full";
 
@@ -61,17 +68,25 @@ export interface RouterConfig {
   basicModel: string;
 }
 
-function readConfigFile(): { prompt?: string; basicModel?: string } {
-  try {
-    if (existsSync(CONFIG_PATH)) return JSON.parse(readFileSync(CONFIG_PATH, "utf-8"));
-  } catch (e) {
-    console.error("[plain] Failed to read router config:", e);
+export async function initializeManagedPlainRouterConfig(
+  db: StateFirstDB = routerDb ?? managedFeltDb(),
+): Promise<void> {
+  routerDb = db;
+  const migrations = db.collection<{ id: string }>("opensession_migrations");
+  if (!await migrations.get(CONFIG_MIGRATION)) {
+    let legacy: Omit<StoredRouterConfig, "id"> = {};
+    if (existsSync(CONFIG_PATH)) legacy = JSON.parse(readFileSync(CONFIG_PATH, "utf8"));
+    await db.transaction((tx) => {
+      tx.collection<StoredRouterConfig>(CONFIG_COLLECTION).set(CONFIG_ID, { ...legacy, id: CONFIG_ID });
+      tx.collection("opensession_migrations").set(CONFIG_MIGRATION, { id: CONFIG_MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
+    }, { transactionId: `opensession:migration:${CONFIG_MIGRATION}` });
+    if (existsSync(CONFIG_PATH)) unlinkSync(CONFIG_PATH);
   }
-  return {};
+  routerConfig = await db.collection<StoredRouterConfig>(CONFIG_COLLECTION).get(CONFIG_ID) || { id: CONFIG_ID };
 }
 
 export function getRouterConfig(): RouterConfig {
-  const file = readConfigFile();
+  const file = routerConfig;
   const prompt = typeof file.prompt === "string" && file.prompt.trim() ? file.prompt : DEFAULT_ROUTER_PROMPT;
   const basicModel =
     typeof file.basicModel === "string" && resolveModel(file.basicModel)
@@ -81,11 +96,13 @@ export function getRouterConfig(): RouterConfig {
 }
 
 /** Update the router config. Empty/absent prompt resets to the default. */
-export function setRouterConfig(patch: {
+export async function setRouterConfig(patch: {
   prompt?: string;
   basicModel?: string;
-}): RouterConfig | { error: string } {
-  const file = readConfigFile();
+}): Promise<RouterConfig | { error: string }> {
+  const db = routerDb ?? managedFeltDb();
+  const current = await db.collection<StoredRouterConfig>(CONFIG_COLLECTION).get(CONFIG_ID);
+  const file: StoredRouterConfig = current ? { ...current } : { id: CONFIG_ID };
   if ("prompt" in patch) {
     const p = (patch.prompt || "").trim();
     if (p && p === DEFAULT_ROUTER_PROMPT.trim()) delete file.prompt;
@@ -98,11 +115,16 @@ export function setRouterConfig(patch: {
     if (resolved.id === DEFAULT_BASIC_MODEL) delete file.basicModel;
     else file.basicModel = resolved.id;
   }
+  const { __version: _, ...stored } = file;
   try {
-    writeJsonAtomic(CONFIG_PATH, file);
+    await db.transaction((tx) => {
+      tx.collection<StoredRouterConfig>(CONFIG_COLLECTION).set(CONFIG_ID, stored,
+        current ? { ifVersion: current.__version } : { requireAbsent: true });
+    }, { transactionId: `opensession:plain-router:update:${crypto.randomUUID()}` });
   } catch (e: any) {
     return { error: `Failed to save router config: ${e?.message || e}` };
   }
+  routerConfig = await db.collection<StoredRouterConfig>(CONFIG_COLLECTION).get(CONFIG_ID) || stored;
   return getRouterConfig();
 }
 
