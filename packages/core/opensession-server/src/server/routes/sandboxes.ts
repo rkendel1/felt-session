@@ -108,7 +108,7 @@ export async function handleSandboxesRoutes(
         if (forbidden) return forbidden;
         saveWorkspaceSandboxDefault(body.value);
       } else if (body.scope === "personal") {
-        savePersonalSandboxDefault(user, body.value);
+        await savePersonalSandboxDefault(user, body.value);
       } else {
         return errorResponse("scope must be workspace or personal");
       }

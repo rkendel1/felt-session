@@ -83,11 +83,11 @@ export function expectedUiPrefsMatch(
  * Merge `patch` into a user's prefs (null value deletes the key). Returns the
  * stored map after the merge.
  */
-export function patchUiPrefs(
+export async function patchUiPrefs(
 	user: string,
 	patch: unknown,
 	expected?: unknown,
-): UiPrefs {
+): Promise<UiPrefs> {
 	const current = getUiPrefs(user);
 	if (!expectedUiPrefsMatch(current, expected)) return current;
 	if (patch && typeof patch === "object") {

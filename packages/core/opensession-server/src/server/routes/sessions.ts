@@ -1585,7 +1585,7 @@ export async function handleSessionsRoutes(
 			// setArchived drops the plain id pin; also drop legacy alias-id pins,
 			// and the workspace pin once its last live session is archived (else the
 			// row resurfaces in Pinned when a new session joins the workspace).
-			unpinArchivedSessions([session], await getSessionListSnapshotAsync());
+			await unpinArchivedSessions([session], await getSessionListSnapshotAsync());
 		}
 		return Response.json({ ok: true, stoppedRun });
 	}

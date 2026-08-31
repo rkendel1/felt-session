@@ -65,6 +65,6 @@ export function getLanes(user: string): Lanes {
 }
 
 /** Replace a user's lanes (validated). Returns the stored map. */
-export function setLanes(user: string, lanes: unknown): Lanes {
+export async function setLanes(user: string, lanes: unknown): Promise<Lanes> {
 	return store.set(user, lanes);
 }

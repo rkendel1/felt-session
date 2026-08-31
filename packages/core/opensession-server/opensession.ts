@@ -25,6 +25,8 @@ import { initializeManagedReviewRequests } from "./src/server/review-requests";
 import { initializeManagedArchive } from "./src/server/archive";
 import { initializeManagedMentions } from "./src/server/mentions";
 import { initializeManagedDrafts } from "./src/server/drafts";
+import { initializeManagedUserStores } from "./src/server/shared/user-store";
+import { migrateLegacySettlementsToSnoozes } from "./src/server/snoozes";
 import { startLiveActivitySync } from "./src/server/live-activities";
 import { startRuntimeInvestigationHandoffConsumer } from "./src/server/runtime-investigation-handoffs";
 import { initializeManagedFeltDb } from "./src/server/managed-feltdb";
@@ -173,6 +175,8 @@ if (!g.__opensessionBooted) {
 	await initializeManagedArchive(db);
 	await initializeManagedMentions(db);
 	await initializeManagedDrafts(db);
+	await initializeManagedUserStores(db);
+	await migrateLegacySettlementsToSnoozes();
 }
 
 // Listeners the server owns. Deliberately started HERE and not as module side

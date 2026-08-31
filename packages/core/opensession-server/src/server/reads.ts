@@ -55,7 +55,7 @@ export function getReads(user: string): Record<string, string> {
  * Replace a user's read marks (strings only, capped). Wholesale, like setPins —
  * the frontend sends its full map on every change. Returns the stored map.
  */
-export function setReads(user: string, reads: unknown): Record<string, string> {
+export async function setReads(user: string, reads: unknown): Promise<Record<string, string>> {
   return store.set(user, reads);
 }
 

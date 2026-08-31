@@ -1,13 +1,16 @@
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
 import { rmSync } from "node:fs";
 import { getSettlements, setSettlements } from "./settlements";
+import { createFeltDB } from "@feltdb/core";
+import { initializeManagedUserStores } from "./shared/user-store";
 
 const previousStateDir = process.env.OPENSESSION_STATE_DIR;
 const root = `/tmp/opensession-settlements-test-${process.pid}`;
 process.env.OPENSESSION_STATE_DIR = root;
 
-beforeEach(() => {
+beforeEach(async () => {
 	rmSync(`${root}/.opensession-settlements`, { recursive: true, force: true });
+	await initializeManagedUserStores(createFeltDB({ namespace: crypto.randomUUID(), memory: true }));
 });
 
 afterAll(() => {
@@ -17,10 +20,10 @@ afterAll(() => {
 });
 
 describe("per-user settlements", () => {
-	test("stores explicit settle and unsettle actions independently per person", () => {
+	test("stores explicit settle and unsettle actions independently per person", async () => {
 		const at = "2026-08-20T10:00:00.000Z";
 		expect(
-			setSettlements("Michiel", {
+			await setSettlements("Michiel", {
 				"workspace:one": { state: "settled", at },
 				"workspace:two": { state: "active", at },
 			}),
@@ -31,9 +34,9 @@ describe("per-user settlements", () => {
 		expect(getSettlements("Kent")).toEqual({});
 	});
 
-	test("drops malformed row keys and records", () => {
+	test("drops malformed row keys and records", async () => {
 		expect(
-			setSettlements("Michiel", {
+			await setSettlements("Michiel", {
 				"workspace:valid": {
 					state: "settled",
 					at: "2026-08-20T10:00:00.000Z",

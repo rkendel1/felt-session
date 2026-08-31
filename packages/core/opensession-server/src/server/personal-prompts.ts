@@ -49,10 +49,10 @@ export function getPersonalPrompt(user: string | undefined | null): string {
 }
 
 /** Store a user's personal prompt (trimmed, length-capped). Empty clears it. */
-export function setPersonalPrompt(
+export async function setPersonalPrompt(
 	user: string | undefined | null,
 	prompt: unknown,
-): string {
+): Promise<string> {
 	return store.set(user ?? "", String(prompt ?? ""));
 }
 

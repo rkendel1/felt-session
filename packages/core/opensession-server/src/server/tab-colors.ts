@@ -54,6 +54,6 @@ export function getTabColors(user: string): TabColors {
 }
 
 /** Replace a user's tab colors (validated). Returns the stored map. */
-export function setTabColors(user: string, colors: unknown): TabColors {
+export async function setTabColors(user: string, colors: unknown): Promise<TabColors> {
 	return store.set(user, colors);
 }

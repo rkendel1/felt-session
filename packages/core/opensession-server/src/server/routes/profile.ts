@@ -236,7 +236,7 @@ export async function handleProfileRoutes(
 			// tab colors, drafts, UI prefs) is filed under the short name, so carry it across
 			// or the rename hands the person a factory-fresh sidebar.
 			const carried = shortNameChanged
-				? renameUserState(previousShort, nextShort)
+				? await renameUserState(previousShort, nextShort)
 				: [];
 
 			audit({
@@ -290,7 +290,7 @@ export async function handleProfileRoutes(
 
 	if (path === "/api/profile/image" && req.method === "DELETE") {
 		const currentName = memberFor(profileName, verifiedLogin)?.name ?? profileName;
-		clearProfileImage(verifiedLogin || profileName);
+		await clearProfileImage(verifiedLogin || profileName);
 		audit({ kind: "profile_update", user: currentName, fields: ["image"] });
 		return Response.json({ ok: true, image: "" });
 	}

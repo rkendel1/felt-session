@@ -165,16 +165,16 @@ export async function setProfileImage(
 	const path = `${dir}/${fileStem(key)}.${ext}`;
 	removeStoredImages(key, path);
 	await Bun.write(path, bytes);
-	store.set(user, { image: path });
+	await store.set(user, { image: path });
 	return profileImageUrl(path);
 }
 
 /** Drop this user's picture. The avatar falls back to GitHub and then to their
  *  initial, exactly as it did before they set one. */
-export function clearProfileImage(user: string): void {
+export async function clearProfileImage(user: string): Promise<void> {
 	const key = keyFor(user);
 	const current = store.get(user).image;
-	store.set(user, { image: "" });
+	await store.set(user, { image: "" });
 	if (key) removeStoredImages(key);
 	else if (current) tryUnlink(current);
 }

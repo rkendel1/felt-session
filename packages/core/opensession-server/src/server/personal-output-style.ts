@@ -21,10 +21,10 @@ export function getPersonalOutputStyle(
 	}
 }
 
-export function setPersonalOutputStyle(
+export async function setPersonalOutputStyle(
 	user: string | undefined | null,
 	style: unknown,
-): PersonalOutputStyle {
+): Promise<PersonalOutputStyle> {
 	return store.set(user ?? "", style);
 }
 

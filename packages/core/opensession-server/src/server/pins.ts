@@ -10,8 +10,6 @@
  * that browser); moving them here makes them per-user and synced across devices.
  */
 
-import { existsSync, readFileSync, readdirSync } from "fs";
-import { writeJsonAtomic } from "./shared/atomic-write";
 import { userStore } from "./shared/user-store";
 import { broadcastToAll } from "./ws-hub";
 
@@ -38,32 +36,25 @@ export function getPins(user: string): string[] {
  * for everyone, and would silently resurface the row on unarchive or when a
  * new session joins the pinned workspace.
  */
-export function unpinEverywhere(keys: string[]): void {
+export async function unpinEverywhere(keys: string[]): Promise<void> {
   const drop = new Set(keys.filter(Boolean));
-  const dir = store.dir();
-  if (!drop.size || !existsSync(dir)) return;
-  // Walks the files, not the users, so legacy-named files are scrubbed too.
-  for (const file of readdirSync(dir)) {
-    if (!file.endsWith(".json")) continue;
-    try {
-      const path = `${dir}/${file}`;
-      const pins = clean(JSON.parse(readFileSync(path, "utf8"))?.pins);
-      const next = pins.filter((p) => !drop.has(p));
-      if (next.length !== pins.length) writeJsonAtomic(path, { pins: next });
-    } catch {}
+  if (!drop.size) return;
+  for (const [userKey, pins] of [...store.entries()]) {
+    const next = pins.filter((pin) => !drop.has(pin));
+    if (next.length !== pins.length) await store.setByKey(userKey, next);
   }
 }
 
 /** Replace a user's pins (de-duped, strings only). Returns the stored list. */
-export function setPins(user: string, pins: unknown): string[] {
+export async function setPins(user: string, pins: unknown): Promise<string[]> {
   return store.set(user, pins);
 }
 
 /** Add a session to the front of a user's pin list without disturbing order. */
-export function pinForUser(user: string, id: string): string[] {
+export async function pinForUser(user: string, id: string): Promise<string[]> {
   const pins = getPins(user);
   if (pins.includes(id)) return pins;
-  const next = setPins(user, [id, ...pins]);
+  const next = await setPins(user, [id, ...pins]);
   broadcastToAll({ type: "pins_changed", user, pins: next });
   return next;
 }

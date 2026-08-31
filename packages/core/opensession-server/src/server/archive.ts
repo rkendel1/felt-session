@@ -51,10 +51,10 @@ export function isArchivedId(id: string): boolean {
  * idle-sweep, and Plain-ticket archive paths all need; `setArchived` still handles the
  * lone plain-id case for callers that don't have the full list.
  */
-export function unpinArchivedSessions(
+export async function unpinArchivedSessions(
   justArchived: UnifiedSession[],
   allSessions: UnifiedSession[],
-): void {
+): Promise<void> {
   if (!justArchived.length) return;
   const dead = (s: UnifiedSession) => s.archived || isArchivedId(s.id);
   const keys: string[] = [];
@@ -69,7 +69,7 @@ export function unpinArchivedSessions(
     if (!allSessions.some((s) => s.workspaceId === pid && !dead(s)))
       keys.push(`workspace:${pid}`);
   }
-  unpinEverywhere(keys);
+  await unpinEverywhere(keys);
 }
 
 export function getArchiveReason(id: string): ArchiveReason | null {
@@ -88,7 +88,7 @@ export async function setArchived(
   // the Pinned band on unarchive. Callers that know more keys (alias ids, the
   // workspace pin) drop those on top of this.
   if (archived) {
-    unpinEverywhere([id]);
+    await unpinEverywhere([id]);
   }
 }
 
@@ -113,7 +113,7 @@ export async function archiveOlderThan(sessions: UnifiedSession[], days: number)
       setIndexedSessionArchived(session.id, true, "idle");
     // Registry is written, so isArchivedId now reflects this batch — drop the
     // stale session/alias pins and any workspace pin whose last session just went.
-    unpinArchivedSessions(justArchived, sessions);
+    await unpinArchivedSessions(justArchived, sessions);
   }
   return archived;
 }

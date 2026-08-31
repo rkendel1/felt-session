@@ -14,7 +14,7 @@
  * it sees them (marking the row unread so the wake is visible).
  */
 
-import { getSettlements, setSettlements } from "./settlements";
+import { settlementEntries, setSettlementsByKey } from "./settlements";
 import { userStore } from "./shared/user-store";
 
 export const SNOOZE_SOMEDAY = "someday";
@@ -44,22 +44,22 @@ function clean(input: unknown): Snoozes {
 const store = userStore<Snoozes>({ name: "snoozes", field: "snoozes", clean });
 
 export function getSnoozes(user: string): Snoozes {
-	const current = store.get(user);
-	const settlements = getSettlements(user);
-	if (Object.keys(settlements).length === 0) return current;
+	return store.get(user);
+}
 
-	// Settled was retired in favour of an indefinite snooze. Migrate each
-	// person's explicit Settled rows exactly once, preserving a more specific
-	// snooze they already chose. Clearing the old map makes Unsnooze stick.
-	const migrated = { ...current };
-	for (const [key, record] of Object.entries(settlements))
-		if (record.state === "settled" && !(key in migrated))
-			migrated[key] = SNOOZE_SOMEDAY;
-	setSettlements(user, {});
-	return store.set(user, migrated);
+export async function migrateLegacySettlementsToSnoozes(): Promise<void> {
+	const snoozesByKey = new Map(store.entries());
+	for (const [userKey, settlements] of settlementEntries()) {
+		if (Object.keys(settlements).length === 0) continue;
+		const migrated = { ...(snoozesByKey.get(userKey) || {}) };
+		for (const [key, record] of Object.entries(settlements))
+			if (record.state === "settled" && !(key in migrated)) migrated[key] = SNOOZE_SOMEDAY;
+		await store.setByKey(userKey, migrated);
+		await setSettlementsByKey(userKey, {});
+	}
 }
 
 /** Replace a user's snoozes (validated). Returns the stored map. */
-export function setSnoozes(user: string, snoozes: unknown): Snoozes {
+export async function setSnoozes(user: string, snoozes: unknown): Promise<Snoozes> {
 	return store.set(user, snoozes);
 }

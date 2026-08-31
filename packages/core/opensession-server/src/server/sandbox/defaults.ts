@@ -80,13 +80,13 @@ export function saveWorkspaceSandboxDefault(value: string): SandboxDefaultsStatu
   return sandboxDefaultsStatus("Anonymous");
 }
 
-export function savePersonalSandboxDefault(
+export async function savePersonalSandboxDefault(
   user: string,
   value: string,
-): SandboxDefaultsStatus {
+): Promise<SandboxDefaultsStatus> {
   const normalized = value.trim().toLowerCase();
   if (normalized !== "workspace" && normalized !== "none") assertAvailable(normalized);
-  patchUiPrefs(user || "Anonymous", { [PERSONAL_PREF_KEY]: normalized });
+	await patchUiPrefs(user || "Anonymous", { [PERSONAL_PREF_KEY]: normalized });
   return sandboxDefaultsStatus(user || "Anonymous");
 }
 

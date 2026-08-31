@@ -48,6 +48,6 @@ export function getHides(user: string): Hides {
 }
 
 /** Replace a user's hides (validated). Returns the stored map. */
-export function setHides(user: string, hides: unknown): Hides {
+export async function setHides(user: string, hides: unknown): Promise<Hides> {
 	return store.set(user, hides);
 }

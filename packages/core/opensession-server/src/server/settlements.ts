@@ -50,6 +50,14 @@ export function getSettlements(user: string): Settlements {
 	return store.get(user);
 }
 
-export function setSettlements(user: string, settlements: unknown): Settlements {
+export async function setSettlements(user: string, settlements: unknown): Promise<Settlements> {
 	return store.set(user, settlements);
+}
+
+export function settlementEntries(): IterableIterator<[string, Settlements]> {
+	return store.entries();
+}
+
+export function setSettlementsByKey(userKey: string, settlements: unknown): Promise<Settlements> {
+	return store.setByKey(userKey, settlements);
 }

@@ -253,7 +253,7 @@ export async function handlePrefsRoutes(
 		}
 		const user = requestUser(ctx, body.user) || "Anonymous";
 		return Response.json({
-			outputStyle: setPersonalOutputStyle(user, body.outputStyle),
+			outputStyle: await setPersonalOutputStyle(user, body.outputStyle),
 		});
 	}
 
@@ -281,7 +281,7 @@ export async function handlePrefsRoutes(
 		}
 		const user = requestUser(ctx, body.user) || "Anonymous";
 		return Response.json({
-			prompt: setPersonalPrompt(user, body.prompt),
+			prompt: await setPersonalPrompt(user, body.prompt),
 		});
 	}
 
@@ -310,7 +310,7 @@ export async function handlePrefsRoutes(
 			);
 		}
 		const user = requestUser(ctx, body.user) || "Anonymous";
-		const reads = setUserReads(user, body.reads);
+		const reads = await setUserReads(user, body.reads);
 		scheduleLiveActivitySync();
 		return Response.json({ reads });
 	}
@@ -386,7 +386,7 @@ export async function handlePrefsRoutes(
 		}
 		const user = requestUser(ctx, body.user) || "Anonymous";
 		return Response.json({
-			prefs: patchUiPrefs(user, body.prefs, body.expected),
+			prefs: await patchUiPrefs(user, body.prefs, body.expected),
 		});
 	}
 
@@ -410,7 +410,7 @@ export async function handlePrefsRoutes(
 		}
 		const user = requestUser(ctx, body.user) || "Anonymous";
 		const next = mergeMapDelta(getUserLanes(user), delta);
-		return Response.json({ lanes: setUserLanes(user, next) });
+		return Response.json({ lanes: await setUserLanes(user, next) });
 	}
 
 	// ── Per-user workspace snoozes ──
@@ -435,7 +435,7 @@ export async function handlePrefsRoutes(
 		const user = requestUser(ctx, body.user) || "Anonymous";
 		const next = mergeMapDelta(getUserSnoozes(user), delta);
 		return Response.json({
-			snoozes: setUserSnoozes(user, next),
+			snoozes: await setUserSnoozes(user, next),
 		});
 	}
 
@@ -459,7 +459,7 @@ export async function handlePrefsRoutes(
 		}
 		const user = requestUser(ctx, body.user) || "Anonymous";
 		const next = mergeMapDelta(getUserHides(user), delta);
-		return Response.json({ hides: setUserHides(user, next) });
+		return Response.json({ hides: await setUserHides(user, next) });
 	}
 
 	// ── Per-user workspace settlements ──
@@ -485,7 +485,7 @@ export async function handlePrefsRoutes(
 		}
 		const user = requestUser(ctx, body.user) || "Anonymous";
 		return Response.json({
-			settlements: setUserSettlements(user, body.settlements),
+			settlements: await setUserSettlements(user, body.settlements),
 		});
 	}
 
@@ -509,7 +509,7 @@ export async function handlePrefsRoutes(
 		const user = requestUser(ctx, body.user) || "Anonymous";
 		const next = mergeMapDelta(getUserTabColors(user), delta);
 		return Response.json({
-			colors: setUserTabColors(user, next),
+			colors: await setUserTabColors(user, next),
 		});
 	}
 

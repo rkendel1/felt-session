@@ -107,11 +107,11 @@ import type { SlackSession, PendingAnswer } from "./state";
 
 const ALLOWED_USER_ID = process.env.ALLOWED_SLACK_USER_ID;
 
-function pinSlackSession(sessionId: string, slackUserId: string): void {
+async function pinSlackSession(sessionId: string, slackUserId: string): Promise<void> {
   const user = slackIdToFirstName(slackUserId);
   // Opt-in, matching the web UI's "Pin new sessions" default.
   if (!user || getUiPrefs(user)["pin-new-sessions"] !== "on") return;
-  pinForUser(user, sessionId);
+  await pinForUser(user, sessionId);
 }
 
 async function postOpenSessionCard(
@@ -172,7 +172,7 @@ async function activateLinkedSession(
     },
   );
   if (res.status !== "error") {
-    pinSlackSession(sessionId, slackUserId);
+    await pinSlackSession(sessionId, slackUserId);
     await postOpenSessionCard(channel, threadTs, sessionId).catch((e) =>
       console.warn(`[slack] Failed to post linked-session card for ${sessionId}:`, e),
     );
@@ -688,7 +688,7 @@ export async function processMessage(
     await persistSession(session);
   }
 
-  if (createdSession) pinSlackSession(`slack-${sessionKey}`, msg.userId);
+  if (createdSession) await pinSlackSession(`slack-${sessionKey}`, msg.userId);
 
   // Auto-name the session from its opening prompt, exactly like a UI-created
   // session. Without this a Slack session wears its session key as a title
