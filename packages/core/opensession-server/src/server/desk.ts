@@ -11,9 +11,11 @@
  * that a passive event digest gets skipped. The Desk only ever speaks when
  * spoken to; the pull is the persistent todo list.
  */
-import { existsSync, readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, readFileSync, unlinkSync } from "node:fs";
+import type { StateFirstDB } from "@feltdb/core";
 import { newSessionId, stateDir } from "./paths";
-import { writeJsonAtomic } from "./shared/atomic-write";
+import { managedFeltDb } from "./managed-feltdb";
 import {
 	findSession,
 	touchNativeSession,
@@ -25,17 +27,52 @@ interface DeskStore {
 	users: Record<string, { sessionId?: string; clearedAt?: string }>;
 }
 
+interface StoredDesk {
+	id: string;
+	user: string;
+	sessionId?: string;
+	clearedAt?: string;
+	__version?: number;
+}
+
 const CONFIG_DIR = stateDir("desk");
 const CONFIG_PATH = `${CONFIG_DIR}/config.json`;
+const COLLECTION = "opensession_desks";
+const MIGRATION = "desk-config-json-to-managed-feltdb-v1";
+let deskDb: StateFirstDB | undefined;
+const desks = new Map<string, StoredDesk>();
+const deskId = (user: string) => `desk_${createHash("sha256").update(user).digest("hex")}`;
 
-function readStore(): DeskStore {
-	try {
-		if (existsSync(CONFIG_PATH))
-			return JSON.parse(readFileSync(CONFIG_PATH, "utf-8")) as DeskStore;
-	} catch (e) {
-		console.error("[desk] failed to read config:", e);
+export async function initializeManagedDesks(db: StateFirstDB = deskDb ?? managedFeltDb()): Promise<void> {
+	deskDb = db;
+	if (!await db.collection<{ id: string }>("opensession_migrations").get(MIGRATION)) {
+		let legacy: DeskStore = { users: {} };
+		try { if (existsSync(CONFIG_PATH)) legacy = JSON.parse(readFileSync(CONFIG_PATH, "utf8")); } catch {}
+		for (const [user, state] of Object.entries(legacy.users ?? {})) {
+			const id = deskId(user);
+			await db.transaction((tx) => {
+				tx.collection<StoredDesk>(COLLECTION).set(id, { id, user, ...state, __version: 1 });
+			}, { transactionId: `opensession:desk:migrate:${id}` });
+		}
+		await db.transaction((tx) => {
+			tx.collection("opensession_migrations").set(MIGRATION, { id: MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
+		}, { transactionId: `opensession:migration:${MIGRATION}` });
 	}
-	return { users: {} };
+	if (existsSync(CONFIG_PATH)) unlinkSync(CONFIG_PATH);
+	desks.clear();
+	for (const record of await db.collection<StoredDesk>(COLLECTION).all()) desks.set(record.id, record);
+}
+
+async function saveDesk(record: StoredDesk): Promise<void> {
+	const db = deskDb ?? managedFeltDb();
+	if (record.__version !== undefined && !Number.isSafeInteger(record.__version))
+		throw new Error(`Desk ${record.id} has no FeltDB authority version`);
+	await db.transaction((tx) => {
+		tx.collection<StoredDesk>(COLLECTION).set(record.id, record,
+			record.__version === undefined ? { requireAbsent: true } : { ifVersion: record.__version });
+	}, { transactionId: `opensession:desk:save:${record.id}:${crypto.randomUUID()}` });
+	record.__version = (record.__version ?? 0) + 1;
+	desks.set(record.id, record);
 }
 
 /** Desk turns should feel instant: quick capture / list ops / delegation,
@@ -45,12 +82,12 @@ const DESK_MODEL = "pi/anthropic/claude-sonnet-5";
 const DESK_EFFORT = "low";
 
 /** Get or create the user's repo-less Desk session. */
-export function ensureDeskSession(user: string): {
+export async function ensureDeskSession(user: string): Promise<{
 	sessionId: string;
 	clearedAt?: string;
-} {
-	const store = readStore();
-	const st = store.users[user] ?? (store.users[user] = {});
+}> {
+	const recordId = deskId(user);
+	const st = desks.get(recordId) ?? { id: recordId, user };
 	const existing = st.sessionId ? findSession(st.sessionId) : undefined;
 	if (st.sessionId && existing) {
 		const patch: Partial<NativeSessionFile> = {};
@@ -78,7 +115,7 @@ export function ensureDeskSession(user: string): {
 			patch.workspaceId = null;
 			patch.attachedRepos = [];
 		}
-		if (Object.keys(patch).length > 0) touchNativeSession(st.sessionId, patch);
+		if (Object.keys(patch).length > 0) await touchNativeSession(st.sessionId, patch);
 		return { sessionId: st.sessionId, clearedAt: st.clearedAt };
 	}
 	const id = newSessionId();
@@ -109,7 +146,7 @@ export function ensureDeskSession(user: string): {
 		console.error(`[desk] failed to write Desk session ${id}:`, e),
 	);
 	st.sessionId = id;
-	writeJsonAtomic(CONFIG_PATH, store);
+	await saveDesk(st);
 	console.log(`[desk] created Desk session ${id} for ${user}`);
 	return { sessionId: id, clearedAt: st.clearedAt };
 }
@@ -117,11 +154,11 @@ export function ensureDeskSession(user: string): {
 /** "Clear" in the Desk overlay: hide everything before now from the modal's
  *  transcript view. A display marker only — the transcript itself is untouched and
  *  fully visible in the expanded session view. */
-export function clearDesk(user: string): { clearedAt: string } {
-	const store = readStore();
-	const st = store.users[user] ?? (store.users[user] = {});
+export async function clearDesk(user: string): Promise<{ clearedAt: string }> {
+	const id = deskId(user);
+	const st = desks.get(id) ?? { id, user };
 	st.clearedAt = new Date().toISOString();
-	writeJsonAtomic(CONFIG_PATH, store);
+	await saveDesk(st);
 	return { clearedAt: st.clearedAt };
 }
 

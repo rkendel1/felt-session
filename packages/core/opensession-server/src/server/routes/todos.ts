@@ -89,7 +89,7 @@ export async function handleTodosRoutes(
 		const body = await req.json().catch(() => null);
 		const user = requestUser(ctx, body?.user);
 		if (!user) return Response.json({ error: "missing user" }, { status: 400 });
-		const { sessionId, clearedAt } = ensureDeskSession(user);
+		const { sessionId, clearedAt } = await ensureDeskSession(user);
 		return Response.json({
 			sessionId,
 			clearedAt: clearedAt ?? null,
@@ -111,7 +111,7 @@ export async function handleTodosRoutes(
 		const body = await req.json().catch(() => null);
 		const user = requestUser(ctx, body?.user);
 		if (!user) return Response.json({ error: "missing user" }, { status: 400 });
-		return Response.json(clearDesk(user));
+		return Response.json(await clearDesk(user));
 	}
 
 	return undefined;

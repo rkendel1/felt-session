@@ -351,7 +351,7 @@ export async function mintVoiceSecret(user: string): Promise<{
 		throw new Error(
 			"No OpenAI API key configured for Desk voice — set one in Settings → Desk voice.",
 		);
-	const { sessionId } = ensureDeskSession(user);
+	const { sessionId } = await ensureDeskSession(user);
 	const session = await buildVoiceSessionConfig(sessionId, user);
 	const res = await fetch("https://api.openai.com/v1/realtime/client_secrets", {
 		method: "POST",
@@ -390,7 +390,7 @@ export async function executeVoiceTool(
 	args: Record<string, unknown>,
 ): Promise<unknown> {
 	const control = getSessionControl();
-	const desk = ensureDeskSession(user);
+	const desk = await ensureDeskSession(user);
 	const mcp = await callVoiceMcpTool(user, desk.sessionId, name, args);
 	if (mcp.found) return mcp.result;
 	switch (name) {
@@ -559,7 +559,7 @@ export async function mirrorVoiceEntries(
 	entries: { id: string; role: "user" | "assistant"; text: string }[],
 ): Promise<void> {
 	if (!entries.length) return;
-	const { sessionId } = ensureDeskSession(user);
+	const { sessionId } = await ensureDeskSession(user);
 	const now = new Date().toISOString();
 	const tes: TranscriptEntry[] = entries.map((e) => ({
 		id: e.id,
@@ -585,7 +585,7 @@ export async function mirrorVoiceToolCall(
 	args: Record<string, unknown>,
 	result: unknown,
 ): Promise<void> {
-	const { sessionId } = ensureDeskSession(user);
+	const { sessionId } = await ensureDeskSession(user);
 	await appendTranscriptEvents(
 		sessionId,
 		voiceToolTranscriptEntries(callId, name, args, result),
