@@ -165,7 +165,7 @@ export function encodeKernelSessionMigration(
       const id = plan.table === "session_kernel_turn_projections"
         ? kernelRecordId("turn_projections", `${sessionId}:1:${row.projection_id}`)
         : recordId(plan, row);
-      let value: Record<string, unknown> = decodeRow(row);
+      let value: Record<string, unknown> = { ...decodeRow(row), decisionEpoch: 1 };
       if (plan.table === "session_kernel_changes") value = {
         schemaVersion: 1,
         sessionId,
@@ -204,6 +204,21 @@ export function encodeKernelSessionMigration(
         decisionEpoch: 1,
         revision: Number(row.revision),
         ...(row.cancel === null ? {} : { cancel: value.cancel }),
+        updatedAt: Number(row.updated_at),
+      };
+      else if (plan.table === "session_kernel_agent_host_plan") value = {
+        schemaVersion: 1,
+        decisionEpoch: 1,
+        op: "register_plan",
+        registrationId: String(row.registration_id),
+        sessionId,
+        runId: String(row.run_id),
+        turnId: String(row.turn_id),
+        generation: Number(row.run_generation),
+        planHash: String(row.plan_hash),
+        ...(row.host_id === null ? {} : { hostId: String(row.host_id) }),
+        hostGenerationHighWater: Number(row.host_generation_high_water),
+        supervisorHighWater: Number(row.supervisor_high_water),
         updatedAt: Number(row.updated_at),
       };
       else if (plan.table === "session_kernel_delivery") value = {
