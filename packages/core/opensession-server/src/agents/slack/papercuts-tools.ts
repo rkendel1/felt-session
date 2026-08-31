@@ -55,7 +55,7 @@ export function createPapercutsMcpServer(ctx: PapercutsToolContext) {
       async (args: { message: string; repo?: string }) => {
         try {
           const d = ctx.defaults();
-          const entry = logPapercut({
+          const entry = await logPapercut({
             message: args.message,
             repo: args.repo || d.repo,
             sessionId: ctx.sessionId,

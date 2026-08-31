@@ -35,7 +35,7 @@ export async function handlePapercutsRoutes(
 			);
 		}
 		try {
-			setPapercutsEnabled(body.repo, body.enabled);
+			await setPapercutsEnabled(body.repo, body.enabled);
 		} catch (e: any) {
 			return Response.json({ error: e?.message || String(e) }, { status: 400 });
 		}

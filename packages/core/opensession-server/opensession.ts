@@ -49,6 +49,7 @@ import { initializeManagedSandboxConnections } from "./src/server/sandbox/connec
 import { initializeManagedSandboxOperations } from "./src/server/sandbox/operations";
 import { initializeManagedSandboxEnvironments } from "./src/server/sandbox/environments";
 import { initializeManagedWorkloadIdentity } from "./src/server/workload-identity";
+import { initializeManagedPapercuts } from "./src/server/papercuts";
 import { startLiveActivitySync } from "./src/server/live-activities";
 import { initializeManagedLiveActivities } from "./src/server/live-activities";
 import { initializeManagedSandboxPortals } from "./src/server/sandbox-portals";
@@ -226,6 +227,7 @@ if (!g.__opensessionBooted) {
 	await initializeManagedSandboxOperations(db);
 	await initializeManagedSandboxEnvironments(db);
 	await initializeManagedWorkloadIdentity(db);
+	await initializeManagedPapercuts(db);
 	await initializeManagedPrivateAppDomain(db);
 	await initializeManagedModelProviders(db);
 	await initializeManagedPiConfig(db);

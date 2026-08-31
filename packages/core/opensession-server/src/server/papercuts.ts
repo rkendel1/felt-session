@@ -6,24 +6,32 @@
  * undocumented gotcha. None are blocking on their own — logged together they
  * show where a repo and its tooling need sanding down.
  *
- * Storage: one JSON line per papercut into a daily file under
- * ~/.opensession-papercuts/, tagged with repo/session/model/run kind. Every
+ * Storage: managed FeltDB records tagged with repo/session/model/run kind. Every
  * entry is ALSO emitted as a `papercut` audit event, so the nightly audit
  * digest (/api/audit/digest → the Dreaming automation) sees the day's
  * papercuts with no extra plumbing.
  *
- * Config (Settings → Papercuts): `~/.opensession-papercuts/config.json`
+ * Config (Settings → Papercuts): managed FeltDB singleton
  *   { "repos": { "<repoId>": { "enabled": false } } }
  * Per-repo, default ON — a repo that opts out neither carries the tool nor
  * gets the "log papercuts" nudge in its runs. Read fresh per call.
  */
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from "fs";
+import { createHash } from "node:crypto";
+import { existsSync, readdirSync, readFileSync, rmdirSync, unlinkSync } from "node:fs";
+import type { StateFirstDB } from "@feltdb/core";
 import { audit } from "./audit";
+import { managedFeltDb } from "./managed-feltdb";
 import { stateDir } from "./paths";
-import { writeJsonAtomic } from "./shared/atomic-write";
 import { REPOS } from "./worktree";
 
 const PAPERCUTS_DIR = stateDir("papercuts");
+const ENTRY_COLLECTION = "opensession_papercuts";
+const CONFIG_COLLECTION = "opensession_papercuts_config";
+const CONFIG_ID = "config";
+const MIGRATION = "papercuts-jsonl-to-managed-feltdb-v1";
+let papercutsDb: StateFirstDB | undefined;
+let entries: PapercutEntry[] = [];
+let config: PapercutsConfigFile = {};
 
 export interface PapercutEntry {
   ts: string;
@@ -40,16 +48,15 @@ export interface PapercutEntry {
 
 const MAX_MESSAGE_CHARS = 1000;
 
-function dayFile(date: string): string {
-  return `${PAPERCUTS_DIR}/papercuts-${date}.jsonl`;
-}
-
-export function logPapercut(entry: Omit<PapercutEntry, "ts">): PapercutEntry {
+export async function logPapercut(entry: Omit<PapercutEntry, "ts">): Promise<PapercutEntry> {
   const message = (entry.message || "").trim().slice(0, MAX_MESSAGE_CHARS);
   if (!message) throw new Error("papercut message is empty");
   const full: PapercutEntry = { ...entry, message, ts: new Date().toISOString() };
-  mkdirSync(PAPERCUTS_DIR, { recursive: true });
-  appendFileSync(dayFile(full.ts.slice(0, 10)), JSON.stringify(full) + "\n");
+  const db = papercutsDb ?? managedFeltDb();
+  await db.transaction((tx) => {
+    tx.collection<PapercutEntry>(ENTRY_COLLECTION).set(crypto.randomUUID(), full);
+  }, { transactionId: `opensession:papercut:add:${crypto.randomUUID()}` });
+  entries.push(full);
   // Mirror into the audit log so buildAuditDigest (and through it the nightly
   // Dreaming automation) picks papercuts up alongside errors and tool stats.
   audit({
@@ -72,24 +79,12 @@ export function listPapercuts(opts?: {
 }): PapercutEntry[] {
   const days = Math.min(120, Math.max(1, opts?.days || 14));
   const limit = Math.min(1000, Math.max(1, opts?.limit || 200));
-  const out: PapercutEntry[] = [];
-  for (let i = 0; i < days && out.length < limit; i++) {
-    const date = new Date(Date.now() - i * 86_400_000).toISOString().slice(0, 10);
-    const path = dayFile(date);
-    if (!existsSync(path)) continue;
-    const dayEntries: PapercutEntry[] = [];
-    for (const line of readFileSync(path, "utf-8").split("\n")) {
-      if (!line) continue;
-      try {
-        const e = JSON.parse(line) as PapercutEntry;
-        if (opts?.repo && e.repo !== opts.repo) continue;
-        dayEntries.push(e);
-      } catch {}
-    }
-    dayEntries.reverse(); // newest first within the day
-    out.push(...dayEntries);
-  }
-  return out.slice(0, limit);
+  const cutoff = Date.now() - days * 86_400_000;
+  return entries
+    .filter((entry) => Date.parse(entry.ts) >= cutoff && (!opts?.repo || entry.repo === opts.repo))
+    .sort((left, right) => Date.parse(right.ts) - Date.parse(left.ts))
+    .slice(0, limit)
+    .map((entry) => structuredClone(entry));
 }
 
 // ── Per-repo config ──────────────────────────────────────────────────────────
@@ -99,11 +94,7 @@ interface PapercutsConfigFile {
 }
 
 function readConfig(): PapercutsConfigFile {
-  try {
-    return JSON.parse(readFileSync(`${PAPERCUTS_DIR}/config.json`, "utf-8"));
-  } catch {
-    return {};
-  }
+  return structuredClone(config);
 }
 
 /** Default ON: only an explicit `enabled: false` turns a repo off, and an
@@ -121,10 +112,54 @@ export function papercutsRepoConfigs(): Array<{ repoId: string; enabled: boolean
   }));
 }
 
-export function setPapercutsEnabled(repoId: string, enabled: boolean): void {
+export async function setPapercutsEnabled(repoId: string, enabled: boolean): Promise<void> {
   if (!REPOS[repoId]) throw new Error(`unknown repo "${repoId}"`);
   const cfg = readConfig();
   cfg.repos = { ...cfg.repos, [repoId]: { ...cfg.repos?.[repoId], enabled } };
-  mkdirSync(PAPERCUTS_DIR, { recursive: true });
-  writeJsonAtomic(`${PAPERCUTS_DIR}/config.json`, cfg);
+  const db = papercutsDb ?? managedFeltDb();
+  await db.transaction((tx) => {
+    tx.collection<PapercutsConfigFile>(CONFIG_COLLECTION).set(CONFIG_ID, cfg);
+  }, { transactionId: `opensession:papercuts-config:put:${crypto.randomUUID()}` });
+  config = cfg;
+}
+
+export async function initializeManagedPapercuts(
+  db: StateFirstDB = papercutsDb ?? managedFeltDb(),
+): Promise<void> {
+  papercutsDb = db;
+  if (!await db.collection<{ id: string }>("opensession_migrations").get(MIGRATION)) {
+    let legacyConfig: PapercutsConfigFile = {};
+    try { legacyConfig = JSON.parse(readFileSync(`${PAPERCUTS_DIR}/config.json`, "utf8")); } catch {}
+    const legacyEntries: Array<{ id: string; entry: PapercutEntry }> = [];
+    if (existsSync(PAPERCUTS_DIR)) for (const name of readdirSync(PAPERCUTS_DIR)) {
+      if (!/^papercuts-\d{4}-\d{2}-\d{2}\.jsonl$/.test(name)) continue;
+      const path = `${PAPERCUTS_DIR}/${name}`;
+      for (const [index, line] of readFileSync(path, "utf8").split("\n").entries()) {
+        if (!line) continue;
+        try {
+          const entry = JSON.parse(line) as PapercutEntry;
+          const id = createHash("sha256").update(`${name}\n${index}\n${line}`).digest("hex");
+          legacyEntries.push({ id, entry });
+        } catch {}
+      }
+    }
+    for (const legacy of legacyEntries) await db.transaction((tx) => {
+      tx.collection<PapercutEntry>(ENTRY_COLLECTION).set(legacy.id, legacy.entry);
+    }, { transactionId: `opensession:papercut:migrate:${legacy.id}` });
+    await db.transaction((tx) => {
+      tx.collection<PapercutsConfigFile>(CONFIG_COLLECTION).set(CONFIG_ID, legacyConfig);
+      tx.collection("opensession_migrations").set(MIGRATION,
+        { id: MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
+    }, { transactionId: `opensession:migration:${MIGRATION}` });
+  }
+  if (existsSync(PAPERCUTS_DIR)) {
+    for (const name of readdirSync(PAPERCUTS_DIR)) {
+      if (name === "config.json" || /^papercuts-\d{4}-\d{2}-\d{2}\.jsonl$/.test(name)) {
+        unlinkSync(`${PAPERCUTS_DIR}/${name}`);
+      }
+    }
+    if (readdirSync(PAPERCUTS_DIR).length === 0) rmdirSync(PAPERCUTS_DIR);
+  }
+  entries = await db.collection<PapercutEntry>(ENTRY_COLLECTION).all();
+  config = await db.collection<PapercutsConfigFile>(CONFIG_COLLECTION).get(CONFIG_ID) ?? {};
 }
