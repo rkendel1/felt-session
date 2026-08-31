@@ -22,6 +22,7 @@ import type {
   AutonomousCollaborationOrchestrator,
 } from "./autonomous-collaboration-orchestrator";
 import { EVIDENCE_GATES, PHASE_AGENT_MAP } from "./autonomous-collaboration-orchestrator";
+import { testFeltDb } from "./test-feltdb";
 
 let testCounter = 0;
 let testDir: string;
@@ -33,7 +34,7 @@ beforeEach(() => {
   fs.mkdirSync(testDir, { recursive: true });
 
   stateRegistry = openDurableCollaborationStateRegistry(
-    path.join(testDir, "state.db")
+    testFeltDb(path.join(testDir, "state.db")),
   );
   ledger = openDurableConversationLedger(path.join(testDir, "ledger.db"));
 });
@@ -293,7 +294,7 @@ describe("PR7: Unified Agent Context and Autonomous Collaboration", () => {
     const persistPath = path.join(testDir, "persist.db");
 
     // Write state
-    let reg1 = openDurableCollaborationStateRegistry(persistPath);
+    let reg1 = openDurableCollaborationStateRegistry(testFeltDb(persistPath));
     const taskId = `task-${randomUUIDv7()}`;
     const projectId = `proj-${randomUUIDv7()}`;
 
@@ -306,7 +307,7 @@ describe("PR7: Unified Agent Context and Autonomous Collaboration", () => {
     );
 
     // Simulate restart
-    let reg2 = openDurableCollaborationStateRegistry(persistPath);
+    let reg2 = openDurableCollaborationStateRegistry(testFeltDb(persistPath));
     const state2 = await reg2.getState(taskId);
 
     expect(state2).toBeDefined();

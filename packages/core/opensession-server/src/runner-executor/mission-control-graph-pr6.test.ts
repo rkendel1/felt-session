@@ -25,6 +25,7 @@ import type {
   RepositoryCommit,
   CommitFileChange,
 } from "./mission-control-repository-observer";
+import { testFeltDb } from "./test-feltdb";
 
 let testCounter = 0;
 let testDir: string;
@@ -37,7 +38,7 @@ beforeEach(() => {
   fs.mkdirSync(testDir, { recursive: true });
 
   commitRegistry = openDurableRepositoryCommitRegistry(
-    path.join(testDir, "commits.db")
+    testFeltDb(path.join(testDir, "commits.db")),
   );
   fileRegistry = openDurableRepositoryFileRegistry(
     path.join(testDir, "files.db")
@@ -378,7 +379,7 @@ describe("PR6: Repository Intelligence Graph", () => {
     const persistPath = path.join(testDir, "persist.db");
 
     // Write data
-    let reg1 = openDurableRepositoryCommitRegistry(persistPath);
+    let reg1 = openDurableRepositoryCommitRegistry(testFeltDb(persistPath));
     const commit: RepositoryCommit = {
       id: `persist-${randomUUIDv7()}`,
       repositoryId: `repo-${randomUUIDv7()}`,
@@ -391,7 +392,7 @@ describe("PR6: Repository Intelligence Graph", () => {
     await reg1.createCommit(commit);
 
     // Simulate restart
-    let reg2 = openDurableRepositoryCommitRegistry(persistPath);
+    let reg2 = openDurableRepositoryCommitRegistry(testFeltDb(persistPath));
     const retrieved = await reg2.getCommitBySha("persist-sha");
 
     expect(retrieved).toBeDefined();

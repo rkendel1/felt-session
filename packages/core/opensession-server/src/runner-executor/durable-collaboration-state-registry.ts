@@ -5,7 +5,7 @@
  * Used by AutonomousCollaborationOrchestrator.
  */
 
-import { createFeltDB } from "@feltdb/core";
+import type { StateFirstDB } from "@feltdb/core";
 import type {
   CollaborationState,
   CollaborationPhase,
@@ -80,9 +80,8 @@ export interface DurableCollaborationStateRegistry {
 }
 
 export function openDurableCollaborationStateRegistry(
-  path: string
+  db: StateFirstDB
 ): DurableCollaborationStateRegistry {
-  const db = createFeltDB({ path, namespace: "mission_control_collaboration" });
   const stateCollection = db.collection<CollaborationState>("states");
   const transitionCollection = db.collection<PhaseTransition>("transitions");
   const recoveryCollection = db.collection<CollaborationRecovery>("recovery");

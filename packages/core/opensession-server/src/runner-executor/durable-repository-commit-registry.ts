@@ -3,7 +3,7 @@
  * Tracks Git history as FeltDB records.
  */
 
-import { createFeltDB } from "@feltdb/core";
+import type { StateFirstDB } from "@feltdb/core";
 import type { RepositoryCommit, CommitFileChange } from "./mission-control-repository-observer";
 import { randomUUIDv7 } from "bun";
 
@@ -60,9 +60,8 @@ export interface DurableRepositoryCommitRegistry {
 }
 
 export function openDurableRepositoryCommitRegistry(
-  path: string
+  db: StateFirstDB
 ): DurableRepositoryCommitRegistry {
-  const db = createFeltDB({ path, namespace: "mission_control_commits" });
   const commitCollection = db.collection<RepositoryCommit>("commits");
   const changeCollection = db.collection<CommitFileChange>("changes");
 
