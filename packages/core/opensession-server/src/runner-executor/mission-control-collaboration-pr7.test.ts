@@ -359,12 +359,12 @@ describe("PR7: Unified Agent Context and Autonomous Collaboration", () => {
       "architect",
       []
     );
-    state = await stateRegistry.getState(taskId);
+    state = (await stateRegistry.getState(taskId))!;
     expect(state?.phase).toBe("ARCHITECTING");
 
     // Design
     await stateRegistry.transitionPhase(taskId, "DESIGNED", "architect", []);
-    state = await stateRegistry.getState(taskId);
+    state = (await stateRegistry.getState(taskId))!;
     expect(state?.phase).toBe("DESIGNED");
 
     // Build
@@ -374,12 +374,12 @@ describe("PR7: Unified Agent Context and Autonomous Collaboration", () => {
       "builder",
       []
     );
-    state = await stateRegistry.getState(taskId);
+    state = (await stateRegistry.getState(taskId))!;
     expect(state?.phase).toBe("BUILDING");
 
     // Built
     await stateRegistry.transitionPhase(taskId, "BUILT", "builder", []);
-    state = await stateRegistry.getState(taskId);
+    state = (await stateRegistry.getState(taskId))!;
     expect(state?.phase).toBe("BUILT");
 
     // Review
@@ -389,12 +389,12 @@ describe("PR7: Unified Agent Context and Autonomous Collaboration", () => {
       "reviewer",
       []
     );
-    state = await stateRegistry.getState(taskId);
+    state = (await stateRegistry.getState(taskId))!;
     expect(state?.phase).toBe("REVIEWING");
 
     // Release
     await stateRegistry.conclude(taskId, "RELEASED");
-    state = await stateRegistry.getState(taskId);
+    state = (await stateRegistry.getState(taskId))!;
     expect(state?.phase).toBe("RELEASED");
   });
 

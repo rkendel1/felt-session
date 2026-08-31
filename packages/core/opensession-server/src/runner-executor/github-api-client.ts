@@ -474,10 +474,14 @@ export class GitHubAPIClient {
         };
       }
 
-      const commits = await response.json();
+      const commits = await response.json() as Array<{
+        sha: string;
+        commit: { message: string; author: { name: string; email: string; date: string } };
+        html_url: string;
+      }>;
       return {
         success: true,
-        data: commits.map((c: Record<string, string>) => ({
+        data: commits.map((c) => ({
           sha: c.sha,
           message: c.commit.message,
           author: {

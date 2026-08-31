@@ -12,6 +12,7 @@ import type {
   RiskScore,
   RiskSignals,
 } from "./mission-control-repository-observer";
+export type { RepositoryGraphQueries } from "./mission-control-repository-observer";
 import type { CommitFileChange } from "./mission-control-repository-observer";
 import type { DurableRepositoryFileRegistry } from "./durable-repository-file-registry";
 import type { DurableRepositoryCommitRegistry } from "./durable-repository-commit-registry";
@@ -49,7 +50,7 @@ export function createRepositoryGraphQueries(
       return Promise.all(
         edges.map(async (edge) => ({
           fileId: edge.toId,
-          path: (await fileRegistry.getFile(edge.toId))?.path || "unknown",
+          path: (await fileRegistry.getFile(edge.toId))?.filePath || "unknown",
         }))
       );
     },
@@ -59,7 +60,7 @@ export function createRepositoryGraphQueries(
       return Promise.all(
         edges.map(async (edge) => ({
           fileId: edge.fromId,
-          path: (await fileRegistry.getFile(edge.fromId))?.path || "unknown",
+          path: (await fileRegistry.getFile(edge.fromId))?.filePath || "unknown",
         }))
       );
     },
@@ -89,7 +90,7 @@ export function createRepositoryGraphQueries(
       return Promise.all(
         taskEdges.map(async (edge) => ({
           fileId: edge.toId,
-          path: (await fileRegistry.getFile(edge.toId))?.path || "unknown",
+          path: (await fileRegistry.getFile(edge.toId))?.filePath || "unknown",
         }))
       );
     },
@@ -143,7 +144,7 @@ export function createRepositoryGraphQueries(
           if (file) {
             result.push({
               fileId: current.id,
-              path: file.path,
+              path: file.filePath,
               distance: current.distance,
             });
           }
@@ -204,7 +205,7 @@ export function createRepositoryGraphQueries(
         node: {
           id: nodeId,
           type: "file",
-          label: (await fileRegistry.getFile(nodeId))?.path || nodeId,
+          label: (await fileRegistry.getFile(nodeId))?.filePath || nodeId,
         },
         edges: relevant.map((e) => ({
           source: e.fromId,

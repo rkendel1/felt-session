@@ -220,7 +220,7 @@ describe("FeltDbCommandLedger", () => {
     delete process.env.FELTDB_TELEMETRY;
     getTelemetryClient().enable();
     open();
-    expect(process.env.FELTDB_TELEMETRY).toBe("0");
+    expect(String(process.env.FELTDB_TELEMETRY)).toBe("0");
     expect(getTelemetryClient().isEnabled()).toBe(false);
   });
 

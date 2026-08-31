@@ -137,7 +137,7 @@ describe("DurableConversationLedger", () => {
       turnIndex: 0,
       agentId: "agent-1",
       actor: "agent",
-      messageType: "response",
+      messageType: "agent_response",
       content: "This is a response",
       timestamp: new Date().toISOString(),
     };

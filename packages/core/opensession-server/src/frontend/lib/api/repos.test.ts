@@ -27,10 +27,10 @@ afterEach(() => {
 
 test("registers a local repository through the setup route", async () => {
 	let request: { url: string; init?: RequestInit } | undefined;
-	globalThis.fetch = (async (input, init) => {
+	globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
 		request = { url: String(input), init };
 		return Response.json({ id: "flow_db", defaultBranch: "main" }, { status: 201 });
-	}) as typeof fetch;
+	}) as unknown as typeof fetch;
 
 	await registerRepoApi({ path: "/Users/randy/.opensession/imports/flow_db" });
 
@@ -44,10 +44,10 @@ test("registers a local repository through the setup route", async () => {
 
 test("normalizes a GitHub clone URL for the setup route", async () => {
 	let body: unknown;
-	globalThis.fetch = (async (_input, init) => {
+	globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
 		body = JSON.parse(String(init?.body));
 		return Response.json({ id: "flow_db", defaultBranch: "main" }, { status: 201 });
-	}) as typeof fetch;
+	}) as unknown as typeof fetch;
 
 	await registerRepoApi({ url: "https://github.com/rkendel1/flow_db.git" });
 
@@ -74,7 +74,7 @@ test("resolves an already-registered GitHub clone URL", async () => {
 				},
 			],
 		});
-	}) as typeof fetch;
+	}) as unknown as typeof fetch;
 
 	const repo = await registerRepoApi({
 		url: "https://github.com/rkendel1/flow_db.git",

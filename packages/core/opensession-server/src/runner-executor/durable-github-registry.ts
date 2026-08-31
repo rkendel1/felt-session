@@ -4,7 +4,8 @@
  * Stores and manages GitHub access tokens and integrations.
  */
 
-import { randomUUIDv7, createFeltDB, getTelemetryClient } from "@feltdb/core";
+import { createFeltDB, getTelemetryClient } from "@feltdb/core";
+import { randomUUIDv7 } from "bun";
 import type {
   GitHubOAuthToken,
   GitHubIntegration,

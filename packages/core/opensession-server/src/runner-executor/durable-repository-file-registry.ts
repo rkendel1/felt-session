@@ -13,6 +13,15 @@ import type {
   FileRelationship,
   CommitFileChange,
 } from "./mission-control-graph";
+import type { CommitFileChange as ObservedCommitFileChange } from "./mission-control-repository-observer";
+export type { RepositoryFile } from "./mission-control-graph";
+
+interface GraphRelationship {
+  fromId: string;
+  toId: string;
+  kind: string;
+  metadata?: Record<string, unknown>;
+}
 
 /**
  * Stored repository file row.
@@ -86,6 +95,8 @@ export interface DurableRepositoryFileRegistry {
     projectId: string,
     filePath: string,
   ): Promise<FileRelationship[]>;
+  getRelationships(fileId: string, relationshipType: string): Promise<GraphRelationship[]>;
+  getRelationshipsByType(relationshipType: string): Promise<GraphRelationship[]>;
   getFileImpact(projectId: string, filePath: string): Promise<FileRelationship[]>;
   updateRelationship(relationship: FileRelationship): Promise<void>;
   deleteRelationship(id: string): Promise<void>;
@@ -97,6 +108,8 @@ export interface DurableRepositoryFileRegistry {
     filePath: string,
   ): Promise<CommitFileChange[]>;
   getCommitChanges(projectId: string, commitSha: string): Promise<CommitFileChange[]>;
+  getChangesByFile(fileId: string): Promise<ObservedCommitFileChange[]>;
+  getChangesByAgentRun(runId: string): Promise<ObservedCommitFileChange[]>;
 
   // Analytics
   getHighRiskFiles(projectId: string, limit?: number): Promise<string[]>;
@@ -322,6 +335,32 @@ export function openDurableRepositoryFileRegistry(
       }));
     },
 
+    async getRelationships(fileId: string, relationshipType: string): Promise<GraphRelationship[]> {
+      const file = await this.getFile(fileId);
+      if (!file) return [];
+      const relationships = await this.getRelationshipsByFile(file.projectId, file.filePath);
+      return relationships
+        .filter((relationship) => relationshipType === "all" || relationship.relationshipType === relationshipType)
+        .map((relationship) => ({
+          fromId: relationship.sourceFile,
+          toId: relationship.targetFile,
+          kind: relationship.relationshipType,
+          metadata: relationship.metadata,
+        }));
+    },
+
+    async getRelationshipsByType(relationshipType: string): Promise<GraphRelationship[]> {
+      const rows = await db.collection<StoredFileRelationship>(RELATIONSHIPS_COLLECTION).all();
+      return rows
+        .filter((row) => relationshipType === "all" || row.relationshipType === relationshipType)
+        .map((row) => ({
+          fromId: row.sourceFile,
+          toId: row.targetFile,
+          kind: row.relationshipType,
+          metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
+        }));
+    },
+
     async getFileImpact(
       projectId: string,
       filePath: string,
@@ -446,6 +485,24 @@ export function openDurableRepositoryFileRegistry(
           : undefined,
         timestamp: row.timestamp,
       }));
+    },
+
+    async getChangesByFile(fileId: string): Promise<ObservedCommitFileChange[]> {
+      const file = await this.getFile(fileId);
+      if (!file) return [];
+      const changes = await this.getFileChanges(file.projectId, file.filePath);
+      return changes.map((change) => ({
+        id: change.id,
+        commitId: change.commitSha,
+        fileId,
+        changeType: change.changeType === "copied" ? "modified" : change.changeType,
+        additions: change.additions,
+        deletions: change.deletions,
+      }));
+    },
+
+    async getChangesByAgentRun(_runId: string): Promise<ObservedCommitFileChange[]> {
+      return [];
     },
 
     async getHighRiskFiles(

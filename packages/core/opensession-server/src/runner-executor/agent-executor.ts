@@ -184,8 +184,8 @@ export class AgentExecutor {
       await this.runRegistry.markRunCompleted(
         runId,
         result.success ? "succeeded" : "failed",
-        result.output,
-        result.error,
+        result.stdout,
+        result.stderr || undefined,
         result.exitCode,
       );
 
@@ -193,8 +193,8 @@ export class AgentExecutor {
         runId,
         success: result.success,
         exitCode: result.exitCode,
-        output: result.output,
-        error: result.error,
+        output: result.stdout,
+        error: result.stderr,
         durationMs: result.durationMs,
         filesChanged,
       };
@@ -282,25 +282,25 @@ export class AgentExecutor {
       const executable = parts[0];
       const args = parts.slice(1);
 
-      const process = spawn(executable, args, {
+      const child = spawn(executable, args, {
         cwd,
         stdio: ["pipe", "pipe", "pipe"],
-        env: { ...process.env, ...options.env },
+        env: { ...globalThis.process.env, ...options.env },
         timeout: options.timeout,
       });
 
       let stdout = "";
       let stderr = "";
 
-      process.stdout?.on("data", (data) => {
+      child.stdout?.on("data", (data: Buffer) => {
         stdout += data.toString();
       });
 
-      process.stderr?.on("data", (data) => {
+      child.stderr?.on("data", (data: Buffer) => {
         stderr += data.toString();
       });
 
-      process.on("close", (code) => {
+      child.on("close", (code: number | null) => {
         const durationMs = Date.now() - startTime;
         resolve({
           stdout,
@@ -311,7 +311,7 @@ export class AgentExecutor {
         });
       });
 
-      process.on("error", (error) => {
+      child.on("error", (error: Error) => {
         const durationMs = Date.now() - startTime;
         resolve({
           stdout: "",

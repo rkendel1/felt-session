@@ -11,7 +11,8 @@
 import { createFeltDB, getTelemetryClient } from "@feltdb/core";
 import { dirname } from "node:path";
 import { mkdirSync } from "node:fs";
-import type { TranscriptEntry, SeqEntry } from "./types";
+import type { TranscriptEntry } from "./types";
+import type { SeqEntry } from "./transcript-bus";
 import type { AppendResult } from "./transcript-store";
 
 interface StoredTranscriptEvent {
@@ -106,16 +107,21 @@ export class FeltDBTranscriptStore {
       let nextChangeSeq = metadata?.nextChangeSeq ?? 1;
       const insertedEntries: { seq: number; uuid: string }[] = [];
       const updatedEntries: { seq: number; uuid: string }[] = [];
+      const eventCollection = this.db.collection<StoredTranscriptEvent>(EVENTS_COLLECTION);
+      const existingEvents = new Map(
+        await Promise.all(entries.filter((entry) => entry.id).map(async (entry) => {
+          const key = `${sessionId}_${entry.id}`;
+          return [key, await eventCollection.get(key)] as const;
+        })),
+      );
 
-      await this.db.transaction(async (tx) => {
+      await this.db.transaction((tx) => {
         for (const entry of entries) {
           if (!entry.id) continue;
 
           // Check if entry already exists (upsert semantics)
           const existingKey = `${sessionId}_${entry.id}`;
-          const existing = await tx
-            .collection<StoredTranscriptEvent>(EVENTS_COLLECTION)
-            .get(existingKey);
+          const existing = existingEvents.get(existingKey);
 
           const stored: StoredTranscriptEvent = {
             id: existingKey,
@@ -139,7 +145,7 @@ export class FeltDBTranscriptStore {
             nextSeq++;
           }
 
-          await tx
+          tx
             .collection<StoredTranscriptEvent>(EVENTS_COLLECTION)
             .set(existingKey, stored);
         }
@@ -157,7 +163,7 @@ export class FeltDBTranscriptStore {
           importWatermark: metadata?.importWatermark,
         };
 
-        await tx
+        tx
           .collection<StoredSessionMetadata>(METADATA_COLLECTION)
           .set(sessionKey, updatedMetadata);
       });
@@ -208,6 +214,7 @@ export class FeltDBTranscriptStore {
             entries.push({
               ...parsed,
               seq: event.seq,
+              changeSeq: event.changeSeq,
             });
           }
         }
@@ -262,11 +269,11 @@ export class FeltDBTranscriptStore {
 
       metadata.importedAt = Date.now();
       metadata.importSrc = src;
-      metadata.importWatermark = watermark;
+      metadata.importWatermark = watermark ?? undefined;
 
-      await this.db
-        .collection<StoredSessionMetadata>(METADATA_COLLECTION)
-        .set(sessionId, metadata);
+      await this.db.transaction((tx) => {
+        tx.collection<StoredSessionMetadata>(METADATA_COLLECTION).set(sessionId, metadata);
+      });
     } catch (error) {
       console.error("[feltdb-transcript-store] Mark imported failed:", error);
     }
@@ -288,24 +295,21 @@ export class FeltDBTranscriptStore {
     if (!this.db) return;
 
     try {
-      await this.db.transaction(async (tx) => {
+      const metadata = await this.getSessionMetadata(sessionId);
+      await this.db.transaction((tx) => {
         // Delete all events for this session
         // Note: This is inefficient; real implementation would need batch delete
-        const metadata = await tx
-          .collection<StoredSessionMetadata>(METADATA_COLLECTION)
-          .get(sessionId);
-
         if (metadata) {
           for (let seq = 1; seq < metadata.nextSeq; seq++) {
             const key = `${sessionId}_${seq}`;
-            await tx
+            tx
               .collection<StoredTranscriptEvent>(EVENTS_COLLECTION)
               .delete(key);
           }
         }
 
         // Delete metadata
-        await tx
+        tx
           .collection<StoredSessionMetadata>(METADATA_COLLECTION)
           .delete(sessionId);
       });

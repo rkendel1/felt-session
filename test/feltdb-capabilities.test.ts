@@ -479,7 +479,7 @@ describe("FeltDB Capability Validation", () => {
     if (sourceRecords.length > 0) {
       await sessions.insert({
         recordType: "replica",
-        data: sourceRecords[0].data,
+        data: (sourceRecords[0] as { data: unknown }).data,
       });
     }
 

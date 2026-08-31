@@ -442,7 +442,7 @@ describe("Phase 6: FeltDB Durability and Crash-Recovery", () => {
       // Verify no .db or .sqlite files created
       const files = require("fs").readdirSync(testDir);
       const sqliteFiles = files.filter(
-        (f) => f.endsWith(".db") || f.endsWith(".sqlite") || f.endsWith(".db3")
+        (f: string) => f.endsWith(".db") || f.endsWith(".sqlite") || f.endsWith(".db3")
       );
       expect(sqliteFiles.length).toBe(0);
     });
@@ -465,7 +465,7 @@ describe("Phase 6: FeltDB Durability and Crash-Recovery", () => {
       // Verify it contains FeltDB files, not SQLite
       const feltdbDir = require("fs").readdirSync(feltdbPath + ".feltdb");
       const sqliteFiles = feltdbDir.filter(
-        (f) => f.endsWith(".db") || f.endsWith(".sqlite")
+        (f: string) => f.endsWith(".db") || f.endsWith(".sqlite")
       );
       expect(sqliteFiles.length).toBe(0);
     });

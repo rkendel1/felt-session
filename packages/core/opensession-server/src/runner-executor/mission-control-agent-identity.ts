@@ -23,11 +23,12 @@ export type AgentRole =
 /**
  * Agent capabilities.
  */
-export interface AgentCapability {
+export interface StructuredAgentCapability {
   name: string;
   description: string;
   version: string;
 }
+export type AgentCapability = StructuredAgentCapability | string;
 
 /**
  * Agent identity - represents an agent as an addressable entity.
@@ -55,7 +56,8 @@ export type AgentPresenceState =
   | "busy"
   | "thinking"
   | "executing"
-  | "unavailable";
+  | "unavailable"
+  | "active";
 
 /**
  * Agent presence information.
@@ -78,7 +80,7 @@ export interface AgentAssignment {
   taskId: string;
   projectId: string;
   assignedAt: string;
-  status: "assigned" | "accepted" | "completed" | "failed";
+  status: "pending" | "active" | "assigned" | "accepted" | "completed" | "failed";
   result?: string;
   completedAt?: string;
 }

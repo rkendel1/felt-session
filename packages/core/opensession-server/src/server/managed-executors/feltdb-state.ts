@@ -210,7 +210,7 @@ export class FeltDbExecutorStateStore implements ExecutorStateStore {
         action: entry.action,
         operatorId: entry.operatorId,
         reason: entry.reason,
-        atMs: new Date(entry.at).getTime(),
+        atMs: entry.atMs,
       };
       tx.collection<StoredAuditRow>(AUDIT_COLLECTION).set(key, row);
     });
@@ -261,43 +261,43 @@ export class FeltDbExecutorStateStore implements ExecutorStateStore {
     return true;
   }
 
-  private #recordToRow(record: ExecutorRecord): StoredExecutorRow {
+  #recordToRow(record: ExecutorRecord): StoredExecutorRow {
     return {
       id: record.executorId,
       executorId: record.executorId,
       sessionId: record.sessionId,
       provider: record.provider,
-      resourceId: record.resourceId,
-      workspaceId: record.workspaceId,
-      resourceGeneration: record.resourceGeneration,
+      resourceId: record.resourceId ?? "",
+      workspaceId: record.workspaceId ?? "",
+      resourceGeneration: record.resourceGeneration ?? 0,
       instanceGeneration: record.instanceGeneration,
       lifecycle: record.lifecycle,
-      projectRevision: record.projectRevision,
-      projectBaseCommit: record.projectBaseCommit,
-      projectDurableDelta: JSON.stringify(record.projectDurableDelta || {}),
-      createdAtMs: new Date(record.createdAt).getTime(),
-      updatedAtMs: new Date(record.updatedAt).getTime(),
+      projectRevision: record.project.revision,
+      projectBaseCommit: record.project.baseCommit,
+      projectDurableDelta: record.project.durableDelta,
+      createdAtMs: record.createdAtMs,
+      updatedAtMs: record.updatedAtMs,
       error: record.error ?? null,
     };
   }
 
-  private #rowToRecord(row: StoredExecutorRow): ExecutorRecord {
+  #rowToRecord(row: StoredExecutorRow): ExecutorRecord {
     return {
       executorId: row.executorId,
       sessionId: row.sessionId,
       provider: row.provider as any,
-      resourceId: row.resourceId,
-      workspaceId: row.workspaceId,
-      resourceGeneration: row.resourceGeneration,
+      resourceId: row.resourceId || undefined,
+      workspaceId: row.workspaceId || undefined,
+      resourceGeneration: row.resourceGeneration || undefined,
       instanceGeneration: row.instanceGeneration,
       lifecycle: row.lifecycle as any,
-      projectRevision: row.projectRevision,
-      projectBaseCommit: row.projectBaseCommit,
-      projectDurableDelta: row.projectDurableDelta
-        ? JSON.parse(row.projectDurableDelta)
-        : {},
-      createdAt: new Date(row.createdAtMs).toISOString(),
-      updatedAt: new Date(row.updatedAtMs).toISOString(),
+      project: {
+        revision: row.projectRevision,
+        baseCommit: row.projectBaseCommit,
+        durableDelta: row.projectDurableDelta,
+      },
+      createdAtMs: row.createdAtMs,
+      updatedAtMs: row.updatedAtMs,
       error: row.error ?? undefined,
     };
   }

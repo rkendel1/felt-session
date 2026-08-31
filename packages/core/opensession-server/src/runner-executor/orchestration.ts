@@ -111,24 +111,24 @@ export function createOrchestration(
       if (success) {
         // Move to review phase
         await eventSpine.record({
-          kind: "agent.execution_completed",
+          kind: "agent.execution.completed",
           id: { sessionId: taskId, eventSequence: getNextSequence(taskId) },
           timestamp: new Date().toISOString(),
           agentId: executionId,
           executionId,
-          status: "succeeded",
-          result,
+          state: "succeeded",
+          outcome: result,
         });
       } else {
         // Record failure, could trigger retry
         await eventSpine.record({
-          kind: "agent.execution_completed",
+          kind: "agent.execution.completed",
           id: { sessionId: taskId, eventSequence: getNextSequence(taskId) },
           timestamp: new Date().toISOString(),
           agentId: executionId,
           executionId,
-          status: "failed",
-          result: result || "Execution failed",
+          state: "failed",
+          outcome: result || "Execution failed",
         });
       }
     },
@@ -155,8 +155,9 @@ export function createOrchestration(
           kind: "review.completed",
           id: { sessionId: taskId, eventSequence: getNextSequence(taskId) },
           timestamp: new Date().toISOString(),
-          executionId,
-          status: "approved",
+          reviewerId: executionId,
+          taskId,
+          state: "approved",
           feedback,
         });
       } else {
@@ -172,8 +173,9 @@ export function createOrchestration(
           kind: "review.completed",
           id: { sessionId: taskId, eventSequence: getNextSequence(taskId) },
           timestamp: new Date().toISOString(),
-          executionId,
-          status: "rejected",
+          reviewerId: executionId,
+          taskId,
+          state: "rejected",
           feedback,
         });
       }

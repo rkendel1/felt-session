@@ -106,14 +106,14 @@ export function openDurableCollaborationStateRegistry(
       };
 
       await db.transaction((tx) => {
-        tx.insertOne(stateCollection, state);
+        tx.collection<CollaborationState>("states").insert(state, state.id);
       });
 
       return state;
     },
 
     async getState(taskId: string): Promise<CollaborationState | undefined> {
-      return stateCollection.findOne({ taskId });
+      return (await stateCollection.find({ taskId }))[0];
     },
 
     async transitionPhase(
@@ -122,7 +122,7 @@ export function openDurableCollaborationStateRegistry(
       agentId: string,
       evidence: Array<{ type: string; ref: string }>
     ): Promise<PhaseTransition> {
-      const state = await stateCollection.findOne({ taskId });
+      const state = (await stateCollection.find({ taskId }))[0];
       if (!state) throw new Error(`No collaboration for task: ${taskId}`);
 
       const transition: PhaseTransition = {
@@ -133,6 +133,7 @@ export function openDurableCollaborationStateRegistry(
         transitionedBy: agentId,
         evidence: evidence.map((e) => ({
           ...e,
+          type: e.type as PhaseTransition["evidence"][number]["type"],
           timestamp: new Date().toISOString(),
         })),
         timestamp: new Date().toISOString(),
@@ -151,8 +152,8 @@ export function openDurableCollaborationStateRegistry(
           ],
         };
 
-        tx.replaceOne(stateCollection, { taskId }, updated, false);
-        tx.insertOne(transitionCollection, transition);
+        tx.collection<CollaborationState>("states").set(state.id, updated);
+        tx.collection<PhaseTransition>("transitions").insert(transition, transition.id);
       });
 
       return transition;
@@ -172,7 +173,7 @@ export function openDurableCollaborationStateRegistry(
       phase: CollaborationPhase,
       error: string
     ): Promise<void> {
-      const state = await stateCollection.findOne({ taskId });
+      const state = (await stateCollection.find({ taskId }))[0];
       if (!state) throw new Error(`No collaboration for task: ${taskId}`);
 
       const updated: CollaborationState = {
@@ -201,22 +202,22 @@ export function openDurableCollaborationStateRegistry(
       };
 
       await db.transaction((tx) => {
-        tx.replaceOne(stateCollection, { taskId }, updated, false);
-        tx.replaceOne(recoveryCollection, { taskId }, recovery, true);
+        tx.collection<CollaborationState>("states").set(state.id, updated);
+        tx.collection<CollaborationRecovery>("recovery").set(taskId, recovery);
       });
     },
 
     async getRecoveryInfo(
       taskId: string
     ): Promise<CollaborationRecovery | undefined> {
-      return recoveryCollection.findOne({ taskId });
+      return (await recoveryCollection.get(taskId)) ?? undefined;
     },
 
     async conclude(
       taskId: string,
       finalPhase: "RELEASED" | "FAILED"
     ): Promise<void> {
-      const state = await stateCollection.findOne({ taskId });
+      const state = (await stateCollection.find({ taskId }))[0];
       if (!state) throw new Error(`No collaboration for task: ${taskId}`);
 
       const updated: CollaborationState = {
@@ -226,7 +227,7 @@ export function openDurableCollaborationStateRegistry(
       };
 
       await db.transaction((tx) => {
-        tx.replaceOne(stateCollection, { taskId }, updated, false);
+        tx.collection<CollaborationState>("states").set(state.id, updated);
       });
     },
 

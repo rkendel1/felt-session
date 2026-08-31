@@ -110,11 +110,11 @@ export class FeltDBMemoryStore {
       lastConfirmedAt: input.lastConfirmedAt,
       expiresAt: input.expiresAt,
       supersedes: input.supersedes || [],
-      supersededBy: null,
+      supersededBy: undefined,
       fingerprint,
       tags: (input.tags || []).map((t) => t.toLowerCase()),
       retrievalCount: 0,
-      lastRetrievedAt: null,
+      lastRetrievedAt: undefined,
     };
 
     const stored: StoredMemoryRecord = {
@@ -358,9 +358,9 @@ export class FeltDBMemoryStore {
           stored.lastRetrievedAt = now;
           stored.retrievalCount = (stored.retrievalCount || 0) + 1;
 
-          await this.db
-            .collection<StoredMemoryRecord>(RECORDS_COLLECTION)
-            .set(id, stored);
+          await this.db.transaction((tx) => {
+            tx.collection<StoredMemoryRecord>(RECORDS_COLLECTION).set(id, stored);
+          });
           count++;
         }
       }

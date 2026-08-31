@@ -1460,11 +1460,11 @@ export async function runAutomation(
     let ticketWorkspaceId: string | undefined;
     if (plainThreadId) {
       try {
-        ticketWorkspaceId = resolvePlainWorkspace({
+        ticketWorkspaceId = (await resolvePlainWorkspace({
           threadId: plainThreadId,
           title: eventTitle,
           createdBy: `${automation.name} (automation)`,
-        }).workspace.id;
+        })).workspace.id;
       } catch {}
     }
 

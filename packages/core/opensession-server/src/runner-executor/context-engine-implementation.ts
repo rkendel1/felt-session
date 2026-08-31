@@ -155,9 +155,9 @@ export function createContextEngine(
 
       relevantFiles.push({
         fileId,
-        path: file.path,
+        path: file.filePath,
         language: file.language,
-        sizeBytes: file.sizeBytes,
+        sizeBytes: file.size,
         relevanceScore: score,
         reason: score >= 90 ? "Direct task focus" : "Related to task",
         dependencies: deps.map((d) => d.path),

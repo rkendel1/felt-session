@@ -171,9 +171,10 @@ describe("Slack Mission Control Integration", () => {
 
       const events = await eventSpine.range(sessionId, 0, 10);
       expect(events).toHaveLength(2);
-      expect(events[0].command).toBe("status");
-      expect(events[1].command).toBe("investigate");
-      expect(events[1].args).toEqual(["Why are builds failing?"]);
+      const commands = events.filter((event) => event.kind === "slack.command.received");
+      expect(commands[0].command).toBe("status");
+      expect(commands[1].command).toBe("investigate");
+      expect(commands[1].args).toEqual(["Why are builds failing?"]);
     }
   });
 
@@ -207,6 +208,7 @@ describe("Slack Mission Control Integration", () => {
 
     const event = events[0];
     expect(event.kind).toBe("slack.notification.posted");
+    if (event.kind !== "slack.notification.posted") throw new Error("unexpected event kind");
     expect(event.agentId).toBe("architect-1");
     expect(event.message).toBe(
       "Found the root cause: authentication is not properly validating tokens.",

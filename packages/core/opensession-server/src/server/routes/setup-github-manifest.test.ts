@@ -292,7 +292,7 @@ describe("GitHub App manifest", () => {
 				client_secret: "client-secret-value",
 				pem,
 				owner: { login: "octocat" },
-			}, { status: 201 })) as typeof fetch;
+			}, { status: 201 })) as unknown as typeof fetch;
 		const completed = await handleSetupRoutes(
 			context(
 				`/api/setup/github/manifest/callback?code=temporary-code&state=${encodeURIComponent(state!)}`,

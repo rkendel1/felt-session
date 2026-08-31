@@ -69,12 +69,12 @@ export function openDurableRepositoryCommitRegistry(
   return {
     async createCommit(commit: RepositoryCommit): Promise<void> {
       await db.transaction((tx) => {
-        tx.replaceOne(commitCollection, { sha: commit.sha }, commit, true);
+        tx.collection<RepositoryCommit>("commits").set(commit.id, commit);
       });
     },
 
     async getCommitBySha(sha: string): Promise<RepositoryCommit | undefined> {
-      return commitCollection.findOne({ sha });
+      return (await commitCollection.find({ sha }))[0];
     },
 
     async getCommits(
@@ -107,13 +107,13 @@ export function openDurableRepositoryCommitRegistry(
     },
 
     async commitExists(sha: string): Promise<boolean> {
-      const commit = await commitCollection.findOne({ sha });
+      const commit = (await commitCollection.find({ sha }))[0];
       return !!commit;
     },
 
     async recordFileChange(change: CommitFileChange): Promise<void> {
       await db.transaction((tx) => {
-        tx.insertOne(changeCollection, change);
+        tx.collection<CommitFileChange>("changes").insert(change, change.id);
       });
     },
 
@@ -133,9 +133,9 @@ export function openDurableRepositoryCommitRegistry(
       const changes = await changeCollection.find({ fileId });
       const commitIds = new Set(changes.map((c) => c.commitId));
 
-      const commits = await commitCollection.find({
-        id: { $in: Array.from(commitIds) },
-      });
+      const commits = (await commitCollection.all()).filter((commit) =>
+        commitIds.has(commit.id),
+      );
 
       return commits.sort((a, b) => {
         const dateA = new Date(a.committedAt).getTime();
@@ -155,23 +155,21 @@ export function openDurableRepositoryCommitRegistry(
         return new Date(c.committedAt).getTime() < cutoff;
       });
 
-      let deleted = 0;
+      const changes = await changeCollection.all();
       await db.transaction((tx) => {
         for (const commit of toDelete) {
-          tx.deleteOne(commitCollection, { id: commit.id });
+          tx.collection<RepositoryCommit>("commits").delete(commit.id);
 
           // Also delete associated changes
           const deleteMany = (doc: CommitFileChange) =>
             doc.commitId === commit.id;
-          for (const change of changeCollection.data.filter(deleteMany)) {
-            tx.deleteOne(changeCollection, { id: change.id });
+          for (const change of changes.filter(deleteMany)) {
+            tx.collection<CommitFileChange>("changes").delete(change.id);
           }
-
-          deleted++;
         }
       });
 
-      return deleted;
+      return toDelete.length;
     },
   };
 }
