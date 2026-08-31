@@ -57,7 +57,7 @@ import {
 	promptQueues,
 } from "./queue-state";
 import { type ImageInput, shouldPersistModelSwitch } from "./run-events";
-import { attachSessionWatchersToEngineTranscript, drainQueue, foldSessionUsage, maybeLaunchSandboxedRun, maybeQueueAutoContinue, sessionMentionsNote, watchExternalRunAndDrain, } from "./run-session";
+import { drainQueue, foldSessionUsage, maybeLaunchSandboxedRun, maybeQueueAutoContinue, sessionMentionsNote, watchExternalRunAndDrain, } from "./run-session";
 import { type McpScope, STRIPE_CONFIRM_TOOLS } from "./runner-shared";
 import { isRemoteSandboxProvider, resolveRequestedSandbox, sandboxConfig, sandboxesEnabled, } from "./sandbox/config";
 import { resolveInteractiveSandbox } from "./sandbox/defaults";
@@ -1472,17 +1472,6 @@ export async function openCreatedSession(
 							...(effectiveModel ? { lastEngineModel: effectiveModel } : {}),
 						}
 					);
-					// The transcript file didn't exist when viewers sent their
-					// watch (fresh session) — attach them now so this first turn
-					// streams live instead of only appearing after a re-watch.
-					if (engineSessionId) {
-						attachSessionWatchersToEngineTranscript(
-							bksId,
-							effectiveProvider,
-							spec.wtPath,
-							engineSessionId,
-						);
-					}
 				}
 				if (event.type === "model_switch") {
 					const to = event.toModel || "";

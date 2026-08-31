@@ -14,7 +14,6 @@ import { audit } from "./audit";
 import { pendingAskAwaitingAnswer } from "./asks";
 import { resendPendingSlackComposer } from "./slack-compose";
 import { notifyMentions } from "./mentions";
-import { stopAllWatchesForClient } from "./file-watcher";
 import { prepareEntriesForWire } from "./jsonl-parser";
 import { providerFor } from "./models";
 
@@ -154,13 +153,13 @@ async function sendWatchExtras(
 
 // Per-socket bus unsubscribe handles. Parked on globalThis so a hot reload
 // can still tear down subscriptions made by the previous module instance
-// (same reason file-watcher parks its watch map).
+// This survives hot reloads so the new module can release old subscriptions.
 const v2Unsubs: Map<unknown, () => void> = ((globalThis as any)
 	.__osTranscriptV2Unsubs ??= new Map());
 
 /**
  * The ONE v2 teardown helper — called from all three paths that end a
- * socket's view of a session (matching stopAllWatchesForClient's contract):
+ * socket's view of a session:
  * watch-switch (re-watch of a different session on the same socket), unwatch,
  * and close. Releases the bus subscription and clears the managed-view mark.
  */
@@ -687,7 +686,6 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 				}
 
 				// Stop watching any previous session first
-				stopAllWatchesForClient(ws);
 				releaseTranscriptV2(ws);
 				leaveSession(ws);
 
@@ -736,7 +734,6 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 				// Mirrors the disconnect/close cleanup; leaveSession broadcasts
 				// presence to the viewers who remain.
 				ws.data.watchRequest = (ws.data.watchRequest ?? 0) + 1;
-				stopAllWatchesForClient(ws);
 				releaseTranscriptV2(ws);
 				leaveSession(ws);
 				break;
@@ -1351,7 +1348,6 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 		if (sandboxPortalRelayClose(ws)) return;
 		ws.data.watchRequest = (ws.data.watchRequest ?? 0) + 1;
 		allClients.delete(ws);
-		stopAllWatchesForClient(ws);
 		releaseTranscriptV2(ws);
 		leaveSession(ws);
 		stopAllTerminals(ws); // the Shell tabs' PTYs die with their socket

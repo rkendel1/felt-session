@@ -72,7 +72,6 @@ import {
 	engineSessionIdFor,
 	engineSessionPatch,
 	engineUserTexts,
-	getEngineTranscriptPath,
 	mergedSessionTranscript,
 	mergedSessionTranscriptAsync,
 	readEngineHandoffTranscriptAsync,
@@ -102,7 +101,6 @@ import { clearReplySuggestions, maybeSuggestReplies } from "./reply-suggestions"
 import { commitAuthorFor } from "./shared/user-mappings";
 import type { StateFirstDB } from "@feltdb/core";
 import { managedFeltDb } from "./managed-feltdb";
-import { startWatching } from "./file-watcher";
 import { ensureAskCheckout, ensureScratchDir, getRepo, isSharedCheckoutDir, repoForPath, repoForPathOrNull, reviveWorktree, sessionRepoId, worktreeHeadBranch } from "./worktree";
 import { createGoalSelfMcpServer } from "../agents/slack/goal-tools";
 import { sendSlackMessage } from "../agents/slack/slack-api";
@@ -1040,13 +1038,6 @@ export async function recordRecoveredRunEvent(osSessionId: string, event: Stream
 				)
 			)
 				invalidateSessionsCache();
-			if (session.worktreeDir)
-				attachSessionWatchersToEngineTranscript(
-					osSessionId,
-					provider,
-					session.worktreeDir,
-					event.sessionId,
-				);
 		}
 		return;
 	}
@@ -1202,70 +1193,7 @@ export async function recordRecoveredRunEvent(osSessionId: string, event: Stream
 			: {}),
 		...(event.model ? { lastEngineModel: event.model } : {}),
 	});
-	if (engineSessionId && session.worktreeDir) {
-		attachSessionWatchersToEngineTranscript(
-			osSessionId,
-			provider,
-			session.worktreeDir,
-			engineSessionId,
-		);
-	}
 	invalidateSessionsCache();
-}
-
-/**
- * Attach every socket viewing `sessionId` to a transcript file that only came
- * into existence after they started watching — a fresh session's first run (no
- * transcriptPath existed at watch time), or an engine-id rotation forking to a
- * new file mid-conversation. Without this the whole run is silent for viewers:
- * the sent message sticks at "sending…" and the reply vanishes at stream_done,
- * until a reload re-watches the right file. Streams from byte 0 — entry ids
- * are the jsonl line uuids, so anything the client already has upserts
- * instead of duplicating.
- */
-export function attachSessionWatchersToTranscript(
-	sessionId: string,
-	path: string,
-): void {
-	const set = sessionWatchers.get(sessionId);
-	if (!set) return;
-	for (const ws of set) {
-		// Transcript v2 viewers (ws-handlers.ts serveTranscriptV2) are fed by
-		// the in-process bus — force-registering them onto the (new) mirror
-		// watch would double-feed a full-file replay.
-		if ((ws as any)?.data?.transcriptV2) continue;
-		startWatching(path, ws, 0, sessionId);
-	}
-}
-
-export function attachSessionWatchersToEngineTranscript(
-	sessionId: string,
-	// "pi" and "pi" resolve to no transcript path (both keep their turns
-	// in the owned store); those sessions stream through run events only, so
-	// this attaches nothing for them.
-	provider: "claude" | "codex" | "pi",
-	cwd: string,
-	engineSessionId: string,
-	attempt = 0,
-): void {
-	const path = getEngineTranscriptPath(cwd, engineSessionId, provider);
-	if (path) {
-		attachSessionWatchersToTranscript(sessionId, path);
-		return;
-	}
-	if (provider === "codex" && attempt < 5) {
-		setTimeout(
-			() =>
-				attachSessionWatchersToEngineTranscript(
-					sessionId,
-					provider,
-					cwd,
-					engineSessionId,
-					attempt + 1,
-				),
-			250,
-		);
-	}
 }
 
 const queueDrains: Map<string, Promise<void>> = (g.__queueDrains ??= new Map());
@@ -2887,12 +2815,6 @@ async function runSessionPromptInner(
 					) {
 						invalidateSessionsCache();
 					}
-					attachSessionWatchersToEngineTranscript(
-						sessionId,
-						effectiveProvider,
-						cwd,
-						finalSessionId,
-					);
 				}
 				break;
 			case "text_chunk":

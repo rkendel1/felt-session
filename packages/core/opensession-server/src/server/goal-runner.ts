@@ -22,7 +22,6 @@ import { STRIPE_CONFIRM_TOOLS } from "./runner-shared";
 import { gitIdentityFor } from "./shared/user-mappings";
 import { createWorktree, getRepo, reviveWorktree, worktreeHeadBranch } from "./worktree";
 import { updateSessionFile } from "./session-cache";
-import { attachSessionWatchersToEngineTranscript } from "./run-session";
 import type { NativeSessionFile } from "./types";
 import { shouldPersistModelSwitch } from "./run-events";
 import { shellQuoteWord } from "./sandbox/adapters/bootstrap";
@@ -206,16 +205,6 @@ export async function runGoal(goal: Goal): Promise<void> {
 					if (!selectedModel) selectedModel = event.model;
 				}
 				await persistSession(engineSessionId);
-				// A goal wake's transcript file is new each wake — attach anyone
-				// already viewing the goal session so the turn streams live.
-				if (engineSessionId) {
-					attachSessionWatchersToEngineTranscript(
-						bksId,
-						effectiveProvider,
-						cwd,
-						engineSessionId,
-					);
-				}
 			}
 			if (event.type === "model_switch") {
 				const to = event.toModel || "";

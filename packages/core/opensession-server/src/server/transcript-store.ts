@@ -33,8 +33,7 @@
  *
  * Post-commit hooks (§4a): every committed append publishes the affected
  * entries (with seqs) on transcript-bus, and invokes the optional
- * steer-receipt append hook (setAppendHook — same contract as
- * file-watcher.ts's setTranscriptAppendListener). Both are wrapped so they
+ * steer-receipt append hook (setAppendHook). Both are wrapped so they
  * can never throw back into the append path. Imports publish one reconciliation
  * wake only after all chunks commit; authoritative replacements publish reset.
  *
@@ -265,8 +264,7 @@ export interface TailWindowOpts {
   weigh?: (kind: string, storedBytes: number) => number;
 }
 
-/** Same contract as file-watcher.ts's AppendListener (setTranscriptAppendListener):
- *  best-effort post-commit notification with the affected entries. */
+/** Best-effort post-commit notification with the affected entries. */
 export type TranscriptAppendHook = (
   sessionId: string,
   entries: SeqEntry[]

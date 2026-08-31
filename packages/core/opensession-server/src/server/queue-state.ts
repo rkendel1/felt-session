@@ -13,7 +13,6 @@
 
 import { copyFileSync, existsSync, readFileSync, rmSync } from "fs";
 import { writeJsonAtomic } from "./shared/atomic-write";
-import { setTranscriptAppendListener } from "./file-watcher";
 import { stripContext } from "./prompt-context";
 import { SESSIONS_DIR } from "./session-cache";
 import { setAppendHook } from "./transcript-store";
@@ -1047,8 +1046,8 @@ export async function takeSteerReceiptForText(
 	return item;
 }
 
-// Clear a steer receipt the moment its message lands in the transcript (the
-// file-watcher reports appended entries). Waiting for run end left delivered
+// Clear a steer receipt the moment its message lands in the managed transcript.
+// Waiting for run end left delivered
 // messages showing as "queued" whenever the client's transcript tail didn't
 // reach back to their user entry — and a mid-run restart would have re-queued
 // (re-delivered) them via restorePromptQueues. Matches the frontend reconcile:
@@ -1127,13 +1126,8 @@ async function reconcileSteerReceiptsOnAppend(
 	await broadcastQueue(sessionId);
 }
 
-setTranscriptAppendListener(reconcileSteerReceiptsOnAppend);
-// Transcript v2 (docs/transcripts.md §4a): v2 viewers retire the
-// mirror file-watcher, so delivered-steer reconciliation ALSO rides the
-// store's post-commit append hook (same contract, same function; fires only
-// when the flag-gated store path writes). Single globalThis slot — each hot
-// reload replaces the registration rather than stacking, and the reconcile
-// is idempotent, so both channels firing for one append is harmless.
+// Delivered-steer reconciliation rides the managed store's post-commit hook.
+// Each hot reload replaces the registration rather than stacking it.
 setAppendHook(reconcileSteerReceiptsOnAppend);
 
 /**
