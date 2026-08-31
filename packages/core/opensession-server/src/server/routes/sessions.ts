@@ -1512,7 +1512,7 @@ export async function handleSessionsRoutes(
 	) {
 		const body = await req.json().catch(() => ({}));
 		const days = Math.max(1, parseInt(body.days) || 7);
-		const count = archiveOlderThan(await getSessionListSnapshotAsync(), days);
+		const count = await archiveOlderThan(await getSessionListSnapshotAsync(), days);
 		invalidateSessionsCache();
 		return Response.json({ archived: count });
 	}

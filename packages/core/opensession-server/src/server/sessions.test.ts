@@ -270,7 +270,7 @@ describe("getAllSessions", () => {
 		});
 
 		const { setArchived } = await import("./archive");
-		setArchived(aliasId, true);
+		await setArchived(aliasId, true);
 		try {
 			const { getAllSessionsAsync } = await import(
 				`./sessions.ts?test=${crypto.randomUUID()}`
@@ -292,7 +292,7 @@ describe("getAllSessions", () => {
 				archived: true,
 			});
 		} finally {
-			setArchived(aliasId, false);
+			await setArchived(aliasId, false);
 		}
 	});
 

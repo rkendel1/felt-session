@@ -13,7 +13,7 @@ function recorder(registryIds: string[] = []) {
 		isArchivedId(id) {
 			return registry.has(id);
 		},
-		setArchived(id, value) {
+		async setArchived(id, value) {
 			archived.push([id, value]);
 		},
 		async clearSessionFileArchive(id) {
@@ -28,10 +28,10 @@ function recorder(registryIds: string[] = []) {
 }
 
 describe("unarchiveForHumanTurn", () => {
-	test("clears every archive identity before accepting a turn", () => {
+	test("clears every archive identity before accepting a turn", async () => {
 		const calls = recorder();
 		expect(
-			unarchiveForHumanTurn(
+			await unarchiveForHumanTurn(
 				{
 					id: "os-current",
 					aliasIds: ["os-old", "os-current"],
@@ -48,20 +48,20 @@ describe("unarchiveForHumanTurn", () => {
 		expect(calls.invalidations()).toBe(1);
 	});
 
-	test("catches archive registry state newer than the session cache", () => {
+	test("catches archive registry state newer than the session cache", async () => {
 		const calls = recorder(["os-stale"]);
 		expect(
-			unarchiveForHumanTurn({ id: "os-stale", archived: false }, calls.deps),
+			await unarchiveForHumanTurn({ id: "os-stale", archived: false }, calls.deps),
 		).toBe(true);
 		expect(calls.archived).toEqual([["os-stale", false]]);
 		expect(calls.files).toEqual(["os-stale"]);
 		expect(calls.invalidations()).toBe(1);
 	});
 
-	test("leaves an active session untouched", () => {
+	test("leaves an active session untouched", async () => {
 		const calls = recorder();
 		expect(
-			unarchiveForHumanTurn({ id: "os-live", archived: false }, calls.deps),
+			await unarchiveForHumanTurn({ id: "os-live", archived: false }, calls.deps),
 		).toBe(false);
 		expect(calls.archived).toEqual([]);
 		expect(calls.files).toEqual([]);

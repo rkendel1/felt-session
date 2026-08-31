@@ -20,14 +20,14 @@ const defaultDeps: HumanTurnUnarchiveDeps = {
 };
 
 /** Restore an archived session immediately before accepting a person's turn. */
-export function unarchiveForHumanTurn(
+export async function unarchiveForHumanTurn(
 	session: ArchivableSession,
 	deps: HumanTurnUnarchiveDeps = defaultDeps,
-): boolean {
+): Promise<boolean> {
 	const ids = new Set([session.id, ...(session.aliasIds || [])]);
 	if (!session.archived && ![...ids].some(deps.isArchivedId)) return false;
 
-	for (const id of ids) deps.setArchived(id, false);
+	for (const id of ids) await deps.setArchived(id, false);
 	deps.clearSessionFileArchive(session.id);
 	deps.invalidateSessionsCache();
 	return true;
