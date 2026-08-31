@@ -25,6 +25,7 @@ import { startRunnerPortalReaper } from "./src/server/runner-portals";
 import { initializeManagedRunnerPortals } from "./src/server/runner-portals";
 import { initializeManagedRunJournal } from "./src/server/run-journal";
 import { flushAuditWrites, initializeManagedAudit } from "./src/server/audit";
+import { initializeManagedPiUsage } from "./src/server/pi-usage";
 import { initializeManagedTodos, startTodoReminderTicker } from "./src/server/todos";
 import { loadActiveSessionsOnStartup as initializeManagedSlackSessions } from "./src/agents/slack/state";
 import { initializeManagedLinearSessions } from "./src/agents/linear/session";
@@ -211,6 +212,7 @@ const g = globalThis as any;
 if (!g.__opensessionBooted) {
 	const db = await initializeManagedFeltDb();
 	await initializeManagedAudit(db);
+	await initializeManagedPiUsage(db);
 	await initializeManagedAnalyticsCache(db);
 	await initializeManagedRunJournal(db);
 	await initializeManagedAccountHealth(db);

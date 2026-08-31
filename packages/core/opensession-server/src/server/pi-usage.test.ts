@@ -1,107 +1,64 @@
 import { afterAll, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { createFeltDB } from "@feltdb/core";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { scanPiUsage } from "./pi-usage";
+import { initializeManagedAudit } from "./audit";
+import { initializeManagedPiUsage, piUsageForDates } from "./pi-usage";
 
 const root = mkdtempSync(join(tmpdir(), "pi-usage-"));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 
-const session = join(root, "os-019c-session");
-const utility = join(root, "utility-run");
-mkdirSync(session, { recursive: true });
-mkdirSync(utility, { recursive: true });
-
-const message = (
-  id: string,
-  timestamp: string,
-  model: string,
-  usage: Record<string, unknown>,
-) =>
-  JSON.stringify({
-    id,
-    type: "message",
-    timestamp,
-    message: {
-      role: "assistant",
-      timestamp,
-      provider: "anthropic",
-      model,
-      usage,
+test("imports legacy cache and derives uncached usage from managed audit", async () => {
+  const db = createFeltDB({ namespace: crypto.randomUUID(), memory: true });
+  const auditDir = join(root, "audit");
+  const cacheDir = join(root, "cache");
+  mkdirSync(cacheDir, { recursive: true });
+  await Bun.write(join(auditDir, "audit-2026-08-20.jsonl"), [
+    JSON.stringify({
+      time: "2026-08-20T10:00:00Z",
+      msg: "pi_turn",
+      direction: "out",
+      session: "os-019c-session",
+      model: "pi/anthropic/claude-opus-5",
+      steps: 2,
+      input_tokens: 40,
+      output_tokens: 6,
+      cache_read_input_tokens: 60,
+      cache_creation_input_tokens: 8,
+      total_cost_usd: 3.75,
+    }),
+    JSON.stringify({
+      time: "2026-08-20T11:00:00Z",
+      kind: "result",
+      session_id: "os-019c-session",
+      model: "claude-opus-5",
+      output_tokens: 999,
+      total_cost_usd: 999,
+    }),
+  ].join("\n"));
+  writeFileSync(join(cacheDir, "engine-day-2026-08-19.json"), JSON.stringify({
+    day: {
+      byModel: [{ model: "legacy-model", requests: 1, input: 2, output: 3, cacheRead: 4, cacheWrite: 5, costUsd: 6 }],
+      bySession: {},
+      unpricedRequests: 0,
     },
-  });
+  }));
 
-writeFileSync(
-  join(session, "session.jsonl"),
-  [
-    message("request-a", "2026-08-20T10:00:00Z", "claude-opus-5", {
-      input: 10,
-      output: 2,
-      cacheRead: 20,
-      cacheWrite: 3,
-      cost: { total: 1.25 },
-    }),
-    message("request-b", "2026-08-20T11:00:00Z", "anthropic/claude-opus-5", {
-      input: 30,
-      output: 4,
-      cacheRead: 40,
-      cacheWrite: 5,
-      cost: { total: 2.5 },
-    }),
-    message("before-cutover", "2026-08-19T12:00:00Z", "claude-opus-5", {
-      input: 100,
-      output: 100,
-      cacheRead: 100,
-      cacheWrite: 100,
-      cost: { total: 100 },
-    }),
-    message("after-cutover", "2026-08-19T14:00:00Z", "claude-opus-5", {
-      input: 1,
-      output: 1,
-      cacheRead: 1,
-      cacheWrite: 1,
-      cost: { total: 1 },
-    }),
-  ].join("\n"),
-);
-writeFileSync(
-  join(utility, "session.jsonl"),
-  message("request-c", "2026-08-20T12:00:00Z", "claude-haiku-4-5", {
-    input: 7,
-    output: 1,
-    cacheRead: 8,
-    cacheWrite: 2,
-    cost: { total: 0.5 },
-  }),
-);
+  await initializeManagedAudit(db, auditDir);
+  await initializeManagedPiUsage(db, cacheDir);
 
-test("scans every Pi assistant request and attributes native sessions", async () => {
-  const result = await scanPiUsage("2026-08-19", root);
-  const day = result.days.get("2026-08-20")!;
-
-  expect(result.complete).toBe(true);
-  expect(result.days.get("2026-08-19")).toMatchObject({
-    requests: 1,
-    totalTokens: 4,
-    costUsd: 1,
+  expect(existsSync(join(cacheDir, "engine-day-2026-08-19.json"))).toBe(false);
+  const usage = await piUsageForDates(["2026-08-19", "2026-08-20"]);
+  expect(usage.get("2026-08-19")).toMatchObject({ requests: 1, totalTokens: 14, costUsd: 6 });
+  expect(usage.get("2026-08-20")).toMatchObject({
+    requests: 2,
+    input: 40,
+    output: 6,
+    cacheRead: 60,
+    cacheWrite: 8,
+    totalTokens: 114,
+    costUsd: 3.75,
   });
-  expect(day).toMatchObject({
-    requests: 3,
-    input: 47,
-    output: 7,
-    cacheRead: 68,
-    cacheWrite: 10,
-    costUsd: 4.25,
-    totalTokens: 132,
-  });
-  expect(day.byModel).toEqual([
-    expect.objectContaining({ model: "claude-opus-5", requests: 2, output: 6 }),
-    expect.objectContaining({
-      model: "claude-haiku-4-5",
-      requests: 1,
-      output: 1,
-    }),
-  ]);
-  expect(day.bySession["os-019c-session"]).toEqual({ requests: 2, output: 6 });
-  expect(Object.keys(day.bySession)).toHaveLength(1);
+  expect(usage.get("2026-08-20")?.bySession["os-019c-session"]).toEqual({ requests: 2, output: 6 });
 });
