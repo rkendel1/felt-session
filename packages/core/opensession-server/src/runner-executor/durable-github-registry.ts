@@ -4,7 +4,7 @@
  * Stores and manages GitHub access tokens and integrations.
  */
 
-import { createFeltDB, getTelemetryClient } from "@feltdb/core";
+import type { StateFirstDB } from "@feltdb/core";
 import { randomUUIDv7 } from "bun";
 import type {
   GitHubOAuthToken,
@@ -70,15 +70,8 @@ export interface DurableGitHubIntegrationRegistry {
  * Open or create a GitHub OAuth token registry.
  */
 export function openDurableGitHubTokenRegistry(
-  path: string,
+  db: StateFirstDB,
 ): DurableGitHubTokenRegistry {
-  const telemetry = getTelemetryClient();
-  telemetry.disable();
-
-  const db = createFeltDB({
-    path,
-    namespace: "mission-control-github",
-  });
 
   const TOKENS_COLLECTION = "github_tokens";
 
@@ -193,15 +186,8 @@ export function openDurableGitHubTokenRegistry(
  * Open or create a GitHub integration registry.
  */
 export function openDurableGitHubIntegrationRegistry(
-  path: string,
+  db: StateFirstDB,
 ): DurableGitHubIntegrationRegistry {
-  const telemetry = getTelemetryClient();
-  telemetry.disable();
-
-  const db = createFeltDB({
-    path,
-    namespace: "mission-control-github",
-  });
 
   const INTEGRATIONS_COLLECTION = "github_integrations";
 

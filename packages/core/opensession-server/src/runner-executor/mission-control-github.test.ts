@@ -5,6 +5,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import * as fs from "fs";
 import { randomUUIDv7 } from "bun";
+import { testFeltDb } from "./test-feltdb";
 import { GitHubCommandParser } from "./github-command-parser";
 import {
   openDurableGitHubTokenRegistry,
@@ -121,7 +122,7 @@ describe("GitHub Token Registry", () => {
   const projectId = randomUUIDv7();
 
   it("creates and retrieves a token", async () => {
-    const registry = openDurableGitHubTokenRegistry(testDir);
+    const registry = openDurableGitHubTokenRegistry(testFeltDb(testDir));
 
     const token: GitHubOAuthToken = {
       id: `gh-token-${randomUUIDv7()}`,
@@ -144,7 +145,7 @@ describe("GitHub Token Registry", () => {
   });
 
   it("retrieves token by project", async () => {
-    const registry = openDurableGitHubTokenRegistry(testDir);
+    const registry = openDurableGitHubTokenRegistry(testFeltDb(testDir));
 
     const token: GitHubOAuthToken = {
       id: `gh-token-${randomUUIDv7()}`,
@@ -165,7 +166,7 @@ describe("GitHub Token Registry", () => {
   });
 
   it("lists tokens by project", async () => {
-    const registry = openDurableGitHubTokenRegistry(testDir);
+    const registry = openDurableGitHubTokenRegistry(testFeltDb(testDir));
 
     const projectId2 = randomUUIDv7();
 
@@ -200,7 +201,7 @@ describe("GitHub Token Registry", () => {
   });
 
   it("updates a token", async () => {
-    const registry = openDurableGitHubTokenRegistry(testDir);
+    const registry = openDurableGitHubTokenRegistry(testFeltDb(testDir));
 
     const token: GitHubOAuthToken = {
       id: `gh-token-${randomUUIDv7()}`,
@@ -225,7 +226,7 @@ describe("GitHub Token Registry", () => {
   });
 
   it("deletes a token", async () => {
-    const registry = openDurableGitHubTokenRegistry(testDir);
+    const registry = openDurableGitHubTokenRegistry(testFeltDb(testDir));
 
     const token: GitHubOAuthToken = {
       id: `gh-token-${randomUUIDv7()}`,
@@ -250,7 +251,7 @@ describe("GitHub Integration Registry", () => {
   const projectId = randomUUIDv7();
 
   it("creates and retrieves an integration", async () => {
-    const registry = openDurableGitHubIntegrationRegistry(testDir);
+    const registry = openDurableGitHubIntegrationRegistry(testFeltDb(testDir));
 
     const integration: GitHubIntegration = {
       id: `gh-int-${randomUUIDv7()}`,
@@ -272,7 +273,7 @@ describe("GitHub Integration Registry", () => {
   });
 
   it("retrieves integration by project", async () => {
-    const registry = openDurableGitHubIntegrationRegistry(testDir);
+    const registry = openDurableGitHubIntegrationRegistry(testFeltDb(testDir));
 
     const integration: GitHubIntegration = {
       id: `gh-int-${randomUUIDv7()}`,
@@ -294,7 +295,7 @@ describe("GitHub Integration Registry", () => {
   });
 
   it("updates an integration", async () => {
-    const registry = openDurableGitHubIntegrationRegistry(testDir);
+    const registry = openDurableGitHubIntegrationRegistry(testFeltDb(testDir));
 
     const integration: GitHubIntegration = {
       id: `gh-int-${randomUUIDv7()}`,
@@ -319,7 +320,7 @@ describe("GitHub Integration Registry", () => {
   });
 
   it("deletes an integration", async () => {
-    const registry = openDurableGitHubIntegrationRegistry(testDir);
+    const registry = openDurableGitHubIntegrationRegistry(testFeltDb(testDir));
 
     const integration: GitHubIntegration = {
       id: `gh-int-${randomUUIDv7()}`,
@@ -346,8 +347,8 @@ describe("GitHub Agent Service", () => {
   const repo = "test-repo";
 
   it("creates and stores OAuth token", async () => {
-    const tokenRegistry = openDurableGitHubTokenRegistry(testDir);
-    const integrationRegistry = openDurableGitHubIntegrationRegistry(testDir);
+    const tokenRegistry = openDurableGitHubTokenRegistry(testFeltDb(testDir));
+    const integrationRegistry = openDurableGitHubIntegrationRegistry(testFeltDb(testDir));
 
     const service = createGitHubAgentService(
       projectId,
@@ -373,8 +374,8 @@ describe("GitHub Agent Service", () => {
   });
 
   it("creates and stores GitHub integration", async () => {
-    const tokenRegistry = openDurableGitHubTokenRegistry(testDir);
-    const integrationRegistry = openDurableGitHubIntegrationRegistry(testDir);
+    const tokenRegistry = openDurableGitHubTokenRegistry(testFeltDb(testDir));
+    const integrationRegistry = openDurableGitHubIntegrationRegistry(testFeltDb(testDir));
 
     const service = createGitHubAgentService(
       projectId,
@@ -398,8 +399,8 @@ describe("GitHub Agent Service", () => {
   });
 
   it("fails to execute command without token", async () => {
-    const tokenRegistry = openDurableGitHubTokenRegistry(testDir);
-    const integrationRegistry = openDurableGitHubIntegrationRegistry(testDir);
+    const tokenRegistry = openDurableGitHubTokenRegistry(testFeltDb(testDir));
+    const integrationRegistry = openDurableGitHubIntegrationRegistry(testFeltDb(testDir));
 
     const service = createGitHubAgentService(
       projectId,
@@ -416,8 +417,8 @@ describe("GitHub Agent Service", () => {
   });
 
   it("lists open PRs", async () => {
-    const tokenRegistry = openDurableGitHubTokenRegistry(testDir);
-    const integrationRegistry = openDurableGitHubIntegrationRegistry(testDir);
+    const tokenRegistry = openDurableGitHubTokenRegistry(testFeltDb(testDir));
+    const integrationRegistry = openDurableGitHubIntegrationRegistry(testFeltDb(testDir));
 
     const service = createGitHubAgentService(
       projectId,
@@ -440,8 +441,8 @@ describe("GitHub Agent Service", () => {
   });
 
   it("creates pull request", async () => {
-    const tokenRegistry = openDurableGitHubTokenRegistry(testDir);
-    const integrationRegistry = openDurableGitHubIntegrationRegistry(testDir);
+    const tokenRegistry = openDurableGitHubTokenRegistry(testFeltDb(testDir));
+    const integrationRegistry = openDurableGitHubIntegrationRegistry(testFeltDb(testDir));
 
     const service = createGitHubAgentService(
       projectId,
@@ -469,8 +470,8 @@ describe("GitHub Agent Service", () => {
   });
 
   it("merges pull request", async () => {
-    const tokenRegistry = openDurableGitHubTokenRegistry(testDir);
-    const integrationRegistry = openDurableGitHubIntegrationRegistry(testDir);
+    const tokenRegistry = openDurableGitHubTokenRegistry(testFeltDb(testDir));
+    const integrationRegistry = openDurableGitHubIntegrationRegistry(testFeltDb(testDir));
 
     const service = createGitHubAgentService(
       projectId,
@@ -494,8 +495,8 @@ describe("GitHub Agent Service", () => {
   });
 
   it("comments on PR", async () => {
-    const tokenRegistry = openDurableGitHubTokenRegistry(testDir);
-    const integrationRegistry = openDurableGitHubIntegrationRegistry(testDir);
+    const tokenRegistry = openDurableGitHubTokenRegistry(testFeltDb(testDir));
+    const integrationRegistry = openDurableGitHubIntegrationRegistry(testFeltDb(testDir));
 
     const service = createGitHubAgentService(
       projectId,
