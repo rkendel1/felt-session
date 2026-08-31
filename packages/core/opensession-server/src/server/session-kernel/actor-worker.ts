@@ -18,6 +18,7 @@ import { isReadReducer, sessionActorReducerRoute } from "./actor-routing";
 import { READ_METHODS, sessionKernelStoreRoute } from "./store-routing";
 import { assertTranscriptActorRequest } from "./transcript-protocol";
 import { ConditionalConflictError } from "@feltdb/core";
+import { createHash } from "node:crypto";
 import {
   openFeltDbKernelChangeStore,
   type FeltDbKernelChangeStore,
@@ -393,7 +394,11 @@ export function startSessionKernelActorWorker(): void {
         const route = routedStoreCall(request.method, request.args, host);
         const { sessionId } = route;
         requestSessionId = sessionId;
+        const managedHead = sessionId && process.env.OPENSESSION_FELTDB_SERVER_URL
+          ? await decisionStore().head(sessionId)
+          : undefined;
         if (
+          !managedHead &&
           route.mutation &&
           sessionId &&
           request.method !== "quarantineSession" &&
@@ -403,7 +408,49 @@ export function startSessionKernelActorWorker(): void {
           if (quarantine)
             throw new SessionQuarantinedError(sessionId, quarantine.reason);
         }
-        if (request.method === "appendChange") {
+        if (managedHead && request.method === "command")
+          result = new FeltDbCommandStore(decisionStore()).command(
+            sessionId!, String(request.args[1]),
+          );
+        else if (managedHead && request.method === "creationState")
+          result = creationStore().creationState(sessionId!);
+        else if (managedHead && request.method === "runState")
+          result = runStore().runState(sessionId!);
+        else if (managedHead && request.method === "changesSince")
+          result = decisionStore().changesSince(
+            sessionId!,
+            managedHead.decisionEpoch,
+            Number(request.args[1]),
+            request.args[2] === undefined ? undefined : Number(request.args[2]),
+          ).then((changes) => changes.map(({ changeSeq, kind, payload, createdAt }) => ({
+            changeSeq, kind, payload, createdAt,
+          })));
+        else if (managedHead && request.method === "isTombstoned")
+          result = managedHead.authority.lifecycle === "tombstoned";
+        else if (managedHead && request.method === "timer")
+          result = timerStore().timer(sessionId!, String(request.args[1]));
+        else if (managedHead && request.method === "acknowledgeCommand")
+          result = new FeltDbCommandStore(decisionStore()).acknowledge(
+            request.transactionId ?? `ack:${sessionId}:${String(request.args[1])}`,
+            sessionId!,
+            String(request.args[1]),
+          );
+        else if (managedHead && request.method === "appendChange") {
+          if (!request.transactionId?.trim())
+            throw new Error("FeltDB appendChange requires a logical transaction id");
+          const kind = String(request.args[1] ?? "");
+          result = decisionStore().commitDecision({
+            transactionId: request.transactionId,
+            operationId: request.transactionId,
+            operationKind: "append_change",
+            inputHash: createHash("sha256")
+              .update(JSON.stringify(request.args)).digest("hex"),
+            observedHead: managedHead,
+            changeKind: kind,
+            changePayload: request.args[2],
+            result: managedHead.changeSeq + 1,
+          });
+        } else if (request.method === "appendChange") {
           const sessionId = request.args[0];
           const kind = request.args[1];
           if (!request.transactionId?.trim())
@@ -612,8 +659,25 @@ export function startSessionKernelActorWorker(): void {
         // every quarantined session into an endless client ack-retry loop that
         // surfaced to users as `Internal error handling "command_ack"` on
         // every reconnect for as long as the quarantine stood.
-        host.call("acknowledgeCommand", [request.sessionId, request.requestId]);
-        post({ t: "acknowledge_result", rpcId: request.rpcId });
+        if (process.env.OPENSESSION_FELTDB_SERVER_URL) {
+          void decisionStore().head(request.sessionId).then(async (head) => {
+            if (head)
+              await new FeltDbCommandStore(decisionStore()).acknowledge(
+                `async-ack:${request.sessionId}:${request.requestId}`,
+                request.sessionId,
+                request.requestId,
+              );
+            else host.call("acknowledgeCommand", [request.sessionId, request.requestId]);
+            post({ t: "acknowledge_result", rpcId: request.rpcId });
+          }).catch((error) => post({
+            t: "error",
+            rpcId: request.rpcId,
+            error: error instanceof Error ? error.message : String(error),
+          }));
+        } else {
+          host.call("acknowledgeCommand", [request.sessionId, request.requestId]);
+          post({ t: "acknowledge_result", rpcId: request.rpcId });
+        }
       } else if (request.t === "stats") {
         post({ t: "stats_result", rpcId: request.rpcId, stats: host.stats() });
       } else if (request.t === "maintain") {
