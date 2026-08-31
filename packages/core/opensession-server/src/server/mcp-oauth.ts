@@ -21,18 +21,14 @@
  * on the server origin → authorization server → RFC 8414 AS metadata →
  * dynamic client registration (RFC 7591, token_endpoint_auth_method "none").
  */
-import { existsSync, readFileSync, unlinkSync } from "node:fs";
 import { randomBytes, createHash } from "crypto";
 import type { StateFirstDB } from "@feltdb/core";
 import { configuredServer, productName } from "./config";
 import { managedFeltDb } from "./managed-feltdb";
-import { statePath } from "./paths";
 import { resolveTeammate } from "./shared/user-mappings";
 
-const STORE_PATH = statePath(".opensession-mcp-oauth.json");
 const COLLECTION = "opensession_mcp_oauth";
 const STORE_ID = "grants";
-const MIGRATION = "mcp-oauth-json-to-managed-feltdb-v1";
 
 interface OauthEndpoints {
   authorize: string;
@@ -72,20 +68,6 @@ let storedOauth: StoredOauth = { id: STORE_ID, value: {} };
 
 export async function initializeManagedMcpOauth(db: StateFirstDB = oauthDb ?? managedFeltDb()): Promise<void> {
   oauthDb = db;
-  if (!await db.collection<{ id: string }>("opensession_migrations").get(MIGRATION)) {
-    let legacy: Store = {};
-    try { if (existsSync(STORE_PATH)) legacy = JSON.parse(readFileSync(STORE_PATH, "utf8")); } catch {}
-    if (Object.keys(legacy).length && !await db.collection(COLLECTION).get(STORE_ID)) {
-      await db.transaction((tx) => {
-        tx.collection<StoredOauth>(COLLECTION).set(STORE_ID, { id: STORE_ID, value: legacy }, { requireAbsent: true });
-      }, { transactionId: "opensession:mcp-oauth:migrate:grants" });
-    }
-    await db.transaction((tx) => {
-      tx.collection("opensession_migrations").set(MIGRATION, { id: MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
-    }, { transactionId: `opensession:migration:${MIGRATION}` });
-  }
-  if (existsSync(STORE_PATH)) unlinkSync(STORE_PATH);
-  if (existsSync(CAPABLE_PATH)) unlinkSync(CAPABLE_PATH);
   storedOauth = await db.collection<StoredOauth>(COLLECTION).get(STORE_ID) ?? { id: STORE_ID, value: {} };
 }
 
@@ -658,7 +640,6 @@ export function mcpOauthStatus(
 // A probe that never got an answer is remembered in memory only, and briefly:
 // a network blip must not persist "this tool has no personal sign-in" and drop
 // the row from everyone's list for an hour.
-const CAPABLE_PATH = statePath(".opensession-mcp-capable.json");
 const CAPABLE_TTL_MS = 60 * 60_000;
 const CAPABLE_ERROR_TTL_MS = 60_000;
 
