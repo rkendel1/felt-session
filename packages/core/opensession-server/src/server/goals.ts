@@ -8,27 +8,28 @@
  * next wake), pauses for human sign-off, and stops when its success condition is
  * met. The mission is just a prompt string — nothing domain-specific lives here.
  *
- * This module is the pure data layer: the on-disk store + validation. The runner
+ * This module is the pure data layer: the managed FeltDB store + validation. The runner
  * (which drives the session) and the ticker live in opensession.ts next to the
  * session loop ticker, because they need the interactive MCP wiring; the two MCP
  * surfaces (opensession-goals management + opensession-goal-self self-cadence) live in
- * src/agents/slack/goal-tools.ts. Records are one JSON file per goal at
- * ~/.opensession-goals/<id>.json, mirroring the automation store.
+ * src/agents/slack/goal-tools.ts.
  */
 import { randomUUIDv7 } from "bun";
-import { writeJsonAtomic } from "./shared/atomic-write";
 import {
-  mkdirSync,
+  existsSync,
   readdirSync,
   readFileSync,
-  writeFileSync,
-  appendFileSync,
+  rmdirSync,
   unlinkSync,
-  existsSync,
-} from "fs";
+} from "node:fs";
+import type { StateFirstDB } from "@feltdb/core";
 import { stateDir } from "./paths";
+import { managedFeltDb } from "./managed-feltdb";
 
 const GOALS_DIR = stateDir("goals");
+const GOALS_COLLECTION = "opensession_goals";
+const LEDGERS_COLLECTION = "opensession_goal_ledgers";
+const GOALS_MIGRATION = "goals-files-to-managed-feltdb-v1";
 
 export type GoalStatus = "active" | "paused" | "done" | "failed";
 
@@ -65,61 +66,131 @@ export interface Goal {
   /** Set when status=paused — what/who it's blocked on. */
   pauseReason?: string;
   doneReason?: string;
-  /** Path to the goal's append-only fact ledger (authoritative memory). */
-  stateFile: string;
   model?: string;
   fallbackModel?: string;
   /** External MCP server allowlist for this goal's runs (least privilege). */
   mcpServers?: string[];
   createdBy: string;
   createdAt: string;
+  /** FeltDB authority version, carried internally for guarded writes. */
+  __version?: number;
 }
 
-mkdirSync(GOALS_DIR, { recursive: true });
+interface GoalLedger {
+  id: string;
+  goalId: string;
+  text: string;
+  __version?: number;
+}
+
+let goalsDb: StateFirstDB | undefined;
+const goals = new Map<string, Goal>();
+
+export async function initializeManagedGoals(
+  db: StateFirstDB = goalsDb ?? managedFeltDb(),
+): Promise<void> {
+  goalsDb = db;
+  const migrations = db.collection<{ id: string }>("opensession_migrations");
+  if (!await migrations.get(GOALS_MIGRATION)) {
+    if (existsSync(GOALS_DIR)) {
+      for (const entry of readdirSync(GOALS_DIR, { withFileTypes: true })) {
+        if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
+        const path = `${GOALS_DIR}/${entry.name}`;
+        const legacy = JSON.parse(readFileSync(path, "utf8")) as Goal & { stateFile?: string };
+        const { stateFile, __version: _, ...goal } = legacy;
+        const ledgerPath = `${GOALS_DIR}/${goal.id}.ledger.md`;
+        const ledgerText = existsSync(ledgerPath) ? readFileSync(ledgerPath, "utf8") : "";
+        await db.transaction((tx) => {
+          tx.collection<Goal>(GOALS_COLLECTION).set(goal.id, goal);
+          tx.collection<GoalLedger>(LEDGERS_COLLECTION).set(goal.id, {
+            id: goal.id,
+            goalId: goal.id,
+            text: ledgerText,
+          });
+        }, { transactionId: `opensession:goals:migrate:${goal.id}` });
+        unlinkSync(path);
+        if (existsSync(ledgerPath)) unlinkSync(ledgerPath);
+      }
+      try { rmdirSync(GOALS_DIR); } catch {}
+    }
+    await db.transaction((tx) => {
+      tx.collection("opensession_migrations").set(GOALS_MIGRATION, { id: GOALS_MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
+    }, { transactionId: `opensession:migration:${GOALS_MIGRATION}` });
+  }
+  goals.clear();
+  for (const goal of await db.collection<Goal>(GOALS_COLLECTION).all()) goals.set(goal.id, goal);
+}
 
 // ── Store ────────────────────────────────────────────────────
 
 export function listGoals(): Goal[] {
-  const out: Goal[] = [];
-  for (const file of readdirSync(GOALS_DIR)) {
-    if (!file.endsWith(".json")) continue;
-    try {
-      out.push(JSON.parse(readFileSync(`${GOALS_DIR}/${file}`, "utf-8")) as Goal);
-    } catch {}
-  }
+  const out = [...goals.values()].map((goal) => ({ ...goal }));
   out.sort((a, b) => a.name.localeCompare(b.name));
   return out;
 }
 
 export function getGoal(id: string): Goal | null {
-  const path = `${GOALS_DIR}/${id}.json`;
-  if (!existsSync(path)) return null;
-  try {
-    return JSON.parse(readFileSync(path, "utf-8"));
-  } catch {
-    return null;
-  }
+  const goal = goals.get(id);
+  return goal ? { ...goal } : null;
 }
 
-export function saveGoal(g: Goal): void {
-  writeJsonAtomic(`${GOALS_DIR}/${g.id}.json`, g);
+export async function saveGoal(g: Goal): Promise<Goal> {
+  const db = goalsDb ?? managedFeltDb();
+  const current = await db.collection<Goal>(GOALS_COLLECTION).get(g.id);
+  const version = g.__version ?? current?.__version;
+  if (current && !Number.isSafeInteger(version)) throw new Error(`Goal ${g.id} has no FeltDB authority version`);
+  const { __version: _, ...stored } = g;
+  await db.transaction((tx) => {
+    tx.collection<Goal>(GOALS_COLLECTION).set(g.id, stored,
+      current ? { ifVersion: version } : { requireAbsent: true });
+  }, { transactionId: `opensession:goal:save:${g.id}:${crypto.randomUUID()}` });
+  const saved = await db.collection<Goal>(GOALS_COLLECTION).get(g.id);
+  if (!saved) throw new Error(`Goal ${g.id} disappeared after save`);
+  goals.set(g.id, saved);
+  return { ...saved };
 }
 
-export function deleteGoal(id: string): boolean {
-  const path = `${GOALS_DIR}/${id}.json`;
-  if (!existsSync(path)) return false;
-  unlinkSync(path);
-  try {
-    const ledger = `${GOALS_DIR}/${id}.ledger.md`;
-    if (existsSync(ledger)) unlinkSync(ledger);
-  } catch {}
+export async function deleteGoal(id: string): Promise<boolean> {
+  const db = goalsDb ?? managedFeltDb();
+  const goal = await db.collection<Goal>(GOALS_COLLECTION).get(id);
+  if (!goal || !Number.isSafeInteger(goal.__version)) return false;
+  const ledger = await db.collection<GoalLedger>(LEDGERS_COLLECTION).get(id);
+  await db.transaction((tx) => {
+    tx.collection<Goal>(GOALS_COLLECTION).delete(id, { ifVersion: goal.__version });
+    if (ledger && Number.isSafeInteger(ledger.__version))
+      tx.collection<GoalLedger>(LEDGERS_COLLECTION).delete(id, { ifVersion: ledger.__version });
+  }, { transactionId: `opensession:goal:delete:${id}:${goal.__version}` });
+  goals.delete(id);
   return true;
 }
 
 /** Append a timestamped entry to a goal's fact ledger (its durable memory). */
-export function appendLedger(goal: Goal, text: string): void {
+export async function appendLedger(goal: Goal, text: string): Promise<void> {
+  const db = goalsDb ?? managedFeltDb();
   const stamp = new Date().toISOString();
-  appendFileSync(goal.stateFile, `\n\n## ${stamp}\n\n${text.trim()}\n`);
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const current = await db.collection<GoalLedger>(LEDGERS_COLLECTION).get(goal.id);
+    if (current && !Number.isSafeInteger(current.__version))
+      throw new Error(`Goal ledger ${goal.id} has no FeltDB authority version`);
+    const next: GoalLedger = {
+      id: goal.id,
+      goalId: goal.id,
+      text: `${current?.text || ""}\n\n## ${stamp}\n\n${text.trim()}\n`,
+    };
+    try {
+      await db.transaction((tx) => {
+        tx.collection<GoalLedger>(LEDGERS_COLLECTION).set(goal.id, next,
+          current ? { ifVersion: current.__version } : { requireAbsent: true });
+      }, { transactionId: `opensession:goal:ledger:${goal.id}:${crypto.randomUUID()}` });
+      return;
+    } catch (error) {
+      if (attempt === 4) throw error;
+    }
+  }
+}
+
+export async function readLedger(goalId: string): Promise<string> {
+  return (await (goalsDb ?? managedFeltDb()).collection<GoalLedger>(LEDGERS_COLLECTION).get(goalId))?.text || "";
 }
 
 // ── Create / update ──────────────────────────────────────────
@@ -131,7 +202,7 @@ function sanitizeMcpList(list?: unknown): string[] | undefined {
   return list.filter((s): s is string => typeof s === "string" && !!s.trim()).map((s) => s.trim());
 }
 
-export function createGoal(input: {
+export async function createGoal(input: {
   name: string;
   mission: string;
   mode?: "ask" | "code";
@@ -144,7 +215,7 @@ export function createGoal(input: {
   /** ISO8601 first wake; omitted/empty = wake on the next tick. */
   firstWakeAt?: string;
   createdBy: string;
-}): Goal | { error: string } {
+}): Promise<Goal | { error: string }> {
   if (!input.name?.trim()) return { error: "Name is required" };
   if (!input.mission?.trim()) return { error: "Mission is required" };
 
@@ -175,30 +246,31 @@ export function createGoal(input: {
         ? Math.floor(input.maxWakes)
         : undefined,
     wakeCount: 0,
-    stateFile: `${GOALS_DIR}/${id}.ledger.md`,
     model: input.model?.trim() || undefined,
     fallbackModel: input.fallbackModel?.trim() || undefined,
     mcpServers: sanitizeMcpList(input.mcpServers),
     createdBy: input.createdBy || "Anonymous",
     createdAt: new Date().toISOString(),
   };
-  saveGoal(g);
-
-  // Seed the ledger so the first wake has something to read.
-  writeFileSync(
-    g.stateFile,
-    `# Ledger — ${g.name}\n\n` +
+  const ledger = `# Ledger — ${g.name}\n\n` +
       `This is the durable, authoritative record of this goal's work: baselines, ` +
       `decisions, shipped PRs and their measured effect. The agent reads it first ` +
       `every wake and appends to it last. It survives context compaction.\n\n` +
-      `## Mission\n\n${g.mission}\n`
-  );
-  return g;
+      `## Mission\n\n${g.mission}\n`;
+  const db = goalsDb ?? managedFeltDb();
+  await db.transaction((tx) => {
+    tx.collection<Goal>(GOALS_COLLECTION).set(id, g, { requireAbsent: true });
+    tx.collection<GoalLedger>(LEDGERS_COLLECTION).set(id, { id, goalId: id, text: ledger }, { requireAbsent: true });
+  }, { transactionId: `opensession:goal:create:${id}` });
+  const saved = await db.collection<Goal>(GOALS_COLLECTION).get(id);
+  if (!saved) throw new Error(`Goal ${id} was not stored`);
+  goals.set(id, saved);
+  return { ...saved };
 }
 
 /** Fields an operator (via opensession-goals) may patch. Runtime/scheduling fields
  *  (engineSessionId, wakeCount, lastRun*, worktreePath) are owned by the runner. */
-export function updateGoal(
+export async function updateGoal(
   id: string,
   patch: Partial<
     Pick<
@@ -219,7 +291,7 @@ export function updateGoal(
       | "doneReason"
     >
   >
-): Goal | { error: string } {
+): Promise<Goal | { error: string }> {
   const g = getGoal(id);
   if (!g) return { error: "Goal not found" };
   const next: Goal = { ...g, ...patch };
@@ -227,12 +299,11 @@ export function updateGoal(
   if (typeof next.minWakeMinutes === "number") {
     next.minWakeMinutes = Math.max(MIN_WAKE_FLOOR, next.minWakeMinutes);
   }
-  saveGoal(next);
-  return next;
+  return saveGoal(next);
 }
 
 /** Resume a paused/done goal: mark active and (re)schedule a wake. */
-export function resumeGoal(id: string, firstWakeAt?: string): Goal | { error: string } {
+export async function resumeGoal(id: string, firstWakeAt?: string): Promise<Goal | { error: string }> {
   const g = getGoal(id);
   if (!g) return { error: "Goal not found" };
   let nextWakeAt = new Date().toISOString();
@@ -247,6 +318,5 @@ export function resumeGoal(id: string, firstWakeAt?: string): Goal | { error: st
     pauseReason: undefined,
     nextWakeAt,
   };
-  saveGoal(next);
-  return next;
+  return saveGoal(next);
 }

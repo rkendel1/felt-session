@@ -64,7 +64,7 @@ function buildGoalWakePrompt(goal: Goal, wake: number, cwd: string): string {
 		`# Your mission (pinned)\n\n${goal.mission}`,
 		`---`,
 		`## This is wake #${wake} of your mission.`,
-		`Your durable fact ledger is at:\n    ${goal.stateFile}\nRead it FIRST every wake — it is the authoritative record of what you've baselined, decided, shipped, and measured. Your in-context memory may have been compacted; the ledger is not.`,
+		`Read your durable fact ledger FIRST with the opensession-goal-self \`read_ledger\` tool. It is the authoritative record of what you've baselined, decided, shipped, and measured. Your in-context memory may have been compacted; the FeltDB ledger has not.`,
 		`Do ONE meaningful increment this wake. Then, before you finish, ALWAYS:\n` +
 			`- Append what you learned/did this wake (concrete numbers, PR URLs, decisions) to the ledger via the opensession-goal-self \`append_ledger\` tool.\n` +
 			`- Decide what happens next with opensession-goal-self: \`set_next_wake\` (e.g. "in 7 days" after shipping, so metrics can actually move before you re-measure), or \`mark_paused\` if you're blocked on a human decision, or \`mark_done\`/\`mark_failed\` when the mission is settled. If you set none, you'll be woken again in ~24h by default.\n` +
@@ -124,7 +124,7 @@ export async function runGoal(goal: Goal): Promise<void> {
 			}
 		}
 
-		saveGoal({
+		await saveGoal({
 			...goal,
 			osSessionId: bksId,
 			branch: branch || undefined,
@@ -225,7 +225,7 @@ export async function runGoal(goal: Goal): Promise<void> {
 					if (shouldPersistModelSwitch(event)) {
 						selectedModel = to;
 						const current = getGoal(goal.id) || goal;
-						saveGoal({ ...current, model: to });
+						await saveGoal({ ...current, model: to });
 					}
 				}
 			}
@@ -263,7 +263,7 @@ export async function runGoal(goal: Goal): Promise<void> {
 			).toISOString();
 			console.log(`[goals] "${goal.name}" set no next wake — defaulting to +24h`);
 		}
-		saveGoal(next);
+		await saveGoal(next);
 		console.log(
 			`[goals] "${goal.name}" wake #${wake} ${errorMsg ? `error: ${errorMsg}` : "ok"} (status ${next.status})`,
 		);
@@ -271,7 +271,7 @@ export async function runGoal(goal: Goal): Promise<void> {
 		console.error(`[goals] "${goal.name}" wake failed:`, e);
 		const fresh = getGoal(goal.id);
 		if (fresh) {
-			saveGoal({
+			await saveGoal({
 				...fresh,
 				lastRunAt: startedAt.toISOString(),
 				lastRunStatus: "error",
@@ -309,11 +309,11 @@ export function startGoalTicker(): void {
 			if (isAgentSessionBusy(goal.engineSessionId, goal.osSessionId)) continue;
 			// Safety cap: stop an out-of-control mission until a human resumes it.
 			if (goal.maxWakes && goal.wakeCount >= goal.maxWakes) {
-				saveGoal({
+				void saveGoal({
 					...goal,
 					status: "paused",
 					pauseReason: `Hit safety cap of ${goal.maxWakes} wakes — resume to continue.`,
-				});
+				}).catch((error) => console.error(`[goals] Failed to pause ${goal.id} at maxWakes:`, error));
 				console.log(`[goals] "${goal.name}" hit maxWakes ${goal.maxWakes}; paused`);
 				continue;
 			}

@@ -8,8 +8,7 @@
 
 import type { RouteContext } from "./context";
 import { runGoal, runningGoals } from "../goal-runner";
-import { createGoal, deleteGoal, getGoal, listGoals, resumeGoal, updateGoal } from "../goals";
-import { existsSync, readFileSync } from "fs";
+import { createGoal, deleteGoal, getGoal, listGoals, readLedger, resumeGoal, updateGoal } from "../goals";
 
 export async function handleGoalsRoutes(
 	ctx: RouteContext,
@@ -29,7 +28,7 @@ export async function handleGoalsRoutes(
 		const body = await req.json().catch(() => null);
 		if (!body)
 			return Response.json({ error: "Invalid JSON" }, { status: 400 });
-		const result = createGoal(body);
+		const result = await createGoal(body);
 		if ("error" in result) return Response.json(result, { status: 400 });
 		return Response.json(result);
 	}
@@ -52,7 +51,7 @@ export async function handleGoalsRoutes(
 	);
 	if (goalResumeMatch && req.method === "POST") {
 		const body = await req.json().catch(() => null);
-		const result = resumeGoal(goalResumeMatch[1], body?.when);
+		const result = await resumeGoal(goalResumeMatch[1], body?.when);
 		if ("error" in result) return Response.json(result, { status: 400 });
 		return Response.json(result);
 	}
@@ -62,7 +61,7 @@ export async function handleGoalsRoutes(
 	);
 	if (goalPauseMatch && req.method === "POST") {
 		const body = await req.json().catch(() => null);
-		const result = updateGoal(goalPauseMatch[1], {
+		const result = await updateGoal(goalPauseMatch[1], {
 			status: "paused",
 			pauseReason: body?.reason?.trim() || "Paused from the UI",
 		});
@@ -74,11 +73,7 @@ export async function handleGoalsRoutes(
 	if (goalMatch && req.method === "GET") {
 		const goal = getGoal(goalMatch[1]);
 		if (!goal) return Response.json({ error: "Not found" }, { status: 404 });
-		let ledger = "";
-		try {
-			if (existsSync(goal.stateFile))
-				ledger = readFileSync(goal.stateFile, "utf-8");
-		} catch {}
+		const ledger = await readLedger(goal.id);
 		return Response.json({
 			...goal,
 			ledger,
@@ -90,13 +85,13 @@ export async function handleGoalsRoutes(
 		const body = await req.json().catch(() => null);
 		if (!body)
 			return Response.json({ error: "Invalid JSON" }, { status: 400 });
-		const result = updateGoal(goalMatch[1], body);
+		const result = await updateGoal(goalMatch[1], body);
 		if ("error" in result) return Response.json(result, { status: 400 });
 		return Response.json(result);
 	}
 
 	if (goalMatch && req.method === "DELETE") {
-		return deleteGoal(goalMatch[1])
+		return await deleteGoal(goalMatch[1])
 			? Response.json({ ok: true })
 			: Response.json({ error: "Not found" }, { status: 404 });
 	}
