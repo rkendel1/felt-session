@@ -205,8 +205,23 @@ authorityTest("FeltDB Session Kernel decision authority", () => {
     expect(await store.commitDecision(input)).toEqual({ state: "ready" });
     expect((await store.head("session-a"))?.changeSeq).toBe(1);
     expect(await store.changesSince("session-a", 1, 0)).toHaveLength(1);
-    expect(await store.dueOutbox(Date.now() + 1_000)).toHaveLength(1);
+    const [effect] = await store.dueOutbox(Date.now() + 1_000);
+    expect(effect).toBeTruthy();
     expect(await db.collection(KERNEL_COLLECTIONS.creation).get("session-a")).toBeTruthy();
+    const observedRecord = await store.outboxRecord(effect!.recordId);
+    const observedAfterDecision = await store.head("session-a");
+    const settlement = {
+      transactionId: "outbox-ack-a",
+      operationId: "ack-a",
+      operationKind: "outbox_ack" as const,
+      inputHash: "ack-input-a",
+      observedHead: observedAfterDecision!,
+      observedRecord: observedRecord!,
+      result: { acknowledged: true },
+    };
+    expect(await store.commitOutboxMutation(settlement)).toEqual({ acknowledged: true });
+    expect(await store.commitOutboxMutation(settlement)).toEqual({ acknowledged: true });
+    expect(await store.outboxRecord(effect!.recordId)).toBeUndefined();
   });
 
   test("permits one stale decision and leaves no losing writes", async () => {

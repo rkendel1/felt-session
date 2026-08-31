@@ -85,6 +85,10 @@ export type SessionKernelOutboxRecord = {
   createdAt: number;
 };
 
+export type VersionedSessionKernelOutboxRecord = SessionKernelOutboxRecord & {
+  __version: number;
+};
+
 export type SessionKernelTransactionReceipt<Result = unknown> = {
   schemaVersion: 1;
   transactionId: string;
@@ -756,6 +760,82 @@ export class FeltDbSessionDecisionStore {
     return page.records;
   }
 
+  async outboxRecord(recordId: string): Promise<VersionedSessionKernelOutboxRecord | undefined> {
+    return (await this.db
+      .collection<VersionedSessionKernelOutboxRecord>(KERNEL_COLLECTIONS.outbox)
+      .get(recordId)) ?? undefined;
+  }
+
+  async commitOutboxMutation<Result>(input: {
+    transactionId: string;
+    operationId: string;
+    operationKind: "outbox_ack" | "outbox_defer" | "outbox_fail";
+    inputHash: string;
+    observedHead: VersionedSessionDecisionHead;
+    observedRecord: VersionedSessionKernelOutboxRecord;
+    nextRecord?: SessionKernelOutboxRecord;
+    result: Result;
+  }): Promise<Result> {
+    const receiptId = kernelRecordId("tx", input.transactionId);
+    const receipts = this.db.collection<SessionKernelTransactionReceipt<Result>>(
+      KERNEL_COLLECTIONS.transactions,
+    );
+    const replay = await receipts.get(receiptId);
+    if (replay) return this.validateAuxiliaryReplay(replay, input);
+    const head = input.observedHead;
+    this.assertWritableHead(head);
+    const record = input.observedRecord;
+    if (record.sessionId !== head.sessionId || record.decisionEpoch !== head.decisionEpoch)
+      throw new Error(`Outbox ${record.recordId} is outside the active session epoch`);
+    const receipt: SessionKernelTransactionReceipt<Result> = {
+      schemaVersion: 1,
+      transactionId: input.transactionId,
+      operationId: input.operationId,
+      sessionId: head.sessionId,
+      operationKind: input.operationKind,
+      inputHash: input.inputHash,
+      changeSeq: head.changeSeq,
+      journalId: "",
+      effectIds: [record.recordId],
+      result: input.result,
+      committedAt: Date.now(),
+    };
+    const outcome = await this.db.transaction({
+      transactionId: input.transactionId,
+      preconditions: [
+        { collection: KERNEL_COLLECTIONS.tombstones, id: head.sessionId, requireAbsent: true },
+        {
+          collection: KERNEL_COLLECTIONS.sessions,
+          id: head.sessionId,
+          ifVersion: head.__version,
+          expectedEpoch: head.authority.epoch,
+          expectedLeaseId: head.lease!.leaseId,
+        },
+        { collection: KERNEL_COLLECTIONS.transactions, id: receiptId, requireAbsent: true },
+      ],
+      operations: [
+        {
+          collection: KERNEL_COLLECTIONS.outbox,
+          id: record.recordId,
+          ...(input.nextRecord ? { value: input.nextRecord } : {}),
+          ifVersion: record.__version,
+        },
+        {
+          collection: KERNEL_COLLECTIONS.transactions,
+          id: receiptId,
+          value: receipt,
+          requireAbsent: true,
+        },
+      ],
+    });
+    if (outcome.duplicate) {
+      const committed = await receipts.get(receiptId);
+      if (!committed) throw new Error(`FeltDB replay receipt ${input.transactionId} is missing`);
+      return this.validateAuxiliaryReplay(committed, input);
+    }
+    return input.result;
+  }
+
   private assertWritableHead(head: VersionedSessionDecisionHead): void {
     if (head.authority.lifecycle !== "active")
       throw new Error(`Session ${head.sessionId} is tombstoned`);
@@ -790,6 +870,29 @@ export class FeltDbSessionDecisionStore {
       receipt.sessionId !== input.observedHead.sessionId ||
       receipt.operationKind !== operationKind ||
       receipt.inputHash !== input.inputHash
+    ) throw new Error(`FeltDB transaction ${input.transactionId} was reused`);
+    return receipt.result;
+  }
+
+  private validateAuxiliaryReplay<Result>(
+    receipt: SessionKernelTransactionReceipt<Result>,
+    input: {
+      transactionId: string;
+      operationId: string;
+      operationKind: string;
+      inputHash: string;
+      observedHead: VersionedSessionDecisionHead;
+      observedRecord: VersionedSessionKernelOutboxRecord;
+    },
+  ): Result {
+    if (
+      receipt.transactionId !== input.transactionId ||
+      receipt.operationId !== input.operationId ||
+      receipt.sessionId !== input.observedHead.sessionId ||
+      receipt.operationKind !== input.operationKind ||
+      receipt.inputHash !== input.inputHash ||
+      receipt.effectIds.length !== 1 ||
+      receipt.effectIds[0] !== input.observedRecord.recordId
     ) throw new Error(`FeltDB transaction ${input.transactionId} was reused`);
     return receipt.result;
   }
