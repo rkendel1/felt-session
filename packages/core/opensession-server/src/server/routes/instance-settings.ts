@@ -350,7 +350,7 @@ export async function handleInstanceSettingsRoutes(
 		const forbidden = requireWorkspaceAdmin(ctx);
 		if (forbidden) return forbidden;
 		try {
-			saveOrganizationIcon(await organizationIconBody(req));
+			await saveOrganizationIcon(await organizationIconBody(req));
 			return Response.json(generalDto(publicPrefix));
 		} catch (error) {
 			if (error instanceof OrganizationIconBodyTooLarge) {
@@ -374,7 +374,7 @@ export async function handleInstanceSettingsRoutes(
 	if (path === "/api/settings/general/icon" && req.method === "DELETE") {
 		const forbidden = requireWorkspaceAdmin(ctx);
 		if (forbidden) return forbidden;
-		removeOrganizationIcon();
+		await removeOrganizationIcon();
 		return Response.json(generalDto(publicPrefix));
 	}
 

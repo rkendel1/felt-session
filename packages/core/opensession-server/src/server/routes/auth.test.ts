@@ -1,9 +1,11 @@
 import { afterEach, expect, test } from "bun:test";
+import { createFeltDB } from "@feltdb/core";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { handleAuthRoutes } from "./auth";
 import type { RouteContext } from "./context";
+import { initializeManagedOrganizationIcon } from "../organization-settings";
 
 const savedConfig = process.env.OPENSESSION_CONFIG;
 const savedStateDir = process.env.OPENSESSION_STATE_DIR;
@@ -23,6 +25,7 @@ test("auth status names the server before sign-in", async () => {
   const config = join(dir, "config.json");
   writeFileSync(config, JSON.stringify({ organization: { name: "Acme" } }));
   process.env.OPENSESSION_CONFIG = config;
+  await initializeManagedOrganizationIcon(createFeltDB({ namespace: crypto.randomUUID(), memory: true }));
 
   const url = new URL("http://localhost/api/auth/status");
   const context: RouteContext = {
@@ -50,6 +53,7 @@ test("auth status carries the organization icon when one is configured", async (
   // The icon lives in the state dir (organizationIconPath), not beside the
   // config, so this test isolates that too.
   process.env.OPENSESSION_STATE_DIR = dir;
+  await initializeManagedOrganizationIcon(createFeltDB({ namespace: crypto.randomUUID(), memory: true }));
 
   const url = new URL("http://localhost/api/auth/status");
   const context: RouteContext = {
@@ -66,6 +70,7 @@ test("auth status carries the organization icon when one is configured", async (
   // gate can load because static assets stay pre-auth.
   mkdirSync(join(dir, ".opensession-organization"), { recursive: true });
   writeFileSync(join(dir, ".opensession-organization", "icon.png"), "png-bytes");
+  await initializeManagedOrganizationIcon(createFeltDB({ namespace: crypto.randomUUID(), memory: true }));
   const withIcon = await handleAuthRoutes(context);
   expect((await withIcon?.json()).organizationIconUrl).toMatch(
     /^\/organization-icon\.png\?v=[a-f0-9]{12}$/,

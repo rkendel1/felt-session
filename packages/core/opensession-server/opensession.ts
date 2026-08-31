@@ -41,6 +41,7 @@ import { initializeManagedPush } from "./src/server/push";
 import { initializeManagedDesks } from "./src/server/desk";
 import { initializeManagedConfigFeeds } from "./src/server/feeds-config";
 import { initializeEphemeralMcpToolsCache } from "./src/server/mcp-tools-cache";
+import { initializeManagedOrganizationIcon } from "./src/server/organization-settings";
 import { startLiveActivitySync } from "./src/server/live-activities";
 import { startRuntimeInvestigationHandoffConsumer } from "./src/server/runtime-investigation-handoffs";
 import { initializeManagedFeltDb } from "./src/server/managed-feltdb";
@@ -205,6 +206,7 @@ if (!g.__opensessionBooted) {
 	await initializeManagedDesks(db);
 	await initializeManagedConfigFeeds(db);
 	initializeEphemeralMcpToolsCache();
+	await initializeManagedOrganizationIcon(db);
 }
 
 // Listeners the server owns. Deliberately started HERE and not as module side

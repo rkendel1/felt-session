@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { createFeltDB } from "@feltdb/core";
 import {
 	mkdtempSync,
 	readFileSync,
@@ -14,6 +15,7 @@ import {
 	handleInstanceSettingsRoutes,
 } from "./instance-settings";
 import { handleStaticAssetsRoutes } from "./static-assets";
+import { initializeManagedOrganizationIcon } from "../organization-settings";
 
 const saved = {
 	config: process.env.OPENSESSION_CONFIG,
@@ -246,6 +248,7 @@ describe("instance general settings", () => {
 
 	test("stores, serves, and removes the organization icon", async () => {
 		seed();
+		await initializeManagedOrganizationIcon(createFeltDB({ namespace: crypto.randomUUID(), memory: true }));
 		const bytes = squarePngHeader();
 		const upload = await handleInstanceSettingsRoutes(
 			context("/api/settings/general/icon", "POST", { login: "ada", bytes }),
