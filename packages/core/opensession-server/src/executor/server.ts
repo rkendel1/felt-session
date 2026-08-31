@@ -8,6 +8,7 @@ import { SocketWriteQueue } from "../runner-host/socket-write-queue";
 import { ndjsonReader } from "../runner-host/protocol";
 import { sessionsDir } from "../server/paths";
 import { ExecutorCoordinator } from "./coordinator";
+import { managedFeltDb } from "../server/managed-feltdb";
 
 const MAX_REQUEST_BYTES = 1024 * 1024;
 
@@ -26,7 +27,9 @@ export async function startExecutorServer(options: {
     unlinkSync(socketPath);
   }
   const coordinator =
-    options.coordinator ?? new ExecutorCoordinator(root, options.token);
+    options.coordinator ??
+    new ExecutorCoordinator(root, options.token, managedFeltDb());
+  await coordinator.initialize();
   const listener = Bun.listen({
     unix: socketPath,
     socket: {

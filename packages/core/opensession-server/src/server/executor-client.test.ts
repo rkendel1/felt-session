@@ -9,6 +9,7 @@ import { ExecutorCoordinator } from "../executor/coordinator";
 import { startExecutorServer } from "../executor/server";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import { launchHostViaExecutor } from "./executor-client";
+import { testFeltDb } from "../runner-executor/test-feltdb";
 
 const roots: string[] = [];
 const listeners: Array<ReturnType<typeof Bun.listen>> = [];
@@ -63,7 +64,7 @@ describe("executor client", () => {
     writeJsonAtomic(join(dir, HOST_SPEC_NAME), spec);
     let launches = 0;
     let ready = false;
-    const coordinator = new ExecutorCoordinator(root, TOKEN, {
+    const coordinator = new ExecutorCoordinator(root, TOKEN, testFeltDb(root), {
       launch: async () => {
         launches++;
         ready = true;
@@ -100,7 +101,7 @@ describe("executor client", () => {
       cwd: "/tmp",
       mcpServers: [],
     } satisfies RunHostSpec);
-    const coordinator = new ExecutorCoordinator(root, TOKEN, {
+    const coordinator = new ExecutorCoordinator(root, TOKEN, testFeltDb(root), {
       launch: async () => {},
       stop: async () => {},
       unitActive: async () => false,

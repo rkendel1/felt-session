@@ -9,6 +9,8 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  readdirSync,
+  unlinkSync,
 } from "fs";
 import type { RunHostMeta, RunHostSpec } from "../runner-host/protocol";
 import {
@@ -17,7 +19,7 @@ import {
   HOST_SPEC_NAME,
   runHostsDir,
 } from "../runner-host/protocol";
-import { writeJsonAtomic } from "../server/shared/atomic-write";
+import type { StateFirstDB } from "@feltdb/core";
 import { envCapacity } from "../server/shared/env-capacity";
 import {
   hostUnitActive,
@@ -47,7 +49,11 @@ interface LaunchRecord {
   unit: string;
   updatedAt: string;
   error?: string;
+  __version?: number;
 }
+
+const LAUNCH_RECORDS = "opensession_executor_launch_records";
+const LAUNCH_RECORD_MIGRATION = "executor-launch-json-to-managed-feltdb-v1";
 
 export interface ExecutorCoordinatorDeps {
   launch(hostId: string, dir: string, specHash: string): Promise<void>;
@@ -90,11 +96,36 @@ export class ExecutorCoordinator {
   constructor(
     sessionsDir: string,
     authToken: string,
+    private readonly db: StateFirstDB,
     private readonly deps: ExecutorCoordinatorDeps = defaultDeps,
   ) {
     this.hostsDir = runHostsDir(sessionsDir);
     this.authTokenBytes = Buffer.from(authToken);
     mkdirSync(this.hostsDir, { recursive: true });
+  }
+
+  async initialize(): Promise<void> {
+    const migrations = this.db.collection<{ id: string }>("opensession_migrations");
+    const migrated = await migrations.get(LAUNCH_RECORD_MIGRATION);
+    for (const entry of readdirSync(this.hostsDir, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const path = `${this.hostsDir}/${entry.name}/executor.json`;
+      if (!existsSync(path)) continue;
+      const legacy = readJson<LaunchRecord>(path);
+      if (!legacy || legacy.hostId !== entry.name)
+        throw new Error(`Invalid legacy executor launch record: ${path}`);
+      if (!await this.db.collection<LaunchRecord>(LAUNCH_RECORDS).get(legacy.hostId))
+        await this.record(legacy);
+      unlinkSync(path);
+    }
+    if (migrated) return;
+    await this.db.transaction((tx) => {
+      tx.collection("opensession_migrations").set(
+        LAUNCH_RECORD_MIGRATION,
+        { id: LAUNCH_RECORD_MIGRATION, completedAt: Date.now() },
+        { requireAbsent: true },
+      );
+    }, { transactionId: `opensession:migration:${LAUNCH_RECORD_MIGRATION}` });
   }
 
   async handle(request: ExecutorRequest): Promise<ExecutorResponse> {
@@ -213,7 +244,7 @@ export class ExecutorCoordinator {
       }
       await stopping.promise;
     }
-    const existing = this.readRecord(hostId);
+    const existing = await this.readRecord(hostId);
     if (existing && existing.specHash !== specHash) {
       throw new CoordinatorError(
         "spec_hash_mismatch",
@@ -227,7 +258,7 @@ export class ExecutorCoordinator {
       const dir = `${this.hostsDir}/${hostId}`;
       try {
         if (await this.deps.hostReady(dir)) {
-          this.recordStarted(hostId, specHash);
+          await this.recordStarted(hostId, specHash);
           return this.status(hostId);
         }
         const [unitActive, hostStarted] = await Promise.all([
@@ -238,7 +269,7 @@ export class ExecutorCoordinator {
           const error = unitActive
             ? "a previous launch is still active but not connectable"
             : "execution evidence exists for a previous launch";
-          this.record({
+          await this.record({
             hostId,
             specHash,
             state: "uncertain",
@@ -251,7 +282,7 @@ export class ExecutorCoordinator {
       } catch (cause) {
         if (cause instanceof CoordinatorError) throw cause;
         const error = `could not prove the previous starting launch absent: ${String(cause)}`;
-        this.record({
+        await this.record({
           hostId,
           specHash,
           state: "uncertain",
@@ -280,10 +311,10 @@ export class ExecutorCoordinator {
         "executor launch capacity is full; retry shortly",
       );
     }
-    this.prepareLaunch(hostId, specHash);
-    const promise = this.launchOnce(hostId, specHash).finally(() => {
-      this.inflight.delete(hostId);
-    });
+    const promise = (async () => {
+      await this.prepareLaunch(hostId, specHash);
+      return this.launchOnce(hostId, specHash);
+    })().finally(() => this.inflight.delete(hostId));
     this.inflight.set(hostId, { specHash, promise });
     return promise;
   }
@@ -296,7 +327,7 @@ export class ExecutorCoordinator {
     const dir = `${this.hostsDir}/${hostId}`;
     try {
       if (await this.deps.hostReady(dir)) {
-        this.recordStarted(hostId, specHash);
+        await this.recordStarted(hostId, specHash);
         return this.status(hostId);
       }
       const [active, started] = await Promise.all([
@@ -309,7 +340,7 @@ export class ExecutorCoordinator {
           previousError || "previous launch may still have executed",
         );
       }
-      this.record({
+      await this.record({
         hostId,
         specHash,
         state: "failed",
@@ -327,7 +358,7 @@ export class ExecutorCoordinator {
     }
   }
 
-  private prepareLaunch(hostId: string, specHash: string): void {
+  private async prepareLaunch(hostId: string, specHash: string): Promise<void> {
     const dir = `${this.hostsDir}/${hostId}`;
     const specPath = `${dir}/${HOST_SPEC_NAME}`;
     if (!existsSync(specPath)) {
@@ -345,7 +376,7 @@ export class ExecutorCoordinator {
     if (spec.hostId !== hostId) {
       throw new CoordinatorError("invalid_host", "run spec hostId does not match request");
     }
-    this.record({
+    await this.record({
       hostId,
       specHash,
       state: "starting",
@@ -360,7 +391,7 @@ export class ExecutorCoordinator {
   ): Promise<ExecutorHostStatus> {
     const dir = `${this.hostsDir}/${hostId}`;
     if (await this.deps.hostReady(dir)) {
-      this.recordStarted(hostId, specHash);
+      await this.recordStarted(hostId, specHash);
       return this.status(hostId);
     }
 
@@ -369,7 +400,7 @@ export class ExecutorCoordinator {
         await this.deps.launch(hostId, dir, specHash);
       }
       await this.waitReady(dir, 20_000);
-      this.recordStarted(hostId, specHash);
+      await this.recordStarted(hostId, specHash);
     } catch (cause) {
       let error = cause instanceof Error ? cause.message : String(cause);
       try {
@@ -388,7 +419,7 @@ export class ExecutorCoordinator {
         error += `; cleanup probe failed: ${String(probeCause)}`;
       }
       const uncertain = effectRemains || launchObserved;
-      this.record({
+      await this.record({
         hostId,
         specHash,
         state: uncertain ? "uncertain" : "failed",
@@ -405,7 +436,7 @@ export class ExecutorCoordinator {
   }
 
   private async status(hostId: string): Promise<ExecutorHostStatus> {
-    const record = this.readRecord(hostId);
+    const record = await this.readRecord(hostId);
     const dir = `${this.hostsDir}/${hostId}`;
     const meta = readJson<RunHostMeta>(`${dir}/${HOST_META_NAME}`);
     const ready = await this.deps.hostReady(dir);
@@ -452,7 +483,7 @@ export class ExecutorCoordinator {
       );
     }
     if (active) await active.promise.catch(() => undefined);
-    const record = this.readRecord(hostId);
+    const record = await this.readRecord(hostId);
     if (!record) {
       throw new CoordinatorError(
         "invalid_host",
@@ -466,7 +497,7 @@ export class ExecutorCoordinator {
       );
     }
     await this.deps.stop(hostId);
-    this.record({
+    await this.record({
       hostId,
       specHash,
       state: "stopped",
@@ -485,8 +516,8 @@ export class ExecutorCoordinator {
     throw new Error("run host did not become ready before the launch deadline");
   }
 
-  private recordStarted(hostId: string, specHash: string): void {
-    this.record({
+  private async recordStarted(hostId: string, specHash: string): Promise<void> {
+    await this.record({
       hostId,
       specHash,
       state: "started",
@@ -495,16 +526,15 @@ export class ExecutorCoordinator {
     });
   }
 
-  private record(record: LaunchRecord): void {
-    writeJsonAtomic(this.recordPath(record.hostId), record);
+  private async record(record: LaunchRecord): Promise<void> {
+    const { __version: _, ...value } = record;
+    await this.db.transaction((tx) => {
+      tx.collection<LaunchRecord>(LAUNCH_RECORDS).set(record.hostId, value);
+    }, { transactionId: `opensession:executor-record:${record.hostId}:${crypto.randomUUID()}` });
   }
 
-  private readRecord(hostId: string): LaunchRecord | null {
-    return readJson<LaunchRecord>(this.recordPath(hostId));
-  }
-
-  private recordPath(hostId: string): string {
-    return `${this.hostsDir}/${hostId}/executor.json`;
+  private async readRecord(hostId: string): Promise<LaunchRecord | null> {
+    return await this.db.collection<LaunchRecord>(LAUNCH_RECORDS).get(hostId);
   }
 
   private error(

@@ -14,6 +14,7 @@ import {
   ExecutorCoordinator,
   type ExecutorCoordinatorDeps,
 } from "./coordinator";
+import { testFeltDb } from "../runner-executor/test-feltdb";
 
 const roots: string[] = [];
 const TOKEN = "test-executor-token";
@@ -52,7 +53,7 @@ function requestId(): string {
 describe("ExecutorCoordinator", () => {
   test("negotiates the exact supported protocol", async () => {
     const { root } = fixture();
-    const coordinator = new ExecutorCoordinator(root, TOKEN, inertDeps());
+    const coordinator = new ExecutorCoordinator(root, TOKEN, testFeltDb(root), inertDeps());
     const ok = await coordinator.handle({
       t: "hello",
       requestId: requestId(),
@@ -77,7 +78,7 @@ describe("ExecutorCoordinator", () => {
 
   test("rejects requests without the executor credential", async () => {
     const { root } = fixture();
-    const coordinator = new ExecutorCoordinator(root, TOKEN, inertDeps());
+    const coordinator = new ExecutorCoordinator(root, TOKEN, testFeltDb(root), inertDeps());
     const response = await coordinator.handle({
       t: "hello",
       requestId: requestId(),
@@ -92,7 +93,7 @@ describe("ExecutorCoordinator", () => {
     const { root, hostId, specHash } = fixture();
     let launches = 0;
     let ready = false;
-    const coordinator = new ExecutorCoordinator(root, TOKEN, {
+    const coordinator = new ExecutorCoordinator(root, TOKEN, testFeltDb(root), {
       ...inertDeps(),
       launch: async () => {
         launches++;
@@ -125,7 +126,7 @@ describe("ExecutorCoordinator", () => {
     const { root, hostId, specHash } = fixture();
     let launches = 0;
     let ready = false;
-    const coordinator = new ExecutorCoordinator(root, TOKEN, {
+    const coordinator = new ExecutorCoordinator(root, TOKEN, testFeltDb(root), {
       ...inertDeps(),
       launch: async () => {
         launches++;
@@ -159,7 +160,7 @@ describe("ExecutorCoordinator", () => {
     });
     const effects: string[] = [];
     let ready = false;
-    const coordinator = new ExecutorCoordinator(root, TOKEN, {
+    const coordinator = new ExecutorCoordinator(root, TOKEN, testFeltDb(root), {
       ...inertDeps(),
       launch: async () => {
         effects.push("launch");
@@ -204,7 +205,7 @@ describe("ExecutorCoordinator", () => {
   test("proves a failed launch was cleaned up before allowing fallback", async () => {
     const { root, hostId, specHash } = fixture();
     let active = false;
-    const coordinator = new ExecutorCoordinator(root, TOKEN, {
+    const coordinator = new ExecutorCoordinator(root, TOKEN, testFeltDb(root), {
       ...inertDeps(),
       launch: async () => {
         active = true;
@@ -230,7 +231,7 @@ describe("ExecutorCoordinator", () => {
   test("reports uncertainty when cleanup cannot prove the host absent", async () => {
     const { root, hostId, specHash } = fixture();
     let active = false;
-    const coordinator = new ExecutorCoordinator(root, TOKEN, {
+    const coordinator = new ExecutorCoordinator(root, TOKEN, testFeltDb(root), {
       ...inertDeps(),
       launch: async () => {
         active = true;
@@ -264,7 +265,7 @@ describe("ExecutorCoordinator", () => {
   test("does not allow fallback after a host process was observed", async () => {
     const { root, hostId, dir, specHash } = fixture();
     let active = false;
-    const coordinator = new ExecutorCoordinator(root, TOKEN, {
+    const coordinator = new ExecutorCoordinator(root, TOKEN, testFeltDb(root), {
       ...inertDeps(),
       launch: async () => {
         active = true;
@@ -304,6 +305,7 @@ describe("ExecutorCoordinator", () => {
 
   test("continues a persisted starting launch after executor replacement", async () => {
     const { root, hostId, dir, specHash } = fixture();
+    const db = testFeltDb(root);
     writeJsonAtomic(join(dir, "executor.json"), {
       hostId,
       specHash,
@@ -313,7 +315,7 @@ describe("ExecutorCoordinator", () => {
     });
     let ready = false;
     let launches = 0;
-    const replacement = new ExecutorCoordinator(root, TOKEN, {
+    const replacement = new ExecutorCoordinator(root, TOKEN, db, {
       ...inertDeps(),
       launch: async () => {
         launches++;
@@ -321,6 +323,7 @@ describe("ExecutorCoordinator", () => {
       },
       hostReady: () => ready,
     });
+    await replacement.initialize();
     const response = await replacement.handle({
       t: "launch_host",
       requestId: requestId(),
@@ -338,15 +341,18 @@ describe("ExecutorCoordinator", () => {
 
   test("does not replay a persisted starting launch with execution evidence", async () => {
     const { root, hostId, dir, specHash } = fixture();
-    writeJsonAtomic(join(dir, "executor.json"), {
-      hostId,
-      specHash,
-      state: "starting",
-      unit: `bks-run-${hostId}`,
-      updatedAt: "2026-08-18T00:00:00.000Z",
+    const db = testFeltDb(root);
+    await db.transaction((tx) => {
+      tx.collection("opensession_executor_launch_records").set(hostId, {
+        hostId,
+        specHash,
+        state: "starting",
+        unit: `bks-run-${hostId}`,
+        updatedAt: "2026-08-18T00:00:00.000Z",
+      });
     });
     let launches = 0;
-    const replacement = new ExecutorCoordinator(root, TOKEN, {
+    const replacement = new ExecutorCoordinator(root, TOKEN, db, {
       ...inertDeps(),
       launch: async () => { launches++; },
       hostStarted: () => true,
@@ -365,7 +371,7 @@ describe("ExecutorCoordinator", () => {
 
   test("rejects new launch admission during shutdown", async () => {
     const { root, hostId, specHash } = fixture();
-    const coordinator = new ExecutorCoordinator(root, TOKEN, inertDeps());
+    const coordinator = new ExecutorCoordinator(root, TOKEN, testFeltDb(root), inertDeps());
     coordinator.closeAdmission();
     const response = await coordinator.handle({
       t: "launch_host",
@@ -381,7 +387,7 @@ describe("ExecutorCoordinator", () => {
   test("refuses a reused host id with another spec hash", async () => {
     const { root, hostId, specHash } = fixture();
     let ready = false;
-    const coordinator = new ExecutorCoordinator(root, TOKEN, {
+    const coordinator = new ExecutorCoordinator(root, TOKEN, testFeltDb(root), {
       ...inertDeps(),
       launch: async () => {
         ready = true;
@@ -413,7 +419,7 @@ describe("ExecutorCoordinator", () => {
   test("verifies the persisted spec bytes before launching", async () => {
     const { root, hostId } = fixture();
     let launches = 0;
-    const coordinator = new ExecutorCoordinator(root, TOKEN, {
+    const coordinator = new ExecutorCoordinator(root, TOKEN, testFeltDb(root), {
       ...inertDeps(),
       launch: async () => {
         launches++;

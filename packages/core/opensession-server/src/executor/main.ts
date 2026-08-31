@@ -6,6 +6,7 @@ import { readExecutorCredential } from "./auth";
 import { ExecutorCoordinator } from "./coordinator";
 import { verifyRunHostHelper } from "./host-unit";
 import { startExecutorServer } from "./server";
+import { initializeManagedFeltDb } from "../server/managed-feltdb";
 
 export async function runExecutor(): Promise<void> {
   process.umask(0o077);
@@ -13,7 +14,11 @@ export async function runExecutor(): Promise<void> {
   const token = readExecutorCredential();
   if (!token) throw new Error("executor credential is unavailable");
   const root = sessionsDir();
-  const coordinator = new ExecutorCoordinator(root, token);
+  const coordinator = new ExecutorCoordinator(
+    root,
+    token,
+    await initializeManagedFeltDb(),
+  );
   const listener = await startExecutorServer({
     sessionsDir: root,
     coordinator,
