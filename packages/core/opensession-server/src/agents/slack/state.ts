@@ -78,11 +78,9 @@ export const pendingAnswers = new Map<string, PendingAnswer>();
 // reprocessed (duplicate handling). Persisting eventId -> expiry lets us drop only
 // events we truly handled and process the ones we missed. 5-min TTL matches Slack's
 // retry window.
-const PROCESSED_EVENTS_STORE = `${SESSION_DIR}/processed-events.json`;
 const PROCESSED_EVENT_TTL_MS = 5 * 60 * 1000;
 const processedEventExpiry = new Map<string, number>();
 const PROCESSED_EVENTS_COLLECTION = "opensession_slack_processed_events";
-const PROCESSED_EVENTS_MIGRATION = "slack-processed-events-json-to-managed-feltdb-v1";
 type ProcessedEvent = { id: string; eventId: string; expiresAt: number; __version?: number };
 
 function feltId(prefix: string, value: string): string {
@@ -91,41 +89,7 @@ function feltId(prefix: string, value: string): string {
 
 /** Load the persisted dedup set on boot, dropping any already-expired ids. */
 export async function loadProcessedEvents(): Promise<void> {
-  const db = managedFeltDb();
-  const migrations = db.collection<{ id: string }>("opensession_migrations");
-  if (!await migrations.get(PROCESSED_EVENTS_MIGRATION)) {
-    let entries: [string, number][] = [];
-    if (existsSync(PROCESSED_EVENTS_STORE)) {
-      try {
-        entries = JSON.parse(readFileSync(PROCESSED_EVENTS_STORE, "utf-8")) as [string, number][];
-        if (!Array.isArray(entries)) throw new Error("expected an array");
-      } catch (error) {
-        throw new Error(`Failed to migrate Slack processed events: ${error}`);
-      }
-    }
-    const now = Date.now();
-    for (const [eventId, expiresAt] of entries) {
-      if (expiresAt <= now) continue;
-      const id = feltId("slack_processed", eventId);
-      try {
-        await db.transaction((tx) => {
-          tx.collection<ProcessedEvent>(PROCESSED_EVENTS_COLLECTION).set(id, {
-            id, eventId, expiresAt,
-          }, { requireAbsent: true });
-        }, { transactionId: `opensession:slack-processed:migrate:${id}` });
-      } catch (error) {
-        if (!await db.collection(PROCESSED_EVENTS_COLLECTION).get(id)) throw error;
-      }
-    }
-    await db.transaction((tx) => {
-      tx.collection("opensession_migrations").set(PROCESSED_EVENTS_MIGRATION, {
-        id: PROCESSED_EVENTS_MIGRATION, completedAt: Date.now(),
-      }, { requireAbsent: true });
-    }, { transactionId: `opensession:migration:${PROCESSED_EVENTS_MIGRATION}` });
-    if (existsSync(PROCESSED_EVENTS_STORE)) unlinkSync(PROCESSED_EVENTS_STORE);
-  } else if (existsSync(PROCESSED_EVENTS_STORE)) {
-    unlinkSync(PROCESSED_EVENTS_STORE);
-  }
+  processedEventExpiry.clear();
 }
 
 /** True if we already handled this event id (and it hasn't aged out). */

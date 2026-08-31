@@ -7,7 +7,6 @@
 
 import { sendSlackMessage } from "./slack-api";
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, unlinkSync } from "node:fs";
 import type { StateFirstDB } from "@feltdb/core";
 import { managedFeltDb } from "../../server/managed-feltdb";
 import { fetchWithTimeout } from "../../server/shared/fetch-with-timeout";
@@ -15,13 +14,10 @@ import {
   findGitHubUsersForBranch,
   inviteRelevantUsersToChannel,
 } from "./github-reviews";
-import { SESSION_DIR } from "./state";
 import { worktreePathFor } from "../../server/worktree";
 
 const SLACK_BOT_TOKEN = process.env.SLACK_BOT_TOKEN;
-const WORKTREE_CHANNELS_FILE = `${SESSION_DIR}/worktree-channels.json`;
 const COLLECTION = "opensession_slack_worktree_channels";
-const MIGRATION = "slack-worktree-channels-json-to-managed-feltdb-v1";
 type WorktreeChannelRecord = { id: string; channelId: string; branch: string; updatedAt: number };
 let worktreeDb: StateFirstDB | undefined;
 const recordId = (channelId: string) => `slack_worktree_${createHash("sha256").update(channelId).digest("hex")}`;
@@ -60,24 +56,6 @@ export async function removeWorktreeChannel(channelId: string): Promise<void> {
 
 export async function loadWorktreeChannels(db: StateFirstDB = worktreeDb ?? managedFeltDb()): Promise<void> {
   worktreeDb = db;
-  const migrations = db.collection<{ id: string }>("opensession_migrations");
-  if (!await migrations.get(MIGRATION)) {
-    let legacy: Record<string, string> = {};
-    try {
-      if (existsSync(WORKTREE_CHANNELS_FILE)) legacy = JSON.parse(readFileSync(WORKTREE_CHANNELS_FILE, "utf8"));
-    } catch {}
-    for (const [channelId, branch] of Object.entries(legacy)) {
-      if (!channelId || typeof branch !== "string" || !branch) continue;
-      const record: WorktreeChannelRecord = { id: recordId(channelId), channelId, branch, updatedAt: Date.now() };
-      await db.transaction((tx) => {
-        tx.collection<WorktreeChannelRecord>(COLLECTION).set(record.id, record);
-      }, { transactionId: `opensession:slack-worktree:migrate:${record.id}` });
-    }
-    await db.transaction((tx) => {
-      tx.collection("opensession_migrations").set(MIGRATION, { id: MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
-    }, { transactionId: `opensession:migration:${MIGRATION}` });
-    if (existsSync(WORKTREE_CHANNELS_FILE)) unlinkSync(WORKTREE_CHANNELS_FILE);
-  }
   const records = await db.collection<WorktreeChannelRecord>(COLLECTION).all();
   worktreeChannels.clear();
   branchToChannel.clear();
