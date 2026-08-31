@@ -14,6 +14,7 @@ import { startDiskGc } from "./src/server/disk-gc";
 import { startWorktreeReaper } from "./src/server/worktree-reaper";
 import { startPortalReaper } from "./src/server/portal-supervisor";
 import { startRunnerPortalReaper } from "./src/server/runner-portals";
+import { initializeManagedRunnerPortals } from "./src/server/runner-portals";
 import { initializeManagedTodos, startTodoReminderTicker } from "./src/server/todos";
 import { loadActiveSessionsOnStartup as initializeManagedSlackSessions } from "./src/agents/slack/state";
 import { initializeManagedLinearSessions } from "./src/agents/linear/session";
@@ -225,6 +226,7 @@ if (!g.__opensessionBooted) {
 	await initializeManagedEngineSessionOwners(db);
 	await initializeManagedLiveActivities(db);
 	await initializeManagedSandboxPortals(db);
+	await initializeManagedRunnerPortals(db);
 }
 
 // Listeners the server owns. Deliberately started HERE and not as module side
