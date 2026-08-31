@@ -23,8 +23,10 @@
 import { configuredServer, productName } from "../../server/config";
 import { stateDir } from "../../server/paths";
 import { randomUUIDv7 } from "bun";
-import { mkdirSync, readFileSync, existsSync, unlinkSync } from "fs";
-import { writeJsonAtomic } from "../../server/shared/atomic-write";
+import { existsSync, readFileSync, readdirSync, rmdirSync, unlinkSync } from "node:fs";
+import { createHash } from "node:crypto";
+import type { StateFirstDB } from "@feltdb/core";
+import { managedFeltDb } from "../../server/managed-feltdb";
 import {
   RequestBodyTooLargeError,
   readRequestTextWithinLimit,
@@ -40,6 +42,8 @@ import {
 import { postSlackBlocks, updateSlackBlocks } from "../slack/slack-api";
 
 const DEDUP_ROOT = stateDir("grafana-poll");
+const DEDUP_COLLECTION = "opensession_grafana_poll_dedup";
+const DEDUP_MIGRATION = "grafana-poll-dedup-json-to-managed-feltdb-v1";
 
 const GRAFANA_URL = process.env.GRAFANA_URL || "";
 const GRAFANA_TOKEN = process.env.GRAFANA_SERVICE_ACCOUNT_TOKEN || "";
@@ -140,45 +144,93 @@ function groupByDedup(series: LokiSeries[], cfg: GrafanaPollConfig): Failure[] {
 // ── Dedup store (per automation) ─────────────────────────────
 
 interface DedupRecord {
+  id: string;
+  automationId: string;
   dedupValue: string;
   firstSeen: string;
   lastInvestigatedAt: string;
   osSessionId: string;
   slackTs?: string;
+  __version?: number;
 }
 
-function dedupDir(automationId: string): string {
-  const dir = `${DEDUP_ROOT}/${automationId}`;
-  mkdirSync(dir, { recursive: true });
-  return dir;
-}
+let dedupDb: StateFirstDB | undefined;
+const dedupId = (automationId: string, dedupValue: string) =>
+  `grafana_dedup_${createHash("sha256").update(automationId).update("\0").update(dedupValue).digest("hex")}`;
 
-function dedupPath(automationId: string, dedupValue: string): string {
-  const safe = dedupValue.replace(/[^A-Za-z0-9_.-]/g, "_");
-  return `${dedupDir(automationId)}/${safe}.json`;
-}
-
-function readDedup(automationId: string, dedupValue: string): DedupRecord | null {
-  const path = dedupPath(automationId, dedupValue);
-  if (!existsSync(path)) return null;
-  try {
-    return JSON.parse(readFileSync(path, "utf-8")) as DedupRecord;
-  } catch {
-    return null;
+export async function initializeManagedGrafanaPollDedup(
+  db: StateFirstDB = dedupDb ?? managedFeltDb(),
+): Promise<void> {
+  dedupDb = db;
+  const migrations = db.collection<{ id: string }>("opensession_migrations");
+  if (await migrations.get(DEDUP_MIGRATION)) return;
+  if (existsSync(DEDUP_ROOT)) {
+    for (const automationEntry of readdirSync(DEDUP_ROOT, { withFileTypes: true })) {
+      if (!automationEntry.isDirectory()) continue;
+      const automationId = automationEntry.name;
+      const directory = `${DEDUP_ROOT}/${automationId}`;
+      for (const entry of readdirSync(directory, { withFileTypes: true })) {
+        if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
+        const path = `${directory}/${entry.name}`;
+        const legacy = JSON.parse(readFileSync(path, "utf8")) as Omit<DedupRecord, "id" | "automationId">;
+        const id = dedupId(automationId, legacy.dedupValue);
+        await db.transaction((tx) => {
+          tx.collection<DedupRecord>(DEDUP_COLLECTION).set(id, { ...legacy, id, automationId });
+        }, { transactionId: `opensession:grafana-dedup:migrate:${id}` });
+        unlinkSync(path);
+      }
+      try { rmdirSync(directory); } catch {}
+    }
+    try { rmdirSync(DEDUP_ROOT); } catch {}
   }
+  await db.transaction((tx) => {
+    tx.collection("opensession_migrations").set(DEDUP_MIGRATION, { id: DEDUP_MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
+  }, { transactionId: `opensession:migration:${DEDUP_MIGRATION}` });
 }
 
-function recentlyInvestigated(automationId: string, dedupValue: string, dedupDays: number): boolean {
-  const rec = readDedup(automationId, dedupValue);
+async function readDedup(automationId: string, dedupValue: string): Promise<DedupRecord | null> {
+  return (dedupDb ?? managedFeltDb()).collection<DedupRecord>(DEDUP_COLLECTION).get(dedupId(automationId, dedupValue));
+}
+
+async function recentlyInvestigated(automationId: string, dedupValue: string, dedupDays: number): Promise<boolean> {
+  const rec = await readDedup(automationId, dedupValue);
   if (!rec) return false;
   const last = Date.parse(rec.lastInvestigatedAt);
   if (Number.isNaN(last)) return false;
   return Date.now() - last < dedupDays * 24 * 60 * 60 * 1000;
 }
 
-function writeDedup(automationId: string, rec: DedupRecord): void {
-  writeJsonAtomic(dedupPath(automationId, rec.dedupValue), rec);
+async function claimDedup(
+  automationId: string,
+  record: Omit<DedupRecord, "id" | "automationId">,
+  dedupDays = DEFAULT_DEDUP_DAYS,
+  force = false,
+): Promise<{
+  current: DedupRecord;
+  prior: DedupRecord | null;
+} | null> {
+  const db = dedupDb ?? managedFeltDb();
+  const id = dedupId(automationId, record.dedupValue);
+  const prior = await db.collection<DedupRecord>(DEDUP_COLLECTION).get(id);
+  if (prior && !Number.isSafeInteger(prior.__version))
+    throw new Error(`Grafana dedup record ${id} has no FeltDB authority version`);
+  const priorAt = prior ? Date.parse(prior.lastInvestigatedAt) : Number.NaN;
+  if (!force && Number.isFinite(priorAt) && Date.now() - priorAt < dedupDays * 24 * 60 * 60 * 1000)
+    return null;
+  try {
+    await db.transaction((tx) => {
+      tx.collection<DedupRecord>(DEDUP_COLLECTION).set(id, { ...record, id, automationId },
+        prior ? { ifVersion: prior.__version } : { requireAbsent: true });
+    }, { transactionId: `opensession:grafana-dedup:claim:${id}:${record.osSessionId}` });
+  } catch {
+    return null;
+  }
+  const current = await db.collection<DedupRecord>(DEDUP_COLLECTION).get(id);
+  if (!current) throw new Error(`Grafana dedup claim ${id} was not stored`);
+  return { current, prior };
 }
+
+export const __grafanaPollDedupForTest = { claim: claimDedup, recentlyInvestigated };
 
 // ── Slack control card ───────────────────────────────────────
 
@@ -231,21 +283,24 @@ async function investigate(
   automation: Automation,
   cfg: GrafanaPollConfig,
   failure: Failure,
-  onSessionInvalidate?: () => void
+  onSessionInvalidate?: () => void,
+  force = false,
 ): Promise<void> {
   const bksId = `bks-${randomUUIDv7()}`;
   const nowIso = new Date().toISOString();
 
   // Claim the dedup slot BEFORE the async work so an overlapping poll can't
   // double-fire the same failure.
-  const prior = readDedup(automation.id, failure.dedupValue);
-  const base: DedupRecord = {
+  const prior = await readDedup(automation.id, failure.dedupValue);
+  const base = {
     dedupValue: failure.dedupValue,
     firstSeen: prior?.firstSeen || nowIso,
     lastInvestigatedAt: nowIso,
     osSessionId: bksId,
   };
-  writeDedup(automation.id, base);
+  const claimed = await claimDedup(automation.id, base, cfg.dedupDays || DEFAULT_DEDUP_DAYS, force);
+  if (!claimed) return;
+  let current = claimed.current;
 
   let slackTs: string | undefined;
   try {
@@ -258,7 +313,11 @@ async function investigate(
   } catch (e) {
     console.error("[grafana-poller] Failed to post Slack control card:", e);
   }
-  if (slackTs) writeDedup(automation.id, { ...base, slackTs });
+  if (slackTs && Number.isSafeInteger(current.__version)) {
+    const result = await (dedupDb ?? managedFeltDb()).collection<DedupRecord>(DEDUP_COLLECTION)
+      .updateIfVersion(current.id, current.__version!, { slackTs });
+    if (result.updated) current = (await readDedup(automation.id, failure.dedupValue)) || current;
+  }
 
   const eventContext = JSON.stringify(
     {
@@ -286,14 +345,21 @@ async function investigate(
     osSessionId: bksId,
     eventContext,
   })
-    .catch((e) => {
+    .catch(async (e) => {
       console.error(`[grafana-poller] runAutomation failed for ${failure.dedupValue}:`, e);
       // The dedup slot was stamped before launch (to stop an overlapping poll
       // from double-firing) — but a crashed launch must not mute this alert
       // for dedupDays. Roll the stamp back so the next poll retries.
       try {
-        if (prior) writeDedup(automation.id, prior);
-        else unlinkSync(dedupPath(automation.id, failure.dedupValue));
+        if (!Number.isSafeInteger(current.__version)) return;
+        const db = dedupDb ?? managedFeltDb();
+        await db.transaction((tx) => {
+          const collection = tx.collection<DedupRecord>(DEDUP_COLLECTION);
+          if (prior) {
+            const { __version: _, ...restored } = prior;
+            collection.set(current.id, restored, { ifVersion: current.__version });
+          } else collection.delete(current.id, { ifVersion: current.__version });
+        }, { transactionId: `opensession:grafana-dedup:rollback:${current.id}:${current.osSessionId}` });
       } catch (e2) {
         console.error(`[grafana-poller] Failed to roll back dedup stamp for ${failure.dedupValue}:`, e2);
       }
@@ -327,7 +393,10 @@ async function pollAutomation(
     if (!failures.length) return;
 
     const dedupDays = cfg.dedupDays || DEFAULT_DEDUP_DAYS;
-    const fresh = failures.filter((f) => !recentlyInvestigated(automation.id, f.dedupValue, dedupDays));
+    const fresh = (await Promise.all(failures.map(async (failure) => ({
+      failure,
+      recent: await recentlyInvestigated(automation.id, failure.dedupValue, dedupDays),
+    })))).filter(({ recent }) => !recent).map(({ failure }) => failure);
     console.log(
       `[grafana-poller] "${automation.name}": ${failures.length} failing, ${fresh.length} new`
     );
@@ -394,7 +463,7 @@ export class GrafanaPollerAgent implements AgentModule {
 
       const force = body?.force === true;
       const dedupDays = cfg.dedupDays || DEFAULT_DEDUP_DAYS;
-      if (!force && recentlyInvestigated(automation.id, value, dedupDays)) {
+      if (!force && await recentlyInvestigated(automation.id, value, dedupDays)) {
         return Response.json({ ok: false, skipped: `investigated within ${dedupDays} days` });
       }
 
@@ -407,7 +476,7 @@ export class GrafanaPollerAgent implements AgentModule {
           runIds: [],
         };
 
-      void investigate(automation, cfg, failure, this.onSessionInvalidate);
+      void investigate(automation, cfg, failure, this.onSessionInvalidate, force);
       return Response.json({ ok: true, value });
     });
 
