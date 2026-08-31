@@ -6,8 +6,7 @@
  * model turn can outlive a service restart; the GitHub recovery marker resumes
  * the surrounding posting workflow.
  */
-import { existsSync, readFileSync } from "fs";
-import { OPENSESSION_SESSIONS_DIR } from "../../server/paths";
+import { nativeSessionMetadata } from "../../server/managed-native-sessions";
 import { invalidateSessionsCache, recordRunOutcome, updateSessionFile } from "../../server/session-cache";
 import {
   cancelAgentRun,
@@ -37,8 +36,6 @@ import {
   shouldPersistModelSwitch,
   type StreamEvent,
 } from "../../server/run-events";
-
-const SESSIONS_DIR = OPENSESSION_SESSIONS_DIR;
 
 /**
  * Default external MCP servers for a PR flow, used when the review automation
@@ -229,12 +226,7 @@ export function finalSummary(text: string): string {
 }
 
 function readSessionFile(bksId: string): NativeSessionFile | null {
-  const path = `${SESSIONS_DIR}/${bksId}.json`;
-  if (!existsSync(path)) return null;
-  try {
-    return JSON.parse(readFileSync(path, "utf-8")) as NativeSessionFile;
-  } catch {}
-  return null;
+  return nativeSessionMetadata(bksId) ?? null;
 }
 
 function readEngineSessionId(

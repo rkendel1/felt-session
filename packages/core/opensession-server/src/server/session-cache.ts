@@ -4,7 +4,6 @@
  * in opensession.ts now calls invalidateSessionsCache().
  */
 
-import { existsSync, readFileSync } from "fs";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
 import {
 	engineSessionIdFor,
@@ -36,8 +35,11 @@ import {
 	getDefaultModel,
 	SESSION_EFFORTS as MODEL_EFFORTS,
 } from "./models";
-import { writeJsonAtomic } from "./shared/atomic-write";
 import type { UnifiedSession, NativeSessionFile } from "./types";
+import {
+	nativeSessionMetadata,
+	updateNativeSessionMetadata,
+} from "./managed-native-sessions";
 import {
 	publicSessionSafety,
 	reconcileAutomaticallyRecoverableSessionSafety,
@@ -581,14 +583,7 @@ export function updateSessionFile(
       throw new Error("Unexpected duplicate session-file command");
     let physicalFinished = false;
     try {
-		const path = `${SESSIONS_DIR}/${sessionId}.json`;
-		const current: NativeSessionFile = existsSync(path)
-			? JSON.parse(readFileSync(path, "utf-8"))
-			: ({} as NativeSessionFile);
-		const next = mutator(current) ?? current;
-		const rev = (current as { rev?: unknown }).rev;
-		(next as { rev?: number }).rev = (typeof rev === "number" ? rev : 0) + 1;
-		writeJsonAtomic(path, next);
+		await updateNativeSessionMetadata(sessionId, mutator);
 		const indexed = readNativeSessionListRow(sessionId);
 		if (indexed) {
 			enrichSessionRuntime([indexed]);
@@ -719,14 +714,8 @@ export interface AutoFallbackRetry {
 export async function retryAutoFallbackModel(
 	sessionId: string,
 ): Promise<AutoFallbackRetry | undefined> {
-	const path = `${SESSIONS_DIR}/${sessionId}.json`;
-	let observed: NativeSessionFile;
-	try {
-		if (!existsSync(path)) return undefined;
-		observed = JSON.parse(readFileSync(path, "utf-8"));
-	} catch {
-		return undefined;
-	}
+	const observed = nativeSessionMetadata(sessionId);
+	if (!observed) return undefined;
 	if (observed.autoFallbackModel === undefined) return undefined;
 
 	let retry: AutoFallbackRetry | undefined;

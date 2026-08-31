@@ -31,16 +31,14 @@ import {
 } from "../../server/config";
 import { createSdkMcpServer, tool } from "../../server/inprocess-mcp";
 import { z } from "zod";
-import { existsSync, readFileSync } from "fs";
 import {
   getSessionControl,
   type SessionControl,
   type SessionState,
   type SessionSummary,
 } from "../../server/session-control";
-import { OPENSESSION_SESSIONS_DIR } from "../../server/paths";
+import { nativeSessionMetadata } from "../../server/managed-native-sessions";
 import { agentActor, isWorkerActor, workerActor } from "../../server/session-actors";
-import { writeJsonAtomic } from "../../server/shared/atomic-write";
 import { userMatchesAny } from "../../server/shared/user-mappings";
 import { migrateSessionEngine } from "../../server/session-model-migration";
 import { resolveSessionRepoContext } from "../../server/session-repos";
@@ -330,13 +328,7 @@ export interface SpawnTaskDeps {
 }
 
 function defaultReadSessionFile(id: string): Partial<NativeSessionFile> | null {
-  try {
-    const path = `${OPENSESSION_SESSIONS_DIR}/${id}.json`;
-    if (!existsSync(path)) return null;
-    return JSON.parse(readFileSync(path, "utf-8"));
-  } catch {
-    return null;
-  }
+  return nativeSessionMetadata(id) ?? null;
 }
 
 /**
@@ -348,16 +340,14 @@ function defaultReadSessionFile(id: string): Partial<NativeSessionFile> | null {
  * (below) covers the guard in the meantime.
  */
 async function defaultStampSpawnDepth(id: string, depth: number): Promise<void> {
-  const path = `${OPENSESSION_SESSIONS_DIR}/${id}.json`;
   for (let i = 0; i < 240; i++) {
-    if (existsSync(path)) {
-      try {
-        const data = JSON.parse(readFileSync(path, "utf-8"));
-        if (data?.id) {
-          if (data.spawnDepth !== depth) writeJsonAtomic(path, { ...data, spawnDepth: depth });
-          return;
-        }
-      } catch {}
+    const data = nativeSessionMetadata(id);
+    if (data?.id) {
+      if (data.spawnDepth !== depth) {
+        const { touchNativeSessionStrict } = await import("../../server/session-cache");
+        await touchNativeSessionStrict(id, { spawnDepth: depth });
+      }
+      return;
     }
     await new Promise((r) => setTimeout(r, 500));
   }

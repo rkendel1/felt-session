@@ -111,6 +111,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, unl
 import type { StateFirstDB } from "@feltdb/core";
 import { dirname, resolve as resolvePath } from "path";
 import { homeDir, OPENSESSION_SESSIONS_DIR } from "../paths";
+import { nativeSessionMetadata } from "../managed-native-sessions";
 import { stateDir } from "../paths";
 import { journalSet, journalClear, journalClearIfLineage, journalRecordAbnormalCompletion, type ActiveRunRecord } from "../run-journal";
 import { shouldPersistModelSwitch, type StreamEvent } from "../run-events";
@@ -517,7 +518,7 @@ async function sweepOrphanSnapshots(): Promise<void> {
       const container = containerNameFor(sessionId);
       if (readState(container)) continue; // still tracked → destroy() cleans
       if ((await containerStatus(container)) !== "gone") continue;
-      if (existsSync(`${OPENSESSION_SESSIONS_DIR}/${sessionId}.json`)) continue; // session alive — keep
+      if (nativeSessionMetadata(sessionId)) continue; // session alive — keep
       console.log(`[sandbox] removing orphaned snapshot images ${repo} (session ${sessionId} deleted, sandbox gone)`);
       await removeSnapshotImages(container);
     } catch (e) {

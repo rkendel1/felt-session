@@ -4,31 +4,24 @@
  * sweep as a safety net in case the webhook subscription misses them.
  */
 import { executeSessionProjection } from "./session-projection-executor";
-import { readdirSync, readFileSync, existsSync } from "fs";
-import { writeJsonAtomic } from "./shared/atomic-write";
 import { plainApiUrl } from "./config";
-import { homeDir, OPENSESSION_SESSIONS_DIR } from "./paths";
+import { homeDir } from "./paths";
 import { invalidateSessionsCache } from "./session-cache";
+import {
+  nativeSessionMetadata,
+  nativeSessionMetadataEntries,
+  updateNativeSessionMetadata,
+} from "./managed-native-sessions";
 import type { NativeSessionFile } from "./types";
 
 const HOME = homeDir();
-const SESSIONS_DIR = OPENSESSION_SESSIONS_DIR;
-
-type PlainSessionCandidate = { path: string; data: NativeSessionFile };
+type PlainSessionCandidate = { data: NativeSessionFile };
 type SessionProjector = typeof executeSessionProjection;
 
 function activePlainSessions(): PlainSessionCandidate[] {
-  if (!existsSync(SESSIONS_DIR)) return [];
-  const out: Array<{ path: string; data: NativeSessionFile }> = [];
-  for (const file of readdirSync(SESSIONS_DIR)) {
-    if (!file.endsWith(".json")) continue;
-    const path = `${SESSIONS_DIR}/${file}`;
-    try {
-      const data = JSON.parse(readFileSync(path, "utf-8")) as NativeSessionFile;
-      if (data.plainThreadId && !data.archived) out.push({ path, data });
-    } catch {}
-  }
-  return out;
+  return nativeSessionMetadataEntries()
+    .map(([, data]) => ({ data }))
+    .filter(({ data }) => !!data.plainThreadId && !data.archived);
 }
 
 /**
@@ -39,16 +32,16 @@ function activePlainSessions(): PlainSessionCandidate[] {
  * if a flag was cleared.
  */
 export async function clearSessionFileArchive(id: string): Promise<boolean> {
-  const path = `${SESSIONS_DIR}/${id}.json`;
-  if (!existsSync(path)) return false;
+  const current = nativeSessionMetadata(id);
+  if (!current) return false;
   try {
-    return await executeSessionProjection(id, "plain_archive_clear", () => {
-      const data = JSON.parse(readFileSync(path, "utf-8")) as NativeSessionFile;
-      if (!data.archived && !data.archivedAt) return false;
-      const { archived, archivedAt, archivedReason, ...rest } = data;
-      writeJsonAtomic(path, rest);
-      return true;
-    });
+    if (!current.archived && !current.archivedAt) return false;
+    await executeSessionProjection(id, "plain_archive_clear", () =>
+      updateNativeSessionMetadata(id, (data) => {
+        const { archived: _, archivedAt: __, archivedReason: ___, ...rest } = data;
+        return rest;
+      }));
+    return true;
   } catch {
     return false;
   }
@@ -71,18 +64,20 @@ export async function archivePlainSessionCandidates(
   project: SessionProjector = executeSessionProjection,
   reportFailure: (sessionId: string, error: unknown) => void = (sessionId, error) =>
     console.warn(`[plain-archive] Could not archive session ${sessionId}:`, error),
+  persist: (id: string, mutate: (data: NativeSessionFile) => NativeSessionFile) => Promise<unknown>
+    = updateNativeSessionMetadata,
 ): Promise<number> {
   let archived = 0;
-  for (const { path, data } of sessions) {
+  for (const { data } of sessions) {
     if (data.plainThreadId !== threadId) continue;
     try {
       await project(data.id, "plain_archive_set", () =>
-        writeJsonAtomic(path, {
-          ...data,
+        persist(data.id, (current) => ({
+          ...current,
           archived: true,
           archivedAt: new Date().toISOString(),
           archivedReason: "plain",
-        }),
+        })),
       );
       archived++;
     } catch (error) {

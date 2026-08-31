@@ -1,7 +1,6 @@
 import { executeSessionProjection } from "./session-projection-executor";
 import { readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "fs";
 import { opendir } from "fs/promises";
-import { OPENSESSION_SESSIONS_DIR } from "./paths";
 import { statePath } from "./paths";
 import { existsSync } from "fs";
 import { slackIdToFirstName } from "./shared/user-mappings";
@@ -58,6 +57,11 @@ import {
   deleteSessionFile as deleteLinearSession,
   persistedLinearSessions,
 } from "../agents/linear/session";
+import {
+  deleteNativeSessionMetadata,
+  nativeSessionMetadata,
+  nativeSessionMetadataEntries,
+} from "./managed-native-sessions";
 
 // The GitHub PR bulk cache lives in pr-cache.ts (extracted from this module);
 // re-export its public surface so existing consumers keep importing from here.
@@ -86,18 +90,7 @@ export {
 // its own — 159 live threads showed up in a demo instance meant to hold 9
 // synthetic sessions (2026-08-05).
 const CLI_SESSIONS_DIR = statePath(".claude/sessions");
-const SESSIONS_DIR = OPENSESSION_SESSIONS_DIR;
 const CLAUDE_PROJECTS_DIR = statePath(".claude/projects");
-
-const SKIP_FILES = new Set([
-  "worktree-channels.json",
-  "message-queue.json",
-  "active-worktrees.json",
-  "prompt-queues.json",
-  "active-at-shutdown.json",
-  "active-runs.json",
-  "processed-events.json",
-]);
 
 /** Which archive half a scan should return. `include` is the legacy/internal
  * whole-list contract; request paths use the narrower halves. */
@@ -721,9 +714,7 @@ const SIDECAR_SOURCE_OWNED = new Set<string>([
  * in the session file itself.
  */
 function overlaySidecarExtras(session: UnifiedSession): UnifiedSession {
-  const path = `${SESSIONS_DIR}/${session.id}.json`;
-  if (!existsSync(path)) return session;
-  const data = readJsonSafe<NativeSessionFile>(path);
+  const data = nativeSessionMetadata(session.id);
   if (!data) return session;
   const row = session as unknown as Record<string, unknown>;
   for (const [key, value] of Object.entries(data)) {
@@ -913,7 +904,7 @@ export function readNativeSessionListRow(
   sessionId: string,
 ): UnifiedSession | undefined {
   if (!/^[A-Za-z0-9_-]{1,160}$/.test(sessionId)) return undefined;
-  const data = readJsonSafe<NativeSessionFile>(`${SESSIONS_DIR}/${sessionId}.json`);
+  const data = nativeSessionMetadata(sessionId);
   if (!data?.id || data.id !== sessionId) return undefined;
   const session = nativeSessionRow(data);
   const generated = getGeneratedTitle(session.id);
@@ -944,13 +935,7 @@ export function readNativeSession(sessionId: string): UnifiedSession | undefined
 }
 
 function* nativeSessionRows(): Generator<UnifiedSession> {
-  if (!existsSync(SESSIONS_DIR)) return [];
-
-  for (const file of readdirSync(SESSIONS_DIR)) {
-    if (!file.endsWith(".json") || SKIP_FILES.has(file)) continue;
-    const data = readJsonSafe<NativeSessionFile>(
-      `${SESSIONS_DIR}/${file}`
-    );
+  for (const [, data] of nativeSessionMetadataEntries()) {
     // Skip non-session bookkeeping files in this dir (active-runs.json,
     // prompt-queues.json, active-at-shutdown.json, …) — a real session always
     // has an id, these don't, so they'd otherwise become bogus id:undefined rows.
@@ -1367,8 +1352,7 @@ async function removeSessionArtifacts(session: UnifiedSession): Promise<void> {
       break;
     }
     case "opensession": {
-      const path = `${SESSIONS_DIR}/${session.id}.json`;
-      if (existsSync(path)) unlinkSync(path);
+      await deleteNativeSessionMetadata(session.id);
       break;
     }
   }

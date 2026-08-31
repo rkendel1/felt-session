@@ -22,7 +22,10 @@
 import { executeSessionProjection } from "./session-projection-executor";
 import { existsSync, readFileSync } from "fs";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
-import { writeJsonAtomic } from "./shared/atomic-write";
+import {
+  nativeSessionMetadata,
+  updateNativeSessionMetadata,
+} from "./managed-native-sessions";
 import { explicitEngineFor, resolveModel } from "./models";
 import type { ActiveRunRecord } from "./run-journal";
 import type { NativeSessionFile } from "./types";
@@ -90,8 +93,7 @@ export async function migrateSessionEngine(
   by = "engine-migration",
   options: { preserveActivity?: boolean } = {}
 ): Promise<MigrateEngineResult> {
-  const path = `${OPENSESSION_SESSIONS_DIR}/${sessionId}.json`;
-  const data = readJson<NativeSessionFile>(path);
+  const data = nativeSessionMetadata(sessionId);
   if (!data?.id) {
     return { ok: false, error: `No opensession session file for "${sessionId}".` };
   }
@@ -132,15 +134,15 @@ export async function migrateSessionEngine(
 
   const from = data.model;
   await executeSessionProjection(sessionId, "model_migration", () =>
-    writeJsonAtomic(path, {
-      ...data,
+    updateNativeSessionMetadata(sessionId, (current) => ({
+      ...current,
       model: resolved.id,
       modelHistory: [
-        ...(data.modelHistory || []),
+        ...(current.modelHistory || []),
         { model: resolved.id, from, at: new Date().toISOString(), by },
       ],
       ...(options.preserveActivity ? {} : { lastActivity: new Date().toISOString() }),
-    }),
+    })),
   );
   return { ok: true, sessionId, from, to: resolved.id };
 }

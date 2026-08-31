@@ -8,12 +8,16 @@
  * Generation is a one-shot Haiku call (see generateSessionTitle), fired in the
  * background at session creation so it never blocks the create path.
  */
-import { readFileSync, existsSync, readdirSync, statSync, unlinkSync } from "fs";
+import { readFileSync, existsSync, unlinkSync } from "fs";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
 import { managedFeltDb } from "./managed-feltdb";
 import type { StateFirstDB } from "@feltdb/core";
 import { oneShot } from "./one-shot";
 import { getTitleOverride } from "./title-overrides";
+import {
+	nativeSessionMetadata,
+	nativeSessionMetadataEntries,
+} from "./managed-native-sessions";
 
 const REGISTRY_PATH = `${OPENSESSION_SESSIONS_DIR}/generated-titles.json`;
 
@@ -120,10 +124,7 @@ export async function ensureGeneratedTitle(
 	if (getGeneratedTitle(id)) return null; // already have one
 	// Desk sessions keep their fixed title (direct file read — importing the
 	// sessions cache here would be an import cycle).
-	try {
-		const f = `${OPENSESSION_SESSIONS_DIR}/${id}.json`;
-		if (existsSync(f) && JSON.parse(readFileSync(f, "utf-8")).desk) return null;
-	} catch {}
+	if (nativeSessionMetadata(id)?.desk) return null;
 	const source = prompt.trim().slice(0, 2000);
 	if (!source) return null;
 
@@ -180,25 +181,12 @@ const SWEEP_BATCH = 10; // one-shots serialize on a shared server; stay polite
 function sweepCandidates(): Array<{ id: string; title: string }> {
 	const cutoff = Date.now() - SWEEP_MAX_AGE_MS;
 	const out: Array<{ id: string; title: string; created: number }> = [];
-	let files: string[] = [];
-	try {
-		files = readdirSync(OPENSESSION_SESSIONS_DIR);
-	} catch {
-		return [];
-	}
-	for (const f of files) {
+	for (const [id, d] of nativeSessionMetadataEntries()) {
 		// Both id prefixes: `os-` is what every session minted since the rename
 		// carries, `bks-` what the older ones kept. Matching only `bks-` left the
 		// retry net dead for every new session.
-		if (!f.endsWith(".json") || !/^(os|bks)-[0-9a-f]{8}-/.test(f)) continue;
-		const id = f.slice(0, -5);
+		if (!/^(os|bks)-[0-9a-f]{8}-/.test(id)) continue;
 		if (getGeneratedTitle(id) || getTitleOverride(id)) continue;
-		let d: any;
-		try {
-			d = JSON.parse(readFileSync(`${OPENSESSION_SESSIONS_DIR}/${f}`, "utf-8"));
-		} catch {
-			continue;
-		}
 		if (!d || typeof d !== "object") continue;
 		if (d.desk || d.goalId || d.automationId) continue;
 		const title = typeof d.title === "string" ? d.title.trim() : "";

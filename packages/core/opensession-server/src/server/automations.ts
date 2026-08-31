@@ -35,6 +35,7 @@ import {
 import { createWorktree, ensureAskCheckout, getRepo, listWorktrees, REPOS, worktreeHeadBranch } from "./worktree";
 import { engineSessionPatch } from "./sessions";
 import { updateSessionFile } from "./session-cache";
+import { nativeSessionMetadata } from "./managed-native-sessions";
 import { resolvePlainWorkspace } from "./workspace-resolve";
 import { getWorkspace } from "./workspaces";
 import type { NativeSessionFile } from "./types";
@@ -83,7 +84,6 @@ import type { StateFirstDB } from "@feltdb/core";
 import { managedFeltDb } from "./managed-feltdb";
 
 const AUTOMATIONS_DIR = stateDir("automations");
-const SESSIONS_DIR = OPENSESSION_SESSIONS_DIR;
 
 /**
  * Config for an automation that is driven by polling a Grafana Loki failure
@@ -1847,12 +1847,8 @@ export function setEventSessionCallback(cb: (sessionId: string) => void): void {
 export function retriggerAutomationSession(
   sessionId: string,
 ): { ok: true; name: string } | { ok: false; reason: string } {
-  let session: NativeSessionFile;
-  try {
-    session = JSON.parse(
-      readFileSync(`${SESSIONS_DIR}/${sessionId}.json`, "utf-8"),
-    );
-  } catch {
+  const session = nativeSessionMetadata(sessionId);
+  if (!session) {
     return { ok: false, reason: `session ${sessionId} not found` };
   }
   // automationId is stamped since 2026-07-16; older sessions only carry the

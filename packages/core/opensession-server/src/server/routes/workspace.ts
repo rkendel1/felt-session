@@ -42,6 +42,7 @@ import { searchSkills } from "../skills";
 import { handleSlashCommand } from "../slash-commands";
 import { sanitizeBranchSlug } from "../suggest-branch";
 import { type NativeSessionFile, type StackedOn } from "../types";
+import { nativeSessionMetadata } from "../managed-native-sessions";
 import { DEFAULT_WORKSPACE_MODEL_SETTINGS, type Workspace, type WorkspaceDraft, type WorkspaceModelSettings, createWorkspace, deleteWorkspace, getWorkspace, listWorkspaces, updateWorkspace, workspaceListVersion } from "../workspaces";
 import { resolveExternalWorkspace, resolvePlainWorkspace, resolvePrWorkspace, workspaceBacksOpenPr } from "../workspace-resolve";
 import { resolveModel } from "../models";
@@ -106,14 +107,8 @@ function findNativeSessionForFileMentions(
 ): NativeSessionFile | undefined {
 	if (!(sessionId && isNativeSessionId(sessionId)) || !/^[a-z0-9-]+$/i.test(sessionId))
 		return undefined;
-	try {
-		const session = JSON.parse(
-			readFileSync(`${SESSIONS_DIR}/${sessionId}.json`, "utf8"),
-		) as NativeSessionFile;
-		return session.id === sessionId ? session : undefined;
-	} catch {
-		return undefined;
-	}
+	const session = nativeSessionMetadata(sessionId);
+	return session?.id === sessionId ? session : undefined;
 }
 
 export async function handleWorkspaceRoutes(

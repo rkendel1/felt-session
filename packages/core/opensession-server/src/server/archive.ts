@@ -10,8 +10,6 @@ import { unpinEverywhere } from "./pins";
 import type { UnifiedSession } from "./types";
 import { setIndexedSessionArchived } from "./session-list-store";
 
-const REGISTRY_PATH = `${OPENSESSION_SESSIONS_DIR}/archive-registry.json`;
-
 /** Why a session ended up archived — drives the "Auto-archived" filter. */
 export type ArchiveReason = "manual" | "idle" | "auto";
 
@@ -28,7 +26,7 @@ type RawEntry = string | Entry;
 const registry = new ManagedValueRegistry<RawEntry>(
   "opensession_archive_registry",
   "archive-registry-json-to-managed-feltdb-v1",
-  REGISTRY_PATH,
+  () => `${OPENSESSION_SESSIONS_DIR}/archive-registry.json`,
 );
 export function initializeManagedArchive(db?: StateFirstDB): Promise<void> {
   return registry.initialize(db);

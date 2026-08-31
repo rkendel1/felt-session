@@ -11,8 +11,7 @@
  * session) keep the configured review model. Kill switch:
  * OPENSESSION_REVIEW_INVERSION=0.
  */
-import { readFileSync } from "fs";
-import { OPENSESSION_SESSIONS_DIR } from "../../server/paths";
+import { nativeSessionMetadata } from "../../server/managed-native-sessions";
 import { defaultRepo } from "../../server/config";
 import { tryGetSessionControl } from "../../server/session-control";
 import { matchSessions, workspaceIdForRepo } from "./session-notify";
@@ -40,12 +39,8 @@ export function familyOf(model?: string): ModelFamily | null {
 }
 
 function sessionFileModel(bksId: string): string | undefined {
-  try {
-    const parsed = JSON.parse(readFileSync(`${OPENSESSION_SESSIONS_DIR}/${bksId}.json`, "utf-8"));
-    return typeof parsed?.model === "string" ? parsed.model : undefined;
-  } catch {
-    return undefined;
-  }
+  const model = nativeSessionMetadata(bksId)?.model;
+  return typeof model === "string" ? model : undefined;
 }
 
 /** Which model family authored the PR's current head, and how we know. */

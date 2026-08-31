@@ -17,7 +17,7 @@ export class ManagedValueRegistry<T> {
   constructor(
     private readonly collectionName: string,
     private readonly migrationId: string,
-    private readonly legacyPath: string,
+    private readonly legacyPath: string | (() => string),
   ) {}
 
   get(id: string): T | undefined { return this.values.get(id); }
@@ -26,11 +26,14 @@ export class ManagedValueRegistry<T> {
 
   async initialize(authority: StateFirstDB = managedFeltDb()): Promise<void> {
     this.db = authority;
+    const legacyPath = typeof this.legacyPath === "function"
+      ? this.legacyPath()
+      : this.legacyPath;
     const migrations = authority.collection<{ id: string }>("opensession_migrations");
     if (!await migrations.get(this.migrationId)) {
       let legacy: Record<string, T> = {};
       try {
-        if (existsSync(this.legacyPath)) legacy = JSON.parse(readFileSync(this.legacyPath, "utf8"));
+        if (existsSync(legacyPath)) legacy = JSON.parse(readFileSync(legacyPath, "utf8"));
       } catch {}
       for (const [id, value] of Object.entries(legacy)) await this.write(id, value, false);
       await authority.transaction((tx) => {
@@ -40,7 +43,7 @@ export class ManagedValueRegistry<T> {
           { requireAbsent: true },
         );
       }, { transactionId: `opensession:migration:${this.migrationId}` });
-      if (existsSync(this.legacyPath)) unlinkSync(this.legacyPath);
+      if (existsSync(legacyPath)) unlinkSync(legacyPath);
     }
     const records = authority.runtime().runtime === "remote"
       ? await this.queryAll(authority)

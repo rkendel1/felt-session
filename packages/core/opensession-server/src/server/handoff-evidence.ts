@@ -386,27 +386,18 @@ export interface BeaconDeps {
 
 async function defaultBeaconDeps(): Promise<BeaconDeps> {
 	const [
-		{ OPENSESSION_SESSIONS_DIR },
 		{ getSessionControl },
 		{ touchNativeSessionStrict },
-		fs,
+		{ nativeSessionMetadata },
 	] =
 		await Promise.all([
-			import("./paths"),
 			import("./session-control"),
 			import("./session-cache"),
-			import("fs"),
+			import("./managed-native-sessions"),
 		]);
 	return {
-		readSessionFile: (id) => {
-			try {
-				const p = `${OPENSESSION_SESSIONS_DIR}/${id}.json`;
-				if (!fs.existsSync(p)) return null;
-				return JSON.parse(fs.readFileSync(p, "utf-8"));
-			} catch {
-				return null;
-			}
-		},
+		readSessionFile: (id) =>
+			(nativeSessionMetadata(id) as unknown as Record<string, unknown> | undefined) ?? null,
 		stamp: (id, at) =>
 			touchNativeSessionStrict(id, { parentNotifiedAt: at }),
 		deliver: (parentId, content, deliveryId) =>

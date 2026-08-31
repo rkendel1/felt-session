@@ -1,8 +1,15 @@
 import { describe, expect, test, beforeAll, afterAll } from "bun:test";
-import { mkdtempSync, rmSync, readFileSync, writeFileSync } from "fs";
+import { mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { __setSessionsDirForTest } from "./paths";
+import { createFeltDB } from "@feltdb/core";
+import {
+  __setNativeSessionMetadataForTest,
+  initializeManagedNativeSessions,
+  nativeSessionMetadata,
+  updateNativeSessionMetadata,
+} from "./managed-native-sessions";
 
 const scratch = mkdtempSync(join(tmpdir(), "migrate-engine-test-"));
 const prevDir = __setSessionsDirForTest(scratch);
@@ -13,23 +20,25 @@ const { migrateSessionEngine, isAutomationOwnedSession, sessionHasJournaledRun }
   await import("./session-model-migration");
 
 function writeSession(id: string, extra: Record<string, unknown> = {}) {
+  const payload = {
+    id,
+    claudeSessionId: "11111111-2222-7000-8000-000000000000",
+    branch: "",
+    worktreeDir: "/tmp",
+    createdBy: "Alex",
+    createdAt: "2026-07-08T00:00:00.000Z",
+    lastActivity: "2026-07-08T00:00:00.000Z",
+    model: "claude-haiku-4-5",
+    ...extra,
+  };
+  __setNativeSessionMetadataForTest(id, payload as any);
   writeFileSync(
     join(scratch, `${id}.json`),
-    JSON.stringify({
-      id,
-      claudeSessionId: "11111111-2222-7000-8000-000000000000",
-      branch: "",
-      worktreeDir: "/tmp",
-      createdBy: "Alex",
-      createdAt: "2026-07-08T00:00:00.000Z",
-      lastActivity: "2026-07-08T00:00:00.000Z",
-      model: "claude-haiku-4-5",
-      ...extra,
-    })
+    JSON.stringify(payload)
   );
 }
 
-beforeAll(() => {
+beforeAll(async () => {
   writeSession("bks-mig-ok");
   writeSession("bks-mig-automation", { automation: "plain triage" });
   writeSession("bks-mig-automation2", { createdBy: "triage (automation)" });
@@ -39,6 +48,9 @@ beforeAll(() => {
     JSON.stringify({
       runkey1: { runKey: "runkey1", osSessionId: "bks-mig-busy", cwd: "/tmp", startedAt: "now" },
     })
+  );
+  await initializeManagedNativeSessions(
+    createFeltDB({ namespace: crypto.randomUUID(), memory: true }),
   );
 });
 
@@ -59,11 +71,11 @@ describe("migrateSessionEngine", async () => {
       from: "claude-haiku-4-5",
       to: "pi/anthropic/claude-haiku-4-5",
     });
-    const data = JSON.parse(readFileSync(join(scratch, "bks-mig-ok.json"), "utf-8"));
+    const data = nativeSessionMetadata("bks-mig-ok")!;
     expect(data.model).toBe("pi/anthropic/claude-haiku-4-5");
     expect(data.claudeSessionId).toBe("11111111-2222-7000-8000-000000000000"); // untouched
     expect(data.modelHistory).toHaveLength(1);
-    expect(data.modelHistory[0]).toMatchObject({
+    expect(data.modelHistory![0]).toMatchObject({
       model: "pi/anthropic/claude-haiku-4-5",
       from: "claude-haiku-4-5",
       by: "tester",
@@ -71,9 +83,7 @@ describe("migrateSessionEngine", async () => {
     // Idempotent: same target again is ok, no duplicate history entry.
     const again = await migrateSessionEngine("bks-mig-ok", "pi/anthropic/claude-haiku-4-5");
     expect(again.ok).toBe(true);
-    expect(
-      JSON.parse(readFileSync(join(scratch, "bks-mig-ok.json"), "utf-8")).modelHistory
-    ).toHaveLength(1);
+    expect(nativeSessionMetadata("bks-mig-ok")?.modelHistory).toHaveLength(1);
   });
 
   test("rejects targets that name a model rather than an engine", async () => {
@@ -115,6 +125,10 @@ describe("migrateSessionEngine", async () => {
 
   test("can preserve last activity during a fleet migration", async () => {
     writeSession("bks-mig-preserve");
+    await updateNativeSessionMetadata(
+      "bks-mig-preserve",
+      () => nativeSessionMetadata("bks-mig-preserve")!,
+    );
     const res = await migrateSessionEngine(
       "bks-mig-preserve",
       "pi/anthropic/claude-haiku-4-5",
@@ -122,11 +136,9 @@ describe("migrateSessionEngine", async () => {
       { preserveActivity: true }
     );
     expect(res.ok).toBe(true);
-    const data = JSON.parse(
-      readFileSync(join(scratch, "bks-mig-preserve.json"), "utf-8")
-    );
+    const data = nativeSessionMetadata("bks-mig-preserve")!;
     expect(data.lastActivity).toBe("2026-07-08T00:00:00.000Z");
-    expect(data.modelHistory.at(-1)).toMatchObject({ by: "fleet" });
+    expect(data.modelHistory!.at(-1)).toMatchObject({ by: "fleet" });
   });
 
   test("rejects sessions with an in-flight journaled run", async () => {

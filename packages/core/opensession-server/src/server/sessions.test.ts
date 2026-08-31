@@ -4,6 +4,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createFeltDB, type StateFirstDB } from "@feltdb/core";
 import type { UnifiedSession } from "./types";
+import {
+	__setNativeSessionMetadataForTest,
+	initializeManagedNativeSessions,
+} from "./managed-native-sessions";
+import { initializeManagedWorkspaces } from "./workspaces";
+import { initializeManagedArchive } from "./archive";
+import { __setSessionListStoreForTest } from "./session-list-store";
+import { ManagedSessionListStore } from "./managed-session-list-store";
 
 let home: string;
 let priorHome: string | undefined;
@@ -61,6 +69,12 @@ beforeAll(async () => {
 	priorSessionsDir = paths.__setSessionsDirForTest(join(home, ".opensession-sessions"));
 	const codexAccounts = await import("./codex-accounts");
 	priorCodexHome = codexAccounts.__setCodexHomeForTest(home);
+	await initializeManagedNativeSessions(prCacheAuthority);
+	await initializeManagedWorkspaces(prCacheAuthority);
+	await initializeManagedArchive(prCacheAuthority);
+	const sessionList = new ManagedSessionListStore(prCacheAuthority);
+	await sessionList.initialize();
+	__setSessionListStoreForTest(sessionList);
 });
 
 afterAll(async () => {
@@ -81,24 +95,22 @@ afterAll(async () => {
 });
 
 function writeSession(id: string, data: Record<string, unknown>): void {
+	const payload = {
+		id,
+		claudeSessionId: "",
+		branch: "",
+		worktreeDir: "/home/ubuntu/projects/opensession",
+		createdBy: "Alex",
+		createdAt: "2026-07-02T18:00:00.000Z",
+		lastActivity: "2026-07-02T18:00:00.000Z",
+		mode: "ask",
+		source: "opensession",
+		...data,
+	};
+	__setNativeSessionMetadataForTest(id, payload as any);
 	writeFileSync(
 		join(home, ".opensession-sessions", `${id}.json`),
-		JSON.stringify(
-			{
-				id,
-				claudeSessionId: "",
-				branch: "",
-				worktreeDir: "/home/ubuntu/projects/opensession",
-				createdBy: "Alex",
-				createdAt: "2026-07-02T18:00:00.000Z",
-				lastActivity: "2026-07-02T18:00:00.000Z",
-				mode: "ask",
-				source: "opensession",
-				...data,
-			},
-			null,
-			2,
-		),
+		JSON.stringify(payload, null, 2),
 	);
 }
 
