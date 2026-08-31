@@ -124,3 +124,13 @@ export function uniqueStrings(values: string[]): string[] {
 export function pageLimit(limit?: number): number {
 	return Math.min(Math.max(limit ?? 25, 1), MAX_PAGE_SIZE);
 }
+
+export function legacySummary(text: string): string {
+	const compact = text.trim().replace(/\s+/g, " ");
+	const sentenceEnds = [...compact.matchAll(/[.!?]+(?:\s+|$)/g)];
+	const bounded = sentenceEnds.length > 2
+		? compact.slice(0, sentenceEnds[1].index! + sentenceEnds[1][0].trimEnd().length)
+		: compact;
+	const chars = Array.from(bounded);
+	return chars.length <= 400 ? bounded : `${chars.slice(0, 399).join("").trimEnd()}…`;
+}

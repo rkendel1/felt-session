@@ -14,50 +14,10 @@
  * remember / list_memory / forget admin tools.
  */
 
-import { existsSync } from "fs";
-import { join } from "path";
-import { unlinkSync } from "fs";
-import { stateDir } from "../../server/paths";
-
-export const MEMORY_DIR = stateDir("memory");
-
-// Test seam: the snapshot harness (src/server/testing/) redirects the store so
-// a recorded fixture can never embed the team's real memories, and so a run's
-// injected memory note is fixture data rather than whatever this box happens
-// to remember. Resolved per call; MEMORY_DIR itself stays the default.
 let memoryDirOverride: string | null = null;
-
-/**
- * Directory backing the scope stores.
- *
- * Resolution order: a test override, isolated state, then the live store.
- */
-export function memoryDir(): string {
-  if (memoryDirOverride) return memoryDirOverride;
-  return process.env.OPENSESSION_STATE_DIR ? stateDir("memory") : MEMORY_DIR;
-}
-
-/** JSON roots eligible for a v2 import. */
-export function memoryImportDirs(): string[] {
-  return [memoryDir()];
-}
-
-const MEMORY_V2_DIRTY_MARKER = ".memory-v2-dirty";
 
 export function markMemoryImportDirty(): void {
   throw new Error("Legacy memory writes are disabled; managed FeltDB is authoritative");
-}
-
-export function memoryImportIsDirty(sourceDirs: string[]): boolean {
-  return sourceDirs.some((directory) => existsSync(join(directory, MEMORY_V2_DIRTY_MARKER)));
-}
-
-export function clearMemoryImportDirty(sourceDirs: string[]): void {
-  for (const directory of sourceDirs) {
-    try {
-      unlinkSync(join(directory, MEMORY_V2_DIRTY_MARKER));
-    } catch {}
-  }
 }
 
 /** Point the memory store at another directory; returns the previous value. */
@@ -143,7 +103,7 @@ export async function saveScope(scope: string, entries: MemoryEntry[]): Promise<
   for (const entry of entries) {
     const record = store.get(entry.id);
     if (!record) {
-      const { legacySummary } = await import("../../server/memory-v2/legacy-import");
+      const { legacySummary } = await import("../../server/memory-v2/validation");
       const summary = legacySummary(entry.text);
       await store.create({
         id: entry.id,
@@ -160,7 +120,7 @@ export async function saveScope(scope: string, entries: MemoryEntry[]): Promise<
       if (entry.archivedAt) await store.archive(entry.id, new Date(entry.archivedAt), entry.supersededBy);
       continue;
     }
-    const { legacySummary } = await import("../../server/memory-v2/legacy-import");
+    const { legacySummary } = await import("../../server/memory-v2/validation");
     const summary = legacySummary(entry.text);
     if (record.summary !== summary || (record.details || "") !== (summary === entry.text.trim() ? "" : entry.text))
       await store.update(record.id, { summary, details: summary === entry.text.trim() ? null : entry.text,

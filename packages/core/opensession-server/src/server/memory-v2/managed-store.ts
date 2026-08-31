@@ -275,6 +275,10 @@ export class ManagedMemoryStore {
       { total: 0, active: 0, pinned: 0, review: 0, ambientSummaryChars: 0, scopes });
   }
 
+  scopeKeys(): string[] {
+    return [...new Set([...this.records.values()].map((record) => record.scopeKey))].sort();
+  }
+
   metadata(key: string): string | null { return this.meta.get(key)?.value ?? null; }
   async setMetadata(key: string, value: string, now = new Date()): Promise<void> {
     const record = { id: key, value, updatedAt: now.toISOString() };

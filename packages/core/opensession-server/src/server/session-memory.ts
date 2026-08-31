@@ -25,12 +25,10 @@
  */
 
 import { randomUUID } from "crypto";
-import { readdirSync } from "fs";
 import {
   activeMemories,
   loadScope,
   saveScope,
-  memoryDir,
   type MemoryEntry,
 } from "../agents/slack/memory";
 import { resolveTeammate, SLACK_ID_TO_NAME } from "./shared/user-mappings";
@@ -41,7 +39,7 @@ import { personaName } from "./config";
 export type MemoryScopeKind = "repo" | "user" | "team" | "channel";
 
 export interface MemoryScope {
-  /** Store file key under MEMORY_DIR, e.g. "repo-app", "workspace". */
+  /** Managed scope key, e.g. "repo-app" or "workspace". */
   key: string;
   kind: MemoryScopeKind;
   /** Human label for prompts/tool output, e.g. "app", "Alice". */
@@ -381,9 +379,8 @@ function scopeHeading(scope: MemoryScope): string {
 
 // ── Settings-page maintenance surface (see GET/POST/PUT/DELETE /api/memory) ──
 
-/** Reconstruct a scope descriptor from a store-file key ("workspace",
- *  "repo-x", "user-U…", "channel-C…"). Unknown shapes are rejected so the
- *  API can't be used to create arbitrary files under MEMORY_DIR. */
+/** Reconstruct a scope descriptor from a managed scope key ("workspace",
+ *  "repo-x", "user-U…", "channel-C…"). */
 export function describeScope(key: string): MemoryScope | null {
   if (key === "workspace") return TEAM_SCOPE;
   const m = key.match(/^(repo|user|channel)-([A-Za-z0-9@._-]+)$/);
@@ -398,15 +395,12 @@ export function describeScope(key: string): MemoryScope | null {
 /**
  * Every memory scope for the Settings page: team + one per registered repo
  * (always shown, even when empty, so there's somewhere to add), plus whatever
- * user/channel stores exist on disk.
+ * user/channel scopes exist in managed FeltDB.
  */
 export async function listAllMemory(repoIds: string[]): Promise<ScopedMemory[]> {
   const keys = new Set<string>(["workspace", ...repoIds.map((r) => `repo-${r}`)]);
-  try {
-    for (const f of readdirSync(memoryDir())) {
-      if (f.endsWith(".json")) keys.add(f.slice(0, -5));
-    }
-  } catch {} // no store dir yet — the fixed scopes still render
+  const { store } = await (await import("./memory-v2/runtime")).ensureMemoryV2Ready();
+  for (const key of store.scopeKeys()) keys.add(key);
   const scopes = [...keys]
     .map(describeScope)
     .filter((s): s is MemoryScope => !!s);

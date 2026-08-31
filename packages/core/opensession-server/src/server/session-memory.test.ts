@@ -1,6 +1,6 @@
-import { afterAll, describe, expect, test } from "bun:test";
-import { rmSync } from "fs";
-import { MEMORY_DIR } from "../agents/slack/memory";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { createFeltDB } from "@feltdb/core";
+import { closeMemoryRuntime, initializeManagedMemory } from "./memory-v2/runtime";
 import { SLACK_ID_TO_NAME } from "./shared/user-mappings";
 import {
   addSessionMemory,
@@ -11,8 +11,6 @@ import {
   type MemoryScope,
 } from "./session-memory";
 
-// Round-trip tests write to uniquely-named scope files inside the real store
-// dir (never touching existing scopes) and remove them afterwards.
 const TEST_REPO = `__sm-test-${Math.random().toString(36).slice(2, 8)}`;
 const TEST_SCOPE: MemoryScope = {
   key: `repo-${TEST_REPO}`,
@@ -20,9 +18,8 @@ const TEST_SCOPE: MemoryScope = {
   label: TEST_REPO,
 };
 
-afterAll(() => {
-  rmSync(`${MEMORY_DIR}/${TEST_SCOPE.key}.json`, { force: true });
-});
+beforeAll(() => initializeManagedMemory(createFeltDB({ namespace: crypto.randomUUID(), memory: true })));
+afterAll(() => closeMemoryRuntime());
 
 describe("sessionMemoryScopes", () => {
   test("repo scopes first (deduped), then user, then team", () => {
