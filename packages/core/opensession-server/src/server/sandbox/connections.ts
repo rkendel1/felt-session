@@ -262,15 +262,15 @@ export interface ConnectSandboxInput {
   settings?: SandboxConnectionSettings;
 }
 
-export function connectSandboxProvider(
+export async function connectSandboxProvider(
   provider: WorkspaceSandboxProvider,
   input: ConnectSandboxInput,
-): SandboxConnection {
+): Promise<SandboxConnection> {
   const previous = getSandboxConnection(provider);
   let credentialRef = previous?.credentialRef;
   if (provider === "daytona" || provider === "box") {
     if (input.secret) {
-      credentialRef = putWorkspaceSecret(
+      credentialRef = await putWorkspaceSecret(
         `sandbox.${provider}`,
         input.secret.trim(),
         credentialRef,
@@ -286,7 +286,7 @@ export function connectSandboxProvider(
       if (!tokenId || !tokenSecret) {
         throw new Error("Modal token ID and token secret are both required");
       }
-      credentialRef = putWorkspaceSecret(
+      credentialRef = await putWorkspaceSecret(
         "sandbox.modal",
         JSON.stringify({ tokenId: tokenId.trim(), tokenSecret: tokenSecret.trim() }),
         credentialRef,
@@ -364,7 +364,7 @@ export function setSandboxConnectionQualification(
   return next;
 }
 
-export function disconnectSandboxProvider(provider: WorkspaceSandboxProvider): boolean {
+export async function disconnectSandboxProvider(provider: WorkspaceSandboxProvider): Promise<boolean> {
   const connection = getSandboxConnection(provider);
   if (!connection) return false;
   const raw = readRaw();
@@ -372,7 +372,7 @@ export function disconnectSandboxProvider(provider: WorkspaceSandboxProvider): b
     (candidate) => candidate.provider !== provider,
   );
   writeRaw(raw);
-  if (connection.credentialRef) deleteWorkspaceSecret(connection.credentialRef);
+  if (connection.credentialRef) await deleteWorkspaceSecret(connection.credentialRef);
   audit({
     kind: "sandbox_connection_disconnected",
     provider,

@@ -12,6 +12,7 @@
  * under a scratch sessions dir via __setSessionsDirForTest.
  */
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
+import { createFeltDB } from "@feltdb/core";
 import {
   existsSync,
   mkdirSync,
@@ -25,6 +26,7 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { __setSessionsDirForTest } from "../paths";
 import { sandboxesEnabled } from "./config";
+import { initializeManagedWorkspaceSecrets } from "../workspace-secrets";
 import {
   connectSandboxProvider,
   setSandboxConnectionQualification,
@@ -98,11 +100,12 @@ afterAll(() => {
   rmSync(scratch, { recursive: true, force: true });
 });
 
-beforeEach(() => {
+beforeEach(async () => {
+	await initializeManagedWorkspaceSecrets(createFeltDB({ namespace: crypto.randomUUID(), memory: true }));
   _resetPrewarmForTest();
   rmSync(prewarmDir(), { recursive: true, force: true });
   rmSync(environmentsPath(), { force: true });
-  writeConfig({});
+  await writeConfig({});
 });
 
 afterEach(() => {
@@ -110,7 +113,7 @@ afterEach(() => {
   _resetPrewarmForTest();
 });
 
-function writeConfig(overrides: Record<string, unknown>): void {
+async function writeConfig(overrides: Record<string, unknown>): Promise<void> {
   const snapshot =
     typeof overrides.connectionSnapshot === "string"
       ? overrides.connectionSnapshot
@@ -126,7 +129,7 @@ function writeConfig(overrides: Record<string, unknown>): void {
       ...runtimeOverrides,
     }),
   );
-  connectSandboxProvider("daytona", {
+  await connectSandboxProvider("daytona", {
     secret: "test-key",
     settings: { snapshot },
   });
@@ -284,7 +287,7 @@ describe("requestPrewarm", () => {
 
   test.skipIf(killSwitch)("prewarm disabled by config → disabled", async () => {
     makeFakeAdapter();
-    writeConfig({ prewarm: { enabled: false } });
+    await writeConfig({ prewarm: { enabled: false } });
     expect((await requestPrewarm("daytona", "tella-fusion")).state).toBe("disabled");
   });
 
@@ -328,7 +331,7 @@ describe("claimPrewarm (adoption)", () => {
     const fake = makeFakeAdapter();
     await requestPrewarm("daytona", "tella-fusion");
     await until(() => readyEntry()?.state === "ready");
-    writeConfig({ runnerSha: "sha-B" }); // runner payload pin moved
+    await writeConfig({ runnerSha: "sha-B" }); // runner payload pin moved
     expect(claimPrewarm("daytona", "tella-fusion", "bks-s")).toBeNull();
     await until(() => fake.destroyed.includes(fake.created[0]));
     expect(_prewarmPoolForTest().size).toBe(0);
@@ -338,7 +341,7 @@ describe("claimPrewarm (adoption)", () => {
     const fake = makeFakeAdapter();
     await requestPrewarm("daytona", "tella-fusion");
     await until(() => readyEntry()?.state === "ready");
-    writeConfig({ connectionSnapshot: "snap-B" });
+    await writeConfig({ connectionSnapshot: "snap-B" });
     expect(claimPrewarm("daytona", "tella-fusion", "bks-s")).toBeNull();
     await until(() => fake.destroyed.includes(fake.created[0]));
   });
@@ -371,7 +374,7 @@ describe("claimPrewarm (adoption)", () => {
 
 describe("keep-ready prewarms", () => {
   test.skipIf(killSwitch)("starts eagerly, replenishes after claim, and survives TTL", async () => {
-    writeConfig({
+    await writeConfig({
       prewarm: {
         enabled: true,
         ttlMinutes: 10,
@@ -645,7 +648,7 @@ describe("sweepPrewarms", () => {
 });
 
 describe("provider orphan protection", () => {
-  test("treats durable session mappings as stronger than stale prewarm labels", () => {
+  test("treats durable session mappings as stronger than stale prewarm labels", async () => {
     expect(sessionOwnedSandboxIds([
       { sessionId: "os-live", sandboxId: "sandbox-adopted" },
       { sessionId: "__prewarm__:daytona:tella-fusion", sandboxId: "sandbox-warm" },
@@ -654,7 +657,7 @@ describe("provider orphan protection", () => {
 });
 
 describe("prewarmRateLimited", () => {
-  test("allows 6/min then limits", () => {
+  test("allows 6/min then limits", async () => {
     for (let i = 0; i < 6; i++) expect(prewarmRateLimited("kent")).toBe(false);
     expect(prewarmRateLimited("kent")).toBe(true);
     // Other users unaffected.

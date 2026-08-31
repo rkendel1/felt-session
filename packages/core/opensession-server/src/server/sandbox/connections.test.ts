@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { createFeltDB } from "@feltdb/core";
 import {
   mkdtempSync,
   readFileSync,
@@ -16,17 +17,19 @@ import {
   sandboxProviderCredential,
   setSandboxConnectionQualification,
 } from "./connections";
+import { initializeManagedWorkspaceSecrets } from "../workspace-secrets";
 
 let scratch = "";
 let oldConfig: string | undefined;
 let oldSecrets: string | undefined;
 
-beforeEach(() => {
+beforeEach(async () => {
   scratch = mkdtempSync(join(tmpdir(), "opensession-sandbox-connections-"));
   oldConfig = process.env.OPENSESSION_SANDBOX_CONFIG;
   oldSecrets = process.env.OPENSESSION_WORKSPACE_SECRETS_STORE;
   process.env.OPENSESSION_SANDBOX_CONFIG = join(scratch, "sandbox.json");
   process.env.OPENSESSION_WORKSPACE_SECRETS_STORE = join(scratch, "secrets.json");
+  await initializeManagedWorkspaceSecrets(createFeltDB({ namespace: crypto.randomUUID(), memory: true }));
 });
 
 afterEach(() => {
@@ -38,8 +41,8 @@ afterEach(() => {
 });
 
 describe("workspace sandbox connections", () => {
-  test("stores Daytona credentials behind an opaque reference and never returns it", () => {
-    connectSandboxProvider("daytona", {
+  test("stores Daytona credentials behind an opaque reference and never returns it", async () => {
+    await connectSandboxProvider("daytona", {
       secret: "daytona-secret-value",
       settings: { apiUrl: "https://daytona.example.test", snapshot: "team-large" },
     });
@@ -58,8 +61,8 @@ describe("workspace sandbox connections", () => {
     expect(JSON.stringify(safe)).not.toContain("daytona-secret-value");
   });
 
-  test("stores Box credentials behind an opaque reference and exposes only readiness", () => {
-    connectSandboxProvider("box", {
+  test("stores Box credentials behind an opaque reference and exposes only readiness", async () => {
+    await connectSandboxProvider("box", {
       secret: "box-secret-value",
       settings: { apiUrl: "https://box.example.test/v1" },
     });
@@ -73,13 +76,13 @@ describe("workspace sandbox connections", () => {
     });
   });
 
-  test("rotates Modal credentials in place and disconnect deletes the secret", () => {
-    const first = connectSandboxProvider("modal", {
+  test("rotates Modal credentials in place and disconnect deletes the secret", async () => {
+    const first = await connectSandboxProvider("modal", {
       tokenId: "modal-id-one",
       tokenSecret: "modal-secret-one",
     });
     const ref = first.credentialRef;
-    const second = connectSandboxProvider("modal", {
+    const second = await connectSandboxProvider("modal", {
       tokenId: "modal-id-two",
       tokenSecret: "modal-secret-two",
     });
@@ -90,13 +93,13 @@ describe("workspace sandbox connections", () => {
       tokenSecret: "modal-secret-two",
     });
 
-    expect(disconnectSandboxProvider("modal")).toBe(true);
+    expect(await disconnectSandboxProvider("modal")).toBe(true);
     expect(getSandboxConnection("modal")).toBeUndefined();
     expect(sandboxProviderCredential("modal")).toBeUndefined();
   });
 
-  test("only enabled, successfully qualified connections become Ready", () => {
-    connectSandboxProvider("docker", { settings: { cpu: 4, memoryMb: 8192 } });
+  test("only enabled, successfully qualified connections become Ready", async () => {
+    await connectSandboxProvider("docker", { settings: { cpu: 4, memoryMb: 8192 } });
     expect(sandboxConnectionReady("docker")).toBe(false);
     setSandboxConnectionQualification("docker", {
       status: "ready",
@@ -108,8 +111,8 @@ describe("workspace sandbox connections", () => {
     ).toBe("ready");
   });
 
-  test("a runner pin change does not invalidate provider qualification", () => {
-    connectSandboxProvider("daytona", { secret: "daytona-secret" });
+  test("a runner pin change does not invalidate provider qualification", async () => {
+    await connectSandboxProvider("daytona", { secret: "daytona-secret" });
     setSandboxConnectionQualification("daytona", {
       status: "ready",
       checkedAt: "2026-08-11T00:00:00.000Z",
@@ -126,8 +129,8 @@ describe("workspace sandbox connections", () => {
     ).toBe("ready");
   });
 
-  test("an adapter signature change makes a previous qualification stale", () => {
-    connectSandboxProvider("docker", {});
+  test("an adapter signature change makes a previous qualification stale", async () => {
+    await connectSandboxProvider("docker", {});
     setSandboxConnectionQualification("docker", {
       status: "ready",
       checkedAt: "2026-08-11T00:00:00.000Z",

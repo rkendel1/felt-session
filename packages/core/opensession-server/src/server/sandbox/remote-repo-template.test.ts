@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { createFeltDB } from "@feltdb/core";
 import { mkdtempSync, readFileSync, rmSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import { connectSandboxProvider, updateSandboxConnection } from "./connections";
+import { initializeManagedWorkspaceSecrets } from "../workspace-secrets";
 
 let scratch = "";
 
@@ -11,11 +13,12 @@ beforeEach(async () => {
   process.env.OPENSESSION_SESSIONS_DIR = `${scratch}/sessions`;
   process.env.OPENSESSION_SANDBOX_CONFIG = `${scratch}/sandbox.json`;
   process.env.OPENSESSION_WORKSPACE_SECRETS_STORE = `${scratch}/secrets.json`;
+  await initializeManagedWorkspaceSecrets(createFeltDB({ namespace: crypto.randomUUID(), memory: true }));
   await Bun.write(
     process.env.OPENSESSION_SANDBOX_CONFIG,
     JSON.stringify({ runnerSha: "abc" }),
   );
-  connectSandboxProvider("modal", {
+  await connectSandboxProvider("modal", {
     tokenId: "test-id",
     tokenSecret: "test-secret",
     settings: { image: "base:v1" },
