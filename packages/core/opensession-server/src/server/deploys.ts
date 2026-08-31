@@ -33,10 +33,11 @@
  */
 
 import { homeDir } from "./paths";
-import { existsSync, mkdirSync, readFileSync, rmSync, cpSync, readdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, cpSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import type { Subprocess } from "bun";
-import { writeJsonAtomic } from "./shared/atomic-write";
+import type { StateFirstDB } from "@feltdb/core";
+import { managedFeltDb } from "./managed-feltdb";
 import { audit } from "./audit";
 import { stateDir } from "./paths";
 
@@ -81,8 +82,14 @@ export interface Deploy {
 }
 
 interface Stored {
+  id: string;
   deploys: Deploy[];
+  __version?: number;
 }
+
+const DEPLOYS_COLLECTION = "opensession_deploy_registry";
+const DEPLOYS_REGISTRY_ID = "global";
+const DEPLOYS_MIGRATION = "deploy-registry-to-managed-feltdb-v1";
 
 const g = globalThis as any;
 const deploys: Map<string, Deploy> = (g.__deploys ??= new Map());
@@ -104,6 +111,9 @@ const crashes: Map<string, number[]> = (g.__deployCrashes ??= new Map());
  */
 const intentionalKills = new WeakSet<Subprocess>();
 let loaded = false;
+let deploysDb: StateFirstDB | undefined;
+let registryVersion: number | undefined;
+let persistTail: Promise<void> = Promise.resolve();
 
 function registryPath(): string {
   return process.env.OPENSESSION_DEPLOYS_REGISTRY || REGISTRY;
@@ -123,21 +133,51 @@ export function dataDir(id: string): string {
   return join(deployDir(id), "data");
 }
 
-function persist(): void {
-  mkdirSync(rootDir(), { recursive: true });
-  writeJsonAtomic(registryPath(), { deploys: [...deploys.values()] } satisfies Stored);
+async function persist(): Promise<void> {
+  const snapshot = structuredClone([...deploys.values()]);
+  const write = persistTail.then(async () => {
+    const db = deploysDb ?? managedFeltDb();
+    await db.transaction((tx) => {
+      tx.collection<Stored>(DEPLOYS_COLLECTION).set(DEPLOYS_REGISTRY_ID, {
+        id: DEPLOYS_REGISTRY_ID,
+        deploys: snapshot,
+      }, { ifVersion: registryVersion });
+    }, { transactionId: `opensession:deploy-registry:${crypto.randomUUID()}` });
+    const saved = await db.collection<Stored>(DEPLOYS_COLLECTION).get(DEPLOYS_REGISTRY_ID);
+    if (!saved) throw new Error("Managed deploy registry disappeared after save");
+    registryVersion = saved.__version;
+  });
+  persistTail = write.catch(() => {});
+  return await write;
+}
+
+export async function initializeManagedDeploys(db: StateFirstDB = deploysDb ?? managedFeltDb()): Promise<void> {
+  deploysDb = db;
+  const migrations = db.collection<{ id: string }>("opensession_migrations");
+  if (!await migrations.get(DEPLOYS_MIGRATION)) {
+    let legacy: Deploy[] = [];
+    if (existsSync(registryPath())) {
+      const parsed = JSON.parse(readFileSync(registryPath(), "utf8")) as Partial<Stored>;
+      legacy = Array.isArray(parsed.deploys) ? parsed.deploys : [];
+    }
+    await db.transaction((tx) => {
+      tx.collection<Stored>(DEPLOYS_COLLECTION).set(DEPLOYS_REGISTRY_ID,
+        { id: DEPLOYS_REGISTRY_ID, deploys: legacy }, { requireAbsent: true });
+      tx.collection("opensession_migrations").set(DEPLOYS_MIGRATION,
+        { id: DEPLOYS_MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
+    }, { transactionId: `opensession:migration:${DEPLOYS_MIGRATION}` });
+  }
+  if (existsSync(registryPath())) unlinkSync(registryPath());
+  const stored = await db.collection<Stored>(DEPLOYS_COLLECTION).get(DEPLOYS_REGISTRY_ID);
+  if (!stored) throw new Error("Managed deploy registry is missing");
+  deploys.clear();
+  for (const value of stored.deploys) deploys.set(value.id, value);
+  registryVersion = stored.__version;
+  loaded = true;
 }
 
 function load(): void {
-  if (loaded) return;
-  loaded = true;
-  if (!existsSync(registryPath())) return;
-  try {
-    const data: Stored = JSON.parse(readFileSync(registryPath(), "utf-8"));
-    for (const d of data.deploys || []) deploys.set(d.id, d);
-  } catch (e) {
-    console.error("[deploys] failed to read registry:", e);
-  }
+  if (!loaded) throw new Error("Managed deploy registry has not been initialized");
 }
 
 export function listDeploys(): Deploy[] {
@@ -228,14 +268,14 @@ export async function launchDeploy(
   if (!version) {
     d.state = "crashed";
     d.lastError = `version ${d.currentVersion} is missing from disk`;
-    persist();
+    await persist();
     return d;
   }
   const cwd = versionDir(id, d.currentVersion);
   if (!existsSync(cwd)) {
     d.state = "crashed";
     d.lastError = `snapshot for version ${d.currentVersion} is missing`;
-    persist();
+    await persist();
     return d;
   }
   mkdirSync(dataDir(id), { recursive: true });
@@ -261,7 +301,7 @@ export async function launchDeploy(
       },
       stdout: "pipe",
       stderr: "pipe",
-      onExit(_proc, exitCode, signalCode) {
+      async onExit(_proc, exitCode, signalCode) {
         if (procs.get(id) === proc) procs.delete(id);
         const current = deploys.get(id);
         // A deliberate teardown (redeploy, rollback, stop) is not a crash and
@@ -272,12 +312,12 @@ export async function launchDeploy(
         current.lastError = `exited (code ${exitCode ?? "null"}${signalCode ? `, signal ${signalCode}` : ""})`;
         if (crashLooping(id)) {
           current.state = "crashed";
-          persist();
+          await persist();
           audit({ kind: "deploy_crash_looping", deploy: current.name, error: current.lastError });
           console.error(`[deploys] ${current.name} is crash-looping — not restarting`);
           return;
         }
-        persist();
+        await persist();
         setTimeout(() => {
           if (deploys.get(id)?.state !== "stopped") void launchDeploy(id, { force: true });
         }, RESTART_DELAY_MS).unref?.();
@@ -286,7 +326,7 @@ export async function launchDeploy(
   } catch (e: any) {
     d.state = "crashed";
     d.lastError = `spawn failed: ${e?.message || String(e)}`;
-    persist();
+    await persist();
     return d;
   }
 
@@ -294,7 +334,7 @@ export async function launchDeploy(
   d.state = "running";
   delete d.lastError;
   d.updatedAt = new Date().toISOString();
-  persist();
+  await persist();
   audit({ kind: "deploy_launched", deploy: d.name, version: d.currentVersion, port: d.port });
   return d;
 }
@@ -309,7 +349,7 @@ export async function stopDeploy(id: string): Promise<Deploy | undefined> {
   d.updatedAt = new Date().toISOString();
   await killProcess(id);
   crashes.delete(id);
-  persist();
+  await persist();
   audit({ kind: "deploy_stopped", deploy: d.name });
   return d;
 }
@@ -320,7 +360,7 @@ export async function deleteDeploy(id: string): Promise<boolean> {
   if (!d) return false;
   await stopDeploy(id);
   deploys.delete(id);
-  persist();
+  await persist();
   try {
     rmSync(deployDir(id), { recursive: true, force: true });
   } catch (e) {
@@ -384,7 +424,7 @@ export function compoundEntrypointError(entrypoint: string): string | null {
   );
 }
 
-export function publishDeploy(input: PublishInput): PublishResult {
+export async function publishDeploy(input: PublishInput): Promise<PublishResult> {
   load();
   const name = input.name.trim().toLowerCase();
   if (!isValidDeployName(name)) {
@@ -451,7 +491,7 @@ export function publishDeploy(input: PublishInput): PublishResult {
   }
   d.versions = d.versions.slice(-MAX_VERSIONS);
 
-  persist();
+  await persist();
   audit({
     kind: "deploy_published",
     deploy: d.name,
@@ -460,11 +500,11 @@ export function publishDeploy(input: PublishInput): PublishResult {
     session_id: input.sessionId,
   });
   crashes.delete(d.id);
-  void launchDeploy(d.id, { force: true });
+  await launchDeploy(d.id, { force: true });
   return { deploy: deploys.get(d.id)!, version, url: deployUrl(d.name) };
 }
 
-export function rollbackDeploy(ref: string, toVersion: number): Deploy {
+export async function rollbackDeploy(ref: string, toVersion: number): Promise<Deploy> {
   load();
   const d = getDeploy(ref);
   if (!d) throw new Error(`no deploy named "${ref}"`);
@@ -475,10 +515,10 @@ export function rollbackDeploy(ref: string, toVersion: number): Deploy {
   }
   d.currentVersion = toVersion;
   d.updatedAt = new Date().toISOString();
-  persist();
+  await persist();
   audit({ kind: "deploy_rolled_back", deploy: d.name, version: toVersion });
   crashes.delete(d.id);
-  void launchDeploy(d.id, { force: true });
+  await launchDeploy(d.id, { force: true });
   return deploys.get(d.id)!;
 }
 
@@ -512,4 +552,7 @@ export function __resetDeploysForTest(): void {
   procs.clear();
   crashes.clear();
   loaded = false;
+  deploysDb = undefined;
+  registryVersion = undefined;
+  persistTail = Promise.resolve();
 }

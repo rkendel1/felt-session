@@ -86,6 +86,7 @@ import { startPrivateAppCertificateRenewal } from "./src/server/private-app-doma
 import { initializeManagedPrivateAppDomain } from "./src/server/private-app-domain";
 import { initializeManagedModelProviders } from "./src/server/model-providers";
 import { initializeManagedModelDefaults } from "./src/server/models";
+import { initializeManagedDeploys } from "./src/server/deploys";
 import { initializeManagedPiConfig } from "./src/server/pi-config";
 import { initializeManagedEngineSessionOwners } from "./src/server/transcript-persistence";
 import { creationOwnsPrompt, readActiveShutdownSnapshot, recoverableLocalHostSnapshotRecords, recordRecoveredRunEvent, restorePromptQueues, resumeDrainedSessions, settleRecoveredCreationOpening, snapshotActiveSessions, startLoopTicker } from "./src/server/run-session";
@@ -247,6 +248,7 @@ if (!g.__opensessionBooted) {
 	await initializeManagedPrivateAppDomain(db);
 	await initializeManagedModelProviders(db);
 	await initializeManagedModelDefaults(db);
+	await initializeManagedDeploys(db);
 	await initializeManagedPiConfig(db);
 	await initializeManagedEngineSessionOwners(db);
 	await initializeManagedLiveActivities(db);
@@ -791,7 +793,7 @@ if (!g.__opensessionBooted) {
 	// everything that wasn't deliberately stopped.
 	try {
 		const { relaunchDeploys } = await import("./src/server/deploys");
-		relaunchDeploys();
+		await relaunchDeploys();
 	} catch (e) {
 		console.error("[deploys] relaunch on boot failed:", e);
 	}

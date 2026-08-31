@@ -85,7 +85,7 @@ export function createPublishMcpServer(ctx: PublishToolContext) {
           );
         }
         try {
-          const r = publishDeploy({
+          const r = await publishDeploy({
             dir,
             entrypoint: args.entrypoint,
             name: args.name,
@@ -134,7 +134,7 @@ export function createPublishMcpServer(ctx: PublishToolContext) {
       },
       async (args: { name: string; version: number }) => {
         try {
-          const d = rollbackDeploy(args.name, args.version);
+          const d = await rollbackDeploy(args.name, args.version);
           return text(`Rolled ${d.name} back to v${d.currentVersion} (${d.state}).`);
         } catch (e: any) {
           return text(`Rollback failed: ${e?.message || String(e)}`);

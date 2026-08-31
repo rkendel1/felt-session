@@ -116,7 +116,7 @@ export async function handleDeployRoutes(
       return Response.json({ error: "expected { version: number }" }, { status: 400 });
     }
     try {
-      return Response.json({ deploy: rollbackDeploy(deploy.id, version) });
+      return Response.json({ deploy: await rollbackDeploy(deploy.id, version) });
     } catch (e: any) {
       return Response.json({ error: e?.message || String(e) }, { status: 400 });
     }
