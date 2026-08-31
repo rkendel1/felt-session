@@ -24,6 +24,8 @@
  */
 
 import { stateDir } from "./paths";
+import { existsSync, unlinkSync } from "node:fs";
+import type { StateFirstDB } from "@feltdb/core";
 import {
 	getCachedSessions,
 	getSessionListSnapshotAsync,
@@ -37,6 +39,7 @@ import {
 	type SearchHit,
 	type SearchRecord,
 } from "./session-search-store";
+import { ManagedSessionSearchStore } from "./managed-session-search-store";
 import { foldContext, foldFamilies, type Folded } from "./session-family";
 import type { TranscriptEntry, UnifiedSession } from "./types";
 
@@ -59,8 +62,29 @@ const IDLE_MS = 10 * 60_000;
 /** Minimum extracted text before an LLM distill is worth a call. */
 const MIN_DISTILL_CHARS = 400;
 
-export function searchIndex(): SessionSearchStore {
-	return (g.__sessionSearchStore ??= new SessionSearchStore(DB_PATH));
+export function searchIndex(): ManagedSessionSearchStore {
+	if (!g.__sessionSearchStore) throw new Error("Managed session search has not been initialized");
+	return g.__sessionSearchStore;
+}
+
+const SEARCH_MIGRATION = "session-search-sqlite-to-managed-feltdb-v1";
+
+export async function initializeManagedSessionSearch(db: StateFirstDB): Promise<void> {
+	const store = new ManagedSessionSearchStore(db);
+	await store.initialize();
+	if (!await db.collection<{ id: string }>("opensession_migrations").get(SEARCH_MIGRATION)) {
+		if (existsSync(DB_PATH)) {
+			const legacy = new SessionSearchStore(DB_PATH);
+			try { await store.upsertMany(legacy.allRecords()); }
+			finally { legacy.close(); }
+		}
+		await db.transaction((tx) => {
+			tx.collection("opensession_migrations").set(SEARCH_MIGRATION,
+				{ id: SEARCH_MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
+		}, { transactionId: `opensession:migration:${SEARCH_MIGRATION}` });
+	}
+	for (const path of [DB_PATH, `${DB_PATH}-wal`, `${DB_PATH}-shm`]) if (existsSync(path)) unlinkSync(path);
+	g.__sessionSearchStore = store;
 }
 
 /** Rows pulled from the store before folding. Well above any caller's limit:
@@ -320,7 +344,7 @@ export async function sweepSessionIndex(): Promise<{
 				// Upgrade pass without budget left after all — nothing new to write.
 				continue;
 			}
-			store.upsert(rec);
+			await store.upsert(rec);
 			indexed++;
 		}
 

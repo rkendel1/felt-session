@@ -114,6 +114,19 @@ export class SessionSearchStore {
 		return row?.n ?? 0;
 	}
 
+	allRecords(): SearchRecord[] {
+		return (this.db.query(
+			"SELECT question, summary, resolution, files, id, source, repo, user, pr, ts, activity_ts, distilled FROM records",
+		).all() as Array<Omit<SearchRecord, "activityTs"> & { activity_ts: number }>).map((row) => ({
+			...row,
+			repo: row.repo || undefined,
+			user: row.user || undefined,
+			pr: row.pr || undefined,
+			activityTs: Number(row.activity_ts),
+			ts: Number(row.ts),
+		}));
+	}
+
 	search(
 		query: string,
 		opts: { repo?: string; limit?: number; sinceTs?: number; now?: number } = {},

@@ -54,6 +54,7 @@ import { initializeManagedSecurity } from "./src/server/security";
 import { initializeManagedGithubFeedback } from "./src/agents/github/feedback";
 import { initializeManagedGithubLearnedRules } from "./src/agents/github/learned-rules";
 import { ensureMemoryV2Ready, initializeManagedMemory } from "./src/server/memory-v2/runtime";
+import { initializeManagedSessionSearch } from "./src/server/session-index";
 import { startLiveActivitySync } from "./src/server/live-activities";
 import { initializeManagedLiveActivities } from "./src/server/live-activities";
 import { initializeManagedSandboxPortals } from "./src/server/sandbox-portals";
@@ -237,6 +238,7 @@ if (!g.__opensessionBooted) {
 	await initializeManagedGithubLearnedRules(db);
 	await initializeManagedMemory(db);
 	await ensureMemoryV2Ready();
+	await initializeManagedSessionSearch(db);
 	await initializeManagedPrivateAppDomain(db);
 	await initializeManagedModelProviders(db);
 	await initializeManagedPiConfig(db);
