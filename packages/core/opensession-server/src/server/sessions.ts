@@ -1374,7 +1374,7 @@ async function removeSessionArtifacts(session: UnifiedSession): Promise<void> {
   }
   removeIndexedSession(session.id);
   // Nobody's unsent draft should outlive the session it was typed into.
-  purgeDraftsForSessions([session.id, ...(session.aliasIds || [])]);
+  await purgeDraftsForSessions([session.id, ...(session.aliasIds || [])]);
   // Neither should its scratch dir (session-scratch.ts). Best-effort and
   // async: a scratch hiccup must never block deletion.
   for (const id of [session.id, ...(session.aliasIds || [])])

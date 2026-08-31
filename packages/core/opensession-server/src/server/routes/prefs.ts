@@ -359,7 +359,7 @@ export async function handlePrefsRoutes(
 		const updatedAt = new Date(
 			Math.min(parsedAt, Date.now() + 5 * 60_000),
 		).toISOString();
-		const result = upsertDraft(user, body.sessionId, body.text, updatedAt);
+		const result = await upsertDraft(user, body.sessionId, body.text, updatedAt);
 		return Response.json(result);
 	}
 
