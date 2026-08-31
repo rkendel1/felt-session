@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { createFeltDB } from "@feltdb/core";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -26,11 +27,12 @@ beforeEach(async () => {
   process.env.OPENSESSION_KEYCHAIN_STORE = STORE;
   resetKeychain();
   kc = await import("./keychain");
+  await kc.initializeManagedKeychain(createFeltDB({ namespace: crypto.randomUUID(), memory: true }), STORE);
 });
 
 afterEach(() => resetKeychain());
 
-const cred = (over: Partial<Parameters<typeof kc.addCredential>[0]> = {}) =>
+const cred = async (over: Partial<Parameters<typeof kc.addCredential>[0]> = {}) =>
   kc.addCredential({
     owner: "Alex",
     service: "vercel",
@@ -40,8 +42,31 @@ const cred = (over: Partial<Parameters<typeof kc.addCredential>[0]> = {}) =>
   });
 
 describe("credentials", () => {
-  test("registering returns metadata and never the secret", () => {
-    const meta = cred();
+  test("imports the legacy secret store once and removes the file", async () => {
+    const legacyPath = join(mkdtempSync(join(tmpdir(), "keychain-legacy-")), "keychain.json");
+    writeFileSync(legacyPath, JSON.stringify({
+      credentials: [{
+        id: "kc-legacy",
+        owner: "Alex",
+        service: "legacy",
+        host: "api.example.com",
+        secret: "legacy-secret",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }],
+      grants: [],
+      asks: [],
+    }));
+    await kc.initializeManagedKeychain(
+      createFeltDB({ namespace: crypto.randomUUID(), memory: true }),
+      legacyPath,
+    );
+    expect(kc.findCredential("legacy")?.id).toBe("kc-legacy");
+    expect(existsSync(legacyPath)).toBe(false);
+  });
+
+  test("registering returns metadata and never the secret", async () => {
+    const meta = await cred();
     expect(meta.service).toBe("vercel");
     expect(meta.host).toBe("api.vercel.com");
     expect(JSON.stringify(meta)).not.toContain("sk-live-secret");
@@ -49,31 +74,31 @@ describe("credentials", () => {
     expect(JSON.stringify(kc.findCredential("vercel"))).not.toContain("sk-live-secret");
   });
 
-  test("normalizes host and service, rejects malformed input", () => {
-    const meta = cred({ service: "  Vercel  ", host: "https://api.vercel.com/v1?x=1" });
+  test("normalizes host and service, rejects malformed input", async () => {
+    const meta = await cred({ service: "  Vercel  ", host: "https://api.vercel.com/v1?x=1" });
     expect(meta.service).toBe("vercel");
     expect(meta.host).toBe("api.vercel.com");
-    expect(() => cred({ service: "has space" })).toThrow(/slug/);
-    expect(() => cred({ service: "ahrefs", host: "api.ahrefs.com:8443" })).toThrow(/host/);
-    expect(() => cred({ service: "ahrefs", secret: "   " })).toThrow(/secret/);
-    expect(() => cred({ service: "ahrefs", allowedPathPrefixes: ["v1/x"] })).toThrow(/start with/);
+    expect(cred({ service: "has space" })).rejects.toThrow(/slug/);
+    expect(cred({ service: "ahrefs", host: "api.ahrefs.com:8443" })).rejects.toThrow(/host/);
+    expect(cred({ service: "ahrefs", secret: "   " })).rejects.toThrow(/secret/);
+    expect(cred({ service: "ahrefs", allowedPathPrefixes: ["v1/x"] })).rejects.toThrow(/start with/);
   });
 
-  test("service slugs are unique", () => {
-    cred();
-    expect(() => cred()).toThrow(/already exists/);
+  test("service slugs are unique", async () => {
+    await cred();
+    expect(cred()).rejects.toThrow(/already exists/);
   });
 
-  test("only the owner may delete, and deleting revokes live grants", () => {
-    const meta = cred();
-    expect(() => kc.deleteCredential(meta.id, "Grant")).toThrow(/owner/);
-    expect(kc.deleteCredential(meta.id, "Alex")).toBe(true);
+  test("only the owner may delete, and deleting revokes live grants", async () => {
+    const meta = await cred();
+    expect(kc.deleteCredential(meta.id, "Grant")).rejects.toThrow(/owner/);
+    expect(await kc.deleteCredential(meta.id, "Alex")).toBe(true);
     expect(kc.listCredentials()).toHaveLength(0);
-    expect(kc.deleteCredential(meta.id, "Alex")).toBe(false);
+    expect(await kc.deleteCredential(meta.id, "Alex")).toBe(false);
   });
 
-  test("findCredential resolves by id or service slug", () => {
-    const meta = cred();
+  test("findCredential resolves by id or service slug", async () => {
+    const meta = await cred();
     expect(kc.findCredential(meta.id)?.id).toBe(meta.id);
     expect(kc.findCredential("VERCEL")?.id).toBe(meta.id);
     expect(kc.findCredential("nope")).toBeUndefined();
@@ -81,7 +106,7 @@ describe("credentials", () => {
 });
 
 describe("owner answers", () => {
-  test("button labels map to their modes", () => {
+  test("button labels map to their modes", async () => {
     expect(kc.parseOwnerAnswer("Approve once", "standing")).toEqual({
       approve: true,
       mode: "once",
@@ -93,7 +118,7 @@ describe("owner answers", () => {
     expect(kc.parseOwnerAnswer("Decline", "once")).toEqual({ approve: false });
   });
 
-  test("free text approves only on an explicit yes, keeping the requested mode", () => {
+  test("free text approves only on an explicit yes, keeping the requested mode", async () => {
     expect(kc.parseOwnerAnswer("yes go ahead", "once")).toEqual({ approve: true, mode: "once" });
     expect(kc.parseOwnerAnswer("ok, standing is fine", "once")).toEqual({
       approve: true,
@@ -102,7 +127,7 @@ describe("owner answers", () => {
     expect(kc.parseOwnerAnswer("no", "once")).toEqual({ approve: false });
   });
 
-  test("anything ambiguous fails closed, keeping the text as the owner's note", () => {
+  test("anything ambiguous fails closed, keeping the text as the owner's note", async () => {
     const r = kc.parseOwnerAnswer("what do you need it for?", "once");
     expect(r.approve).toBe(false);
     expect((r as { note?: string }).note).toBe("what do you need it for?");
@@ -110,12 +135,12 @@ describe("owner answers", () => {
 });
 
 describe("broker", () => {
-  test("rejects unknown, revoked and expired grants", () => {
-    const r = kc.consumeGrantForBroker("kg-nope", "GET", "/v1/x");
+  test("rejects unknown, revoked and expired grants", async () => {
+    const r = await kc.consumeGrantForBroker("kg-nope", "GET", "/v1/x");
     expect(r).toMatchObject({ status: 404 });
   });
 
-  test("injects Authorization: Bearer by default and honors a custom header", () => {
+  test("injects Authorization: Bearer by default and honors a custom header", async () => {
     expect(
       kc.brokerHeaders({ secret: "s3cr3t" } as Parameters<typeof kc.brokerHeaders>[0])
     ).toEqual({ Authorization: "Bearer s3cr3t" });
@@ -133,7 +158,7 @@ describe("broker", () => {
     ).toEqual({ Authorization: "token s3cr3t" });
   });
 
-  test("scrubs a secret the upstream echoed back", () => {
+  test("scrubs a secret the upstream echoed back", async () => {
     expect(kc.scrubSecret('{"key":"s3cr3t","ok":true}', "s3cr3t")).toBe(
       '{"key":"[redacted]","ok":true}'
     );
@@ -146,16 +171,16 @@ describe("grant lifecycle", () => {
   // requestCredential needs the identity roster + the human-asks transport, so
   // the ask path is covered by the route/tool layers. The lifecycle below
   // exercises the parts that own the security properties.
-  test("listGrants is empty for a fresh session", () => {
+  test("listGrants is empty for a fresh session", async () => {
     expect(kc.listGrants({ sessionId: "bks-none" })).toEqual([]);
   });
 
-  test("revoking an unknown grant reports it rather than throwing", () => {
-    expect(kc.revokeGrant("kg-missing", "Alex")).toEqual({ error: "no such grant" });
+  test("revoking an unknown grant reports it rather than throwing", async () => {
+    expect(await kc.revokeGrant("kg-missing", "Alex")).toEqual({ error: "no such grant" });
   });
 
   test("requesting an unknown credential names what exists", async () => {
-    cred();
+    await cred();
     const r = await kc.requestCredential({
       credential: "stripe",
       sessionId: "bks-1",
@@ -167,7 +192,7 @@ describe("grant lifecycle", () => {
   });
 
   test("a purpose is required — it is what the owner approves", async () => {
-    cred();
+    await cred();
     const r = await kc.requestCredential({
       credential: "vercel",
       sessionId: "bks-1",
@@ -179,51 +204,51 @@ describe("grant lifecycle", () => {
 });
 
 describe("grant enforcement", () => {
-  test("a once grant is consumed by its first call and dead thereafter", () => {
-    const meta = cred();
-    const gr = kc.__mintGrantForTest({
+  test("a once grant is consumed by its first call and dead thereafter", async () => {
+    const meta = await cred();
+    const gr = await kc.__mintGrantForTest({
       credentialId: meta.id,
       sessionId: "bks-1",
       requestedBy: "Grant",
       mode: "once",
     });
-    const first = kc.consumeGrantForBroker(gr.id, "GET", "/v1/deployments");
+    const first = await kc.consumeGrantForBroker(gr.id, "GET", "/v1/deployments");
     expect(first).toHaveProperty("credential");
     expect((first as { credential: { secret: string } }).credential.secret).toBe("sk-live-secret");
-    const second = kc.consumeGrantForBroker(gr.id, "GET", "/v1/deployments");
+    const second = await kc.consumeGrantForBroker(gr.id, "GET", "/v1/deployments");
     expect(second).toMatchObject({ status: 403 });
     expect((second as { error: string }).error).toContain("used");
   });
 
-  test("a standing grant survives repeated calls until revoked", () => {
-    const meta = cred();
-    const gr = kc.__mintGrantForTest({
+  test("a standing grant survives repeated calls until revoked", async () => {
+    const meta = await cred();
+    const gr = await kc.__mintGrantForTest({
       credentialId: meta.id,
       sessionId: "bks-1",
       requestedBy: "Grant",
       mode: "standing",
     });
-    expect(kc.consumeGrantForBroker(gr.id, "GET", "/v1/x")).toHaveProperty("credential");
-    expect(kc.consumeGrantForBroker(gr.id, "GET", "/v1/x")).toHaveProperty("credential");
-    expect(kc.revokeGrant(gr.id, "Alex")).toEqual({ ok: true });
-    expect(kc.consumeGrantForBroker(gr.id, "GET", "/v1/x")).toMatchObject({ status: 403 });
+    expect(await kc.consumeGrantForBroker(gr.id, "GET", "/v1/x")).toHaveProperty("credential");
+    expect(await kc.consumeGrantForBroker(gr.id, "GET", "/v1/x")).toHaveProperty("credential");
+    expect(await kc.revokeGrant(gr.id, "Alex")).toEqual({ ok: true });
+    expect(await kc.consumeGrantForBroker(gr.id, "GET", "/v1/x")).toMatchObject({ status: 403 });
   });
 
-  test("an expired grant is refused and settles to expired", () => {
-    const meta = cred();
-    const gr = kc.__mintGrantForTest({
+  test("an expired grant is refused and settles to expired", async () => {
+    const meta = await cred();
+    const gr = await kc.__mintGrantForTest({
       credentialId: meta.id,
       sessionId: "bks-1",
       requestedBy: "Grant",
       mode: "standing",
       expiresAt: new Date(Date.now() - 1000).toISOString(),
     });
-    expect(kc.consumeGrantForBroker(gr.id, "GET", "/v1/x")).toMatchObject({ status: 403 });
+    expect(await kc.consumeGrantForBroker(gr.id, "GET", "/v1/x")).toMatchObject({ status: 403 });
     expect(kc.listGrants({ sessionId: "bks-1" })[0]!.status).toBe("expired");
   });
 
-  test("the credential's method and path limits bound every grant", () => {
-    const meta = cred({ allowedMethods: ["GET"], allowedPathPrefixes: ["/v1/deployments"] });
+  test("the credential's method and path limits bound every grant", async () => {
+    const meta = await cred({ allowedMethods: ["GET"], allowedPathPrefixes: ["/v1/deployments"] });
     const grant = () =>
       kc.__mintGrantForTest({
         credentialId: meta.id,
@@ -231,43 +256,43 @@ describe("grant enforcement", () => {
         requestedBy: "Grant",
         mode: "standing",
       });
-    const gr = grant();
-    expect(kc.consumeGrantForBroker(gr.id, "GET", "/v1/deployments/abc")).toHaveProperty(
+    const gr = await grant();
+    expect(await kc.consumeGrantForBroker(gr.id, "GET", "/v1/deployments/abc")).toHaveProperty(
       "credential"
     );
-    expect(kc.consumeGrantForBroker(gr.id, "DELETE", "/v1/deployments/abc")).toMatchObject({
+    expect(await kc.consumeGrantForBroker(gr.id, "DELETE", "/v1/deployments/abc")).toMatchObject({
       status: 403,
     });
-    expect(kc.consumeGrantForBroker(gr.id, "GET", "/v1/teams")).toMatchObject({ status: 403 });
+    expect(await kc.consumeGrantForBroker(gr.id, "GET", "/v1/teams")).toMatchObject({ status: 403 });
   });
 
-  test("deleting the credential kills its live grants", () => {
-    const meta = cred();
-    const gr = kc.__mintGrantForTest({
+  test("deleting the credential kills its live grants", async () => {
+    const meta = await cred();
+    const gr = await kc.__mintGrantForTest({
       credentialId: meta.id,
       sessionId: "bks-1",
       requestedBy: "Grant",
       mode: "standing",
     });
-    kc.deleteCredential(meta.id, "Alex");
-    expect(kc.consumeGrantForBroker(gr.id, "GET", "/v1/x")).toMatchObject({ status: 403 });
+    await kc.deleteCredential(meta.id, "Alex");
+    expect(await kc.consumeGrantForBroker(gr.id, "GET", "/v1/x")).toMatchObject({ status: 403 });
   });
 
-  test("either side may revoke, nobody else", () => {
-    const meta = cred();
-    const gr = kc.__mintGrantForTest({
+  test("either side may revoke, nobody else", async () => {
+    const meta = await cred();
+    const gr = await kc.__mintGrantForTest({
       credentialId: meta.id,
       sessionId: "bks-1",
       requestedBy: "Grant",
       mode: "standing",
     });
-    expect(kc.revokeGrant(gr.id, "Kent")).toHaveProperty("error");
-    expect(kc.revokeGrant(gr.id, "Grant")).toEqual({ ok: true });
+    expect(await kc.revokeGrant(gr.id, "Kent")).toHaveProperty("error");
+    expect(await kc.revokeGrant(gr.id, "Grant")).toEqual({ ok: true });
   });
 
-  test("grants are listed per session, so one session cannot see another's", () => {
-    const meta = cred();
-    kc.__mintGrantForTest({
+  test("grants are listed per session, so one session cannot see another's", async () => {
+    const meta = await cred();
+    await kc.__mintGrantForTest({
       credentialId: meta.id,
       sessionId: "bks-1",
       requestedBy: "Grant",
@@ -279,8 +304,8 @@ describe("grant enforcement", () => {
 });
 
 describe("grant instructions", () => {
-  test("name the broker URL, the limits and the single-use rule", () => {
-    const meta = cred({ allowedMethods: ["GET"], allowedPathPrefixes: ["/v1/deployments"] });
+  test("name the broker URL, the limits and the single-use rule", async () => {
+    const meta = await cred({ allowedMethods: ["GET"], allowedPathPrefixes: ["/v1/deployments"] });
     const text = kc.grantInstructions(
       {
         id: "kg-abc",

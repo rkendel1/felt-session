@@ -62,7 +62,7 @@ export async function handleKeychainRoutes(
     const upstreamPath = slash === -1 ? "/" : rest.slice(slash);
     if (!grantId) return Response.json({ error: "missing grant id" }, { status: 400 });
 
-    const use = consumeGrantForBroker(grantId, req.method, upstreamPath);
+    const use = await consumeGrantForBroker(grantId, req.method, upstreamPath);
     if ("error" in use) {
       audit({
         kind: "keychain_broker_denied",
@@ -156,7 +156,7 @@ export async function handleKeychainRoutes(
     }
     try {
       return Response.json({
-        credential: addCredential({
+        credential: await addCredential({
           owner,
           service: body.service,
           host: String(body.host || ""),
@@ -177,7 +177,7 @@ export async function handleKeychainRoutes(
   const credMatch = path.match(/^\/api\/keychain\/credentials\/([^/]+)$/);
   if (credMatch && req.method === "DELETE") {
     try {
-      const ok = deleteCredential(decodeURIComponent(credMatch[1]!), requestUser(ctx));
+      const ok = await deleteCredential(decodeURIComponent(credMatch[1]!), requestUser(ctx));
       return ok
         ? Response.json({ ok: true })
         : Response.json({ error: "no such credential" }, { status: 404 });
@@ -188,7 +188,7 @@ export async function handleKeychainRoutes(
 
   const grantMatch = path.match(/^\/api\/keychain\/grants\/([^/]+)$/);
   if (grantMatch && req.method === "DELETE") {
-    const result = revokeGrant(decodeURIComponent(grantMatch[1]!), requestUser(ctx));
+    const result = await revokeGrant(decodeURIComponent(grantMatch[1]!), requestUser(ctx));
     return "error" in result
       ? Response.json(result, { status: 403 })
       : Response.json({ ok: true });

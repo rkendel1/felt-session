@@ -303,7 +303,7 @@ export interface CreateAskInput {
  * Registry lives on globalThis so hot reloads keep it; owning modules
  * re-register at module load, so the newest code answers.
  */
-export type AskDomainHandler = (ask: HumanAsk, answer: string) => string | null;
+export type AskDomainHandler = (ask: HumanAsk, answer: string) => string | null | Promise<string | null>;
 
 const domainHandlers: Map<string, AskDomainHandler> = ((globalThis as any).__humanAskDomainHandlers ??=
   new Map());
@@ -312,7 +312,7 @@ export function registerAskDomainHandler(kind: string, handler: AskDomainHandler
   domainHandlers.set(kind, handler);
 }
 
-function applyDomainHandler(a: HumanAsk, answer: string): string {
+async function applyDomainHandler(a: HumanAsk, answer: string): Promise<string> {
   if (!a.domain) return answer;
   const handler = domainHandlers.get(a.domain.kind);
   if (!handler) {
@@ -322,7 +322,7 @@ function applyDomainHandler(a: HumanAsk, answer: string): string {
     return answer;
   }
   try {
-    return handler(a, answer) ?? answer;
+    return await handler(a, answer) ?? answer;
   } catch (e) {
     console.error(`[human-asks] domain handler ${a.domain.kind} failed for ${a.id}:`, e,);
     return answer;
@@ -737,7 +737,7 @@ async function resolveAsk(
   // module FIRST — server-side effects (minting a grant) happen exactly once
   // here, whichever channel answered, and the session receives the domain's
   // text (grant instructions) rather than the raw button label.
-  const delivered = applyDomainHandler(a, answer);
+  const delivered = await applyDomainHandler(a, answer);
 
   const resolver = resolvers.get(a.id);
   if (resolver) {

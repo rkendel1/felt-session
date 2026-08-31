@@ -8,7 +8,7 @@
  * module adds exactly that:
  *
  *   credential — owned by a PERSON (identity roster name). The secret lives
- *                here 0600 and is never returned by any API or tool.
+ *                in managed FeltDB and is never returned by any API or tool.
  *   ask        — a session's request to borrow one: purpose + once/standing.
  *                Delivered to the owner through human-asks (Slack DM with
  *                Approve once / Approve standing / Decline buttons, UI-first
@@ -56,18 +56,17 @@
  */
 
 import { stateDir } from "./paths";
-import { existsSync, readFileSync, chmodSync } from "node:fs";
-import { writeJsonAtomic } from "./shared/atomic-write";
+import { existsSync, readFileSync, unlinkSync } from "node:fs";
+import type { StateFirstDB } from "@feltdb/core";
+import { managedFeltDb } from "./managed-feltdb";
 import { audit } from "./audit";
 import { resolveTeammate } from "./shared/user-mappings";
 import { registerAsk, registerAskDomainHandler, type HumanAsk } from "./human-asks";
 
 /**
- * Resolved per call, never captured at module load. Tests point
- * OPENSESSION_KEYCHAIN_STORE at a temp file, and this module is imported
- * transitively (interactive-mcp → keychain-tools → here) by other suites — a
- * const captured at first import would silently ignore the override and let a
- * test suite write to, or truncate, the real keychain.
+ * The path is only a one-time migration source. It is resolved per call so
+ * tests can prove import and removal without ever touching the live legacy
+ * file.
  */
 function storePath(): string {
   return process.env.OPENSESSION_KEYCHAIN_STORE || stateDir("keychain.json");
@@ -140,53 +139,91 @@ export interface KeychainAskRecord {
 }
 
 interface Stored {
+  id: string;
   credentials: KeychainCredential[];
   grants: KeychainGrant[];
   asks: KeychainAskRecord[];
+  __version?: number;
 }
 
 const g = globalThis as any;
 const credentials: Map<string, KeychainCredential> = (g.__keychainCredentials ??= new Map());
 const grants: Map<string, KeychainGrant> = (g.__keychainGrants ??= new Map());
 const keychainAsks: Map<string, KeychainAskRecord> = (g.__keychainAsks ??= new Map());
-/** The path we last loaded from — a change (only tests do this) reloads. */
-let loadedFrom: string | null = null;
+let keychainDb: StateFirstDB | undefined;
+let stored: Stored | undefined;
+const KEYCHAIN_COLLECTION = "opensession_keychain";
+const KEYCHAIN_ID = "keychain";
+const KEYCHAIN_MIGRATION = "keychain-file-to-managed-feltdb-v1";
 
-function persist(): void {
-  const path = storePath();
-  writeJsonAtomic(path, {
+function snapshot(): Stored {
+  return {
+    id: KEYCHAIN_ID,
     credentials: [...credentials.values()],
     grants: [...grants.values()],
     asks: [...keychainAsks.values()],
-  } satisfies Stored);
-  try {
-    chmodSync(path, 0o600);
-  } catch {
-    // best-effort — the file holds secrets, but a chmod failure must not
-    // lose the write (the box is single-tenant either way)
+    ...(stored?.__version ? { __version: stored.__version } : {}),
+  };
+}
+
+export async function initializeManagedKeychain(
+  db: StateFirstDB = keychainDb ?? managedFeltDb(),
+  legacyPath = storePath(),
+): Promise<void> {
+  keychainDb = db;
+  const migrations = db.collection<{ id: string }>("opensession_migrations");
+  if (!await migrations.get(KEYCHAIN_MIGRATION)) {
+    let initial: Stored = { id: KEYCHAIN_ID, credentials: [], grants: [], asks: [] };
+    if (existsSync(legacyPath)) {
+      const legacy = JSON.parse(readFileSync(legacyPath, "utf8")) as Partial<Stored>;
+      initial = {
+        id: KEYCHAIN_ID,
+        credentials: legacy.credentials || [],
+        grants: legacy.grants || [],
+        asks: legacy.asks || [],
+      };
+    }
+    await db.transaction((tx) => {
+      tx.collection<Stored>(KEYCHAIN_COLLECTION).set(KEYCHAIN_ID, initial, { requireAbsent: true });
+      tx.collection("opensession_migrations").set(KEYCHAIN_MIGRATION,
+        { id: KEYCHAIN_MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
+    }, { transactionId: `opensession:migration:${KEYCHAIN_MIGRATION}` });
   }
+  if (existsSync(legacyPath)) unlinkSync(legacyPath);
+  const loaded = await db.collection<Stored>(KEYCHAIN_COLLECTION).get(KEYCHAIN_ID);
+  if (!loaded) throw new Error("Managed keychain is missing");
+  const cutoff = Date.now() - TERMINAL_RETENTION_MS;
+  credentials.clear();
+  grants.clear();
+  keychainAsks.clear();
+  for (const credential of loaded.credentials) credentials.set(credential.id, credential);
+  for (const grant of loaded.grants) {
+    if (grant.status !== "active" && new Date(grant.createdAt).getTime() < cutoff) continue;
+    grants.set(grant.id, grant);
+  }
+  for (const ask of loaded.asks) {
+    if (ask.status !== "pending" && new Date(ask.createdAt).getTime() < cutoff) continue;
+    keychainAsks.set(ask.id, ask);
+  }
+  stored = loaded;
+  if (grants.size !== loaded.grants.length || keychainAsks.size !== loaded.asks.length) await persist();
 }
 
 function load(): void {
-  const path = storePath();
-  if (loadedFrom === path) return;
-  loadedFrom = path;
-  if (!existsSync(path)) return;
-  try {
-    const data: Stored = JSON.parse(readFileSync(path, "utf-8"));
-    const cutoff = Date.now() - TERMINAL_RETENTION_MS;
-    for (const c of data.credentials || []) credentials.set(c.id, c);
-    for (const gr of data.grants || []) {
-      if (gr.status !== "active" && new Date(gr.createdAt).getTime() < cutoff) continue;
-      grants.set(gr.id, gr);
-    }
-    for (const a of data.asks || []) {
-      if (a.status !== "pending" && new Date(a.createdAt).getTime() < cutoff) continue;
-      keychainAsks.set(a.id, a);
-    }
-  } catch (e) {
-    console.error("[keychain] failed to load store:", e);
-  }
+  if (!stored) throw new Error("Managed keychain has not been initialized");
+}
+
+async function persist(): Promise<void> {
+  load();
+  const next = snapshot();
+  const db = keychainDb ?? managedFeltDb();
+  await db.transaction((tx) => {
+    tx.collection<Stored>(KEYCHAIN_COLLECTION).set(KEYCHAIN_ID, next,
+      stored?.__version ? { ifVersion: stored.__version } : { requireAbsent: true });
+  }, { transactionId: `opensession:keychain:${crypto.randomUUID()}` });
+  const saved = await db.collection<Stored>(KEYCHAIN_COLLECTION).get(KEYCHAIN_ID);
+  if (!saved) throw new Error("Managed keychain disappeared after save");
+  stored = saved;
 }
 
 function meta(c: KeychainCredential): KeychainCredentialMeta {
@@ -195,11 +232,11 @@ function meta(c: KeychainCredential): KeychainCredentialMeta {
 }
 
 /** Lazy expiry — checked on every read/use, no sweeper to keep alive. */
-function settleExpiry(gr: KeychainGrant): KeychainGrant {
+async function settleExpiry(gr: KeychainGrant): Promise<KeychainGrant> {
   if (gr.status === "active" && Date.now() > new Date(gr.expiresAt).getTime()) {
     gr.status = "expired";
     grants.set(gr.id, gr);
-    persist();
+    await persist();
     audit({ kind: "keychain_grant_expired", grant_id: gr.id, credential_id: gr.credentialId });
   }
   return gr;
@@ -229,7 +266,7 @@ export interface AddCredentialInput {
   allowedPathPrefixes?: string[];
 }
 
-export function addCredential(input: AddCredentialInput): KeychainCredentialMeta {
+export async function addCredential(input: AddCredentialInput): Promise<KeychainCredentialMeta> {
   load();
   const service = norm(input.service);
   const host = input.host
@@ -267,7 +304,7 @@ export function addCredential(input: AddCredentialInput): KeychainCredentialMeta
     updatedAt: now,
   };
   credentials.set(cred.id, cred);
-  persist();
+  await persist();
   audit({
     kind: "keychain_credential_added",
     credential_id: cred.id,
@@ -278,7 +315,7 @@ export function addCredential(input: AddCredentialInput): KeychainCredentialMeta
   return meta(cred);
 }
 
-export function deleteCredential(id: string, by: string): boolean {
+export async function deleteCredential(id: string, by: string): Promise<boolean> {
   load();
   const cred = credentials.get(id);
   if (!cred) return false;
@@ -293,7 +330,7 @@ export function deleteCredential(id: string, by: string): boolean {
       grants.set(gr.id, gr);
     }
   }
-  persist();
+  await persist();
   audit({ kind: "keychain_credential_deleted", credential_id: id, by });
   return true;
 }
@@ -316,7 +353,9 @@ export function findCredential(ref: string): KeychainCredentialMeta | undefined 
 export function listGrants(opts?: { sessionId?: string; owner?: string }): KeychainGrant[] {
   load();
   return [...grants.values()]
-    .map(settleExpiry)
+    .map((gr) => gr.status === "active" && Date.now() > new Date(gr.expiresAt).getTime()
+      ? { ...gr, status: "expired" as const }
+      : gr)
     .filter(
       (gr) =>
         (!opts?.sessionId || gr.sessionId === opts.sessionId) &&
@@ -325,11 +364,11 @@ export function listGrants(opts?: { sessionId?: string; owner?: string }): Keych
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
-export function revokeGrant(id: string, by: string): { ok: true } | { error: string } {
+export async function revokeGrant(id: string, by: string): Promise<{ ok: true } | { error: string }> {
   load();
   const gr = grants.get(id);
   if (!gr) return { error: "no such grant" };
-  settleExpiry(gr);
+  await settleExpiry(gr);
   if (gr.status !== "active") return { error: `grant is already ${gr.status}` };
   // The owner lent it, the requester borrowed it — either may end it.
   if (!sameOwner(gr.owner, by) && norm(gr.requestedBy) !== norm(by)) {
@@ -338,7 +377,7 @@ export function revokeGrant(id: string, by: string): { ok: true } | { error: str
   gr.status = "revoked";
   gr.revokedAt = new Date().toISOString();
   grants.set(gr.id, gr);
-  persist();
+  await persist();
   audit({ kind: "keychain_grant_revoked", grant_id: id, credential_id: gr.credentialId, by });
   return { ok: true };
 }
@@ -361,7 +400,6 @@ function mintGrant(ask: KeychainAskRecord, mode: GrantMode): KeychainGrant {
     askId: ask.id,
   };
   grants.set(gr.id, gr);
-  persist();
   audit({
     kind: "keychain_grant_minted",
     grant_id: gr.id,
@@ -379,13 +417,13 @@ function mintGrant(ask: KeychainAskRecord, mode: GrantMode): KeychainGrant {
  * method/path enforcement) is testable without sending a real Slack DM.
  * Never call outside tests — a grant minted here had no owner approval.
  */
-export function __mintGrantForTest(input: {
+export async function __mintGrantForTest(input: {
   credentialId: string;
   sessionId: string;
   requestedBy: string;
   mode: GrantMode;
   expiresAt?: string;
-}): KeychainGrant {
+}): Promise<KeychainGrant> {
   load();
   const gr = mintGrant(
     {
@@ -404,8 +442,8 @@ export function __mintGrantForTest(input: {
   if (input.expiresAt) {
     gr.expiresAt = input.expiresAt;
     grants.set(gr.id, gr);
-    persist();
   }
+  await persist();
   return gr;
 }
 
@@ -423,15 +461,15 @@ export interface BrokerUse {
  * upstream fetch fails is spent, not retryable — err on the side of the
  * owner's intent.
  */
-export function consumeGrantForBroker(
+export async function consumeGrantForBroker(
   grantId: string,
   method: string,
   path: string
-): BrokerUse | { error: string; status: number } {
+): Promise<BrokerUse | { error: string; status: number }> {
   load();
   const gr = grants.get(grantId);
   if (!gr) return { error: "unknown grant", status: 404 };
-  settleExpiry(gr);
+  await settleExpiry(gr);
   if (gr.status !== "active") return { error: `grant is ${gr.status}`, status: 403 };
   const cred = credentials.get(gr.credentialId);
   if (!cred) return { error: "credential no longer exists", status: 404 };
@@ -455,7 +493,7 @@ export function consumeGrantForBroker(
     gr.status = "used";
     gr.usedAt = new Date().toISOString();
     grants.set(gr.id, gr);
-    persist();
+    await persist();
   }
   return { credential: cred, grant: gr };
 }
@@ -575,7 +613,7 @@ export async function requestCredential(
 
   record.humanAskId = transport.id;
   keychainAsks.set(record.id, record);
-  persist();
+  await persist();
   audit({
     kind: "keychain_ask_created",
     ask_id: record.id,
@@ -620,7 +658,7 @@ export function parseOwnerAnswer(
  * DM reply, UI card). Mints or declines, and returns the steer text the
  * requesting session receives in place of the generic "X answered" line.
  */
-function resolveKeychainAsk(ask: HumanAsk, answer: string): string | null {
+async function resolveKeychainAsk(ask: HumanAsk, answer: string): Promise<string | null> {
   load();
   const ref = ask.domain?.ref;
   const record = ref ? keychainAsks.get(ref) : undefined;
@@ -633,7 +671,7 @@ function resolveKeychainAsk(ask: HumanAsk, answer: string): string | null {
     record.status = "declined";
     if (verdict.note) record.note = verdict.note;
     keychainAsks.set(record.id, record);
-    persist();
+    await persist();
     audit({
       kind: "keychain_ask_declined",
       ask_id: record.id,
@@ -652,7 +690,7 @@ function resolveKeychainAsk(ask: HumanAsk, answer: string): string | null {
   const grant = mintGrant(record, verdict.mode);
   record.grantId = grant.id;
   keychainAsks.set(record.id, record);
-  persist();
+  await persist();
   audit({ kind: "keychain_ask_approved", ask_id: record.id, grant_id: grant.id, mode: verdict.mode });
   const credMeta = findCredential(record.credentialId);
   return credMeta ? grantInstructions(grant, credMeta) : null;
