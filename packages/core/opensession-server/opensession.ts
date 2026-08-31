@@ -69,6 +69,7 @@ import { startPrReviewNotificationTicker } from "./src/server/pr-review-notifica
 import { startPublicIngress } from "./src/server/public-ingress";
 import { ensureCloudflareTunnel } from "./src/server/ingress-settings";
 import { startPrivateAppCertificateRenewal } from "./src/server/private-app-domain";
+import { initializeManagedPrivateAppDomain } from "./src/server/private-app-domain";
 import { creationOwnsPrompt, readActiveShutdownSnapshot, recoverableLocalHostSnapshotRecords, recordRecoveredRunEvent, restorePromptQueues, resumeDrainedSessions, settleRecoveredCreationOpening, snapshotActiveSessions, startLoopTicker } from "./src/server/run-session";
 import { startMcpHttpServer, startRunRpcServer } from "./src/server/run-rpc";
 import { handleSandboxWsUpgrade, startTimerPoisonHeartbeat, timerPoisonRequestCheck } from "./src/server/run-ws";
@@ -213,6 +214,7 @@ if (!g.__opensessionBooted) {
 	await initializeManagedMcpOauth(db);
 	await initializeManagedWorkspaceSecrets(db);
 	await initializeManagedSandboxConnections(db);
+	await initializeManagedPrivateAppDomain(db);
 }
 
 // Listeners the server owns. Deliberately started HERE and not as module side

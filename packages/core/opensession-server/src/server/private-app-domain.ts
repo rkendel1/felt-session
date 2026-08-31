@@ -8,11 +8,13 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
+  unlinkSync,
 } from "fs";
+import type { StateFirstDB } from "@feltdb/core";
 import { join } from "path";
 import { tmpdir } from "os";
 import { stateDir } from "./paths";
-import { writeJsonAtomic } from "./shared/atomic-write";
+import { managedFeltDb } from "./managed-feltdb";
 import { isTailnetIpv4 } from "./shared/network-address";
 
 export type PrivateAppDnsProvider = "cloudflare" | "vercel";
@@ -26,6 +28,7 @@ interface PrivateAppCredential {
   apiToken: string;
   teamId?: string;
   upstream?: string;
+  __version?: number;
 }
 
 export interface PrivateAppDomainStatus {
@@ -38,6 +41,11 @@ export interface PrivateAppDomainStatus {
 }
 
 const CREDENTIAL_PATH = () => stateDir("private-app-dns.json");
+const CREDENTIAL_COLLECTION = "opensession_private_app_domain";
+const CREDENTIAL_ID = "credential";
+const CREDENTIAL_MIGRATION = "private-app-domain-json-to-managed-feltdb-v1";
+let credentialDb: StateFirstDB | undefined;
+let managedCredential: PrivateAppCredential | null = null;
 const ACME_PATH = () => stateDir("private-app-acme");
 const CADDYFILE = () => process.env.OPENSESSION_CADDYFILE || "/etc/caddy/Caddyfile";
 const TLS_DIR = () => process.env.OPENSESSION_TLS_DIR || "/etc/opensession/tls";
@@ -49,8 +57,11 @@ const runtime = globalThis as typeof globalThis & {
 };
 
 function safeCredential(): PrivateAppCredential | null {
+  return managedCredential;
+}
+
+function parseCredential(parsed: any): PrivateAppCredential | null {
   try {
-    const parsed = JSON.parse(readFileSync(CREDENTIAL_PATH(), "utf8"));
     if (
       parsed?.version !== 1 ||
       (parsed?.provider !== "cloudflare" && parsed?.provider !== "vercel") ||
@@ -60,10 +71,37 @@ function safeCredential(): PrivateAppCredential | null {
       (parsed.teamId !== undefined && typeof parsed.teamId !== "string") ||
       (parsed.upstream !== undefined && typeof parsed.upstream !== "string")
     ) return null;
-    return parsed;
+    return parsed as PrivateAppCredential;
   } catch {
     return null;
   }
+}
+
+export async function initializeManagedPrivateAppDomain(db: StateFirstDB = credentialDb ?? managedFeltDb()): Promise<void> {
+  credentialDb = db;
+  if (!await db.collection<{ id: string }>("opensession_migrations").get(CREDENTIAL_MIGRATION)) {
+    let legacy: PrivateAppCredential | null = null;
+    try { if (existsSync(CREDENTIAL_PATH())) legacy = parseCredential(JSON.parse(readFileSync(CREDENTIAL_PATH(), "utf8"))); } catch {}
+    if (legacy) await db.transaction((tx) => {
+      tx.collection<PrivateAppCredential>(CREDENTIAL_COLLECTION).set(CREDENTIAL_ID, legacy!);
+    }, { transactionId: "opensession:private-app-domain:migrate" });
+    await db.transaction((tx) => {
+      tx.collection("opensession_migrations").set(CREDENTIAL_MIGRATION,
+        { id: CREDENTIAL_MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
+    }, { transactionId: `opensession:migration:${CREDENTIAL_MIGRATION}` });
+  }
+  if (existsSync(CREDENTIAL_PATH())) unlinkSync(CREDENTIAL_PATH());
+  managedCredential = parseCredential(await db.collection<PrivateAppCredential>(CREDENTIAL_COLLECTION).get(CREDENTIAL_ID));
+}
+
+async function persistCredential(credential: PrivateAppCredential): Promise<void> {
+  const db = credentialDb ?? managedFeltDb();
+  const previous = managedCredential;
+  await db.transaction((tx) => {
+    tx.collection<PrivateAppCredential>(CREDENTIAL_COLLECTION).set(CREDENTIAL_ID, credential,
+      previous ? { ifVersion: previous.__version } : { requireAbsent: true });
+  }, { transactionId: `opensession:private-app-domain:put:${crypto.randomUUID()}` });
+  managedCredential = { ...credential, __version: (previous?.__version ?? 0) + 1 };
 }
 
 function certificatePaths(domain: string): { certificate: string; key: string } {
@@ -544,7 +582,7 @@ export async function configurePrivateAppDomain(input: {
   }
   await issueCertificate(credential, existsSync(legoCertificatePaths(credential.domain).certificate));
   await installCertificateAndCaddy(credential.domain, input.tailnetIpv4, credential.upstream);
-  writeJsonAtomic(CREDENTIAL_PATH(), credential, true, 0o600);
+  await persistCredential(credential);
 }
 
 export async function testPrivateAppDomain(origin: string, tailnetIpv4: string | null): Promise<PrivateAppDomainStatus> {
