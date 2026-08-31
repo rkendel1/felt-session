@@ -363,8 +363,8 @@ export function planInstall(
 
 export interface InstanceStores {
 	state(): Promise<InstanceState>;
-	addMcpServer(name: string, entry: unknown, allowedUsers?: string[]): void;
-	removeMcpServer(name: string): void;
+	addMcpServer(name: string, entry: unknown, allowedUsers?: string[]): Promise<void>;
+	removeMcpServer(name: string): Promise<void>;
 	upsertFeed(feed: unknown): Promise<void>;
 	removeFeed(id: string): Promise<void>;
 	addAutomation(recipe: Recipe, createdBy: string): Promise<void>;
@@ -381,6 +381,8 @@ function sha256(path: string): string {
 /** The real stores. Imported lazily so this module stays cheap to load. */
 export async function defaultStores(): Promise<InstanceStores> {
 	const connections = await import("../../packages/core/opensession-server/src/server/connections");
+	const { initializeManagedFeltDb } = await import("../../packages/core/opensession-server/src/server/managed-feltdb");
+	await connections.initializeManagedMcpConfig(await initializeManagedFeltDb());
 	const feeds = await import("../../packages/core/opensession-server/src/server/feeds-config");
 	const { readdirSync } = await import("fs");
 
@@ -403,17 +405,17 @@ export async function defaultStores(): Promise<InstanceStores> {
 				skills: skillNames(),
 			};
 		},
-		addMcpServer(name, entry, allowedUsers) {
+		async addMcpServer(name, entry, allowedUsers) {
 			// Replacing this package's own earlier copy is an update, so drop
 			// the old entry first rather than failing the no-overwrite guard.
-			connections.removeMcpServer(name);
-			const result = connections.addMcpServerEntry(name, entry as Record<string, unknown>, {
+			await connections.removeMcpServer(name);
+			const result = await connections.addMcpServerEntry(name, entry as Record<string, unknown>, {
 				allowedUsers,
 			});
 			if ("error" in result) throw new Error(result.error);
 		},
-		removeMcpServer(name) {
-			connections.removeMcpServer(name);
+		async removeMcpServer(name) {
+			await connections.removeMcpServer(name);
 		},
 		async upsertFeed(feed) {
 			const result = await feeds.upsertConfigFeed(feed);
@@ -475,7 +477,7 @@ export async function applyPlan(input: ApplyInput): Promise<InstalledPackage> {
 		for (const action of sorted) {
 			let artifact: InstalledArtifact = { kind: action.kind, ref: action.ref };
 			if (action.kind === "mcp") {
-				stores.addMcpServer(action.ref, action.payload, input.allowedUsers);
+				await stores.addMcpServer(action.ref, action.payload, input.allowedUsers);
 			} else if (action.kind === "feed") {
 				await stores.upsertFeed(action.payload);
 			} else if (action.kind === "automation") {
@@ -528,7 +530,7 @@ async function removeArtifact(
 ): Promise<void> {
 	switch (artifact.kind) {
 		case "mcp":
-			stores.removeMcpServer(artifact.ref);
+			await stores.removeMcpServer(artifact.ref);
 			return;
 		case "feed":
 			await stores.removeFeed(artifact.ref);

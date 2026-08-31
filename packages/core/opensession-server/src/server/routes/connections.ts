@@ -251,7 +251,7 @@ export async function handleConnectionsRoutes(
 		const body = await req.json().catch(() => null);
 		if (!body)
 			return Response.json({ error: "Invalid JSON" }, { status: 400 });
-		const result = addMcpServer(body);
+		const result = await addMcpServer(body);
 		if ("error" in result) return Response.json(result, { status: 400 });
 		return Response.json(result);
 	}
@@ -483,7 +483,7 @@ export async function handleConnectionsRoutes(
 		/^\/api\/connections\/mcp\/([^/]+)$/,
 	);
 	if (mcpDelMatch && req.method === "DELETE") {
-		const result = removeMcpServer(decodeURIComponent(mcpDelMatch[1]));
+		const result = await removeMcpServer(decodeURIComponent(mcpDelMatch[1]));
 		if ("error" in result) return Response.json(result, { status: 404 });
 		return Response.json(result);
 	}
@@ -495,7 +495,7 @@ export async function handleConnectionsRoutes(
 		const allowedUsers = Array.isArray(body?.allowedUsers)
 			? body.allowedUsers
 			: undefined;
-		const result = setMcpAllowedUsers(
+		const result = await setMcpAllowedUsers(
 			decodeURIComponent(mcpDelMatch[1]),
 			allowedUsers,
 		);

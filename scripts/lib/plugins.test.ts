@@ -61,11 +61,11 @@ function fakeStores(options: { failOn?: string } = {}) {
 				skills: [...skills.keys()],
 			};
 		},
-		addMcpServer(name, entry, allowedUsers) {
+		async addMcpServer(name, entry, allowedUsers) {
 			if (options.failOn === `mcp:${name}`) throw new Error("boom");
 			mcp.set(name, allowedUsers ? { ...(entry as object), allowedUsers } : entry);
 		},
-		removeMcpServer(name) {
+		async removeMcpServer(name) {
 			mcp.delete(name);
 		},
 		async upsertFeed(feed) {
@@ -341,7 +341,10 @@ describe("install and remove", () => {
  * a temp directory, so it can use the real writers without being able to reach
  * the instance running it.
  */
-describe("plugins update, end to end", () => {
+const managedPluginDescribe = process.env.OPENSESSION_FELTDB_URL && process.env.OPENSESSION_FELTDB_API_KEY
+	? describe
+	: describe.skip;
+managedPluginDescribe("plugins update, end to end (managed FeltDB)", () => {
 	const CLI = join(resolve(import.meta.dir, "..", ".."), "scripts/cli.ts");
 
 	function manifest(version: string, servers: string[]): string {
@@ -377,6 +380,7 @@ describe("plugins update, end to end", () => {
 				OPENSESSION_CONFIG: join(root, "config.json"),
 				OPENSESSION_SKILLS_DIR: skillsDir,
 				OPENSESSION_MCP_CONFIG: mcpPath,
+				OPENSESSION_FELTDB_NAMESPACE: `plugin-e2e-${crypto.randomUUID()}`,
 				GIT_AUTHOR_NAME: "Scratch",
 				GIT_AUTHOR_EMAIL: "scratch@example.invalid",
 				GIT_COMMITTER_NAME: "Scratch",
@@ -402,7 +406,7 @@ describe("plugins update, end to end", () => {
 				git("commit", "-qm", "v1");
 
 				const installed = cli("add", upstream, "--yes", "--users", "alice,bob");
-				expect(installed.code).toBe(0);
+				expect(installed.code, installed.out).toBe(0);
 				const before = ledger();
 				expect(before.version).toBe("0.1.0");
 				expect(refs("mcp")).toEqual(["alpha", "beta"]);
@@ -432,9 +436,7 @@ describe("plugins update, end to end", () => {
 				expect(after.allowedUsers).toEqual(["alice", "bob"]);
 
 				expect(refs("mcp")).toEqual(["alpha", "gamma"]);
-				const servers = JSON.parse(readFileSync(mcpPath, "utf8")).mcpServers;
-				expect(Object.keys(servers).sort()).toEqual(["alpha", "gamma"]);
-				expect(servers.gamma.allowedUsers).toEqual(["alice", "bob"]);
+				expect(existsSync(mcpPath)).toBe(false);
 
 				// The skill's recorded hash tracks the new text, which is on disk.
 				const skillArtifact = ledger().artifacts.find((a: InstalledArtifact) => a.kind === "skill");
@@ -473,6 +475,7 @@ describe("plugins update, end to end", () => {
 				OPENSESSION_CONFIG: join(root, "config.json"),
 				OPENSESSION_SKILLS_DIR: join(root, "skills"),
 				OPENSESSION_MCP_CONFIG: mcpPath,
+				OPENSESSION_FELTDB_NAMESPACE: `plugin-rename-e2e-${crypto.randomUUID()}`,
 				GIT_AUTHOR_NAME: "Scratch",
 				GIT_AUTHOR_EMAIL: "scratch@example.invalid",
 				GIT_COMMITTER_NAME: "Scratch",

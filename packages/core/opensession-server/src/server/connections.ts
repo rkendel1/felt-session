@@ -4,8 +4,9 @@
  * query strings (they can embed tokens) or env values.
  */
 import { homeDir } from "./paths";
-import { existsSync, readFileSync, copyFileSync, watchFile } from "fs";
-import { writeFileAtomic } from "./shared/atomic-write";
+import { existsSync, readFileSync, unlinkSync } from "fs";
+import type { StateFirstDB } from "@feltdb/core";
+import { managedFeltDb } from "./managed-feltdb";
 import { configuredPaths } from "./config";
 import { mcpOauthStatus, mcpSharedGrantHeader, mcpUserGrantHeader, mcpUserGrantToken, oauthPresetFor } from "./mcp-oauth";
 
@@ -14,35 +15,44 @@ const HOME = homeDir();
 // `paths.mcpConfig` → this repo's checkout — unchanged when neither is set.
 const CONFIG_PATH = configuredPaths().mcpConfig;
 
-// Cache the parsed MCP config with file-watcher invalidation
-let cachedMcpConfig: { mcpServers: Record<string, any> } | null = null;
-let cacheWatcherSetUp = false;
+interface McpConfigRecord {
+  id: string;
+  mcpServers: Record<string, any>;
+  __version?: number;
+}
+const MCP_CONFIG_COLLECTION = "opensession_mcp_config";
+const MCP_CONFIG_ID = "mcp-servers";
+const MCP_CONFIG_MIGRATION = "mcp-config-file-to-managed-feltdb-v1";
+let mcpConfigDb: StateFirstDB | undefined;
+let cachedMcpConfig: McpConfigRecord | null = null;
 
-function setupCacheWatcher() {
-  if (cacheWatcherSetUp) return;
-  cacheWatcherSetUp = true;
-  try {
-    watchFile(CONFIG_PATH, () => {
-      cachedMcpConfig = null;
-      console.log("[mcp-cache] config changed, invalidating cache");
-    });
-  } catch (e) {
-    console.warn("[mcp-cache] failed to set up file watcher:", e);
+export async function initializeManagedMcpConfig(
+  db: StateFirstDB = mcpConfigDb ?? managedFeltDb(),
+  legacyPath: string = CONFIG_PATH,
+): Promise<void> {
+  mcpConfigDb = db;
+  const migrations = db.collection<{ id: string }>("opensession_migrations");
+  if (!await migrations.get(MCP_CONFIG_MIGRATION)) {
+    let mcpServers: Record<string, any> = {};
+    if (existsSync(legacyPath)) {
+      const parsed = JSON.parse(readFileSync(legacyPath, "utf8"));
+      if (parsed?.mcpServers && typeof parsed.mcpServers === "object") mcpServers = parsed.mcpServers;
+    }
+    await db.transaction((tx) => {
+      tx.collection<McpConfigRecord>(MCP_CONFIG_COLLECTION).set(MCP_CONFIG_ID,
+        { id: MCP_CONFIG_ID, mcpServers }, { requireAbsent: true });
+      tx.collection("opensession_migrations").set(MCP_CONFIG_MIGRATION,
+        { id: MCP_CONFIG_MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
+    }, { transactionId: `opensession:migration:${MCP_CONFIG_MIGRATION}` });
   }
+  for (const path of [legacyPath, `${legacyPath}.bak`]) if (existsSync(path)) unlinkSync(path);
+  cachedMcpConfig = await db.collection<McpConfigRecord>(MCP_CONFIG_COLLECTION).get(MCP_CONFIG_ID);
+  if (!cachedMcpConfig) throw new Error("Managed MCP configuration is missing");
 }
 
 export function readMcpConfig(): { mcpServers: Record<string, any> } {
-  if (!cacheWatcherSetUp) setupCacheWatcher();
   if (cachedMcpConfig) return cachedMcpConfig;
-
-  try {
-    cachedMcpConfig = JSON.parse(readFileSync(CONFIG_PATH, "utf-8")) as {
-      mcpServers: Record<string, any>;
-    };
-  } catch {
-    cachedMcpConfig = { mcpServers: {} };
-  }
-  return cachedMcpConfig;
+  throw new Error("Managed MCP configuration has not been initialized");
 }
 
 const LINEAR_AGENT_TOKENS_PATH = `${HOME}/.linear-agent-tokens.json`;
@@ -127,12 +137,14 @@ export function withDynamicCredentials(
   return out;
 }
 
-function writeMcpConfig(config: { mcpServers: Record<string, any> }): void {
-  // Keep one backup so a bad edit is always recoverable
-  try {
-    copyFileSync(CONFIG_PATH, `${CONFIG_PATH}.bak`);
-  } catch {}
-  writeFileAtomic(CONFIG_PATH, JSON.stringify(config, null, 2) + "\n");
+async function writeMcpConfig(config: McpConfigRecord): Promise<void> {
+  const db = mcpConfigDb ?? managedFeltDb();
+  await db.transaction((tx) => {
+    tx.collection<McpConfigRecord>(MCP_CONFIG_COLLECTION).set(MCP_CONFIG_ID, config,
+      config.__version ? { ifVersion: config.__version } : { requireAbsent: true });
+  }, { transactionId: `opensession:mcp-config:${crypto.randomUUID()}` });
+  cachedMcpConfig = await db.collection<McpConfigRecord>(MCP_CONFIG_COLLECTION).get(MCP_CONFIG_ID);
+  if (!cachedMcpConfig) throw new Error("Managed MCP configuration disappeared after save");
   cache = null;
 }
 
@@ -162,13 +174,13 @@ function cleanAllowedUsers(users?: string[]): string[] | undefined {
   return out.length ? out : undefined;
 }
 
-export function addMcpServer(input: AddMcpInput): { ok: true } | { error: string } {
+export async function addMcpServer(input: AddMcpInput): Promise<{ ok: true } | { error: string }> {
   const name = (input.name || "").trim();
   if (!/^[a-z0-9][a-z0-9_-]{0,40}$/i.test(name)) {
     return { error: "Name must be alphanumeric (dashes/underscores allowed)" };
   }
 
-  const config = readMcpConfig();
+  const config = structuredClone(readMcpConfig()) as McpConfigRecord;
   if (config.mcpServers[name]) {
     return { error: `Server "${name}" already exists — remove it first` };
   }
@@ -199,7 +211,7 @@ export function addMcpServer(input: AddMcpInput): { ok: true } | { error: string
   if (allowedUsers) entry.allowedUsers = allowedUsers;
 
   config.mcpServers[name] = entry;
-  writeMcpConfig(config);
+  await writeMcpConfig(config);
   return { ok: true };
 }
 
@@ -215,23 +227,23 @@ export function addMcpServer(input: AddMcpInput): { ok: true } | { error: string
  * never the package's, so any allowlist on the incoming entry is discarded in
  * favour of the one passed here.
  */
-export function addMcpServerEntry(
+export async function addMcpServerEntry(
   name: string,
   entry: Record<string, unknown>,
   opts: { allowedUsers?: string[] } = {}
-): { ok: true } | { error: string } {
+): Promise<{ ok: true } | { error: string }> {
   const clean = (name || "").trim();
   if (!/^[a-z0-9][a-z0-9_-]{0,40}$/i.test(clean)) {
     return { error: "Name must be alphanumeric (dashes/underscores allowed)" };
   }
-  const config = readMcpConfig();
+  const config = structuredClone(readMcpConfig()) as McpConfigRecord;
   if (config.mcpServers[clean]) {
     return { error: `Server "${clean}" already exists, remove it first` };
   }
   const { allowedUsers: _ignored, ...rest } = entry;
   const allowedUsers = cleanAllowedUsers(opts.allowedUsers);
   config.mcpServers[clean] = allowedUsers ? { ...rest, allowedUsers } : rest;
-  writeMcpConfig(config);
+  await writeMcpConfig(config);
   return { ok: true };
 }
 
@@ -240,25 +252,25 @@ export function addMcpServerEntry(
  * existing MCP server. Lets you restrict a server after it's been added — e.g.
  * lock a sensitive server down to specific teammates — without re-entering its secrets.
  */
-export function setMcpAllowedUsers(
+export async function setMcpAllowedUsers(
   name: string,
   allowedUsers?: string[]
-): { ok: true; allowedUsers?: string[] } | { error: string } {
-  const config = readMcpConfig();
+): Promise<{ ok: true; allowedUsers?: string[] } | { error: string }> {
+  const config = structuredClone(readMcpConfig()) as McpConfigRecord;
   const entry = config.mcpServers[name];
   if (!entry) return { error: `Server "${name}" not found` };
   const cleaned = cleanAllowedUsers(allowedUsers);
   if (cleaned) entry.allowedUsers = cleaned;
   else delete entry.allowedUsers;
-  writeMcpConfig(config);
+  await writeMcpConfig(config);
   return { ok: true, allowedUsers: cleaned };
 }
 
-export function removeMcpServer(name: string): { ok: true } | { error: string } {
-  const config = readMcpConfig();
+export async function removeMcpServer(name: string): Promise<{ ok: true } | { error: string }> {
+  const config = structuredClone(readMcpConfig()) as McpConfigRecord;
   if (!config.mcpServers[name]) return { error: `Server "${name}" not found` };
   delete config.mcpServers[name];
-  writeMcpConfig(config);
+  await writeMcpConfig(config);
   return { ok: true };
 }
 

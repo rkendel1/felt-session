@@ -521,7 +521,7 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
           env?: Record<string, string>;
           allowedUsers?: string[];
         }) => {
-          const res = addMcpServer(args);
+          const res = await addMcpServer(args);
           if ("error" in res) return text(`Couldn't add it: ${res.error}`);
           const restricted = args.allowedUsers?.length
             ? ` Restricted to ${args.allowedUsers.join(", ")}.`
@@ -542,7 +542,7 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
             .describe("People allowed to use it. Empty/omitted = available to everyone."),
         },
         async (args: { name: string; allowedUsers?: string[] }) => {
-          const res = setMcpAllowedUsers(args.name, args.allowedUsers);
+          const res = await setMcpAllowedUsers(args.name, args.allowedUsers);
           if ("error" in res) return text(`Couldn't update it: ${res.error}`);
           return text(
             res.allowedUsers?.length
@@ -556,7 +556,7 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
         "Remove a configured MCP server by name.",
         { name: z.string() },
         async (args: { name: string }) => {
-          const res = removeMcpServer(args.name);
+          const res = await removeMcpServer(args.name);
           if ("error" in res) return text(`Couldn't remove it: ${res.error}`);
           return text(`Removed MCP server *${args.name}*.`);
         }
