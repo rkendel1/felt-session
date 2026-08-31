@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, readdirSync } from "fs";
+import { mkdtempSync, readdirSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import {
@@ -41,6 +41,15 @@ describe("managed FeltDB boundary", () => {
       apiKey: "secret-value",
       namespace: "shared-development",
     });
+  });
+
+  test("reads the API key from a scoped service credential", () => {
+    const { dir } = fixture();
+    writeFileSync(join(dir, "managed-feltdb-token"), "credential-token\n");
+    expect(managedFeltDbConfig({
+      OPENSESSION_FELTDB_URL: "https://managed.example",
+      CREDENTIALS_DIRECTORY: dir,
+    }).apiKey).toBe("credential-token");
   });
 
   test("constructs only a remote database and creates no local FeltDB", async () => {

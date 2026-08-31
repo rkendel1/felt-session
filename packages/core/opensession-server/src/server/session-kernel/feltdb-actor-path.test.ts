@@ -92,7 +92,7 @@ authorityTest("Session Kernel actor to FeltDB authority", () => {
     });
     process.env.OPENSESSION_FELTDB_SERVER_URL = proxy.url.origin;
     process.env.OPENSESSION_FELTDB_SERVER_NAMESPACE = "opensession-actor-test";
-    process.env.OPENSESSION_FELTDB_SERVER_TOKEN = "";
+    process.env.OPENSESSION_FELTDB_SERVER_TOKEN = "actor-path-test-token";
   });
 
   afterAll(async () => {

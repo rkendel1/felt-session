@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { createFeltDB, type StateFirstDB } from "@feltdb/core";
+import { managedFeltDbConfig } from "../managed-feltdb";
 
 const RUN_STATES = "opensession_kernel_run_states";
 const CHANGES = "opensession_kernel_changes";
@@ -203,16 +204,12 @@ export class FeltDbKernelChangeStore {
 export function openFeltDbKernelChangeStore(
   env: Record<string, string | undefined> = process.env,
 ): FeltDbKernelChangeStore {
-  const url = env.OPENSESSION_FELTDB_SERVER_URL?.trim().replace(/\/$/, "");
-  const namespace = env.OPENSESSION_FELTDB_SERVER_NAMESPACE?.trim();
-  if (!url) throw new Error("Session Kernel requires OPENSESSION_FELTDB_SERVER_URL");
-  if (!namespace)
-    throw new Error("Session Kernel requires OPENSESSION_FELTDB_SERVER_NAMESPACE");
+  const config = managedFeltDbConfig(env);
   return new FeltDbKernelChangeStore(createFeltDB({
-    namespace,
+    namespace: config.namespace,
     server: {
-      url,
-      token: env.OPENSESSION_FELTDB_SERVER_TOKEN?.trim() ?? "",
+      url: config.url,
+      token: config.apiKey,
     },
   }));
 }

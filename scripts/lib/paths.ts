@@ -66,6 +66,7 @@ export const STAGED_EXECUTOR_UNIT_PATH = join(
   "opensession-executor.service",
 );
 export const EXECUTOR_TOKEN_PATH = "/etc/opensession/executor-token";
+export const MANAGED_FELTDB_TOKEN_PATH = "/etc/opensession/managed-feltdb-token";
 export const SESSION_KERNEL_SERVICE_NAME = "opensession-session-kernel";
 export const SESSION_KERNEL_SERVICE_PATH = `/etc/systemd/system/${SESSION_KERNEL_SERVICE_NAME}.service`;
 export const STAGED_SESSION_KERNEL_UNIT_PATH = join(

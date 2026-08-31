@@ -14,6 +14,7 @@ User=ubuntu
 WorkingDirectory=/home/ubuntu/projects/opensession
 # EXECUTOR_PATH_ENV
 LoadCredential=executor-token:/etc/opensession/executor-token
+LoadCredential=managed-feltdb-token:/etc/opensession/managed-feltdb-token
 Environment="NODE_ENV=production"
 RuntimeDirectory=opensession-executor
 Environment="OPENSESSION_EXECUTOR_READY_FILE=/run/opensession-executor/ready"

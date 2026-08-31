@@ -1,4 +1,5 @@
 import { createFeltDB, type StateFirstDB } from "@feltdb/core";
+import { readFileSync } from "node:fs";
 
 export type ManagedFeltDbProjectConfig = {
   namespace: string;
@@ -20,6 +21,16 @@ function required(value: string | undefined, name: string): string {
   return normalized;
 }
 
+function managedCredential(env: Record<string, string | undefined>): string | undefined {
+  const directory = env.CREDENTIALS_DIRECTORY?.trim();
+  if (!directory) return undefined;
+  try {
+    return readFileSync(`${directory}/managed-feltdb-token`, "utf8").trim();
+  } catch {
+    return undefined;
+  }
+}
+
 /** Resolve the one canonical persistence authority. Credentials are accepted
  * only from the process environment and are never returned by status APIs or
  * included in errors. The generic FELTDB_* names match the managed runtime
@@ -30,6 +41,7 @@ export function managedFeltDbConfig(
 ): ManagedFeltDbConnectionConfig {
   const namespace = required(
     env.OPENSESSION_FELTDB_NAMESPACE ||
+      env.OPENSESSION_FELTDB_SERVER_NAMESPACE ||
       env.FELTDB_MANAGED_NAMESPACE ||
       env.VITE_FELTDB_MANAGED_NAMESPACE ||
       env.FELTDB_NAMESPACE ||
@@ -38,6 +50,7 @@ export function managedFeltDbConfig(
   );
   const url = required(
     env.OPENSESSION_FELTDB_URL ||
+      env.OPENSESSION_FELTDB_SERVER_URL ||
       env.FELTDB_MANAGED_URL ||
       env.VITE_FELTDB_MANAGED_URL ||
       env.FELTDB_URL,
@@ -45,9 +58,11 @@ export function managedFeltDbConfig(
   ).replace(/\/$/, "");
   const apiKey = required(
     env.OPENSESSION_FELTDB_API_KEY ||
+      env.OPENSESSION_FELTDB_SERVER_TOKEN ||
       env.FELTDB_MANAGED_API_KEY ||
       env.VITE_FELTDB_MANAGED_API_KEY ||
-      env.FELTDB_TOKEN,
+      env.FELTDB_TOKEN ||
+      managedCredential(env),
     "an API key",
   );
   return {

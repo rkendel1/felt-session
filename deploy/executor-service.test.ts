@@ -14,6 +14,10 @@ describe("executor deployment", () => {
       "ExecStart=/home/ubuntu/.bun/bin/bun run packages/core/opensession-server/src/executor/main.ts",
     );
     expect(executor).not.toContain("PartOf=opensession.service");
+    expect(executor).toContain(
+      "LoadCredential=managed-feltdb-token:/etc/opensession/managed-feltdb-token",
+    );
+    expect(executor).not.toContain("EnvironmentFile=");
     expect(gateway).toContain("Wants=opensession-executor.service");
     expect(gateway).not.toContain("Requires=opensession-executor.service");
     expect(gateway).toContain("# EXECUTOR_CREDENTIAL:");
@@ -43,6 +47,8 @@ describe("executor deployment", () => {
     expect(deploy).toContain('"$RUN_HOST_ENV_FILE"');
     expect(deploy).toContain('^# EXECUTOR_PATH_ENV$');
     expect(deploy).toContain('OPENSESSION_SESSIONS_DIR=');
+    expect(deploy).toContain("install-managed-feltdb-credential.sh");
+    expect(deploy).toContain("OPENSESSION_FELTDB_URL");
   });
 
   test("self-deploy and rollback synchronize the executor before the gateway", async () => {
@@ -91,5 +97,17 @@ describe("executor deployment", () => {
     expect(installer).toContain("credential directory cannot be a symlink");
     expect(installer).toContain("credential cannot be a symlink");
     expect(installer).toContain("stat -c %h");
+    const feltDbInstaller = await Bun.file(
+      resolve(repoRoot, "deploy/install-managed-feltdb-credential.sh"),
+    ).text();
+    expect(feltDbInstaller).toContain(
+      "managed FeltDB credential directory cannot be a symlink",
+    );
+    expect(feltDbInstaller).toContain(
+      "managed FeltDB credential cannot be a symlink",
+    );
+    expect(feltDbInstaller).toContain("stat -c %h");
+    expect(feltDbInstaller).not.toContain("GITHUB_");
+    expect(feltDbInstaller).not.toContain("SLACK_");
   });
 });

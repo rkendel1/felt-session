@@ -198,6 +198,21 @@ if [ -z "$RUN_HOST_ENV_FILE" ]; then
   echo "[deploy] ERROR: gateway EnvironmentFile is required for run hosts" >&2
   exit 1
 fi
+MANAGED_FELTDB_TOKEN_PATH="/etc/opensession/managed-feltdb-token"
+"$REPO_DIR/deploy/install-managed-feltdb-credential.sh" \
+  "$RUN_HOST_ENV_FILE" "$MANAGED_FELTDB_TOKEN_PATH"
+FELTDB_URL=""
+for name in OPENSESSION_FELTDB_URL FELTDB_MANAGED_URL VITE_FELTDB_MANAGED_URL FELTDB_URL; do
+  FELTDB_URL="$(read_env_value "$name" "$RUN_HOST_ENV_FILE")"
+  [ -z "$FELTDB_URL" ] || break
+done
+[ -n "$FELTDB_URL" ] || { echo "[deploy] ERROR: managed FeltDB URL is missing" >&2; exit 1; }
+FELTDB_NAMESPACE=""
+for name in OPENSESSION_FELTDB_NAMESPACE FELTDB_MANAGED_NAMESPACE VITE_FELTDB_MANAGED_NAMESPACE FELTDB_NAMESPACE; do
+  FELTDB_NAMESPACE="$(read_env_value "$name" "$RUN_HOST_ENV_FILE")"
+  [ -z "$FELTDB_NAMESPACE" ] || break
+done
+FELTDB_NAMESPACE="${FELTDB_NAMESPACE:-open-session}"
 SESSIONS_DIR="$(read_env_value OPENSESSION_SESSIONS_DIR "$RUN_HOST_ENV_FILE")"
 STATE_DIR="$(read_env_value OPENSESSION_STATE_DIR "$RUN_HOST_ENV_FILE")"
 if [ -z "$SESSIONS_DIR" ]; then
@@ -221,12 +236,14 @@ esac
 run_as_service_user sudo -n /usr/local/libexec/opensession-run-host check
 
 EXECUTOR_UNIT_RENDERED="$(mktemp)"
-awk -v home="$SERVICE_HOME_DIR" -v state="$STATE_DIR" -v sessions="$SESSIONS_DIR" -v workdir="$CURRENT_LINK" '
+awk -v home="$SERVICE_HOME_DIR" -v state="$STATE_DIR" -v sessions="$SESSIONS_DIR" -v workdir="$CURRENT_LINK" -v felt_url="$FELTDB_URL" -v felt_namespace="$FELTDB_NAMESPACE" '
   /^WorkingDirectory=/ { print "WorkingDirectory=" workdir; next }
   /^# EXECUTOR_PATH_ENV$/ {
     print "Environment=\"HOME=" home "\""
     if (state != "") print "Environment=\"OPENSESSION_STATE_DIR=" state "\""
     if (sessions != "") print "Environment=\"OPENSESSION_SESSIONS_DIR=" sessions "\""
+    print "Environment=\"OPENSESSION_FELTDB_URL=" felt_url "\""
+    print "Environment=\"OPENSESSION_FELTDB_NAMESPACE=" felt_namespace "\""
     next
   }
   { print }
@@ -240,12 +257,14 @@ fi
 rm -f "$EXECUTOR_UNIT_RENDERED"
 
 SESSION_KERNEL_UNIT_RENDERED="$(mktemp)"
-awk -v home="$SERVICE_HOME_DIR" -v state="$STATE_DIR" -v sessions="$SESSIONS_DIR" -v workdir="$CURRENT_LINK" '
+awk -v home="$SERVICE_HOME_DIR" -v state="$STATE_DIR" -v sessions="$SESSIONS_DIR" -v workdir="$CURRENT_LINK" -v felt_url="$FELTDB_URL" -v felt_namespace="$FELTDB_NAMESPACE" '
   /^WorkingDirectory=/ { print "WorkingDirectory=" workdir; next }
   /^# SESSION_KERNEL_PATH_ENV$/ {
     print "Environment=\"HOME=" home "\""
     if (state != "") print "Environment=\"OPENSESSION_STATE_DIR=" state "\""
     if (sessions != "") print "Environment=\"OPENSESSION_SESSIONS_DIR=" sessions "\""
+    print "Environment=\"OPENSESSION_FELTDB_URL=" felt_url "\""
+    print "Environment=\"OPENSESSION_FELTDB_NAMESPACE=" felt_namespace "\""
     next
   }
   { print }

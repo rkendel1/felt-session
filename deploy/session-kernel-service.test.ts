@@ -21,6 +21,9 @@ describe("session kernel service deployment", () => {
     expect(actor).toContain("IPAddressAllow=localhost");
     expect(actor).toContain("IPAddressDeny=any");
     expect(actor).not.toContain("EnvironmentFile=");
+    expect(actor).toContain(
+      "LoadCredential=managed-feltdb-token:/etc/opensession/managed-feltdb-token",
+    );
   });
 
   test("leaves no gateway-side actor or writable-store fallback", async () => {

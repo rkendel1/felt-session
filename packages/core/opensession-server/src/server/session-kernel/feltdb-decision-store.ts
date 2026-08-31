@@ -4,6 +4,7 @@ import type {
   StateFirstDB,
 } from "@feltdb/core";
 import { createFeltDB } from "@feltdb/core";
+import { managedFeltDbConfig } from "../managed-feltdb";
 
 export const KERNEL_COLLECTIONS = {
   sessions: "opensession_kernel_sessions",
@@ -1008,13 +1009,9 @@ export class FeltDbSessionDecisionStore {
 export function openFeltDbSessionDecisionStore(
   env: Record<string, string | undefined> = process.env,
 ): FeltDbSessionDecisionStore {
-  const url = env.OPENSESSION_FELTDB_SERVER_URL?.trim().replace(/\/$/, "");
-  const namespace = env.OPENSESSION_FELTDB_SERVER_NAMESPACE?.trim();
-  if (!url) throw new Error("Session Kernel requires OPENSESSION_FELTDB_SERVER_URL");
-  if (!namespace)
-    throw new Error("Session Kernel requires OPENSESSION_FELTDB_SERVER_NAMESPACE");
+  const config = managedFeltDbConfig(env);
   return new FeltDbSessionDecisionStore(createFeltDB({
-    namespace,
-    server: { url, token: env.OPENSESSION_FELTDB_SERVER_TOKEN?.trim() ?? "" },
+    namespace: config.namespace,
+    server: { url: config.url, token: config.apiKey },
   }));
 }

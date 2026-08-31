@@ -35,6 +35,7 @@ import {
   EXECUTOR_SERVICE_NAME,
   EXECUTOR_SERVICE_PATH,
   EXECUTOR_TOKEN_PATH,
+  MANAGED_FELTDB_TOKEN_PATH,
   HOME,
   OPENSESSION_HOME,
   REPO_ROOT,
@@ -414,6 +415,13 @@ export async function renderUnit(
 }
 
 function executorPathEnvironment(): string {
+  const configured = (...names: string[]) => {
+    for (const name of names) {
+      const value = process.env[name] || envFileValue(name);
+      if (value) return value;
+    }
+    return undefined;
+  };
   const values = [
     ["HOME", HOME],
     [
@@ -425,6 +433,24 @@ function executorPathEnvironment(): string {
       "OPENSESSION_SESSIONS_DIR",
       process.env.OPENSESSION_SESSIONS_DIR ||
         envFileValue("OPENSESSION_SESSIONS_DIR"),
+    ],
+    [
+      "OPENSESSION_FELTDB_URL",
+      configured(
+        "OPENSESSION_FELTDB_URL",
+        "FELTDB_MANAGED_URL",
+        "VITE_FELTDB_MANAGED_URL",
+        "FELTDB_URL",
+      ),
+    ],
+    [
+      "OPENSESSION_FELTDB_NAMESPACE",
+      configured(
+        "OPENSESSION_FELTDB_NAMESPACE",
+        "FELTDB_MANAGED_NAMESPACE",
+        "VITE_FELTDB_MANAGED_NAMESPACE",
+        "FELTDB_NAMESPACE",
+      ) || "open-session",
     ],
   ] satisfies Array<readonly [string, string | undefined]>;
   const lines: string[] = [];
@@ -772,6 +798,16 @@ export async function install(
               "install-session-kernel-credential.sh",
             ),
             SESSION_KERNEL_TOKEN_PATH,
+          ],
+          [
+            "sudo",
+            join(
+              serviceWorkdir(),
+              "deploy",
+              "install-managed-feltdb-credential.sh",
+            ),
+            ENV_PATH,
+            MANAGED_FELTDB_TOKEN_PATH,
           ],
           [
             "sudo",
