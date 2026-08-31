@@ -94,7 +94,10 @@ function canonical(value: unknown): string {
 }
 
 function digest(value: unknown): string {
-  return createHash("sha256").update(canonical(value)).digest("hex");
+  return createHash("sha256")
+    .update("opensession.transcript-actor-command.v1\0")
+    .update(canonical(value))
+    .digest("hex");
 }
 
 function eventId(sessionId: string, decisionEpoch: number, transcriptEpoch: number, entryId: string) {

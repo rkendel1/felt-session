@@ -146,6 +146,127 @@ function assertSource(db: Database, sessionId: string): void {
   ) throw new Error(`Session ${sessionId} has a non-dense change journal`);
 }
 
+function encodeTranscriptMigration(
+  db: Database,
+  sessionId: string,
+): AtomicTransactionOperationRequest[] {
+  const operations: AtomicTransactionOperationRequest[] = [];
+  const tables = new Set(
+    (db.query("SELECT name FROM sqlite_master WHERE type = 'table'").all() as Array<{ name: string }>)
+      .map(({ name }) => name),
+  );
+  if (!tables.has("transcript_sessions")) return operations;
+  const metadata = db.query(`
+    SELECT next_seq, next_change_seq, reset_change_seq, last_ts,
+      imported_at, import_src, import_watermark
+    FROM transcript_sessions WHERE session_id = ?
+  `).get(sessionId) as Record<string, SqlValue> | null;
+  const wake = tables.has("session_kernel_transcript_wakes") ? db.query(`
+    SELECT cursor, acked_cursor, first_change_seq, last_change_seq,
+      reset_epoch, acked_reset_epoch
+    FROM session_kernel_transcript_wakes WHERE session_id = ?
+  `).get(sessionId) as Record<string, SqlValue> | null : null;
+  if (metadata || wake) operations.push({
+    collection: KERNEL_COLLECTIONS.transcriptHeads,
+    id: sessionId,
+    value: {
+      schemaVersion: 1,
+      sessionId,
+      decisionEpoch: 1,
+      transcriptEpoch: 1,
+      nextSeq: Number(metadata?.next_seq ?? 1),
+      nextChangeSeq: Number(metadata?.next_change_seq ?? 1),
+      resetChangeSeq: Number(metadata?.reset_change_seq ?? wake?.reset_epoch ?? 0),
+      lastTs: metadata?.last_ts === null || !metadata ? null : Number(metadata.last_ts),
+      ...(metadata?.imported_at === null || !metadata
+        ? {} : { importedAt: Number(metadata.imported_at) }),
+      ...(metadata?.import_src === null || !metadata
+        ? {} : { importSrc: String(metadata.import_src) }),
+      ...(metadata?.import_watermark === null || !metadata
+        ? {} : { importWatermark: Number(metadata.import_watermark) }),
+      wake: {
+        cursor: Number(wake?.cursor ?? 0),
+        ackedCursor: Number(wake?.acked_cursor ?? 0),
+        firstChangeSeq: Number(wake?.first_change_seq ?? 0),
+        lastChangeSeq: Number(wake?.last_change_seq ?? 0),
+        resetEpoch: Number(wake?.reset_epoch ?? 0),
+        ackedResetEpoch: Number(wake?.acked_reset_epoch ?? 0),
+      },
+    },
+    requireAbsent: true,
+  });
+  const events = db.query(`
+    SELECT event.seq, event.change_seq, event.uuid, event.ts,
+      COALESCE(blob.data, event.data) AS data
+    FROM transcript_events event
+    LEFT JOIN transcript_blobs blob
+      ON blob.id = event.full_ref AND blob.session_id = event.session_id
+    WHERE event.session_id = ? ORDER BY event.seq
+  `).all(sessionId) as Array<Record<string, SqlValue>>;
+  for (const event of events) {
+    let entry: unknown;
+    try { entry = JSON.parse(String(event.data)); }
+    catch { throw new Error(`Session ${sessionId} has invalid transcript entry ${event.uuid}`); }
+    operations.push({
+      collection: KERNEL_COLLECTIONS.transcriptEvents,
+      id: kernelRecordId("transcript_event", `${sessionId}:1:1:${event.uuid}`),
+      value: {
+        schemaVersion: 1,
+        sessionId,
+        decisionEpoch: 1,
+        transcriptEpoch: 1,
+        seq: Number(event.seq),
+        changeSeq: Number(event.change_seq),
+        entryId: String(event.uuid),
+        ts: Number(event.ts),
+        entry,
+      },
+      requireAbsent: true,
+    });
+  }
+  const receipts = db.query(`
+    SELECT append_id, request_digest, fence_json, result_json, created_at
+    FROM transcript_append_receipts WHERE session_id = ? ORDER BY append_id
+  `).all(sessionId) as Array<Record<string, SqlValue>>;
+  for (const receipt of receipts) {
+    let fence: Record<string, unknown>;
+    let durableResult: unknown;
+    try {
+      fence = JSON.parse(String(receipt.fence_json)) as Record<string, unknown>;
+      durableResult = JSON.parse(String(receipt.result_json));
+    } catch {
+      throw new Error(`Session ${sessionId} has invalid transcript receipt ${receipt.append_id}`);
+    }
+    const agent = Object.hasOwn(fence, "transcriptAnchor");
+    const value: Record<string, unknown> = {
+      schemaVersion: 1,
+      sessionId,
+      requestId: String(receipt.append_id),
+      requestHash: String(receipt.request_digest),
+      result: agent
+        ? { result: durableResult, wakeCursor: Number(wake?.cursor ?? 0), replay: false }
+        : durableResult,
+      committedAt: Number(receipt.created_at),
+    };
+    if (agent) value.agent = {
+      runId: fence.runId,
+      turnId: fence.turnId,
+      generation: fence.generation,
+      transcriptAnchor: fence.transcriptAnchor,
+      requestDigest: `sha256:${receipt.request_digest}`,
+      entryIds: (durableResult as { changes?: Array<{ entryId: string }> }).changes
+        ?.map(({ entryId }) => entryId) ?? [],
+    };
+    operations.push({
+      collection: KERNEL_COLLECTIONS.transcriptReceipts,
+      id: kernelRecordId("transcript_receipt", `${sessionId}:${receipt.append_id}`),
+      value,
+      requireAbsent: true,
+    });
+  }
+  return operations;
+}
+
 export function encodeKernelSessionMigration(
   db: Database,
   sessionId: string,
@@ -327,6 +448,7 @@ export function encodeKernelSessionMigration(
       });
     }
   }
+  operations.push(...encodeTranscriptMigration(db, sessionId));
   const state = sourceRun(db, sessionId);
   const journalRows = operations.filter(
     (operation) => operation.collection === KERNEL_COLLECTIONS.changes,
