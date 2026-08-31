@@ -68,6 +68,7 @@ export class FeltDbCommandStore {
     prior?: StoredCommand;
     next: DurableCommandRecord;
     changeKind: string;
+    domainOperations?: AtomicTransactionOperationRequest[];
     effects?: DecisionEffect[];
     result: Result;
     now: number;
@@ -86,7 +87,7 @@ export class FeltDbCommandStore {
       observedHead: input.head,
       changeKind: input.changeKind,
       changePayload: { requestId: input.next.requestId },
-      domainOperations: [operation],
+      domainOperations: [operation, ...(input.domainOperations ?? [])],
       effects: input.effects,
       result: input.result,
       now: input.now,
@@ -196,6 +197,7 @@ export class FeltDbCommandStore {
     requestId: string,
     result: unknown,
     effects: DecisionEffect[] = [],
+    domainOperations: AtomicTransactionOperationRequest[] = [],
     now = Date.now(),
   ): Promise<void> {
     const [head, prior] = await Promise.all([
@@ -224,6 +226,7 @@ export class FeltDbCommandStore {
       prior,
       next,
       changeKind: `command:${prior.type}`,
+      domainOperations,
       effects,
       result: null,
       now,
@@ -236,6 +239,7 @@ export class FeltDbCommandStore {
     requestId: string,
     error: string,
     retryable = false,
+    domainOperations: AtomicTransactionOperationRequest[] = [],
     now = Date.now(),
   ): Promise<void> {
     const [head, prior] = await Promise.all([
@@ -262,6 +266,7 @@ export class FeltDbCommandStore {
       prior,
       next,
       changeKind: `command:${prior.type}`,
+      domainOperations,
       result: null,
       now,
     });

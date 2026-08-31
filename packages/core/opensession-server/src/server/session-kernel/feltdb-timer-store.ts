@@ -6,6 +6,7 @@ import {
   kernelRecordId,
   type SessionKernelTimerRecord,
 } from "./feltdb-decision-store";
+import { FeltDbCommandStore } from "./feltdb-command-store";
 
 type VersionedTimer = SessionKernelTimerRecord & { __version: number };
 
@@ -55,7 +56,7 @@ export function nextFeltDbTimerFailure(
 export class FeltDbTimerStore {
   constructor(private readonly decisions: FeltDbSessionDecisionStore) {}
 
-  private record(sessionId: string, timerId: string): Promise<VersionedTimer | undefined> {
+  record(sessionId: string, timerId: string): Promise<VersionedTimer | undefined> {
     return this.decisions.record(KERNEL_COLLECTIONS.timers, timerRecordId(sessionId, timerId));
   }
 
@@ -138,6 +139,37 @@ export class FeltDbTimerStore {
     });
   }
 
+  async settleSuccess(
+    commandId: string,
+    sessionId: string,
+    timerId: string,
+    token: string,
+    now = Date.now(),
+  ): Promise<boolean> {
+    const [head, prior] = await Promise.all([
+      this.decisions.head(sessionId),
+      this.record(sessionId, timerId),
+    ]);
+    if (!head) throw new Error(`Session ${sessionId} has no FeltDB authority`);
+    if (!prior || prior.token !== token) return false;
+    return this.decisions.commitDecision({
+      transactionId: `opensession:kernel:timer:settle:${sessionId}:${commandId}`,
+      operationId: commandId,
+      operationKind: "timer_settle",
+      inputHash: digest({ sessionId, timerId, token }),
+      observedHead: head,
+      changeKind: "timer_completed",
+      changePayload: { timerId },
+      domainOperations: [{
+        collection: KERNEL_COLLECTIONS.timers,
+        id: prior.recordId,
+        ifVersion: prior.__version,
+      }],
+      result: true,
+      now,
+    });
+  }
+
   async fail(
     commandId: string,
     sessionId: string,
@@ -175,5 +207,119 @@ export class FeltDbTimerStore {
       result,
       now,
     });
+  }
+}
+
+/** Timer execution receipts and timer state settle in the same FeltDB decision. */
+export class FeltDbTimerExecutionStore {
+  constructor(
+    private readonly timers: FeltDbTimerStore,
+    private readonly commands: FeltDbCommandStore,
+  ) {}
+
+  async begin(
+    logicalId: string,
+    input: { sessionId: string; timerId: string; token: string },
+  ): Promise<"execute" | "completed" | "missing"> {
+    if (!input.timerId || !input.token) throw new Error("Invalid timer execution intent");
+    const timer = await this.timers.record(input.sessionId, input.timerId);
+    if (!timer || timer.token !== input.token) return "missing";
+    const requestId = `timer:${input.timerId}:${input.token}`;
+    const existing = await this.commands.command(input.sessionId, requestId);
+    if (existing?.status === "completed") {
+      await this.timers.settleSuccess(
+        `${logicalId}:settle-replay`,
+        input.sessionId,
+        input.timerId,
+        input.token,
+      );
+      return "completed";
+    }
+    if (
+      existing?.status === "indeterminate" ||
+      (existing?.status === "failed" && (!existing.retryable || !existing.replaySafe))
+    ) throw new Error(existing.error || "Timer execution failed");
+    await this.commands.accept(`${logicalId}:admit`, {
+      sessionId: input.sessionId,
+      requestId,
+      type: "timer_fired",
+      payload: {
+        timerId: timer.timerId,
+        kind: timer.kind,
+        dueAt: timer.dueAt,
+        payload: timer.payload,
+      },
+      replaySafe: true,
+    });
+    await this.commands.markProcessing(
+      `${logicalId}:processing`,
+      input.sessionId,
+      requestId,
+    );
+    return "execute";
+  }
+
+  async complete(
+    logicalId: string,
+    input: { sessionId: string; timerId: string; token: string },
+  ): Promise<boolean> {
+    const timer = await this.timers.record(input.sessionId, input.timerId);
+    if (!timer || timer.token !== input.token) return false;
+    const requestId = `timer:${input.timerId}:${input.token}`;
+    const command = await this.commands.command(input.sessionId, requestId);
+    if (!command || command.type !== "timer_fired")
+      throw new Error("Timer execution receipt is missing");
+    await this.commands.complete(
+      logicalId,
+      input.sessionId,
+      requestId,
+      true,
+      [],
+      [{
+        collection: KERNEL_COLLECTIONS.timers,
+        id: timer.recordId,
+        ifVersion: timer.__version,
+      }],
+    );
+    return true;
+  }
+
+  async fail(
+    logicalId: string,
+    input: {
+      sessionId: string;
+      timerId: string;
+      token: string;
+      error: string;
+      maxAttempts: number;
+    },
+    now = Date.now(),
+  ): Promise<{ updated: boolean; deadLetteredNow: boolean }> {
+    if (!Number.isSafeInteger(input.maxAttempts) || input.maxAttempts < 1)
+      throw new Error("Invalid timer attempt limit");
+    const timer = await this.timers.record(input.sessionId, input.timerId);
+    if (!timer || timer.token !== input.token)
+      return { updated: false, deadLetteredNow: false };
+    const requestId = `timer:${input.timerId}:${input.token}`;
+    const command = await this.commands.command(input.sessionId, requestId);
+    if (!command || command.type !== "timer_fired")
+      throw new Error("Timer execution receipt is missing");
+    const { __version: _, ...current } = timer;
+    const next = nextFeltDbTimerFailure(current, input.error, input.maxAttempts, now);
+    await this.commands.fail(
+      logicalId,
+      input.sessionId,
+      requestId,
+      input.error,
+      true,
+      [{
+        collection: KERNEL_COLLECTIONS.timers,
+        id: timer.recordId,
+        value: next,
+        ifVersion: timer.__version,
+      }],
+      now,
+    );
+    return { updated: true, deadLetteredNow: next.status === "dead_letter" };
   }
 }
