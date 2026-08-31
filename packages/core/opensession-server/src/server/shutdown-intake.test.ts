@@ -10,9 +10,8 @@ describe("shutdown intake fence", () => {
     const shutdown = source.indexOf("if (isShuttingDown())", run);
     expect(source.indexOf("persistAutomationIntent({", run)).toBeLessThan(shutdown);
     expect(shutdown).toBeLessThan(source.indexOf("runningCounts.set", run));
-    expect(source).toContain(
-      "schedulerInterval = setInterval(() => {\n    if (isShuttingDown()) return;",
-    );
+    expect(source).toContain("schedulerInterval = setInterval(() => {");
+    expect(source).toContain("void (async () => {\n    if (isShuttingDown()) return;");
     expect(
       source.match(
         /return Response\.json\(\{ error: "Server restarting" \}, \{ status: 503 \}\)/g,

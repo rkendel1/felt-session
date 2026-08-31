@@ -257,7 +257,7 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
           owner?: string;
           workspaceId?: string;
         }) => {
-          const res = createAutomation({
+          const res = await createAutomation({
             name: args.name,
             prompt: args.prompt,
             schedule: args.schedule || "",
@@ -354,7 +354,7 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
           workspaceId?: string;
         }) => {
           const { id, ...patch } = args;
-          const res = updateAutomation(id, patch);
+          const res = await updateAutomation(id, patch);
           if ("error" in res) return text(`Couldn't update it: ${res.error}`);
           const runsIn = res.repo || defaultRepoId();
           return text(
@@ -450,7 +450,7 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
             if (mcpServers) mcpServers = Array.from(new Set([...mcpServers, "slack"]));
           }
 
-          const res = createAutomation({
+          const res = await createAutomation({
             name: args.name?.trim() || `Reminder: ${args.prompt.trim().slice(0, 48)}`,
             prompt,
             schedule: "",

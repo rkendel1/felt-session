@@ -48,7 +48,7 @@ import { isTrustedGithubLogin, isTrustedUser } from "../../server/shared/user-ma
 const GITHUB_WEBHOOK_SECRET = process.env.GITHUB_WEBHOOK_SECRET || "";
 
 /** Seed the review automation (disabled) if it doesn't exist yet. Keyed on eventKey. */
-function ensureReviewAutomation(): void {
+async function ensureReviewAutomation(): Promise<void> {
   const existing = listAutomations().find((a) => a.eventKey === PR_EVENT_KEY);
   if (existing) {
     // One-time backfill: this record predates PR flows reading `mcpServers`
@@ -57,14 +57,14 @@ function ensureReviewAutomation(): void {
     // renders unset as "all connectors", which would now be a lie. Write the
     // effective list so the settings screen matches what the runs actually get.
     if (existing.mcpServers === undefined) {
-      saveAutomation({ ...existing, mcpServers: [...DEFAULT_GITHUB_FLOW_MCP_SERVERS] });
+      await saveAutomation({ ...existing, mcpServers: [...DEFAULT_GITHUB_FLOW_MCP_SERVERS] });
       console.log(
         `[github] Backfilled review automation MCP allowlist: ${DEFAULT_GITHUB_FLOW_MCP_SERVERS.join(", ")}`,
       );
     }
     return;
   }
-  const created = createAutomation({
+  const created = await createAutomation({
     name: REVIEW_AUTOMATION_NAME,
     prompt: DEFAULT_REVIEW_PROMPT,
     schedule: "",
@@ -78,7 +78,7 @@ function ensureReviewAutomation(): void {
     return;
   }
   // Seed it OFF — start label-only; flip on in the Automations UI to review every non-draft PR.
-  saveAutomation({ ...created, enabled: false });
+  await saveAutomation({ ...created, enabled: false });
   console.log(`[github] Seeded review automation "${REVIEW_AUTOMATION_NAME}" (disabled)`);
 }
 
@@ -89,12 +89,12 @@ function ensureReviewAutomation(): void {
  * replacement for the old Mintlify-hosted docs-sync workflow. Toggle it in the
  * Automations UI.
  */
-function ensureDocsSyncAutomation(): void {
+async function ensureDocsSyncAutomation(): Promise<void> {
   const prompt = configuredIntegration("github").docsSyncPrompt;
   if (typeof prompt !== "string" || !prompt.trim()) return;
   const existing = listAutomations().find((a) => a.eventKey === PR_MERGED_EVENT_KEY);
   if (existing) return;
-  const created = createAutomation({
+  const created = await createAutomation({
     name: DOCS_SYNC_AUTOMATION_NAME,
     prompt: prompt.trim(),
     schedule: "",
@@ -360,8 +360,8 @@ export class GithubAgent implements AgentModule {
       console.warn("[github] GITHUB_WEBHOOK_SECRET unset — PR webhooks won't be verified");
     }
     if (this.onSessionInvalidate) setGithubSessionInvalidate(this.onSessionInvalidate);
-    ensureReviewAutomation();
-    ensureDocsSyncAutomation();
+    await ensureReviewAutomation();
+    await ensureDocsSyncAutomation();
     await recoverInterrupted();
     startPendingMentionRetry();
     // Safety net under all of the above: the webhook path is fire-once, so

@@ -93,7 +93,7 @@ export async function handleAutomationsRoutes(
 		const body = await req.json().catch(() => null);
 		if (!body)
 			return Response.json({ error: "Invalid JSON" }, { status: 400 });
-		const result = createAutomation(body);
+		const result = await createAutomation(body);
 		if ("error" in result) return Response.json(result, { status: 400 });
 		return Response.json(result);
 	}
@@ -133,7 +133,7 @@ export async function handleAutomationsRoutes(
 		const body = await req.json().catch(() => null);
 		if (!body)
 			return Response.json({ error: "Invalid JSON" }, { status: 400 });
-		const result = updateAutomation(autoMatch[1], body);
+		const result = await updateAutomation(autoMatch[1], body);
 		if ("error" in result) return Response.json(result, { status: 400 });
 		return Response.json(result);
 	}

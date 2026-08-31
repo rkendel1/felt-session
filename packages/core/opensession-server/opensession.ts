@@ -12,7 +12,7 @@ import { initializeManagedAccountHealth, startAccountHealthMonitor } from "./src
 import { initializeManagedGithubLimits } from "./src/server/github-limit";
 import { initializeManagedAutomationInputs } from "./src/server/automation-inputs";
 import { initializeManagedAutomationOutputs } from "./src/server/automation-outputs";
-import { initializeManagedAutomationIntents } from "./src/server/automations";
+import { initializeManagedAutomationIntents, initializeManagedAutomations } from "./src/server/automations";
 import { startAnalyticsPrewarm } from "./src/server/analytics";
 import { startDiskGc } from "./src/server/disk-gc";
 import { startWorktreeReaper } from "./src/server/worktree-reaper";
@@ -209,6 +209,7 @@ if (!g.__opensessionBooted) {
 	await initializeManagedGithubLimits(db);
 	await initializeManagedAutomationInputs(db);
 	await initializeManagedAutomationOutputs(db);
+	await initializeManagedAutomations(db);
 	await initializeManagedAutomationIntents(db);
 	await initializeManagedWorkspaces(db);
 	await initializeManagedTodos(db);
@@ -791,7 +792,7 @@ if (!g.__opensessionBooted) {
 	// records and anything created through the UI are unaffected.
 	if (configuredIntegration("seeds").enabled === true) {
 		try {
-			ensureConfiguredAutomations();
+			await ensureConfiguredAutomations();
 		} catch (e) {
 			console.error("[seeds] Failed to seed instance automations:", e);
 		}

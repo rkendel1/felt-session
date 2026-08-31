@@ -35,7 +35,7 @@ export interface SelfImproveContext {
   updateOwnPrompt: (
     newPrompt: string,
     reason: string
-  ) => { ok: true; backupPath: string } | { ok: false; error: string };
+  ) => Promise<{ ok: true; backupPath: string } | { ok: false; error: string }>;
 }
 
 function text(s: string) {
@@ -67,7 +67,7 @@ export function createSelfImproveMcpServer(ctx: SelfImproveContext) {
       ),
       tool(
         "update_own_prompt",
-        "Replace your own automation prompt (self-improvement). Pass the COMPLETE new prompt — this is a full replacement, not a patch — and a one-line reason (it lands in the audit log). A timestamped backup of the old record is written first, so a human can revert with one copy. Takes effect on the NEXT run. Improve incrementally and conservatively: keep the prompt's overall structure and every guardrail/safety section intact — a prompt that loses its constraints is a regression, not an improvement. If you're unsure whether a change is wanted, ask in your Slack thread instead of applying it.",
+        "Replace your own automation prompt (self-improvement). Pass the COMPLETE new prompt — this is a full replacement, not a patch — and a one-line reason (it lands in the audit log). A timestamped managed backup of the old record is written first. Takes effect on the NEXT run. Improve incrementally and conservatively: keep the prompt's overall structure and every guardrail/safety section intact — a prompt that loses its constraints is a regression, not an improvement. If you're unsure whether a change is wanted, ask in your Slack thread instead of applying it.",
         {
           new_prompt: z
             .string()
@@ -77,7 +77,7 @@ export function createSelfImproveMcpServer(ctx: SelfImproveContext) {
             .describe("One line: what you changed and why (audited)."),
         },
         async (args: { new_prompt: string; reason: string }) => {
-          const res = ctx.updateOwnPrompt(args.new_prompt, args.reason);
+          const res = await ctx.updateOwnPrompt(args.new_prompt, args.reason);
           if (!res.ok) return text(res.error);
           return text(
             `Prompt updated (takes effect next run). Backup: \`${res.backupPath}\`. Mention this change — and why — in your Slack post/reply so a human sees it.`

@@ -1,13 +1,12 @@
 /**
  * Automations: cron-scheduled agent sessions, Devin-style.
- * Records live in ~/.opensession-automations/<id>.json; each run creates a
+ * Records live in managed FeltDB; each run creates a
  * normal opensession session so it shows up in the sessions list and UI.
  */
 import { randomUUIDv7 } from "bun";
 import { OPENSESSION_SESSIONS_DIR , newSessionId} from "./paths";
-import { mkdirSync, readdirSync, readFileSync, unlinkSync, existsSync, rmSync } from "fs";
+import { readdirSync, readFileSync, existsSync, rmSync } from "fs";
 import { join } from "path";
-import { writeJsonAtomic } from "./shared/atomic-write";
 import {
   RequestBodyTooLargeError,
   readRequestTextWithinLimit,
@@ -297,22 +296,50 @@ export interface Automation {
   lastTrigger?: "cron" | "webhook" | "manual" | "event";
   /** Run history ledger, newest first, capped at RUNS_CAP entries. */
   runs?: AutomationRun[];
+  __version?: number;
 }
 
 export interface AutomationWithNext extends Automation {
   nextRunAt: string | null;
 }
 
-mkdirSync(AUTOMATIONS_DIR, { recursive: true });
-
 // ── Store ────────────────────────────────────────────────────
+
+const AUTOMATIONS_COLLECTION = "opensession_automations";
+const AUTOMATION_BACKUPS_COLLECTION = "opensession_automation_backups";
+const AUTOMATIONS_MIGRATION = "automation-files-to-managed-feltdb-v1";
+let automationsDb: StateFirstDB | undefined;
+const automationRecords = new Map<string, Automation>();
+
+export async function initializeManagedAutomations(
+  db: StateFirstDB = automationsDb ?? managedFeltDb(),
+): Promise<void> {
+  automationsDb = db;
+  const migrations = db.collection<{ id: string }>("opensession_migrations");
+  if (!await migrations.get(AUTOMATIONS_MIGRATION)) {
+    const records: Automation[] = [];
+    const backups: Array<{ id: string; automation: Automation; importedAt: string }> = [];
+    if (existsSync(AUTOMATIONS_DIR)) for (const file of readdirSync(AUTOMATIONS_DIR)) {
+      if (!file.endsWith(".json") && !file.includes(".json.bak.")) continue;
+      const parsed = JSON.parse(readFileSync(join(AUTOMATIONS_DIR, file), "utf8")) as Automation;
+      if (file.endsWith(".json")) records.push(parsed);
+      else if (file.includes(".json.bak.")) backups.push({ id: file, automation: parsed, importedAt: new Date().toISOString() });
+    }
+    await db.transaction((tx) => {
+      for (const record of records) tx.collection<Automation>(AUTOMATIONS_COLLECTION).set(record.id, record, { requireAbsent: true });
+      for (const backup of backups) tx.collection(AUTOMATION_BACKUPS_COLLECTION).set(backup.id, backup, { requireAbsent: true });
+      tx.collection("opensession_migrations").set(AUTOMATIONS_MIGRATION,
+        { id: AUTOMATIONS_MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
+    }, { transactionId: `opensession:migration:${AUTOMATIONS_MIGRATION}` });
+  }
+  if (existsSync(AUTOMATIONS_DIR)) rmSync(AUTOMATIONS_DIR, { recursive: true, force: true });
+  automationRecords.clear();
+  for (const record of await db.collection<Automation>(AUTOMATIONS_COLLECTION).all()) automationRecords.set(record.id, record);
+}
 
 export function listAutomations(): AutomationWithNext[] {
   const out: AutomationWithNext[] = [];
-  for (const file of readdirSync(AUTOMATIONS_DIR)) {
-    if (!file.endsWith(".json")) continue;
-    try {
-      const a = JSON.parse(readFileSync(`${AUTOMATIONS_DIR}/${file}`, "utf-8")) as Automation;
+  for (const a of automationRecords.values()) {
       out.push({
         ...a,
         nextRunAt: !a.enabled
@@ -323,24 +350,27 @@ export function listAutomations(): AutomationWithNext[] {
               ? nextRun(a.schedule)?.toISOString() || null
               : null,
       });
-    } catch {}
   }
   out.sort((a, b) => a.name.localeCompare(b.name));
   return out;
 }
 
 export function getAutomation(id: string): Automation | null {
-  const path = `${AUTOMATIONS_DIR}/${id}.json`;
-  if (!existsSync(path)) return null;
-  try {
-    return JSON.parse(readFileSync(path, "utf-8"));
-  } catch {
-    return null;
-  }
+  return automationRecords.get(id) ?? null;
 }
 
-export function saveAutomation(a: Automation): void {
-  writeJsonAtomic(`${AUTOMATIONS_DIR}/${a.id}.json`, a);
+export async function saveAutomation(a: Automation): Promise<Automation> {
+  const current = automationRecords.get(a.id);
+  const db = automationsDb ?? managedFeltDb();
+  await db.transaction((tx) => {
+    tx.collection<Automation>(AUTOMATIONS_COLLECTION).set(a.id, a,
+      current ? { ifVersion: a.__version } : { requireAbsent: true });
+  }, { transactionId: `opensession:automation:${a.id}:${crypto.randomUUID()}` });
+  const saved = await db.collection<Automation>(AUTOMATIONS_COLLECTION).get(a.id);
+  if (!saved) throw new Error(`Automation ${a.id} disappeared after save`);
+  automationRecords.set(a.id, saved);
+  Object.assign(a, saved);
+  return a;
 }
 
 function sanitizeMcpList(list?: unknown): string[] | undefined {
@@ -659,7 +689,7 @@ function applyAutomationConfig(
   return normalizeAutomation(next, touched);
 }
 
-export function createAutomation(input: {
+export async function createAutomation(input: {
   name: string;
   prompt: string;
   schedule: string;
@@ -691,7 +721,7 @@ export function createAutomation(input: {
   inputs?: AutomationInput[];
   outputs?: AutomationOutput[];
   webhookEnabled?: boolean;
-}): Automation | { error: string } {
+}): Promise<Automation | { error: string }> {
   const base: Automation = {
     id: `auto-${randomUUIDv7()}`,
     name: "",
@@ -705,13 +735,12 @@ export function createAutomation(input: {
   };
   const a = applyAutomationConfig(base, input as Record<string, unknown>);
   if ("error" in a) return a;
-  saveAutomation(a);
-  return a;
+  return await saveAutomation(a);
 }
 
 /** Create deployment-provided automations once. Source ships no company-
  * specific routines; instances opt in with `integrations.seeds.automations`. */
-export function ensureConfiguredAutomations(): void {
+export async function ensureConfiguredAutomations(): Promise<void> {
   const raw = configuredIntegration("seeds").automations;
   if (!Array.isArray(raw)) return;
   for (const candidate of raw) {
@@ -728,7 +757,7 @@ export function ensureConfiguredAutomations(): void {
           (!eventKey && automation.name === name),
       )
     ) continue;
-    const result = createAutomation({
+    const result = await createAutomation({
       ...(value as any),
       name,
       prompt,
@@ -749,18 +778,17 @@ export function ensureConfiguredAutomations(): void {
   }
 }
 
-export function updateAutomation(
+export async function updateAutomation(
   id: string,
   patch: Partial<Pick<Automation, "name" | "prompt" | "schedule" | "runOnceAt" | "mode" | "enabled" | "eventKey" | "mcpServers" | "repo" | "prReviewer" | "owner" | "workspaceId" | "selfImprove" | "workflows" | "claudeCliEnv" | "codexCliEnv" | "model" | "fallbackModel" | "accountId" | "accountStrict" | "usageCredits" | "sandbox" | "grafanaPoll" | "slackWatch" | "inputs" | "outputs" | "webhookEnabled">>
-): Automation | { error: string } {
+): Promise<Automation | { error: string }> {
   const a = getAutomation(id);
   if (!a) return { error: "Automation not found" };
   const next = applyAutomationConfig(a, patch as Record<string, unknown>);
   if ("error" in next) return next;
   // Backfill secrets for automations created before webhook support
   if (!next.webhookSecret) next.webhookSecret = generateSecret();
-  saveAutomation(next);
-  return next;
+  return await saveAutomation(next);
 }
 
 /**
@@ -770,11 +798,11 @@ export function updateAutomation(
  * undone. Length floor guards against self-lobotomy (a degenerate rewrite
  * that drops the prompt's structure and guardrails).
  */
-function updateAutomationPromptSelf(
+async function updateAutomationPromptSelf(
   id: string,
   newPrompt: string,
   reason: string
-): { ok: true; backupPath: string } | { ok: false; error: string } {
+): Promise<{ ok: true; backupPath: string } | { ok: false; error: string }> {
   const a = getAutomation(id);
   if (!a) return { ok: false, error: "Automation not found." };
   const prompt = (newPrompt || "").trim();
@@ -786,9 +814,13 @@ function updateAutomationPromptSelf(
   }
   if (!reason?.trim()) return { ok: false, error: "A one-line reason is required (audited)." };
   const stamp = new Date().toISOString().slice(0, 16).replace(/[-T:]/g, "");
-  const backupPath = `${AUTOMATIONS_DIR}/${id}.json.bak.self-${stamp}`;
-  writeJsonAtomic(backupPath, a);
-  const res = updateAutomation(id, { prompt });
+  const backupPath = `feltdb://${AUTOMATION_BACKUPS_COLLECTION}/${id}:self:${stamp}`;
+  const db = automationsDb ?? managedFeltDb();
+  await db.transaction((tx) => {
+    tx.collection(AUTOMATION_BACKUPS_COLLECTION)
+      .set(`${id}:self:${stamp}`, { id: `${id}:self:${stamp}`, automation: a, reason, createdAt: new Date().toISOString() }, { requireAbsent: true });
+  }, { transactionId: `opensession:automation-backup:${id}:self:${stamp}` });
+  const res = await updateAutomation(id, { prompt });
   if ("error" in res) return { ok: false, error: res.error };
   audit({
     msg: "automation_self_update",
@@ -974,9 +1006,13 @@ export function automationResumeMcpForSession(
 }
 
 export async function deleteAutomation(id: string): Promise<boolean> {
-  const path = `${AUTOMATIONS_DIR}/${id}.json`;
-  if (!existsSync(path)) return false;
-  unlinkSync(path);
+  const current = automationRecords.get(id);
+  if (!current) return false;
+  const db = automationsDb ?? managedFeltDb();
+  await db.transaction((tx) => {
+    tx.collection<Automation>(AUTOMATIONS_COLLECTION).delete(id, { ifVersion: current.__version });
+  }, { transactionId: `opensession:automation:${id}:delete` });
+  automationRecords.delete(id);
   await deleteAutomationInputState(id);
   await deleteAutomationOutputState(id);
   return true;
@@ -991,36 +1027,46 @@ const RUNS_CAP = 50;
 /** Prepend a run-ledger entry (plus the legacy lastRun* mirror fields) on a
  *  fresh read of the automation — event/webhook runs can overlap, so never
  *  write ledger updates from a stale copy. */
-function recordRunStart(id: string, run: AutomationRun): void {
-  const fresh = getAutomation(id);
-  if (!fresh) return;
-  saveAutomation({
-    ...fresh,
-    lastRunAt: run.at,
-    lastRunSessionId: run.sessionId,
-    lastRunStatus: "running",
-    lastRunError: undefined,
-    lastTrigger: run.trigger,
-    runs: (fresh.runs || []).some((entry) => entry.sessionId === run.sessionId)
-      ? (fresh.runs || []).map((entry) =>
-          entry.sessionId === run.sessionId ? { ...entry, status: "running" as const } : entry,
-        )
-      : [run, ...(fresh.runs || [])].slice(0, RUNS_CAP),
-  });
+async function recordRunStart(id: string, run: AutomationRun): Promise<void> {
+  for (;;) {
+    const fresh = getAutomation(id);
+    if (!fresh) return;
+    try {
+      await saveAutomation({
+        ...fresh,
+        lastRunAt: run.at,
+        lastRunSessionId: run.sessionId,
+        lastRunStatus: "running",
+        lastRunError: undefined,
+        lastTrigger: run.trigger,
+        runs: (fresh.runs || []).some((entry) => entry.sessionId === run.sessionId)
+          ? (fresh.runs || []).map((entry) => entry.sessionId === run.sessionId ? { ...entry, status: "running" as const } : entry)
+          : [run, ...(fresh.runs || [])].slice(0, RUNS_CAP),
+      });
+      return;
+    } catch (error) {
+      if (getAutomation(id)?.__version === fresh.__version) throw error;
+    }
+  }
 }
 
 /** Settle the ledger entry for `sessionId` (matched by id, not position, so
  *  overlapping runs settle independently). */
-function settleRun(id: string, sessionId: string, patch: Pick<AutomationRun, "status" | "error" | "durationMs">): void {
-  const fresh = getAutomation(id);
-  if (!fresh) return;
-  saveAutomation({
-    ...fresh,
-    ...(fresh.lastRunSessionId === sessionId
-      ? { lastRunStatus: patch.status, lastRunError: patch.error }
-      : {}),
-    runs: (fresh.runs || []).map((r) => (r.sessionId === sessionId ? { ...r, ...patch } : r)),
-  });
+async function settleRun(id: string, sessionId: string, patch: Pick<AutomationRun, "status" | "error" | "durationMs">): Promise<void> {
+  for (;;) {
+    const fresh = getAutomation(id);
+    if (!fresh) return;
+    try {
+      await saveAutomation({
+        ...fresh,
+        ...(fresh.lastRunSessionId === sessionId ? { lastRunStatus: patch.status, lastRunError: patch.error } : {}),
+        runs: (fresh.runs || []).map((r) => (r.sessionId === sessionId ? { ...r, ...patch } : r)),
+      });
+      return;
+    } catch (error) {
+      if (getAutomation(id)?.__version === fresh.__version) throw error;
+    }
+  }
 }
 
 /**
@@ -1037,7 +1083,7 @@ export async function settleResumedAutomationRun(sessionId: string, error: strin
   for (const automation of listAutomations()) {
     const run = (automation.runs || []).find((r) => r.sessionId === sessionId);
     if (!run || run.status !== "running") continue;
-    settleRun(automation.id, sessionId, {
+    await settleRun(automation.id, sessionId, {
       status: error ? "error" : "ok",
       error: error || undefined,
       durationMs: Math.max(0, Date.now() - new Date(run.at).getTime()),
@@ -1240,7 +1286,7 @@ export async function resumePendingAutomationRuns(
         continue;
       }
       if (intent.terminalAt) {
-        settleRun(automation.id, intent.sessionId, {
+        await settleRun(automation.id, intent.sessionId, {
           status: intent.terminalError ? "error" : "ok",
           error: intent.terminalError,
           durationMs: Math.max(0, Date.parse(intent.terminalAt) - Date.parse(intent.acceptedAt)),
@@ -1384,7 +1430,7 @@ export async function runAutomation(
       cwd = sandbox.cwd;
     }
 
-    recordRunStart(automation.id, {
+    await recordRunStart(automation.id, {
       at: startedAt.toISOString(),
       sessionId: bksId,
       trigger,
@@ -1750,7 +1796,7 @@ export async function runAutomation(
     }
 
     await recordAutomationIntentTerminal(bksId, errorMsg || undefined);
-    settleRun(automation.id, bksId, {
+    await settleRun(automation.id, bksId, {
       status: errorMsg ? "error" : "ok",
       error: errorMsg || undefined,
       durationMs: Date.now() - startedAt.getTime(),
@@ -1763,7 +1809,7 @@ export async function runAutomation(
     );
   } catch (e: any) {
     console.error(`[automations] "${automation.name}" failed:`, e);
-    settleRun(automation.id, bksId, {
+    await settleRun(automation.id, bksId, {
       status: "error",
       error: e.message || String(e),
       durationMs: Date.now() - startedAt.getTime(),
@@ -1880,11 +1926,15 @@ export function fireAutomationsForEvent(
 
 let schedulerInterval: ReturnType<typeof setInterval> | null = null;
 let lastFiredMinute = "";
+let schedulerTickRunning = false;
 
 export function startScheduler(onSessionCreated?: (sessionId: string) => void): void {
   if (schedulerInterval) return;
 
   schedulerInterval = setInterval(() => {
+    if (schedulerTickRunning) return;
+    schedulerTickRunning = true;
+    void (async () => {
     if (isShuttingDown()) return;
     const now = new Date();
     const minuteKey = now.toISOString().slice(0, 16);
@@ -1900,7 +1950,7 @@ export function startScheduler(onSessionCreated?: (sessionId: string) => void): 
       // never double-fire on a later tick; the record is deleted once it settles.
       if (automation.runOnceAt) {
         if (Date.parse(automation.runOnceAt) <= now.getTime()) {
-          saveAutomation({ ...automation, runOnceAt: undefined, enabled: false });
+          await saveAutomation({ ...automation, runOnceAt: undefined, enabled: false });
           const osSessionId = newSessionId();
           void runAutomation(
             { ...automation, runOnceAt: undefined, enabled: false },
@@ -1924,6 +1974,9 @@ export function startScheduler(onSessionCreated?: (sessionId: string) => void): 
         void runAutomation(automation, onSessionCreated, { trigger: "cron" });
       }
     }
+    })()
+      .catch((error) => console.error("[automations] Scheduler tick failed:", error))
+      .finally(() => { schedulerTickRunning = false; });
   }, 20_000);
 
   console.log("[automations] Scheduler started (20s tick, UTC cron)");
@@ -1932,7 +1985,7 @@ export function startScheduler(onSessionCreated?: (sessionId: string) => void): 
 // ── Webhook trigger ──────────────────────────────────────────
 // POST /automations/<id>/<secret> on the fail-closed public ingress gateway.
 // The secret in the path is the only auth, so it's
-// long-random and rotatable by editing the automation file.
+// long-random and rotatable by updating the automation record.
 
 export function getWebhookRoutes(
   onSessionCreated?: (sessionId: string) => void
