@@ -213,6 +213,24 @@ export function encodeKernelSessionMigration(
           : { deadLetteredAt: Number(row.dead_lettered_at) }),
         createdAt: Number(row.created_at),
       };
+      else if (plan.table === "session_kernel_commands") value = {
+        schemaVersion: 1,
+        sessionId,
+        requestId: String(row.request_id),
+        type: String(row.type),
+        payload: value.payload,
+        payloadHash: String(row.payload_hash),
+        status: String(row.status),
+        replaySafe: Number(row.replay_safe) === 1,
+        ...(row.retryable === null ? {} : { retryable: Number(row.retryable) === 1 }),
+        ...(row.result === null ? {} : { result: value.result }),
+        ...(row.result_hash === null ? {} : { resultHash: String(row.result_hash) }),
+        terminalFailure: Number(row.terminal_failure) === 1,
+        ...(row.acknowledged_at === null ? {} : { acknowledgedAt: Number(row.acknowledged_at) }),
+        ...(row.error === null ? {} : { error: String(row.error) }),
+        createdAt: Number(row.created_at),
+        updatedAt: Number(row.updated_at),
+      };
       else if (plan.table === "session_kernel_outbox") value = {
         schemaVersion: 1,
         recordId: id,
