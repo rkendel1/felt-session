@@ -6,8 +6,9 @@
  * pause GraphQL consumers without suppressing healthy REST acknowledgements,
  * metadata reads, comments, or writes. Backoffs survive process restarts.
  */
-import { existsSync, readFileSync } from "fs";
-import { writeFileAtomic } from "./shared/atomic-write";
+import { existsSync, readFileSync, unlinkSync } from "fs";
+import type { StateFirstDB } from "@feltdb/core";
+import { managedFeltDb } from "./managed-feltdb";
 import { stateDir } from "./paths";
 
 const PERSIST_PATH = stateDir("github-limit.json");
@@ -18,35 +19,75 @@ interface GhLimitState {
   probe: Record<GithubRateResource, Promise<void> | null>;
 }
 
-const state: GhLimitState = ((globalThis as any).__osGhLimitStateV2 ||= (() => {
-  const s: GhLimitState = {
+const state: GhLimitState = ((globalThis as any).__osGhLimitStateV2 ||= {
     backoffUntil: { graphql: 0, rest: 0 },
     probe: { graphql: null, rest: null },
-  };
-  try {
+  });
+
+interface PersistedGhLimit {
+  id: string;
+  backoffUntil: Record<GithubRateResource, number>;
+  __version?: number;
+}
+const GH_LIMIT_COLLECTION = "opensession_github_limits";
+const GH_LIMIT_ID = "rate-limits";
+const GH_LIMIT_MIGRATION = "github-limit-file-to-managed-feltdb-v1";
+let githubLimitDb: StateFirstDB | undefined;
+let persistedVersion: number | undefined;
+let persistTail: Promise<void> = Promise.resolve();
+
+export async function initializeManagedGithubLimits(
+  db: StateFirstDB = githubLimitDb ?? managedFeltDb(),
+): Promise<void> {
+  githubLimitDb = db;
+  const migrations = db.collection<{ id: string }>("opensession_migrations");
+  if (!await migrations.get(GH_LIMIT_MIGRATION)) {
+    const backoffUntil: PersistedGhLimit["backoffUntil"] = { graphql: 0, rest: 0 };
     if (existsSync(PERSIST_PATH)) {
-      const parsed = JSON.parse(readFileSync(PERSIST_PATH, "utf-8"));
-      // Migrate the old global gate conservatively to GraphQL. It was almost
-      // always set by gh porcelain, and must not keep suppressing healthy REST.
+      const parsed = JSON.parse(readFileSync(PERSIST_PATH, "utf8"));
       const saved = parsed?.resources || { graphql: parsed?.backoffUntil };
       for (const resource of ["graphql", "rest"] as const) {
-        const until = saved?.[resource];
-        if (typeof until === "number" && until > Date.now()) {
-          s.backoffUntil[resource] = until;
-          console.error(
-            `[github-limit] resuming persisted ${resource} backoff until ${new Date(until).toISOString()}`,
-          );
-        }
+        if (typeof saved?.[resource] === "number") backoffUntil[resource] = saved[resource];
       }
     }
-  } catch {}
-  return s;
-})());
+    await db.transaction((tx) => {
+      tx.collection<PersistedGhLimit>(GH_LIMIT_COLLECTION).set(GH_LIMIT_ID,
+        { id: GH_LIMIT_ID, backoffUntil }, { requireAbsent: true });
+      tx.collection("opensession_migrations").set(GH_LIMIT_MIGRATION,
+        { id: GH_LIMIT_MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
+    }, { transactionId: `opensession:migration:${GH_LIMIT_MIGRATION}` });
+  }
+  if (existsSync(PERSIST_PATH)) unlinkSync(PERSIST_PATH);
+  const saved = await db.collection<PersistedGhLimit>(GH_LIMIT_COLLECTION).get(GH_LIMIT_ID);
+  if (!saved) throw new Error("Managed GitHub rate-limit state is missing");
+  persistedVersion = saved.__version;
+  for (const resource of ["graphql", "rest"] as const) {
+    const until = saved.backoffUntil[resource];
+    state.backoffUntil[resource] = typeof until === "number" ? until : 0;
+    if (state.backoffUntil[resource] > Date.now()) console.error(
+      `[github-limit] resuming persisted ${resource} backoff until ${new Date(state.backoffUntil[resource]).toISOString()}`,
+    );
+  }
+}
 
 function persistBackoff(): void {
-  try {
-    writeFileAtomic(PERSIST_PATH, JSON.stringify({ resources: state.backoffUntil }) + "\n");
-  } catch {}
+  const write = persistTail.then(async () => {
+    const db = githubLimitDb ?? managedFeltDb();
+    const record: PersistedGhLimit = {
+      id: GH_LIMIT_ID,
+      backoffUntil: { ...state.backoffUntil },
+      ...(persistedVersion ? { __version: persistedVersion } : {}),
+    };
+    await db.transaction((tx) => {
+      tx.collection<PersistedGhLimit>(GH_LIMIT_COLLECTION).set(GH_LIMIT_ID, record,
+        persistedVersion ? { ifVersion: persistedVersion } : { requireAbsent: true });
+    }, { transactionId: `opensession:github-limit:${crypto.randomUUID()}` });
+    const saved = await db.collection<PersistedGhLimit>(GH_LIMIT_COLLECTION).get(GH_LIMIT_ID);
+    if (!saved) throw new Error("Managed GitHub rate-limit state disappeared after save");
+    persistedVersion = saved.__version;
+  });
+  persistTail = write.catch((error) =>
+    console.error("[github-limit] Failed to persist managed backoff:", error));
 }
 
 /** Defaults to GraphQL for existing gh-pr callers. REST callers must opt in. */

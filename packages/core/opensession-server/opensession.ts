@@ -9,6 +9,7 @@ import {
 	resumeInterruptedRuns,
 } from "./src/server/agent-runner";
 import { initializeManagedAccountHealth, startAccountHealthMonitor } from "./src/server/account-health";
+import { initializeManagedGithubLimits } from "./src/server/github-limit";
 import { startAnalyticsPrewarm } from "./src/server/analytics";
 import { startDiskGc } from "./src/server/disk-gc";
 import { startWorktreeReaper } from "./src/server/worktree-reaper";
@@ -202,6 +203,7 @@ if (!g.__opensessionBooted) {
 	const db = await initializeManagedFeltDb();
 	await initializeManagedRunJournal(db);
 	await initializeManagedAccountHealth(db);
+	await initializeManagedGithubLimits(db);
 	await initializeManagedWorkspaces(db);
 	await initializeManagedTodos(db);
 	await initializeManagedSlackSessions(db);
