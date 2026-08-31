@@ -13,9 +13,19 @@ import type {
   TranscriptOutline,
   TranscriptRangePage,
 } from "../transcript-store";
-import { handoffTranscriptEntryWeight, TranscriptAppendConflictError } from "../transcript-store";
+import {
+  handoffTranscriptEntryWeight,
+  TranscriptAppendAgentReceiptInvariantError,
+  TranscriptAppendConflictError,
+  TranscriptAppendReceiptMismatchError,
+} from "../transcript-store";
 import { v2SnapshotEntryWeight } from "../transcript-wire";
 import type {
+  AgentTranscriptAnchorV1,
+  AgentTranscriptDestinationAppendRequest,
+  AgentTranscriptReceiptQueryRequest,
+  AgentTranscriptReceiptValidationRequest,
+  AgentTranscriptReceiptRefV1,
   TranscriptActorRequest,
   TranscriptMutationResult,
   TranscriptWake,
@@ -64,6 +74,14 @@ type TranscriptReceipt = {
   requestId: string;
   requestHash: string;
   result: TranscriptMutationResult<unknown>;
+  agent?: {
+    runId: string;
+    turnId: string;
+    generation: number;
+    transcriptAnchor: Readonly<AgentTranscriptAnchorV1>;
+    requestDigest: `sha256:${string}`;
+    entryIds: string[];
+  };
   committedAt: number;
 };
 
@@ -129,8 +147,15 @@ export class FeltDbTranscriptStore {
   async applyMutation(
     request: LegacyMutation,
     now = Date.now(),
+    options?: {
+      requestHash?: string;
+      expectedTranscriptVersion?: number;
+      expectedTranscriptAbsent?: boolean;
+      requireInsertOnly?: boolean;
+      agent?: NonNullable<TranscriptReceipt["agent"]>;
+    },
   ): Promise<TranscriptMutationResult<unknown>> {
-    const requestHash = digest(request);
+    const requestHash = options?.requestHash ?? digest(request);
     const priorReceipt = await this.db.collection<TranscriptReceipt>(
       KERNEL_COLLECTIONS.transcriptReceipts,
     ).get(receiptId(request.sessionId, request.requestId));
@@ -148,6 +173,12 @@ export class FeltDbTranscriptStore {
     const prior = storedHead?.decisionEpoch === authority.decisionEpoch
       ? storedHead
       : initialHead(request.sessionId, authority.decisionEpoch);
+    if (
+      options?.expectedTranscriptVersion !== undefined &&
+      storedHead?.__version !== options.expectedTranscriptVersion
+    ) throw new TranscriptAppendReceiptMismatchError();
+    if (options?.expectedTranscriptAbsent && storedHead)
+      throw new TranscriptAppendReceiptMismatchError();
     if (request.expectedEpoch !== undefined && request.expectedEpoch !== prior.resetChangeSeq)
       throw new Error(
         `Transcript epoch fence rejected ${request.sessionId}: expected ${request.expectedEpoch}, current ${prior.resetChangeSeq}`,
@@ -172,6 +203,8 @@ export class FeltDbTranscriptStore {
     for (let index = 0; index < entries.length; index++) {
       const entry = structuredClone(entries[index]);
       const previous = existing[index];
+      if (options?.requireInsertOnly && previous)
+        throw new TranscriptAppendAgentReceiptInvariantError();
       const seq = previous?.seq ?? nextSeq++;
       const changeSeq = nextChangeSeq++;
       const ts = entryTs(entry, now);
@@ -276,6 +309,7 @@ export class FeltDbTranscriptStore {
             requestId: request.requestId,
             requestHash,
             result,
+            ...(options?.agent ? { agent: options.agent } : {}),
             committedAt: now,
           } satisfies TranscriptReceipt,
           requireAbsent: true,
@@ -283,6 +317,161 @@ export class FeltDbTranscriptStore {
       ],
     });
     return result;
+  }
+
+  private async assertAnchor(
+    sessionId: string,
+    anchor: Readonly<AgentTranscriptAnchorV1>,
+    requireCurrent: boolean,
+  ): Promise<StoredTranscriptHead | undefined> {
+    const head = await this.activeHead(sessionId);
+    const lastChangeSeq = Math.max(0, (head?.nextChangeSeq ?? 1) - 1);
+    if (
+      (requireCurrent && anchor.throughChangeSeq !== lastChangeSeq) ||
+      anchor.throughChangeSeq < (head?.resetChangeSeq ?? 0)
+    ) throw new TranscriptAppendReceiptMismatchError();
+    if (!head) {
+      if (anchor.throughChangeSeq !== 0 || anchor.entryIds.length !== 0)
+        throw new TranscriptAppendReceiptMismatchError();
+      return undefined;
+    }
+    const records = await Promise.all(anchor.entryIds.map((entryId) =>
+      this.db.collection<StoredTranscriptEvent>(KERNEL_COLLECTIONS.transcriptEvents)
+        .get(eventId(sessionId, head.decisionEpoch, head.transcriptEpoch, entryId))));
+    if (records.some((record) => !record || record.changeSeq > anchor.throughChangeSeq))
+      throw new TranscriptAppendReceiptMismatchError();
+    return head;
+  }
+
+  private agentRef(receipt: TranscriptReceipt): AgentTranscriptReceiptRefV1 {
+    const agent = receipt.agent;
+    const result = receipt.result.result as DestinationTranscriptAppendResult;
+    if (!agent || result.updated !== 0 || result.inserted !== result.changes.length)
+      throw new TranscriptAppendReceiptMismatchError();
+    return {
+      appendId: receipt.requestId,
+      entryIds: [...agent.entryIds],
+      firstSeq: result.firstSeq,
+      lastSeq: result.lastSeq,
+      throughChangeSeq: result.changes.at(-1)?.changeSeq ?? 0,
+      requestDigest: agent.requestDigest,
+    };
+  }
+
+  async appendAgentDestination(
+    request: AgentTranscriptDestinationAppendRequest,
+    now = Date.now(),
+  ): Promise<TranscriptMutationResult<AgentTranscriptReceiptRefV1>> {
+    const fence = {
+      sessionId: request.sessionId,
+      runId: request.runId,
+      turnId: request.turnId,
+      generation: request.generation,
+      transcriptAnchor: request.transcriptAnchor,
+    };
+    const rawDigest = createHash("sha256")
+      .update("opensession.transcript-destination-append.v1\0")
+      .update(canonical({ fence, entries: request.entries }))
+      .digest("hex");
+    const requestDigest = `sha256:${rawDigest}` as const;
+    const existing = await this.db.collection<TranscriptReceipt>(
+      KERNEL_COLLECTIONS.transcriptReceipts,
+    ).get(receiptId(request.sessionId, request.appendId));
+    if (existing) {
+      if (
+        existing.requestHash !== rawDigest || !existing.agent ||
+        existing.agent.requestDigest !== requestDigest
+      ) throw new TranscriptAppendConflictError(request.sessionId, request.appendId);
+      return {
+        result: this.agentRef(existing),
+        wakeCursor: existing.result.wakeCursor,
+        replay: true,
+      };
+    }
+    if (new Set(request.entries.map((entry) => entry.id)).size !== request.entries.length)
+      throw new TranscriptAppendAgentReceiptInvariantError();
+    const head = await this.assertAnchor(request.sessionId, request.transcriptAnchor, true);
+    const legacy: LegacyMutation = {
+      op: "append_destination",
+      sessionId: request.sessionId,
+      requestId: request.appendId,
+      appendId: request.appendId,
+      runId: request.runId,
+      turnId: request.turnId,
+      generation: request.generation,
+      entries: [...request.entries],
+    };
+    const result = await this.applyMutation(legacy, now, {
+      requestHash: rawDigest,
+      expectedTranscriptVersion: head?.__version,
+      expectedTranscriptAbsent: !head,
+      requireInsertOnly: true,
+      agent: {
+        runId: request.runId,
+        turnId: request.turnId,
+        generation: request.generation,
+        transcriptAnchor: request.transcriptAnchor,
+        requestDigest,
+        entryIds: request.entries.map((entry) => entry.id),
+      },
+    });
+    const receipt = await this.db.collection<TranscriptReceipt>(
+      KERNEL_COLLECTIONS.transcriptReceipts,
+    ).get(receiptId(request.sessionId, request.appendId));
+    if (!receipt?.agent) throw new TranscriptAppendReceiptMismatchError();
+    return { result: this.agentRef(receipt), wakeCursor: result.wakeCursor, replay: false };
+  }
+
+  async queryAgentReceipt(
+    request: AgentTranscriptReceiptQueryRequest,
+  ): Promise<AgentTranscriptReceiptRefV1 | null> {
+    const receipt = await this.db.collection<TranscriptReceipt>(
+      KERNEL_COLLECTIONS.transcriptReceipts,
+    ).get(receiptId(request.sessionId, request.appendId));
+    if (!receipt) return null;
+    if (
+      !receipt.agent || receipt.agent.runId !== request.runId ||
+      receipt.agent.turnId !== request.turnId ||
+      receipt.agent.generation !== request.generation ||
+      receipt.agent.requestDigest !== request.requestDigest ||
+      canonical(receipt.agent.transcriptAnchor) !== canonical(request.transcriptAnchor)
+    ) throw new TranscriptAppendReceiptMismatchError();
+    await this.assertAnchor(request.sessionId, request.transcriptAnchor, false);
+    const head = await this.activeHead(request.sessionId);
+    if (!head) throw new TranscriptAppendReceiptMismatchError();
+    const result = receipt.result.result as DestinationTranscriptAppendResult;
+    const records = await Promise.all(result.changes.map((change) =>
+      this.db.collection<StoredTranscriptEvent>(KERNEL_COLLECTIONS.transcriptEvents).get(
+        eventId(
+          request.sessionId,
+          head.decisionEpoch,
+          head.transcriptEpoch,
+          change.entryId,
+        ),
+      )));
+    if (records.some((record, index) =>
+      !record || record.seq !== result.changes[index].seq ||
+      record.changeSeq !== result.changes[index].changeSeq))
+      throw new TranscriptAppendReceiptMismatchError();
+    return this.agentRef(receipt);
+  }
+
+  async validateAgentReceipt(
+    request: AgentTranscriptReceiptValidationRequest,
+  ): Promise<AgentTranscriptReceiptRefV1 | null> {
+    const durable = await this.queryAgentReceipt({
+      op: "agent_query_destination_receipt",
+      sessionId: request.sessionId,
+      appendId: request.receipt.appendId,
+      runId: request.runId,
+      turnId: request.turnId,
+      generation: request.generation,
+      transcriptAnchor: request.transcriptAnchor,
+      requestDigest: request.receipt.requestDigest,
+    });
+    if (durable && canonical(durable) !== canonical(request.receipt))
+      throw new TranscriptAppendReceiptMismatchError();
+    return durable;
   }
 
   async importInfo(sessionId: string): Promise<TranscriptImportInfo | null> {
