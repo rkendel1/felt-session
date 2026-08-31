@@ -8,8 +8,6 @@
  * Generation is a one-shot Haiku call (see generateSessionTitle), fired in the
  * background at session creation so it never blocks the create path.
  */
-import { readFileSync, existsSync, unlinkSync } from "fs";
-import { OPENSESSION_SESSIONS_DIR } from "./paths";
 import { managedFeltDb } from "./managed-feltdb";
 import type { StateFirstDB } from "@feltdb/core";
 import { oneShot } from "./one-shot";
@@ -19,10 +17,7 @@ import {
 	nativeSessionMetadataEntries,
 } from "./managed-native-sessions";
 
-const REGISTRY_PATH = `${OPENSESSION_SESSIONS_DIR}/generated-titles.json`;
-
 const COLLECTION = "opensession_generated_titles";
-const MIGRATION = "generated-titles-json-to-managed-feltdb-v1";
 type StoredGeneratedTitle = { id: string; title: string; updatedAt: number };
 const cache = new Map<string, string>();
 let titleDb: StateFirstDB | undefined;
@@ -35,23 +30,6 @@ export async function initializeManagedGeneratedTitles(
 	authority: StateFirstDB = managedFeltDb(),
 ): Promise<void> {
 	titleDb = authority;
-	const migrations = authority.collection<{ id: string }>("opensession_migrations");
-	if (!await migrations.get(MIGRATION)) {
-		let legacy: Record<string, string> = {};
-		try {
-			if (existsSync(REGISTRY_PATH)) legacy = JSON.parse(readFileSync(REGISTRY_PATH, "utf8"));
-		} catch {}
-		for (const [id, title] of Object.entries(legacy)) {
-			if (!title) continue;
-			await authority.transaction((tx) => {
-				tx.collection<StoredGeneratedTitle>(COLLECTION).set(id, { id, title, updatedAt: Date.now() });
-			}, { transactionId: `opensession:generated-title:migrate:${id}` });
-		}
-		await authority.transaction((tx) => {
-			tx.collection("opensession_migrations").set(MIGRATION, { id: MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
-		}, { transactionId: `opensession:migration:${MIGRATION}` });
-		if (existsSync(REGISTRY_PATH)) unlinkSync(REGISTRY_PATH);
-	}
 	const records = authority.runtime().runtime === "remote"
 		? await queryGeneratedTitles(authority)
 		: await authority.collection<StoredGeneratedTitle>(COLLECTION).all();

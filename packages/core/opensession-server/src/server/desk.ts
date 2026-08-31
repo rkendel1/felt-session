@@ -12,9 +12,8 @@
  * spoken to; the pull is the persistent todo list.
  */
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, unlinkSync } from "node:fs";
 import type { StateFirstDB } from "@feltdb/core";
-import { newSessionId, stateDir } from "./paths";
+import { newSessionId } from "./paths";
 import { managedFeltDb } from "./managed-feltdb";
 import {
 	findSession,
@@ -22,10 +21,6 @@ import {
 	updateSessionFile,
 } from "./session-cache";
 import type { NativeSessionFile } from "./types";
-
-interface DeskStore {
-	users: Record<string, { sessionId?: string; clearedAt?: string }>;
-}
 
 interface StoredDesk {
 	id: string;
@@ -35,30 +30,13 @@ interface StoredDesk {
 	__version?: number;
 }
 
-const CONFIG_DIR = stateDir("desk");
-const CONFIG_PATH = `${CONFIG_DIR}/config.json`;
 const COLLECTION = "opensession_desks";
-const MIGRATION = "desk-config-json-to-managed-feltdb-v1";
 let deskDb: StateFirstDB | undefined;
 const desks = new Map<string, StoredDesk>();
 const deskId = (user: string) => `desk_${createHash("sha256").update(user).digest("hex")}`;
 
 export async function initializeManagedDesks(db: StateFirstDB = deskDb ?? managedFeltDb()): Promise<void> {
 	deskDb = db;
-	if (!await db.collection<{ id: string }>("opensession_migrations").get(MIGRATION)) {
-		let legacy: DeskStore = { users: {} };
-		try { if (existsSync(CONFIG_PATH)) legacy = JSON.parse(readFileSync(CONFIG_PATH, "utf8")); } catch {}
-		for (const [user, state] of Object.entries(legacy.users ?? {})) {
-			const id = deskId(user);
-			await db.transaction((tx) => {
-				tx.collection<StoredDesk>(COLLECTION).set(id, { id, user, ...state, __version: 1 });
-			}, { transactionId: `opensession:desk:migrate:${id}` });
-		}
-		await db.transaction((tx) => {
-			tx.collection("opensession_migrations").set(MIGRATION, { id: MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
-		}, { transactionId: `opensession:migration:${MIGRATION}` });
-	}
-	if (existsSync(CONFIG_PATH)) unlinkSync(CONFIG_PATH);
 	desks.clear();
 	for (const record of await db.collection<StoredDesk>(COLLECTION).all()) desks.set(record.id, record);
 }
