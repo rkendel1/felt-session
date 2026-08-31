@@ -60,8 +60,16 @@ export class FeltDbTimerStore {
     return this.decisions.record(KERNEL_COLLECTIONS.timers, timerRecordId(sessionId, timerId));
   }
 
+  async activeRecord(sessionId: string, timerId: string): Promise<VersionedTimer | undefined> {
+    const [head, record] = await Promise.all([
+      this.decisions.head(sessionId),
+      this.record(sessionId, timerId),
+    ]);
+    return head && record?.decisionEpoch === head.decisionEpoch ? record : undefined;
+  }
+
   async timer(sessionId: string, timerId: string): Promise<DurableTimer | undefined> {
-    const record = await this.record(sessionId, timerId);
+    const record = await this.activeRecord(sessionId, timerId);
     return record ? durable(record) : undefined;
   }
 
@@ -120,7 +128,7 @@ export class FeltDbTimerStore {
       this.record(sessionId, timerId),
     ]);
     if (!head) throw new Error(`Session ${sessionId} has no FeltDB authority`);
-    if (!prior) return;
+    if (!prior || prior.decisionEpoch !== head.decisionEpoch) return;
     await this.decisions.commitDecision({
       transactionId: `opensession:kernel:timer:cancel:${sessionId}:${commandId}`,
       operationId: commandId,
@@ -151,7 +159,7 @@ export class FeltDbTimerStore {
       this.record(sessionId, timerId),
     ]);
     if (!head) throw new Error(`Session ${sessionId} has no FeltDB authority`);
-    if (!prior || prior.token !== token) return false;
+    if (!prior || prior.decisionEpoch !== head.decisionEpoch || prior.token !== token) return false;
     return this.decisions.commitDecision({
       transactionId: `opensession:kernel:timer:settle:${sessionId}:${commandId}`,
       operationId: commandId,
@@ -186,7 +194,9 @@ export class FeltDbTimerStore {
       this.record(sessionId, timerId),
     ]);
     if (!head) throw new Error(`Session ${sessionId} has no FeltDB authority`);
-    if (!prior || prior.token !== token) return { updated: false, deadLetteredNow: false };
+    if (
+      !prior || prior.decisionEpoch !== head.decisionEpoch || prior.token !== token
+    ) return { updated: false, deadLetteredNow: false };
     const { __version: _, ...current } = prior;
     const next = nextFeltDbTimerFailure(current, error, maxAttempts, now);
     const result = { updated: true, deadLetteredNow: next.status === "dead_letter" };
@@ -222,7 +232,7 @@ export class FeltDbTimerExecutionStore {
     input: { sessionId: string; timerId: string; token: string },
   ): Promise<"execute" | "completed" | "missing"> {
     if (!input.timerId || !input.token) throw new Error("Invalid timer execution intent");
-    const timer = await this.timers.record(input.sessionId, input.timerId);
+    const timer = await this.timers.activeRecord(input.sessionId, input.timerId);
     if (!timer || timer.token !== input.token) return "missing";
     const requestId = `timer:${input.timerId}:${input.token}`;
     const existing = await this.commands.command(input.sessionId, requestId);
@@ -263,7 +273,7 @@ export class FeltDbTimerExecutionStore {
     logicalId: string,
     input: { sessionId: string; timerId: string; token: string },
   ): Promise<boolean> {
-    const timer = await this.timers.record(input.sessionId, input.timerId);
+    const timer = await this.timers.activeRecord(input.sessionId, input.timerId);
     if (!timer || timer.token !== input.token) return false;
     const requestId = `timer:${input.timerId}:${input.token}`;
     const command = await this.commands.command(input.sessionId, requestId);
@@ -297,7 +307,7 @@ export class FeltDbTimerExecutionStore {
   ): Promise<{ updated: boolean; deadLetteredNow: boolean }> {
     if (!Number.isSafeInteger(input.maxAttempts) || input.maxAttempts < 1)
       throw new Error("Invalid timer attempt limit");
-    const timer = await this.timers.record(input.sessionId, input.timerId);
+    const timer = await this.timers.activeRecord(input.sessionId, input.timerId);
     if (!timer || timer.token !== input.token)
       return { updated: false, deadLetteredNow: false };
     const requestId = `timer:${input.timerId}:${input.token}`;

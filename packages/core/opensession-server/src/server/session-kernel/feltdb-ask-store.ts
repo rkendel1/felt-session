@@ -11,6 +11,7 @@ import {
 type AskRecord = {
   schemaVersion: 1;
   sessionId: string;
+  decisionEpoch: number;
   revision: number;
   record: unknown;
   updatedAt: number;
@@ -74,7 +75,11 @@ export class FeltDbAskStore {
   }
 
   async snapshot(sessionId: string): Promise<unknown | undefined> {
-    return (await this.record(sessionId))?.record;
+    const [head, record] = await Promise.all([
+      this.decisions.head(sessionId),
+      this.record(sessionId),
+    ]);
+    return head && record?.decisionEpoch === head.decisionEpoch ? record.record : undefined;
   }
 
   async set(commandId: string, sessionId: string, value: unknown, now = Date.now()): Promise<void> {
@@ -83,13 +88,15 @@ export class FeltDbAskStore {
       this.record(sessionId),
     ]);
     if (!head) throw new Error(`Session ${sessionId} has no FeltDB authority`);
+    const activePrior = prior?.decisionEpoch === head.decisionEpoch ? prior : undefined;
     const operation: AtomicTransactionOperationRequest = {
       collection: KERNEL_COLLECTIONS.asks,
       id: askId(sessionId),
       value: {
         schemaVersion: 1,
         sessionId,
-        revision: (prior?.revision ?? 0) + 1,
+        decisionEpoch: head.decisionEpoch,
+        revision: (activePrior?.revision ?? 0) + 1,
         record: value,
         updatedAt: now,
       },
@@ -123,8 +130,9 @@ export class FeltDbAskStore {
       this.record(sessionId),
     ]);
     if (!head) throw new Error(`Session ${sessionId} has no FeltDB authority`);
+    const activePrior = prior?.decisionEpoch === head.decisionEpoch ? prior : undefined;
     const answer = decideFeltDbAskAnswer(
-      prior?.record as AnswerableAsk | undefined,
+      activePrior?.record as AnswerableAsk | undefined,
       questionId,
       answers,
       answeredVia,
@@ -145,11 +153,12 @@ export class FeltDbAskStore {
         value: {
           schemaVersion: 1,
           sessionId,
-          revision: prior!.revision + 1,
+          decisionEpoch: head.decisionEpoch,
+          revision: activePrior!.revision + 1,
           record: answer.next,
           updatedAt: now,
         },
-        ifVersion: prior!.__version,
+        ifVersion: activePrior!.__version,
       }],
       result: answer.result,
       now,
@@ -162,7 +171,7 @@ export class FeltDbAskStore {
       this.record(sessionId),
     ]);
     if (!head) throw new Error(`Session ${sessionId} has no FeltDB authority`);
-    if (!prior) return false;
+    if (!prior || prior.decisionEpoch !== head.decisionEpoch) return false;
     return this.decisions.commitDecision({
       transactionId: `opensession:kernel:ask:delete:${sessionId}:${commandId}`,
       operationId: commandId,

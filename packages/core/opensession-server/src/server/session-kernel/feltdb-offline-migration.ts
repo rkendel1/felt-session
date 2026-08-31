@@ -179,6 +179,7 @@ export function encodeKernelSessionMigration(
       else if (plan.table === "session_kernel_creation") value = {
         schemaVersion: 1,
         sessionId,
+        decisionEpoch: 1,
         identity: String(row.identity),
         state: String(row.state),
         generation: Number(row.generation),
@@ -192,6 +193,7 @@ export function encodeKernelSessionMigration(
       else if (plan.table === "session_kernel_asks") value = {
         schemaVersion: 1,
         sessionId,
+        decisionEpoch: 1,
         revision: Number(row.revision),
         record: value.record,
         updatedAt: Number(row.updated_at),
@@ -199,6 +201,7 @@ export function encodeKernelSessionMigration(
       else if (plan.table === "session_kernel_turn") value = {
         schemaVersion: 1,
         sessionId,
+        decisionEpoch: 1,
         revision: Number(row.revision),
         ...(row.cancel === null ? {} : { cancel: value.cancel }),
         updatedAt: Number(row.updated_at),
@@ -206,6 +209,7 @@ export function encodeKernelSessionMigration(
       else if (plan.table === "session_kernel_delivery") value = {
         schemaVersion: 1,
         sessionId,
+        decisionEpoch: 1,
         revision: Number(row.revision),
         queued: value.queued,
         ...(row.dispatch === null ? {} : { dispatch: value.dispatch }),
@@ -246,6 +250,7 @@ export function encodeKernelSessionMigration(
       else if (plan.table === "session_kernel_commands") value = {
         schemaVersion: 1,
         sessionId,
+        decisionEpoch: 1,
         requestId: String(row.request_id),
         type: String(row.type),
         payload: value.payload,

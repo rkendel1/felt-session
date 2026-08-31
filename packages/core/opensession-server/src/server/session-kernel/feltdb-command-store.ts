@@ -11,6 +11,7 @@ import {
 
 type StoredCommand = DurableCommandRecord & {
   schemaVersion: 1;
+  decisionEpoch: number;
   __version: number;
 };
 
@@ -27,7 +28,7 @@ function commandId(sessionId: string, requestId: string): string {
 }
 
 function withoutStorage(record: StoredCommand): DurableCommandRecord {
-  const { __version: _, schemaVersion: __, ...value } = record;
+  const { __version: _, schemaVersion: __, decisionEpoch: ___, ...value } = record;
   return value;
 }
 
@@ -54,10 +55,13 @@ export class FeltDbCommandStore {
   }
 
   async command(sessionId: string, requestId: string): Promise<DurableCommandRecord | undefined> {
-    const record = await this.stored(sessionId, requestId);
-    if (!record) return undefined;
-    const { schemaVersion: _, __version: __, ...value } = record;
-    return value;
+    const [head, record] = await Promise.all([
+      this.decisions.head(sessionId),
+      this.stored(sessionId, requestId),
+    ]);
+    return head && record?.decisionEpoch === head.decisionEpoch
+      ? withoutStorage(record)
+      : undefined;
   }
 
   private async commit<Result>(input: {
@@ -76,7 +80,11 @@ export class FeltDbCommandStore {
     const operation: AtomicTransactionOperationRequest = {
       collection: KERNEL_COLLECTIONS.commands,
       id: commandId(input.next.sessionId, input.next.requestId),
-      value: { schemaVersion: 1, ...input.next },
+      value: {
+        schemaVersion: 1,
+        decisionEpoch: input.head.decisionEpoch,
+        ...input.next,
+      },
       ...(input.prior ? { ifVersion: input.prior.__version } : { requireAbsent: true }),
     };
     return this.decisions.commitDecision({
@@ -105,19 +113,19 @@ export class FeltDbCommandStore {
     },
     now = Date.now(),
   ): Promise<DurableCommandRecord> {
-    const [head, prior] = await Promise.all([
+    const [head, storedPrior] = await Promise.all([
       this.decisions.head(input.sessionId),
       this.stored(input.sessionId, input.requestId),
     ]);
     if (!head) throw new Error(`Session ${input.sessionId} has no FeltDB authority`);
+    const prior = storedPrior?.decisionEpoch === head.decisionEpoch ? storedPrior : undefined;
     const payload = input.payload ?? null;
     const payloadHash = sha256(json(payload));
     if (prior) {
       if (prior.type !== input.type || prior.payloadHash !== payloadHash)
         throw new Error(`Session command id ${input.requestId} was reused with another payload`);
       if (!input.replaySafe || prior.replaySafe || prior.status === "indeterminate") {
-        const { schemaVersion: _, __version: __, ...existing } = prior;
-        return existing;
+        return withoutStorage(prior);
       }
       const next = { ...withoutStorage(prior), replaySafe: true, updatedAt: now };
       return this.commit({
@@ -125,7 +133,7 @@ export class FeltDbCommandStore {
         operationKind: "command_admit_upgrade",
         inputHash: sha256(json(input)),
         head,
-        prior,
+        prior: storedPrior,
         next,
         changeKind: `command:${input.type}`,
         result: next,
@@ -149,6 +157,7 @@ export class FeltDbCommandStore {
       operationKind: "command_admit",
       inputHash: sha256(json(input)),
       head,
+      prior: storedPrior,
       next,
       changeKind: `command:${input.type}`,
       result: next,
@@ -167,7 +176,7 @@ export class FeltDbCommandStore {
       this.stored(sessionId, requestId),
     ]);
     if (!head) throw new Error(`Session ${sessionId} has no FeltDB authority`);
-    if (!prior) return;
+    if (!prior || prior.decisionEpoch !== head.decisionEpoch) return;
     const next: DurableCommandRecord = {
       ...withoutStorage(prior),
       status: "processing",
@@ -205,7 +214,8 @@ export class FeltDbCommandStore {
       this.stored(sessionId, requestId),
     ]);
     if (!head) throw new Error(`Session ${sessionId} has no FeltDB authority`);
-    if (!prior) throw new Error("Session command receipt is missing");
+    if (!prior || prior.decisionEpoch !== head.decisionEpoch)
+      throw new Error("Session command receipt is missing");
     const settled = feltDbCommandResultRecord(result);
     const next: DurableCommandRecord = {
       ...withoutStorage(prior),
@@ -247,7 +257,7 @@ export class FeltDbCommandStore {
       this.stored(sessionId, requestId),
     ]);
     if (!head) throw new Error(`Session ${sessionId} has no FeltDB authority`);
-    if (!prior) return;
+    if (!prior || prior.decisionEpoch !== head.decisionEpoch) return;
     const next: DurableCommandRecord = {
       ...withoutStorage(prior),
       status: "failed",
@@ -283,7 +293,8 @@ export class FeltDbCommandStore {
       this.stored(sessionId, requestId),
     ]);
     if (!head) throw new Error(`Session ${sessionId} has no FeltDB authority`);
-    if (!prior || prior.status !== "completed") return false;
+    if (!prior || prior.decisionEpoch !== head.decisionEpoch || prior.status !== "completed")
+      return false;
     if (prior.acknowledgedAt !== undefined) return true;
     const next = { ...withoutStorage(prior), acknowledgedAt: now, updatedAt: now };
     return this.commit({

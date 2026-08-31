@@ -18,12 +18,14 @@ import type { QueueItem } from "../queue-state";
 type StoredDelivery = DurableDeliveryState & {
   schemaVersion: 1;
   sessionId: string;
+  decisionEpoch: number;
   __version: number;
 };
 
 type StoredCreation = DurableCreationState & {
   schemaVersion: 1;
   sessionId: string;
+  decisionEpoch: number;
   __version: number;
 };
 
@@ -45,7 +47,9 @@ function initialDelivery(): DurableDeliveryState {
 
 function deliveryState(record: StoredDelivery | undefined): DurableDeliveryState {
   if (!record) return initialDelivery();
-  const { schemaVersion: _, sessionId: __, __version: ___, ...value } = record;
+  const {
+    schemaVersion: _, sessionId: __, decisionEpoch: ___, __version: ____, ...value
+  } = record;
   return value;
 }
 
@@ -83,7 +87,13 @@ export class FeltDbDeliveryStore {
   }
 
   async snapshot(sessionId: string): Promise<DurableDeliveryState> {
-    return deliveryState(await this.record(sessionId));
+    const [head, record] = await Promise.all([
+      this.decisions.head(sessionId),
+      this.record(sessionId),
+    ]);
+    return deliveryState(
+      head && record?.decisionEpoch === head.decisionEpoch ? record : undefined,
+    );
   }
 
   private async mutate<Result>(input: {
@@ -102,9 +112,12 @@ export class FeltDbDeliveryStore {
       this.decisions.record<StoredCreation>(KERNEL_COLLECTIONS.creation, creationId(input.sessionId)),
     ]);
     if (!head) throw new Error(`Session ${input.sessionId} has no FeltDB authority`);
-    const prior = deliveryState(priorRecord);
-    const creationState = creation
-      ? (({ schemaVersion: _, sessionId: __, __version: ___, ...value }) => value)(creation)
+    const activePrior = priorRecord?.decisionEpoch === head.decisionEpoch
+      ? priorRecord
+      : undefined;
+    const prior = deliveryState(activePrior);
+    const creationState = creation?.decisionEpoch === head.decisionEpoch
+      ? (({ schemaVersion: _, sessionId: __, decisionEpoch: ___, __version: ____, ...value }) => value)(creation)
       : undefined;
     const working = prepareFeltDbDeliveryMutation(prior, creationState, input.kind);
     const result = input.mutate(working, head);
@@ -127,7 +140,12 @@ export class FeltDbDeliveryStore {
       domainOperations: [{
         collection: KERNEL_COLLECTIONS.delivery,
         id: deliveryId(input.sessionId),
-        value: { schemaVersion: 1, sessionId: input.sessionId, ...state },
+        value: {
+          schemaVersion: 1,
+          sessionId: input.sessionId,
+          decisionEpoch: head.decisionEpoch,
+          ...state,
+        },
         ...(priorRecord ? { ifVersion: priorRecord.__version } : { requireAbsent: true }),
       }],
       effects: typeof input.effects === "function" ? input.effects(head) : input.effects,

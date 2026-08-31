@@ -17,6 +17,7 @@ import {
 type StoredTurn = DurableTurnState & {
   schemaVersion: 1;
   sessionId: string;
+  decisionEpoch: number;
   __version: number;
 };
 
@@ -32,6 +33,7 @@ type StoredProjection = DurableTurnOutcomeProjection & {
 type StoredDelivery = DurableDeliveryState & {
   schemaVersion: 1;
   sessionId: string;
+  decisionEpoch: number;
   __version: number;
 };
 
@@ -60,7 +62,9 @@ function generationId(sessionId: string, decisionEpoch: number, generation: numb
 
 function state(record: StoredTurn | undefined): DurableTurnState {
   if (!record) return { revision: 0, updatedAt: 0 };
-  const { schemaVersion: _, sessionId: __, __version: ___, ...value } = record;
+  const {
+    schemaVersion: _, sessionId: __, decisionEpoch: ___, __version: ____, ...value
+  } = record;
   return value;
 }
 
@@ -89,7 +93,11 @@ export class FeltDbTurnStore {
   }
 
   async snapshot(sessionId: string): Promise<DurableTurnState> {
-    return state(await this.record(sessionId));
+    const [head, record] = await Promise.all([
+      this.decisions.head(sessionId),
+      this.record(sessionId),
+    ]);
+    return state(head && record?.decisionEpoch === head.decisionEpoch ? record : undefined);
   }
 
   async prepareCancel(
@@ -125,8 +133,12 @@ export class FeltDbTurnStore {
       ),
     ]);
     if (!head) throw new Error(`Session ${input.sessionId} has no FeltDB authority`);
-    if (priorTurn?.cancel?.cancelId === input.cancelId) {
-      const prior = priorTurn.cancel;
+    const activeTurn = priorTurn?.decisionEpoch === head.decisionEpoch ? priorTurn : undefined;
+    const activeDelivery = priorDelivery?.decisionEpoch === head.decisionEpoch
+      ? priorDelivery
+      : undefined;
+    if (activeTurn?.cancel?.cancelId === input.cancelId) {
+      const prior = activeTurn.cancel;
       if (
         prior.runId !== input.expectedRunId ||
         prior.runGeneration !== input.expectedGeneration ||
@@ -143,8 +155,8 @@ export class FeltDbTurnStore {
     const reduced = nextRunState(head.run.state as RunState, "cancel");
     if (!reduced) throw new Error(`Cannot cancel a run while ${head.run.state}`);
     const targetState = head.run.state === "preparing" ? "stopped" : reduced;
-    const baseDelivery: DurableDeliveryState = priorDelivery
-      ? (({ schemaVersion: _, sessionId: __, __version: ___, ...value }) => value)(priorDelivery)
+    const baseDelivery: DurableDeliveryState = activeDelivery
+      ? (({ schemaVersion: _, sessionId: __, decisionEpoch: ___, __version: ____, ...value }) => value)(activeDelivery)
       : { revision: 0, queued: [], steered: [], pendingSteers: [], updatedAt: 0 };
     const steered = [...baseDelivery.steered] as QueueItem[];
     const requested = new Set(input.requeueIds);
@@ -202,7 +214,12 @@ export class FeltDbTurnStore {
         {
           collection: KERNEL_COLLECTIONS.delivery,
           id: deliveryId(input.sessionId),
-          value: { schemaVersion: 1, sessionId: input.sessionId, ...delivery },
+          value: {
+            schemaVersion: 1,
+            sessionId: input.sessionId,
+            decisionEpoch: head.decisionEpoch,
+            ...delivery,
+          },
           ...(priorDelivery ? { ifVersion: priorDelivery.__version } : { requireAbsent: true }),
         },
         {
@@ -211,7 +228,8 @@ export class FeltDbTurnStore {
           value: {
             schemaVersion: 1,
             sessionId: input.sessionId,
-            revision: (priorTurn?.revision ?? 0) + 1,
+            decisionEpoch: head.decisionEpoch,
+            revision: (activeTurn?.revision ?? 0) + 1,
             cancel,
             updatedAt: now,
           },
@@ -256,6 +274,7 @@ export class FeltDbTurnStore {
         value: {
           schemaVersion: 1,
           sessionId: input.head.sessionId,
+          decisionEpoch: input.head.decisionEpoch,
           revision: input.prior.revision + 1,
           cancel: input.cancel,
           updatedAt: input.now,
@@ -277,14 +296,15 @@ export class FeltDbTurnStore {
       this.record(input.sessionId),
     ]);
     if (!head) throw new Error(`Session ${input.sessionId} has no FeltDB authority`);
-    const decision = decideFeltDbTurnCancelBegin(head, prior?.cancel, input);
-    if (!decision.next || !prior) return decision.result;
+    const activePrior = prior?.decisionEpoch === head.decisionEpoch ? prior : undefined;
+    const decision = decideFeltDbTurnCancelBegin(head, activePrior?.cancel, input);
+    if (!decision.next || !activePrior) return decision.result;
     return this.commitCancel({
       commandId,
       operationKind: "turn_cancel_begin",
       inputHash: digest(input),
       head,
-      prior,
+      prior: activePrior,
       cancel: decision.next,
       result: decision.result,
       now,
@@ -305,15 +325,16 @@ export class FeltDbTurnStore {
       this.record(input.sessionId),
     ]);
     if (!head) throw new Error(`Session ${input.sessionId} has no FeltDB authority`);
-    if (!prior?.cancel || prior.cancel.cancelId !== input.cancelId) return false;
-    if (prior.cancel.phase === "settled") return true;
+    const activePrior = prior?.decisionEpoch === head.decisionEpoch ? prior : undefined;
+    if (!activePrior?.cancel || activePrior.cancel.cancelId !== input.cancelId) return false;
+    if (activePrior.cancel.phase === "settled") return true;
     return this.commitCancel({
       commandId,
       operationKind: "turn_cancel_settle",
       inputHash: digest(input),
       head,
-      prior,
-      cancel: { ...prior.cancel, phase: "settled", outcome: input.outcome },
+      prior: activePrior,
+      cancel: { ...activePrior.cancel, phase: "settled", outcome: input.outcome },
       result: true,
       now,
     });
@@ -387,7 +408,7 @@ export class FeltDbTurnStore {
         throw new Error("Turn outcome projection identity was reused with another payload");
       return { ...payload, phase };
     }
-    const cancel = turn?.cancel;
+    const cancel = turn?.decisionEpoch === head.decisionEpoch ? turn.cancel : undefined;
     if (
       head.run.generation !== input.runGeneration ||
       (head.run.currentRunId !== undefined && head.run.currentRunId !== input.runId) ||

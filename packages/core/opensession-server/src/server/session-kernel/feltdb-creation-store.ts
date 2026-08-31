@@ -21,6 +21,7 @@ import {
 type StoredCreation = DurableCreationState & {
   schemaVersion: 1;
   sessionId: string;
+  decisionEpoch: number;
   __version: number;
 };
 
@@ -186,12 +187,14 @@ export class FeltDbCreationStore {
   constructor(private readonly decisions: FeltDbSessionDecisionStore) {}
 
   async creationState(sessionId: string): Promise<DurableCreationState | undefined> {
-    const value = await this.decisions.record<StoredCreation>(
-      KERNEL_COLLECTIONS.creation,
-      creationId(sessionId),
-    );
-    if (!value) return undefined;
-    const { schemaVersion: _, sessionId: __, __version: ___, ...state } = value;
+    const [head, value] = await Promise.all([
+      this.decisions.head(sessionId),
+      this.decisions.record<StoredCreation>(KERNEL_COLLECTIONS.creation, creationId(sessionId)),
+    ]);
+    if (!head || !value || value.decisionEpoch !== head.decisionEpoch) return undefined;
+    const {
+      schemaVersion: _, sessionId: __, decisionEpoch: ___, __version: ____, ...state
+    } = value;
     return state;
   }
 
@@ -205,8 +208,8 @@ export class FeltDbCreationStore {
       this.decisions.record<StoredCreation>(KERNEL_COLLECTIONS.creation, creationId(input.sessionId)),
     ]);
     if (!head) throw new Error(`Session ${input.sessionId} has no FeltDB authority`);
-    const prior = stored
-      ? (({ schemaVersion: _, sessionId: __, __version: ___, ...state }) => state)(stored)
+    const prior = stored?.decisionEpoch === head.decisionEpoch
+      ? (({ schemaVersion: _, sessionId: __, decisionEpoch: ___, __version: ____, ...state }) => state)(stored)
       : undefined;
     const decision = decideFeltDbCreationEvent(head, prior, input, now);
     if (!decision.next) return decision.result;
@@ -232,6 +235,7 @@ export class FeltDbCreationStore {
         value: {
           schemaVersion: 1,
           sessionId: input.sessionId,
+          decisionEpoch: head.decisionEpoch,
           ...decision.next,
         },
         ...(stored ? { ifVersion: stored.__version } : { requireAbsent: true }),
