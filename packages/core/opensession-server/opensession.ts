@@ -103,7 +103,7 @@ import { join } from "node:path";
 // from a script or a test never touches live resources.
 import "./src/server/interactive-mcp"; // registerInteractiveMcpBuilder
 import { hydratePersistedQueueState } from "./src/server/queue-state";
-import { hydrateScheduledPromptTimers } from "./src/server/scheduled-prompts";
+import { hydrateScheduledPromptTimers, initializeManagedScheduledPrompts } from "./src/server/scheduled-prompts";
 import { beginShutdown } from "./src/server/shutdown-state";
 import { setServiceReadiness } from "./src/server/service-readiness";
 import {
@@ -159,6 +159,7 @@ if (!g.__opensessionBooted) {
 	await initializeManagedSlackSessions(db);
 	await initializeManagedLinearSessions(db);
 	await initializeManagedLinearOauth(db);
+	await initializeManagedScheduledPrompts(db);
 }
 
 // Listeners the server owns. Deliberately started HERE and not as module side
@@ -714,7 +715,7 @@ if (!g.__opensessionBooted) {
 
 	// Scheduled prompts are durable SessionKernel timers. The runtime starts
 	// after run recovery below; hydrate their rows before that gate opens.
-	hydrateScheduledPromptTimers();
+	await hydrateScheduledPromptTimers();
 
 	// Archive triage sessions when their Plain ticket is done.
 	startPlainArchiveSweep(() => {

@@ -1,14 +1,13 @@
 /**
  * Durable prompts scheduled for an existing session.
  *
- * The JSON file remains the UI listing format. Delivery authority is a
- * SessionKernel timer, so a process timeout is only a wake-up and the stable
- * schedule id is also the prompt delivery id.
+ * Managed FeltDB owns the listing and a SessionKernel timer owns delivery.
  */
 import { randomUUIDv7 } from "bun";
-import { existsSync, readFileSync } from "fs";
-import { writeJsonAtomic } from "./shared/atomic-write";
+import { existsSync, readFileSync, unlinkSync } from "fs";
 import { stateDir } from "./paths";
+import { managedFeltDb } from "./managed-feltdb";
+import type { StateFirstDB } from "@feltdb/core";
 import {
 	registerSessionTimerHandler,
 	sessionKernel,
@@ -16,6 +15,7 @@ import {
 import { getSessionControl } from "./session-control";
 
 let STORE_PATH = stateDir("scheduled-prompts.json");
+let scheduledPromptDb: StateFirstDB | undefined;
 
 export function __setScheduledPromptStoreForTest(path: string): string {
 	const previous = STORE_PATH;
@@ -23,6 +23,8 @@ export function __setScheduledPromptStoreForTest(path: string): string {
 	return previous;
 }
 const TIMER_KIND = "scheduled_prompt";
+const COLLECTION = "opensession_scheduled_prompts";
+const MIGRATION = "scheduled-prompts-json-to-managed-feltdb-v1";
 
 export interface ScheduledPrompt {
 	id: string;
@@ -33,30 +35,30 @@ export interface ScheduledPrompt {
 	createdAt: string;
 }
 
-interface Store {
-	prompts: ScheduledPrompt[];
+type StoredScheduledPrompt = ScheduledPrompt & {
+	state: "active" | "deleted";
+	dueAt: number;
+	updatedAt: number;
+	__version?: number;
+};
+const scheduledPrompts = new Map<string, StoredScheduledPrompt>();
+const db = () => scheduledPromptDb ?? managedFeltDb();
+
+export function __setScheduledPromptDbForTest(next: StateFirstDB | undefined): StateFirstDB | undefined {
+	const previous = scheduledPromptDb;
+	scheduledPromptDb = next;
+	scheduledPrompts.clear();
+	return previous;
 }
 
-function readStore(): Store {
-	try {
-		if (existsSync(STORE_PATH)) {
-			const stored = JSON.parse(readFileSync(STORE_PATH, "utf-8"));
-			if (Array.isArray(stored.prompts)) return stored;
-		}
-	} catch {}
-	return { prompts: [] };
-}
-
-function writeStore(store: Store): void {
-	writeJsonAtomic(STORE_PATH, store);
-}
-
-function removeFromListing(id: string): boolean {
-	const store = readStore();
-	const before = store.prompts.length;
-	store.prompts = store.prompts.filter((prompt) => prompt.id !== id);
-	if (store.prompts.length === before) return false;
-	writeStore(store);
+async function removeFromListing(id: string): Promise<boolean> {
+	const current = scheduledPrompts.get(id);
+	if (!current) return false;
+	if (!Number.isSafeInteger(current.__version)) throw new Error(`Scheduled prompt ${id} has no FeltDB authority version`);
+	const result = await db().collection<StoredScheduledPrompt>(COLLECTION)
+		.updateIfVersion(id, current.__version!, { state: "deleted", updatedAt: Date.now() });
+	if (!result.updated) throw new Error(`Scheduled prompt ${id} changed during deletion`);
+	scheduledPrompts.delete(id);
 	return true;
 }
 
@@ -85,31 +87,42 @@ registerSessionTimerHandler(TIMER_KIND, async (timer) => {
 		{ deliveryId: prompt.id },
 	);
 	if (result.status === "error") throw new Error(result.message);
-	removeFromListing(prompt.id);
+	await removeFromListing(prompt.id);
 	console.log(
 		`[scheduled-prompts] ${prompt.id} -> ${prompt.sessionId}: ${result.status}`,
 	);
 });
 
-export function hydrateScheduledPromptTimers(): number {
-	const prompts = readStore().prompts;
-	for (const prompt of prompts) schedule(prompt);
+export async function initializeManagedScheduledPrompts(authority: StateFirstDB = managedFeltDb()): Promise<number> {
+	scheduledPromptDb = authority;
+	await migrateLegacyScheduledPrompts(authority);
+	const records = authority.runtime().runtime === "remote"
+		? await queryScheduledPrompts(authority)
+		: (await authority.collection<StoredScheduledPrompt>(COLLECTION).all()).filter((item) => item.state === "active");
+	scheduledPrompts.clear();
+	for (const record of records) scheduledPrompts.set(record.id, record);
+	return records.length;
+}
+
+export async function hydrateScheduledPromptTimers(): Promise<number> {
+	const prompts = [...scheduledPrompts.values()];
+	await Promise.all(prompts.map(schedule));
 	return prompts.length;
 }
 
 export function listScheduledPrompts(sessionId?: string): ScheduledPrompt[] {
-	const all = readStore().prompts;
+	const all = [...scheduledPrompts.values()];
 	return (sessionId ? all.filter((prompt) => prompt.sessionId === sessionId) : all).sort(
 		(a, b) => a.at.localeCompare(b.at),
 	);
 }
 
-export function createScheduledPrompt(input: {
+export async function createScheduledPrompt(input: {
 	sessionId: string;
 	prompt: string;
 	at: string;
 	user: string;
-}): ScheduledPrompt | { error: string } {
+}): Promise<ScheduledPrompt | { error: string }> {
 	if (!input.sessionId?.trim()) return { error: "sessionId required" };
 	if (!input.prompt?.trim()) return { error: "Prompt is required" };
 	const time = Date.parse(input.at || "");
@@ -123,22 +136,72 @@ export function createScheduledPrompt(input: {
 		at: new Date(time).toISOString(),
 		createdAt: new Date().toISOString(),
 	};
-	const store = readStore();
-	store.prompts.push(prompt);
-	writeStore(store);
-	schedule(prompt);
+	const record: StoredScheduledPrompt = { ...prompt, state: "active", dueAt: time, updatedAt: Date.now() };
+	await db().transaction((tx) => {
+		tx.collection<StoredScheduledPrompt>(COLLECTION).set(prompt.id, record, { requireAbsent: true });
+	}, { transactionId: `opensession:scheduled-prompt:create:${prompt.id}` });
+	const stored = await db().collection<StoredScheduledPrompt>(COLLECTION).get(prompt.id);
+	if (!stored) throw new Error(`Scheduled prompt ${prompt.id} did not commit`);
+	scheduledPrompts.set(prompt.id, stored);
+	await schedule(prompt);
 	return prompt;
 }
 
 export async function deleteScheduledPrompt(id: string): Promise<boolean> {
-	const prompt = readStore().prompts.find((candidate) => candidate.id === id);
+	const prompt = scheduledPrompts.get(id);
 	if (!prompt) return false;
-	const removed = removeFromListing(id);
+	const removed = await removeFromListing(id);
 	if (removed) await sessionKernel(prompt.sessionId).cancelTimer(prompt.id);
 	return removed;
 }
 
 /** Compatibility read for old callers. Delivery is no longer destructive. */
 export function takeDuePrompts(now = Date.now()): ScheduledPrompt[] {
-	return readStore().prompts.filter((prompt) => Date.parse(prompt.at) <= now);
+	return [...scheduledPrompts.values()].filter((prompt) => prompt.dueAt <= now);
+}
+
+async function queryScheduledPrompts(authority: StateFirstDB): Promise<StoredScheduledPrompt[]> {
+	const records: StoredScheduledPrompt[] = [];
+	let cursor: string | undefined;
+	do {
+		const page = await authority.query<StoredScheduledPrompt>({
+			collection: COLLECTION,
+			where: [{ field: "state", eq: "active" }],
+			orderBy: [{ field: "dueAt", direction: "asc" }],
+			limit: 500,
+			...(cursor ? { cursor } : {}),
+		});
+		records.push(...page.records);
+		cursor = page.exhausted ? undefined : page.nextCursor;
+		if (!page.exhausted && !cursor) throw new Error("FeltDB scheduled prompt cursor is missing");
+	} while (cursor);
+	return records;
+}
+
+async function migrateLegacyScheduledPrompts(authority: StateFirstDB): Promise<void> {
+	const migrations = authority.collection<{ id: string }>("opensession_migrations");
+	if (await migrations.get(MIGRATION)) return;
+	let prompts: ScheduledPrompt[] = [];
+	if (existsSync(STORE_PATH)) {
+		try {
+			const raw = JSON.parse(readFileSync(STORE_PATH, "utf8"));
+			if (Array.isArray(raw.prompts)) prompts = raw.prompts;
+		} catch {}
+	}
+	for (const prompt of prompts) {
+		const value: StoredScheduledPrompt = {
+			...prompt, state: "active", dueAt: Date.parse(prompt.at), updatedAt: Date.now(),
+		};
+		try {
+			await authority.transaction((tx) => {
+				tx.collection<StoredScheduledPrompt>(COLLECTION).set(prompt.id, value, { requireAbsent: true });
+			}, { transactionId: `opensession:scheduled-prompt:migrate:${prompt.id}` });
+		} catch (error) {
+			if (!await authority.collection(COLLECTION).get(prompt.id)) throw error;
+		}
+	}
+	await authority.transaction((tx) => {
+		tx.collection("opensession_migrations").set(MIGRATION, { id: MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
+	}, { transactionId: `opensession:migration:${MIGRATION}` });
+	if (existsSync(STORE_PATH)) unlinkSync(STORE_PATH);
 }

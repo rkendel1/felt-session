@@ -164,7 +164,7 @@ export async function handleAutomationsRoutes(
 		const { createScheduledPrompt } = await import(
 			"../../server/scheduled-prompts"
 		);
-		const result = createScheduledPrompt({
+		const result = await createScheduledPrompt({
 			sessionId: schedListMatch[1],
 			prompt: body.prompt,
 			at: body.at,
