@@ -8,7 +8,7 @@ import {
 	activeDetachedAgentRunCount,
 	resumeInterruptedRuns,
 } from "./src/server/agent-runner";
-import { startAccountHealthMonitor } from "./src/server/account-health";
+import { initializeManagedAccountHealth, startAccountHealthMonitor } from "./src/server/account-health";
 import { startAnalyticsPrewarm } from "./src/server/analytics";
 import { startDiskGc } from "./src/server/disk-gc";
 import { startWorktreeReaper } from "./src/server/worktree-reaper";
@@ -201,6 +201,7 @@ const g = globalThis as any;
 if (!g.__opensessionBooted) {
 	const db = await initializeManagedFeltDb();
 	await initializeManagedRunJournal(db);
+	await initializeManagedAccountHealth(db);
 	await initializeManagedWorkspaces(db);
 	await initializeManagedTodos(db);
 	await initializeManagedSlackSessions(db);

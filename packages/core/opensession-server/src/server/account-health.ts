@@ -19,18 +19,19 @@
  * so a codex expiry alert only ever fires when the in-process refresh itself
  * failed (dead refresh token, endpoint trouble).
  *
- * Alerts dedupe through a state file: a standing issue re-alerts daily, and
+ * Alerts dedupe through managed FeltDB: a standing issue re-alerts daily, and
  * clears silently once fixed. Transient poller noise (rate-limit cooldowns)
  * is never alerted.
  */
 
-import { existsSync, readFileSync } from "fs";
+import { existsSync, readFileSync, unlinkSync } from "fs";
+import type { StateFirstDB } from "@feltdb/core";
 import { listAccountsPublic } from "./claude-accounts";
 import { listCodexAccountsPublic } from "./codex-accounts";
 import { refreshIdleCodexTokens } from "./codex-token-refresh";
 import { stateDir } from "./paths";
 import { resolveTeammate } from "./shared/user-mappings";
-import { writeFileAtomic } from "./shared/atomic-write";
+import { managedFeltDb } from "./managed-feltdb";
 import { openDirectMessage, sendSlackMessage } from "../agents/slack/slack-api";
 import { audit } from "./audit";
 import {
@@ -66,20 +67,49 @@ interface Issue {
 }
 
 interface HealthState {
+  id: string;
   alerts: Record<string, { lastSentAt: string }>;
+  __version?: number;
 }
 
-function readState(): HealthState {
-  try {
-    const parsed = JSON.parse(readFileSync(STATE_PATH, "utf-8"));
-    return { alerts: parsed?.alerts && typeof parsed.alerts === "object" ? parsed.alerts : {} };
-  } catch {
-    return { alerts: {} };
+const ACCOUNT_HEALTH_COLLECTION = "opensession_account_health";
+const ACCOUNT_HEALTH_ID = "alerts";
+const ACCOUNT_HEALTH_MIGRATION = "account-health-file-to-managed-feltdb-v1";
+let accountHealthDb: StateFirstDB | undefined;
+
+export async function initializeManagedAccountHealth(
+  db: StateFirstDB = accountHealthDb ?? managedFeltDb(),
+): Promise<void> {
+  accountHealthDb = db;
+  const migrations = db.collection<{ id: string }>("opensession_migrations");
+  if (!await migrations.get(ACCOUNT_HEALTH_MIGRATION)) {
+    let alerts: HealthState["alerts"] = {};
+    if (existsSync(STATE_PATH)) {
+      const parsed = JSON.parse(readFileSync(STATE_PATH, "utf8"));
+      if (parsed?.alerts && typeof parsed.alerts === "object") alerts = parsed.alerts;
+    }
+    await db.transaction((tx) => {
+      tx.collection<HealthState>(ACCOUNT_HEALTH_COLLECTION).set(ACCOUNT_HEALTH_ID,
+        { id: ACCOUNT_HEALTH_ID, alerts }, { requireAbsent: true });
+      tx.collection("opensession_migrations").set(ACCOUNT_HEALTH_MIGRATION,
+        { id: ACCOUNT_HEALTH_MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
+    }, { transactionId: `opensession:migration:${ACCOUNT_HEALTH_MIGRATION}` });
   }
+  if (existsSync(STATE_PATH)) unlinkSync(STATE_PATH);
 }
 
-function writeState(state: HealthState): void {
-  writeFileAtomic(STATE_PATH, JSON.stringify(state, null, 2) + "\n");
+async function readState(): Promise<HealthState> {
+  const db = accountHealthDb ?? managedFeltDb();
+  return await db.collection<HealthState>(ACCOUNT_HEALTH_COLLECTION).get(ACCOUNT_HEALTH_ID)
+    ?? { id: ACCOUNT_HEALTH_ID, alerts: {} };
+}
+
+async function writeState(state: HealthState): Promise<void> {
+  const db = accountHealthDb ?? managedFeltDb();
+  await db.transaction((tx) => {
+    tx.collection<HealthState>(ACCOUNT_HEALTH_COLLECTION).set(ACCOUNT_HEALTH_ID, state,
+      state.__version ? { ifVersion: state.__version } : { requireAbsent: true });
+  }, { transactionId: `opensession:account-health:${crypto.randomUUID()}` });
 }
 
 /** ms-epoch expiry from a JWT's `exp` claim, or null if unparseable. */
@@ -269,7 +299,7 @@ export async function sweepAccountHealth(): Promise<Issue[]> {
     ...detectAccountIssues(),
     ...(await selectedGithubCredentialIssues()),
   ];
-  const state = readState();
+  const state = await readState();
   const now = Date.now();
   const live = new Set(issues.map((i) => i.key));
   // Drop cleared issues so a relapse re-alerts immediately.
@@ -289,7 +319,7 @@ export async function sweepAccountHealth(): Promise<Issue[]> {
     if (sent) state.alerts[issue.key] = { lastSentAt: new Date(now).toISOString() };
     else console.warn(`[account-health] failed to DM ${issue.notify} about ${issue.key}`);
   }
-  writeState(state);
+  await writeState(state);
   return issues;
 }
 
