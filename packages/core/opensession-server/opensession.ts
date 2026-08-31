@@ -111,7 +111,7 @@ import { initializeManagedModelDefaults } from "./src/server/models";
 import { initializeManagedDeploys } from "./src/server/deploys";
 import { initializeManagedPiConfig } from "./src/server/pi-config";
 import { initializeManagedEngineSessionOwners } from "./src/server/transcript-persistence";
-import { creationOwnsPrompt, readActiveShutdownSnapshot, recoverableLocalHostSnapshotRecords, recordRecoveredRunEvent, restorePromptQueues, resumeDrainedSessions, settleRecoveredCreationOpening, snapshotActiveSessions, startLoopTicker } from "./src/server/run-session";
+import { creationOwnsPrompt, flushActiveShutdownSnapshotWrites, initializeManagedActiveShutdownSnapshot, readActiveShutdownSnapshot, recoverableLocalHostSnapshotRecords, recordRecoveredRunEvent, restorePromptQueues, resumeDrainedSessions, settleRecoveredCreationOpening, snapshotActiveSessions, startLoopTicker } from "./src/server/run-session";
 import { startMcpHttpServer, startRunRpcServer } from "./src/server/run-rpc";
 import { handleSandboxWsUpgrade, startTimerPoisonHeartbeat, timerPoisonRequestCheck } from "./src/server/run-ws";
 import {
@@ -279,6 +279,7 @@ if (!g.__opensessionBooted) {
 	await initializeManagedRestartState(db);
 	await initializeManagedWorkflows(db);
 	await initializeManagedTimerPoisonState(db);
+	await initializeManagedActiveShutdownSnapshot(db);
 	await initializeManagedSandboxConnections(db);
 	await initializeManagedSandboxConfig(db);
 	await initializeManagedSandboxOperations(db);
@@ -1303,6 +1304,7 @@ if (!g.__opensessionBooted) {
 		await flushCreatePlanWrites();
 		await flushWorkflowWrites();
 		await flushTimerPoisonWrites();
+		await flushActiveShutdownSnapshotWrites();
 		// Keep HTTP available while runs drain. Stopping the listener before the
 		// bounded wait made Caddy return 502 for the full drain window on every
 		// deploy. Shutdown-aware intake above already parks new agent work.

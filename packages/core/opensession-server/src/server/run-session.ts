@@ -10,7 +10,7 @@
 
 import type { McpScope } from "./runner-shared";
 import { randomUUIDv7 } from "bun";
-import { existsSync, mkdirSync, readFileSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, rmSync } from "fs";
 import {
 	runAgent,
 	isAgentSessionBusy,
@@ -101,7 +101,8 @@ import { ensureGeneratedTitle } from "./generated-titles";
 import { nameKnownSessionReferencesForTitle } from "./session-reference-title";
 import { clearReplySuggestions, maybeSuggestReplies } from "./reply-suggestions";
 import { commitAuthorFor } from "./shared/user-mappings";
-import { writeFileAtomic, writeJsonAtomic } from "./shared/atomic-write";
+import type { StateFirstDB } from "@feltdb/core";
+import { managedFeltDb } from "./managed-feltdb";
 import { startWatching } from "./file-watcher";
 import { ensureAskCheckout, ensureScratchDir, getRepo, isSharedCheckoutDir, repoForPath, repoForPathOrNull, reviveWorktree, sessionRepoId, worktreeHeadBranch } from "./worktree";
 import { createGoalSelfMcpServer } from "../agents/slack/goal-tools";
@@ -864,16 +865,63 @@ export async function restorePromptQueues(resumedSessionIds: Set<string>): Promi
 // resume didn't already cover. Crash (no graceful shutdown) still falls back to
 // the journal, so both paths are covered.
 const RESUME_SNAPSHOT_PATH = `${SESSIONS_DIR}/active-at-shutdown.json`;
+type StoredShutdownSnapshot = { id: "active"; records: ActiveRunRecord[] };
+const SHUTDOWN_SNAPSHOT_COLLECTION = "opensession_active_shutdown_snapshot";
+const SHUTDOWN_SNAPSHOT_MIGRATION = "active-shutdown-json-to-managed-feltdb-v1";
+let shutdownSnapshotDb: StateFirstDB | undefined;
+let shutdownSnapshot: ActiveRunRecord[] = [];
+let shutdownSnapshotTail: Promise<void> = Promise.resolve();
+
+export async function initializeManagedActiveShutdownSnapshot(
+	db: StateFirstDB = shutdownSnapshotDb ?? managedFeltDb(),
+	legacyPath = RESUME_SNAPSHOT_PATH,
+): Promise<void> {
+	await shutdownSnapshotTail;
+	shutdownSnapshotDb = db;
+	const migrations = db.collection<{ id: string }>("opensession_migrations");
+	const migrationComplete = !!await migrations.get(SHUTDOWN_SNAPSHOT_MIGRATION);
+	let legacy: ActiveRunRecord[] | undefined;
+	try {
+		if (existsSync(legacyPath)) {
+			const parsed = JSON.parse(readFileSync(legacyPath, "utf8"));
+			if (Array.isArray(parsed)) legacy = parsed;
+		}
+	} catch {}
+	if (!migrationComplete || legacy) await db.transaction((tx) => {
+		if (legacy || !migrationComplete) tx.collection<StoredShutdownSnapshot>(
+			SHUTDOWN_SNAPSHOT_COLLECTION,
+		).set("active", { id: "active", records: legacy ?? [] });
+		if (!migrationComplete) tx.collection("opensession_migrations").set(
+			SHUTDOWN_SNAPSHOT_MIGRATION,
+			{ id: SHUTDOWN_SNAPSHOT_MIGRATION, completedAt: Date.now() },
+			{ requireAbsent: true },
+		);
+	}, { transactionId: `opensession:migration:${SHUTDOWN_SNAPSHOT_MIGRATION}:${crypto.randomUUID()}` });
+	shutdownSnapshot = (await db.collection<StoredShutdownSnapshot>(
+		SHUTDOWN_SNAPSHOT_COLLECTION,
+	).get("active"))?.records ?? [];
+	rmSync(legacyPath, { force: true });
+}
+
+function persistActiveShutdownSnapshot(records: ActiveRunRecord[]): void {
+	shutdownSnapshot = structuredClone(records);
+	const db = shutdownSnapshotDb ?? managedFeltDb();
+	const stored: StoredShutdownSnapshot = { id: "active", records: shutdownSnapshot };
+	const write = shutdownSnapshotTail.then(async () => {
+		await db.transaction((tx) => {
+			tx.collection<StoredShutdownSnapshot>(SHUTDOWN_SNAPSHOT_COLLECTION).set("active", stored);
+		}, { transactionId: `opensession:active-shutdown:${crypto.randomUUID()}` });
+	});
+	shutdownSnapshotTail = write.catch((error) =>
+		console.error("[resume] Failed to persist managed active-session snapshot:", error));
+}
+
+export async function flushActiveShutdownSnapshotWrites(): Promise<void> {
+	await shutdownSnapshotTail;
+}
 
 export function readActiveShutdownSnapshot(): ActiveRunRecord[] {
-	try {
-		if (!existsSync(RESUME_SNAPSHOT_PATH)) return [];
-		const records = JSON.parse(readFileSync(RESUME_SNAPSHOT_PATH, "utf-8"));
-		return Array.isArray(records) ? records : [];
-	} catch (e) {
-		console.error("[resume] Failed to read active-session snapshot:", e);
-		return [];
-	}
+	return structuredClone(shutdownSnapshot);
 }
 
 /** Snapshot-only local hosts that still have a run directory to reattach to.
@@ -897,12 +945,8 @@ export function recoverableLocalHostSnapshotRecords(
 export function snapshotActiveSessions(): void {
 	try {
 		const records = activeRunRecords();
-		if (records.length === 0) {
-			if (existsSync(RESUME_SNAPSHOT_PATH))
-				writeFileAtomic(RESUME_SNAPSHOT_PATH, "[]");
-			return;
-		}
-		writeJsonAtomic(RESUME_SNAPSHOT_PATH, records, false);
+		persistActiveShutdownSnapshot(records);
+		if (records.length === 0) return;
 		console.log(
 			`[resume] Snapshotted ${records.length} active session(s) for wake-up on restart`,
 		);
@@ -920,9 +964,7 @@ export function resumeDrainedSessions(
 ): void {
 	if (!records.length) return;
 	// Consume the snapshot so the next (non-graceful) boot doesn't replay it.
-	try {
-		writeFileAtomic(RESUME_SNAPSHOT_PATH, "[]");
-	} catch {}
+	persistActiveShutdownSnapshot([]);
 
 	let woken = 0;
 	for (const r of records) {
