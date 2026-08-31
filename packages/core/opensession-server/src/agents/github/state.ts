@@ -1,21 +1,19 @@
 /**
- * Per-PR state for the github agent, one JSON file per PR at
- * ~/.opensession-github/<prNumber>.json. Tracks the single review comment id, which
+ * Per-PR state for the GitHub agent in managed FeltDB. Tracks the single review comment id, which
  * head SHAs we've already reviewed (dedup), the resumable review session, and the
  * auto-fix run state. Mirrors the grafana-poller dedup store.
  *
  * In-process locks coalesce rapid webhook bursts (force-push, stacked commits)
- * within one process; the on-disk state guards across restarts.
+ * within one process; managed state guards across restarts.
  */
 import { stateDir } from "../../server/paths";
 import { prKey } from "./constants";
 import type { HandoffState } from "./handoff-gates";
-import { mkdirSync, readFileSync, existsSync, readdirSync } from "fs";
-import { writeJsonAtomic } from "../../server/shared/atomic-write";
+import { readFileSync, existsSync, readdirSync, unlinkSync } from "fs";
+import type { StateFirstDB } from "@feltdb/core";
+import { managedFeltDb } from "../../server/managed-feltdb";
 
 const STATE_DIR = stateDir("github");
-
-mkdirSync(STATE_DIR, { recursive: true });
 
 // Engine-session resume is handled via the deterministic per-PR session file
 // (see run.ts `bksIdFor`), so these track only behavioral state.
@@ -115,7 +113,7 @@ export interface GithubPrState {
     startedAt: string;
   };
   /**
-   * A just-received @mention, persisted synchronously on receipt — before the run
+   * A just-received @mention, durably persisted on receipt before the run
    * self-persists (the classify + worktree window, several seconds). If the process
    * dies in that window — e.g. a webhook that lands during shutdown drain, which we
    * still ack 200 so GitHub won't redeliver — startup recovery replays it. Cleared
@@ -133,20 +131,56 @@ export interface GithubPrState {
     progressCommentId?: number;
   };
   updatedAt: string;
+  __version?: number;
 }
 
-function statePath(prNumber: number, ghRepo?: string): string {
-  return `${STATE_DIR}/${prKey(prNumber, ghRepo)}.json`;
+const PR_STATE_COLLECTION = "opensession_github_pr_state";
+const PR_STATE_MIGRATION = "github-pr-state-files-to-managed-feltdb-v1";
+let prStateDb: StateFirstDB | undefined;
+const prStateCache = new Map<string, GithubPrState>();
+const mutationTails = new Map<string, Promise<void>>();
+
+export async function initializeManagedGithubPrState(
+  db: StateFirstDB = prStateDb ?? managedFeltDb(),
+  legacyDir = STATE_DIR,
+): Promise<void> {
+  prStateDb = db;
+  const migrations = db.collection<{ id: string }>("opensession_migrations");
+  const importedPaths: string[] = [];
+  const legacy: GithubPrState[] = [];
+  if (existsSync(legacyDir)) {
+    for (const file of readdirSync(legacyDir)) {
+      if (!file.endsWith(".json")) continue;
+      const path = `${legacyDir}/${file}`;
+      try {
+        const value = JSON.parse(readFileSync(path, "utf8")) as GithubPrState;
+        if (typeof value?.prNumber !== "number" || !Array.isArray(value.reviewedShas)) continue;
+        legacy.push(value);
+        importedPaths.push(path);
+      } catch {}
+    }
+  }
+  if (!await migrations.get(PR_STATE_MIGRATION)) {
+    await db.transaction((tx) => {
+      for (const state of legacy)
+        tx.collection<GithubPrState>(PR_STATE_COLLECTION).set(prKey(state.prNumber, state.ghRepo), state, { requireAbsent: true });
+      tx.collection("opensession_migrations").set(PR_STATE_MIGRATION,
+        { id: PR_STATE_MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
+    }, { transactionId: `opensession:migration:${PR_STATE_MIGRATION}` });
+  }
+  for (const path of importedPaths) if (existsSync(path)) unlinkSync(path);
+  prStateCache.clear();
+  for (const state of await db.collection<GithubPrState>(PR_STATE_COLLECTION).all())
+    prStateCache.set(prKey(state.prNumber, state.ghRepo), state);
+}
+
+function cloneState(state: GithubPrState): GithubPrState {
+  return structuredClone(state);
 }
 
 export function readPrState(prNumber: number, ghRepo?: string): GithubPrState | null {
-  const path = statePath(prNumber, ghRepo);
-  if (!existsSync(path)) return null;
-  try {
-    return JSON.parse(readFileSync(path, "utf-8")) as GithubPrState;
-  } catch {
-    return null;
-  }
+  const state = prStateCache.get(prKey(prNumber, ghRepo));
+  return state ? cloneState(state) : null;
 }
 
 export function getOrInitPrState(prNumber: number, headRef: string, ghRepo?: string): GithubPrState {
@@ -161,15 +195,24 @@ export function getOrInitPrState(prNumber: number, headRef: string, ghRepo?: str
   );
 }
 
-/** Module-private on purpose: a caller that holds a whole-file snapshot across an
+/** Module-private on purpose: a caller that holds a whole-record snapshot across an
  *  await and writes it back reverts whatever another behavior landed in between.
  *  Every mutation goes through updatePrState (or one of the helpers below), which
  *  re-reads immediately before patching. */
-function writePrState(state: GithubPrState): void {
+async function writePrState(state: GithubPrState): Promise<GithubPrState> {
   state.updatedAt = new Date().toISOString();
   // Keep the reviewed-SHA list bounded.
   if (state.reviewedShas.length > 20) state.reviewedShas = state.reviewedShas.slice(-20);
-  writeJsonAtomic(statePath(state.prNumber, state.ghRepo), state);
+  const key = prKey(state.prNumber, state.ghRepo);
+  const db = prStateDb ?? managedFeltDb();
+  await db.transaction((tx) => {
+    tx.collection<GithubPrState>(PR_STATE_COLLECTION).set(key, state,
+      state.__version ? { ifVersion: state.__version } : { requireAbsent: true });
+  }, { transactionId: `opensession:github-pr-state:${key}:${crypto.randomUUID()}` });
+  const saved = await db.collection<GithubPrState>(PR_STATE_COLLECTION).get(key);
+  if (!saved) throw new Error(`Managed GitHub PR state disappeared for ${key}`);
+  prStateCache.set(key, saved);
+  return cloneState(saved);
 }
 
 /**
@@ -183,11 +226,16 @@ export function updatePrState(
   headRef: string,
   patch: (s: GithubPrState) => void,
   ghRepo?: string
-): GithubPrState {
-  const s = getOrInitPrState(prNumber, headRef, ghRepo);
-  patch(s);
-  writePrState(s);
-  return s;
+): Promise<GithubPrState> {
+  const key = prKey(prNumber, ghRepo);
+  const prior = mutationTails.get(key) ?? Promise.resolve();
+  const run = prior.then(async () => {
+    const state = getOrInitPrState(prNumber, headRef, ghRepo);
+    patch(state);
+    return writePrState(state);
+  });
+  mutationTails.set(key, run.then(() => undefined, () => undefined));
+  return run;
 }
 
 /** Persist a just-received mention so a crash/restart before the run self-persists
@@ -196,8 +244,8 @@ export function setPendingMention(
   prNumber: number,
   pending: NonNullable<GithubPrState["pendingMention"]>,
   ghRepo?: string
-): void {
-  updatePrState(
+): Promise<GithubPrState> {
+  return updatePrState(
     prNumber,
     `pr-${prNumber}`,
     (s) => {
@@ -208,9 +256,9 @@ export function setPendingMention(
 }
 
 /** Clear the pending-mention marker once a run owns the mention or it completes. */
-export function clearPendingMention(prNumber: number, ghRepo?: string): void {
+export async function clearPendingMention(prNumber: number, ghRepo?: string): Promise<void> {
   if (!readPrState(prNumber, ghRepo)?.pendingMention) return;
-  updatePrState(
+  await updatePrState(
     prNumber,
     `pr-${prNumber}`,
     (s) => {
@@ -227,8 +275,8 @@ export function recordReviewed(
   sha: string,
   lastReview: LastReviewState,
   ghRepo?: string,
-): void {
-  updatePrState(
+): Promise<GithubPrState> {
+  return updatePrState(
     prNumber,
     headRef,
     (s) => {
@@ -242,13 +290,13 @@ export function recordReviewed(
 
 /** Clear the one-shot recovery marker — but only when it's still ours. A run that
  *  chains into another one (simplify → re-review) must not clear the successor's. */
-export function clearActiveRun(
+export async function clearActiveRun(
   prNumber: number,
   headRef: string,
   kind: NonNullable<GithubPrState["activeRun"]>["kind"],
   ghRepo?: string,
-): void {
-  updatePrState(
+): Promise<void> {
+  await updatePrState(
     prNumber,
     headRef,
     (s) => {
@@ -260,14 +308,14 @@ export function clearActiveRun(
 
 /** Persist a stop request before aborting the engine, so startup recovery and
  *  pre-engine setup cannot bring the run back. */
-export function requestActiveRunCancellation(
+export async function requestActiveRunCancellation(
   prNumber: number,
   headRef: string,
   kind: NonNullable<GithubPrState["activeRun"]>["kind"],
   ghRepo?: string,
-): boolean {
+): Promise<boolean> {
   let requested = false;
-  updatePrState(
+  await updatePrState(
     prNumber,
     headRef,
     (s) => {
@@ -289,16 +337,9 @@ export function activeRunCancellationRequested(
   return run?.kind === kind && Boolean(run.cancelRequestedAt);
 }
 
-/** Every PR state file (for the startup recovery sweep). */
+/** Every managed PR state record for the startup recovery sweep. */
 export function listPrStates(): GithubPrState[] {
-  const out: GithubPrState[] = [];
-  for (const file of readdirSync(STATE_DIR)) {
-    if (!file.endsWith(".json")) continue;
-    try {
-      out.push(JSON.parse(readFileSync(`${STATE_DIR}/${file}`, "utf-8")) as GithubPrState);
-    } catch {}
-  }
-  return out;
+  return [...prStateCache.values()].map(cloneState);
 }
 
 // ── Startup recovery selection ───────────────────────────────
@@ -371,8 +412,8 @@ export function planRecovery(
 }
 
 /** Clear one recovery marker (used for the stale ones planRecovery reports). */
-export function clearRecoveryMarker(s: GithubPrState, kind: RecoveryKind): void {
-  updatePrState(
+export function clearRecoveryMarker(s: GithubPrState, kind: RecoveryKind): Promise<GithubPrState> {
+  return updatePrState(
     s.prNumber,
     s.headRef,
     (st) => {

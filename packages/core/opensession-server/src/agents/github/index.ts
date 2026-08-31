@@ -155,7 +155,7 @@ async function fireRecovery(s: GithubPrState, kind: RecoveryKind): Promise<void>
     console.warn(
       `[github] Refusing ${kind} recovery for PR #${s.prNumber} from untrusted @${recoveryRequester(s, kind) || "unknown"}`,
     );
-    clearRecoveryMarker(s, kind);
+    await clearRecoveryMarker(s, kind);
     return;
   }
 
@@ -225,7 +225,7 @@ async function fireRecovery(s: GithubPrState, kind: RecoveryKind): Promise<void>
  * in the same receipt-to-run window. The classic case is a webhook that landed
  * during shutdown drain (acked 200, so GitHub won't redeliver).
  *
- * ONE pass over the state files, at most one run fired per PR. These markers
+ * ONE pass over managed PR state, at most one run fired per PR. These markers
  * legitimately coexist — auto-fix arms `autoFix.active` and its gate review arms
  * `activeRun` — so per-marker sweeps used to fire two runs for the same PR after
  * every restart. planRecovery picks the outermost live marker; the nested ones
@@ -238,7 +238,7 @@ async function retryPendingMentions(): Promise<void> {
     if (!s.pendingMention || s.activeMention || s.activeRun) continue;
     const p = s.pendingMention;
     if (!isTrustedGithubLogin(p.author)) {
-      clearPendingMention(s.prNumber, s.ghRepo);
+      await clearPendingMention(s.prNumber, s.ghRepo);
       continue;
     }
     const { dispatchMention } = await import("./mention");
@@ -262,7 +262,7 @@ Request accepted.`,
             s.ghRepo,
           ).catch(() => {});
         }
-        clearPendingMention(s.prNumber, s.ghRepo);
+        await clearPendingMention(s.prNumber, s.ghRepo);
       },
       (error) => console.warn(`[github] pending mention remains queued for PR #${s.prNumber}:`, error),
     );
@@ -285,11 +285,11 @@ async function recoverInterrupted(): Promise<void> {
       console.log(
         `[github] Clearing stale ${label} recovery flag for PR #${s.prNumber} (from ${recoveryMarkerAt(s, kind) || "unknown"})`,
       );
-      clearRecoveryMarker(s, kind);
+      await clearRecoveryMarker(s, kind);
     }
     if (!fire) continue;
     // The fired run owns the PR; its mention receipt is bookkeeping it supersedes.
-    if (fire !== "pending-mention" && s.pendingMention) clearPendingMention(s.prNumber, s.ghRepo);
+    if (fire !== "pending-mention" && s.pendingMention) await clearPendingMention(s.prNumber, s.ghRepo);
     await fireRecovery(s, fire);
   }
 }
@@ -378,7 +378,7 @@ export class GithubAgent implements AgentModule {
   }
 
   async shutdown(): Promise<void> {
-    // Auto-fix loop state is persisted to disk after each iteration; nothing to flush.
+    // Auto-fix loop state is durably persisted after each iteration; nothing to flush.
   }
 
   health(): Record<string, unknown> {

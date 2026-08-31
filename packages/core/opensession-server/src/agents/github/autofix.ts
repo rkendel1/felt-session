@@ -165,7 +165,7 @@ export async function runAutoFix(
       const id = await postIssueComment(pr.number, body, pr.ghRepo);
       if (id) {
         statusCommentId = id;
-        updatePrState(
+        await updatePrState(
           pr.number,
           pr.headRef,
           (s) => {
@@ -187,7 +187,7 @@ export async function runAutoFix(
     // A killed-and-recovered loop re-enters with no steer arg; pull it back from state.
     const effectiveSteer = steer ?? (resuming ? prior?.steer : undefined);
 
-    updatePrState(
+    await updatePrState(
       pr.number,
       pr.headRef,
       (s) => {
@@ -286,7 +286,7 @@ export async function runAutoFix(
 
       // The loop's own locals are authoritative here. Re-reading them off disk
       // would pick up whatever a concurrent review lane last wrote.
-      updatePrState(
+      await updatePrState(
         pr.number,
         pr.headRef,
         (s) => {
@@ -427,7 +427,7 @@ export async function runAutoFix(
     const dispBlock = lastDisp ? formatDispositions(lastDisp) : "";
     await updateStatus(dispBlock ? `${outcome || "done."}\n\n${dispBlock}` : outcome || "done.");
 
-    updatePrState(
+    await updatePrState(
       pr.number,
       pr.headRef,
       (s) => {
@@ -460,7 +460,7 @@ export async function runAutoFix(
   } catch (e) {
     console.error(`[github] auto-fix error for PR #${pr.number}:`, e);
     transientExit = true; // an unexpected throw is infrastructure, not a verdict
-    updatePrState(
+    await updatePrState(
       pr.number,
       pr.headRef,
       (s) => {

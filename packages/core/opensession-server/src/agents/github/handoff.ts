@@ -42,10 +42,10 @@ export function isHandoffActive(prNumber: number, ghRepo?: string): boolean {
 }
 
 /** Drop round tracking (PR closed, or a review came back satisfied). */
-export function clearHandoff(prNumber: number, ghRepo?: string): void {
+export async function clearHandoff(prNumber: number, ghRepo?: string): Promise<void> {
   const s = readPrState(prNumber, ghRepo);
   if (!s?.handoff) return;
-  updatePrState(
+  await updatePrState(
     prNumber,
     s.headRef,
     (st) => {
@@ -64,7 +64,7 @@ export async function maybeHandoffFindings(pr: PrRef, review: ReviewResult | nul
     // null = the review was skipped (dedup/lock) or died before producing a result.
     if (!handoffEnabled() || !review || review.error) return;
     if (reviewSatisfied(review)) {
-      clearHandoff(pr.number, pr.ghRepo);
+      await clearHandoff(pr.number, pr.ghRepo);
       return;
     }
     // A fixer (label auto-fix / simplify / mention reply) already owns the
@@ -140,8 +140,8 @@ export async function maybeHandoffFindings(pr: PrRef, review: ReviewResult | nul
     }
 
     // Re-read here: the delivery above is a network round-trip, and a mention
-    // webhook landing in that window writes to the same file.
-    const delivered = updatePrState(
+    // webhook landing in that window writes to the same managed record.
+    const delivered = await updatePrState(
       pr.number,
       pr.headRef,
       (s) => {
@@ -186,7 +186,7 @@ async function announceCap(pr: PrRef): Promise<void> {
     state.summaryCommentId,
     `🔁 Still not merge-ready after ${state.handoff.rounds} handed-off fix round(s) — over to humans. (The \`os-auto-fix\` label still works for another automated pass.)`,
   );
-  updatePrState(
+  await updatePrState(
     pr.number,
     pr.headRef,
     (s) => {

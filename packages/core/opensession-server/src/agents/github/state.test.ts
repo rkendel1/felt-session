@@ -1,13 +1,8 @@
-import { afterAll, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "fs";
-import { homedir, tmpdir } from "os";
+import { beforeEach, describe, expect, test } from "bun:test";
+import { createFeltDB } from "@feltdb/core";
+import { existsSync, mkdtempSync, writeFileSync } from "fs";
+import { tmpdir } from "os";
 import { join } from "path";
-
-// state.ts resolves its dir once at import, so point the state root at a scratch
-// dir BEFORE importing it and put the env back for everyone else.
-const SCRATCH = mkdtempSync(join(tmpdir(), "gh-pr-state-"));
-const savedRoot = process.env.OPENSESSION_STATE_DIR;
-process.env.OPENSESSION_STATE_DIR = SCRATCH;
 const {
   activeRunCancellationRequested,
   getOrInitPrState,
@@ -16,23 +11,17 @@ const {
   requestActiveRunCancellation,
   setPendingMention,
   updatePrState,
+  initializeManagedGithubPrState,
 } = await import("./state");
-if (savedRoot === undefined) delete process.env.OPENSESSION_STATE_DIR;
-else process.env.OPENSESSION_STATE_DIR = savedRoot;
 
 const PR = 990101;
 const HEAD = "some-feature-branch";
 
-afterAll(() => {
-  rmSync(SCRATCH, { recursive: true, force: true });
-  // Another test file in the same run may have imported state.ts first, pinning
-  // it to the real root before the env override above. Sweep the fake PRs from
-  // every root it could have resolved to, so no run leaves state behind.
-  for (const root of [SCRATCH, savedRoot, process.env.HOME, homedir()]) {
-    if (!root) continue;
-    for (const pr of [PR, PR + 1, PR + 2])
-      rmSync(`${root}/.opensession-github/${pr}.json`, { force: true });
-  }
+beforeEach(async () => {
+  await initializeManagedGithubPrState(
+    createFeltDB({ namespace: crypto.randomUUID(), memory: true }),
+    `/tmp/missing-github-state-${crypto.randomUUID()}`,
+  );
 });
 
 function pendingMention(commentId: number) {
@@ -46,18 +35,35 @@ function pendingMention(commentId: number) {
 }
 
 describe("concurrent writers on one PR's state", () => {
+  test("imports legacy PR state once and removes its file", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "github-pr-state-legacy-"));
+    const path = join(dir, `${PR}.json`);
+    writeFileSync(path, JSON.stringify({
+      prNumber: PR,
+      headRef: HEAD,
+      reviewedShas: ["aaaaaaa"],
+      updatedAt: new Date().toISOString(),
+    }));
+    await initializeManagedGithubPrState(
+      createFeltDB({ namespace: crypto.randomUUID(), memory: true }),
+      dir,
+    );
+    expect(readPrState(PR)?.reviewedShas).toEqual(["aaaaaaa"]);
+    expect(existsSync(path)).toBe(false);
+  });
+
   // Reviews and code actions hold DIFFERENT locks by design, so their windows
   // overlap: a mention webhook lands while a review is awaiting network work.
-  test("a review-lane commit keeps a mention marker that landed mid-flight", () => {
+  test("a review-lane commit keeps a mention marker that landed mid-flight", async () => {
     // The review's early read, taken before its (slow) model run.
     const snapshot = getOrInitPrState(PR, HEAD);
-    updatePrState(PR, HEAD, (s) => { s.summaryCommentId = 11; });
+    await updatePrState(PR, HEAD, (s) => { s.summaryCommentId = 11; });
 
     // A mention webhook arrives while the review is still awaiting.
-    setPendingMention(PR, pendingMention(7));
+    await setPendingMention(PR, pendingMention(7));
 
     // The review's commit point, after the await.
-    recordReviewed(PR, HEAD, "bbbbbbb", {
+    await recordReviewed(PR, HEAD, "bbbbbbb", {
       verdict: "comment",
       confidence: 4,
       findings: 2,
@@ -77,14 +83,14 @@ describe("concurrent writers on one PR's state", () => {
     expect(snapshot.pendingMention).toBeUndefined();
   });
 
-  test("a code-lane commit keeps the review verdict written during its run", () => {
+  test("a code-lane commit keeps the review verdict written during its run", async () => {
     const pr = PR + 1;
-    updatePrState(pr, HEAD, (s) => {
+    await updatePrState(pr, HEAD, (s) => {
       s.autoFix = { active: true, iterations: 1, startedAt: new Date().toISOString() };
     });
 
     // The review lane records its verdict while the auto-fix loop is running.
-    recordReviewed(pr, HEAD, "ccccccc", {
+    await recordReviewed(pr, HEAD, "ccccccc", {
       findings: 0,
       blocking: 0,
       sha: "ccccccc",
@@ -92,7 +98,7 @@ describe("concurrent writers on one PR's state", () => {
     });
 
     // The loop's own locals win for its own fields, and nothing else is touched.
-    updatePrState(pr, HEAD, (s) => {
+    await updatePrState(pr, HEAD, (s) => {
       if (s.autoFix) { s.autoFix.active = false; s.autoFix.iterations = 3; s.autoFix.lastPushedSha = "ddddddd"; }
     });
 
@@ -102,9 +108,9 @@ describe("concurrent writers on one PR's state", () => {
     expect(after.lastReviewedSha).toBe("ccccccc");
   });
 
-  test("a review cancellation is durable and kind-scoped", () => {
+  test("a review cancellation is durable and kind-scoped", async () => {
     const pr = PR + 2;
-    updatePrState(pr, HEAD, (s) => {
+    await updatePrState(pr, HEAD, (s) => {
       s.activeRun = {
         kind: "review",
         requestedBy: "Kent",
@@ -112,9 +118,9 @@ describe("concurrent writers on one PR's state", () => {
       };
     });
 
-    expect(requestActiveRunCancellation(pr, HEAD, "review")).toBe(true);
+    expect(await requestActiveRunCancellation(pr, HEAD, "review")).toBe(true);
     expect(activeRunCancellationRequested(pr, "review")).toBe(true);
-    expect(requestActiveRunCancellation(pr, HEAD, "simplify")).toBe(false);
+    expect(await requestActiveRunCancellation(pr, HEAD, "simplify")).toBe(false);
     expect(readPrState(pr)?.activeRun?.cancelRequestedAt).toBeTruthy();
   });
 });

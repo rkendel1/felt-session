@@ -142,7 +142,7 @@ export async function handleMention(kind: MentionKind, payload: any): Promise<vo
   // the process dies in that window — e.g. this webhook landed mid-shutdown-drain,
   // which we still ack 200 so GitHub won't redeliver — startup recovery replays it.
   // The run self-persists its richer activeMention/activeRun only seconds later.
-  setPendingMention(
+  await setPendingMention(
     prNumber,
     {
       kind,
@@ -166,7 +166,7 @@ Queued @${authorLogin}'s request. I'll retry automatically if GitHub metadata is
   if (receiptId) {
     const pending = readPrState(prNumber, ghRepo)?.pendingMention;
     if (pending && pending.commentId === comment.id) {
-      setPendingMention(prNumber, { ...pending, progressCommentId: receiptId }, ghRepo);
+      await setPendingMention(prNumber, { ...pending, progressCommentId: receiptId }, ghRepo);
     }
   }
   try {
@@ -180,7 +180,7 @@ Request accepted.`,
         ghRepo,
       ).catch(() => {});
     }
-    clearPendingMention(prNumber, ghRepo);
+    await clearPendingMention(prNumber, ghRepo);
   } catch (error) {
     if (receiptId)
       await editIssueComment(
@@ -296,7 +296,7 @@ export async function runConversationalMention(
       `${REPLY_MARKER}\n🔄 On it — working on @${args.author}'s request… · ${link}`,
       ghRepo,
     );
-    updatePrState(
+    await updatePrState(
       prNumber,
       headRef,
       (s) => {
@@ -368,7 +368,7 @@ export async function runConversationalMention(
   } finally {
     // Clear recovery state on completion; a killed process leaves it set so the
     // github agent re-runs the mention on startup.
-    updatePrState(
+    await updatePrState(
       prNumber,
       headRef || `pr-${prNumber}`,
       (s) => {

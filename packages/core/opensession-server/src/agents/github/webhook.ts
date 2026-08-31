@@ -155,7 +155,7 @@ export async function handleGithubPrEvent(event: string, payload: any): Promise<
       } else if (labelMatches(label, LABEL_AUTOFIX)) {
         // A human re-applying the label is a fresh mandate — reset the sweep's
         // per-SHA retry budget so it can babysit this new attempt too.
-        updatePrState(pr.number, ref.headRef, (s) => {
+        await updatePrState(pr.number, ref.headRef, (s) => {
           if (s.reconcile) { s.reconcile.autofixAttempts = 0; s.reconcile.autofixSha = undefined; }
           // Dispatch below is intentionally async. Persist the actor first so a
           // shutdown after this webhook is acknowledged cannot make reconcile
@@ -175,7 +175,7 @@ export async function handleGithubPrEvent(event: string, payload: any): Promise<
     // dead PR — cancel it, and drop any handoff round tracking.
     if (action === "closed") {
       cancelPendingReview(prKey(pr.number, ghRepo));
-      clearHandoff(pr.number, ghRepo);
+      await clearHandoff(pr.number, ghRepo);
     }
 
     // ── Merge → notify linked sessions + fire configured docs-sync ──

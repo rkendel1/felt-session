@@ -62,6 +62,7 @@ import { initializeManagedPapercuts } from "./src/server/papercuts";
 import { initializeManagedSecurity } from "./src/server/security";
 import { initializeManagedGithubFeedback } from "./src/agents/github/feedback";
 import { initializeManagedGithubLearnedRules } from "./src/agents/github/learned-rules";
+import { initializeManagedGithubPrState } from "./src/agents/github/state";
 import { ensureMemoryV2Ready, initializeManagedMemory } from "./src/server/memory-v2/runtime";
 import { initializeManagedSessionSearch } from "./src/server/session-index";
 import { initializeManagedSessionList } from "./src/server/session-list-store";
@@ -259,6 +260,7 @@ if (!g.__opensessionBooted) {
 	await initializeManagedSecurity(db);
 	await initializeManagedGithubFeedback(db);
 	await initializeManagedGithubLearnedRules(db);
+	await initializeManagedGithubPrState(db);
 	await initializeManagedMemory(db);
 	await ensureMemoryV2Ready();
 	await initializeManagedSessionSearch(db);

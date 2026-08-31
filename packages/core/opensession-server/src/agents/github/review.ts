@@ -217,7 +217,7 @@ export async function runReview(
     const recoveredReviewResult = sameHeadRecovery
       ? priorRun?.reviewResult
       : undefined;
-    updatePrState(
+    await updatePrState(
       pr.number,
       pr.headRef,
       (s) => {
@@ -294,7 +294,7 @@ export async function runReview(
     );
     if (placeholderId) {
       let ownsRun = false;
-      updatePrState(
+      await updatePrState(
         pr.number,
         pr.headRef,
         (s) => {
@@ -418,8 +418,8 @@ export async function runReview(
       });
     }
 
-    const persistReviewResult = (result: GithubRunResult) => {
-      updatePrState(
+    const persistReviewResult = async (result: GithubRunResult) => {
+      await updatePrState(
         pr.number,
         pr.headRef,
         (s) => {
@@ -478,7 +478,7 @@ export async function runReview(
         preserveRecovery = true;
         throw new Error(finalResult.error || "Detached review ownership is uncertain");
       }
-      persistReviewResult(finalResult);
+      await persistReviewResult(finalResult);
     }
 
     if (cancellationRequested()) return finishCancelled(placeholderId || undefined);
@@ -513,7 +513,7 @@ export async function runReview(
         preserveRecovery = true;
         throw new Error(finalResult.error || "Detached review ownership is uncertain");
       }
-      persistReviewResult(finalResult);
+      await persistReviewResult(finalResult);
       if (cancellationRequested()) return finishCancelled(placeholderId || undefined);
       parsed = parseReviewOutput(finalResult.text, cwd);
     }
@@ -596,7 +596,7 @@ export async function runReview(
     if (!reviewError && pr.headSha) {
       // The verdict is kept alongside the SHA so the sidebar can show the score
       // without reading the PR's comments back off GitHub.
-      recordReviewed(
+      await recordReviewed(
         pr.number,
         pr.headRef,
         pr.headSha,
@@ -632,7 +632,7 @@ export async function runReview(
           );
       }
       if (!preserveRecovery)
-        clearActiveRun(pr.number, pr.headRef, "review", pr.ghRepo);
+        await clearActiveRun(pr.number, pr.headRef, "review", pr.ghRepo);
     }
     releaseLock("review", pr.number, pr.ghRepo);
   }
@@ -730,7 +730,7 @@ async function postReview(
   }
   if (id && id !== knownCommentId) {
     const postedId = id;
-    updatePrState(
+    await updatePrState(
       pr.number,
       pr.headRef,
       (s) => {

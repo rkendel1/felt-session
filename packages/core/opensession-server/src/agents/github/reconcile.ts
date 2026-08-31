@@ -100,7 +100,7 @@ export async function reconcileOpenPrs(): Promise<void> {
         if (!isTrustedGithubLogin(requestedBy)) continue;
         const attempts = state?.reconcile?.autofixSha === pr.headSha ? state.reconcile.autofixAttempts || 0 : 0;
         if (attempts >= MAX_ATTEMPTS_PER_SHA) continue;
-        updatePrState(pr.number, pr.headRef, (s) => {
+        await updatePrState(pr.number, pr.headRef, (s) => {
           s.reconcile = { ...s.reconcile, autofixSha: pr.headSha, autofixAttempts: attempts + 1 };
         }, ref.ghRepo);
         fires++;
@@ -139,7 +139,7 @@ export async function reconcileOpenPrs(): Promise<void> {
       if (!reviewedBefore && !createdRecently) continue;
       const attempts = state?.reconcile?.reviewSha === pr.headSha ? state.reconcile.reviewAttempts || 0 : 0;
       if (attempts >= MAX_ATTEMPTS_PER_SHA) continue;
-      updatePrState(pr.number, pr.headRef, (s) => {
+      await updatePrState(pr.number, pr.headRef, (s) => {
         s.reconcile = { ...s.reconcile, reviewSha: pr.headSha, reviewAttempts: attempts + 1 };
       }, ref.ghRepo);
       fires++;
