@@ -17,7 +17,7 @@ import { initializeManagedRunners } from "./src/server/runners";
 import { initializeManagedAutomationInputs } from "./src/server/automation-inputs";
 import { initializeManagedAutomationOutputs } from "./src/server/automation-outputs";
 import { initializeManagedAutomationIntents, initializeManagedAutomations } from "./src/server/automations";
-import { startAnalyticsPrewarm } from "./src/server/analytics";
+import { initializeManagedAnalyticsCache, startAnalyticsPrewarm } from "./src/server/analytics";
 import { startDiskGc } from "./src/server/disk-gc";
 import { startWorktreeReaper } from "./src/server/worktree-reaper";
 import { startPortalReaper } from "./src/server/portal-supervisor";
@@ -211,6 +211,7 @@ const g = globalThis as any;
 if (!g.__opensessionBooted) {
 	const db = await initializeManagedFeltDb();
 	await initializeManagedAudit(db);
+	await initializeManagedAnalyticsCache(db);
 	await initializeManagedRunJournal(db);
 	await initializeManagedAccountHealth(db);
 	await initializeManagedGithubLimits(db);

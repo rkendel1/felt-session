@@ -14,7 +14,8 @@
  *   ask-mode and don't own their branch, so reviewed-only PRs don't count).
  */
 
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, unlinkSync } from "node:fs";
+import type { StateFirstDB } from "@feltdb/core";
 import { $ } from "bun";
 import { isNativeSessionId, OPENSESSION_SESSIONS_DIR, stateDir, statePath } from "./paths";
 import { configuredRepos, defaultRepo, githubBotLogins } from "./config";
@@ -26,6 +27,7 @@ import { delegatedActorParent, isMachineActor, machineActorLabel } from "./sessi
 import { PI_USAGE_CUTOVER_MS, piUsageForDates } from "./pi-usage";
 import { persistedSlackSessions } from "../agents/slack/state";
 import { readAuditDayEvents } from "./audit";
+import { managedFeltDb } from "./managed-feltdb";
 
 const CACHE_DIR = stateDir("analytics-cache");
 
@@ -349,7 +351,7 @@ async function managedRollup(date: string): Promise<DayRollup> {
 	return rollupAuditContents(date, events.toReversed().map((event) => JSON.stringify(event)).join("\n"));
 }
 
-// ── Generic timestamped disk cache (gh fetches + composed summaries) ──
+// ── Managed timestamped cache (GitHub fetches + composed summaries) ──
 //
 // The gh caches below are the expensive part of buildAnalytics (network,
 // paginated GraphQL, occasional 504s) and used to be memory-only, so every
@@ -358,36 +360,38 @@ async function managedRollup(date: string): Promise<DayRollup> {
 // are pruned by age (day rollups above are deliberately not touched — past
 // days never recompute).
 
-let lastCachePrune = 0;
+const ANALYTICS_CACHE_COLLECTION = "opensession_analytics_cache";
+type ManagedCacheRecord<T = unknown> = { id: string; at: number; data: T };
+let analyticsCacheDb: StateFirstDB | undefined;
 
-function writeDiskCache(name: string, data: unknown): void {
-	try {
-		mkdirSync(CACHE_DIR, { recursive: true });
-		writeFileSync(`${CACHE_DIR}/${name}.json`, JSON.stringify({ at: Date.now(), data }));
-	} catch (e) {
-		console.error("[analytics] disk cache write failed:", e);
-	}
-	if (Date.now() - lastCachePrune < 86_400_000) return;
-	lastCachePrune = Date.now();
-	try {
-		for (const f of readdirSync(CACHE_DIR)) {
-			if (!f.startsWith("gh-") && !f.startsWith("summary-")) continue;
-			const p = `${CACHE_DIR}/${f}`;
-			if (Date.now() - statSync(p).mtimeMs > 7 * 86_400_000) unlinkSync(p);
+export async function initializeManagedAnalyticsCache(
+	db: StateFirstDB = analyticsCacheDb ?? managedFeltDb(),
+	legacyDir = CACHE_DIR,
+): Promise<void> {
+	analyticsCacheDb = db;
+	if (existsSync(legacyDir)) {
+		for (const file of readdirSync(legacyDir)) {
+			if (/^(gh-|summary-|day-).*\.json$/.test(file)) unlinkSync(`${legacyDir}/${file}`);
 		}
-	} catch {}
+	}
+	const cutoff = Date.now() - 7 * 86_400_000;
+	for (const record of await db.collection<ManagedCacheRecord>(ANALYTICS_CACHE_COLLECTION).all()) {
+		if (record.at < cutoff) await db.collection(ANALYTICS_CACHE_COLLECTION).delete(record.id);
+	}
 }
 
-function readDiskCache<T>(name: string): { at: number; data: T } | null {
-	try {
-		const p = `${CACHE_DIR}/${name}.json`;
-		if (!existsSync(p)) return null;
-		const parsed = JSON.parse(readFileSync(p, "utf-8"));
-		if (typeof parsed?.at !== "number" || parsed.data === undefined) return null;
-		return parsed;
-	} catch {
-		return null;
-	}
+async function writeManagedCache(name: string, data: unknown): Promise<void> {
+	const db = analyticsCacheDb ?? managedFeltDb();
+	const record: ManagedCacheRecord = { id: name, at: Date.now(), data };
+	await db.transaction((tx) => {
+		tx.collection<ManagedCacheRecord>(ANALYTICS_CACHE_COLLECTION).set(name, record);
+	}, { transactionId: `opensession:analytics-cache:${name}:${crypto.randomUUID()}` });
+}
+
+async function readManagedCache<T>(name: string): Promise<{ at: number; data: T } | null> {
+	const record = await (analyticsCacheDb ?? managedFeltDb())
+		.collection<ManagedCacheRecord<T>>(ANALYTICS_CACHE_COLLECTION).get(name);
+	return record && typeof record.at === "number" ? record : null;
 }
 
 // ── Session store scan ──
@@ -509,11 +513,11 @@ const prCache = new Map<string, { at: number; prs: AnalyticsPr[] }>();
 
 async function fetchRepoPrs(repoId: string, ghRepo: string, fromDate: string): Promise<AnalyticsPr[]> {
 	const key = `${ghRepo}:${fromDate}`;
-	const diskName = `gh-prs-${repoId}-${fromDate}`;
+	const cacheName = `gh-prs-${repoId}-${fromDate}`;
 	let cached = prCache.get(key);
 	if (!cached) {
-		const disk = readDiskCache<AnalyticsPr[]>(diskName);
-		if (disk) prCache.set(key, (cached = { at: disk.at, prs: disk.data }));
+		const managed = await readManagedCache<AnalyticsPr[]>(cacheName);
+		if (managed) prCache.set(key, (cached = { at: managed.at, prs: managed.data }));
 	}
 	if (cached && Date.now() - cached.at < PR_CACHE_TTL_MS) return cached.prs;
 
@@ -559,7 +563,7 @@ async function fetchRepoPrs(repoId: string, ghRepo: string, fromDate: string): P
 	if (failed) return cached?.prs ?? [...seen.values()];
 	const prs = [...seen.values()];
 	prCache.set(key, { at: Date.now(), prs });
-	writeDiskCache(diskName, prs);
+	await writeManagedCache(cacheName, prs);
 	return prs;
 }
 
@@ -626,11 +630,11 @@ const FACTORY_QUERY = `query($q: String!, $cursor: String) {
 
 async function fetchRepoFactoryPrs(repoId: string, ghRepo: string, fromDate: string): Promise<FactoryPr[]> {
 	const key = `${ghRepo}:${fromDate}`;
-	const diskName = `gh-factory-${repoId}-${fromDate}`;
+	const cacheName = `gh-factory-${repoId}-${fromDate}`;
 	let cached = factoryCache.get(key);
 	if (!cached) {
-		const disk = readDiskCache<FactoryPr[]>(diskName);
-		if (disk) factoryCache.set(key, (cached = { at: disk.at, prs: disk.data }));
+		const managed = await readManagedCache<FactoryPr[]>(cacheName);
+		if (managed) factoryCache.set(key, (cached = { at: managed.at, prs: managed.data }));
 	}
 	if (cached && Date.now() - cached.at < FACTORY_CACHE_TTL_MS) return cached.prs;
 
@@ -685,7 +689,7 @@ async function fetchRepoFactoryPrs(repoId: string, ghRepo: string, fromDate: str
 		return cached?.prs ?? [];
 	}
 	factoryCache.set(key, { at: Date.now(), prs });
-	writeDiskCache(diskName, prs);
+	await writeManagedCache(cacheName, prs);
 	return prs;
 }
 
@@ -1442,14 +1446,14 @@ export async function buildAnalytics(from: string, to: string): Promise<Analytic
 // paginated GraphQL queries run (or 504). The route therefore serves through
 // this cache: a fresh summary returns directly; a stale one returns
 // immediately while a single background rebuild refreshes it; concurrent
-// misses share one build. Summaries also persist to disk so the first request
+// misses share one build. Summaries also persist in managed FeltDB so the first request
 // after a restart serves the last known numbers instead of blocking.
 
 const SUMMARY_FRESH_MS = 5 * 60 * 1000;
 /** Older than this and we'd rather make the user wait than show it. */
 const SUMMARY_STALE_SERVE_MS = 24 * 60 * 60 * 1000;
 // Bump when composition semantics change so a restart cannot serve a fresh but
-// obsolete disk summary before the background prewarm replaces it.
+// obsolete managed summary before the background prewarm replaces it.
 const SUMMARY_VERSION = 10;
 const summaryCache = new Map<string, { at: number; summary: AnalyticsSummary }>();
 const summaryInflight = new Map<string, Promise<AnalyticsSummary>>();
@@ -1461,7 +1465,7 @@ function summaryDiskName(from: string, to: string): string {
 async function buildAndStore(key: string, from: string, to: string): Promise<AnalyticsSummary> {
 	const summary = await buildAnalytics(from, to);
 	summaryCache.set(key, { at: Date.now(), summary });
-	writeDiskCache(summaryDiskName(from, to), summary);
+	await writeManagedCache(summaryDiskName(from, to), summary);
 	// Bound the map under arbitrary custom ranges (entries are ~100KB).
 	if (summaryCache.size > 24) {
 		const oldest = [...summaryCache.entries()].sort((a, b) => a[1].at - b[1].at)[0];
@@ -1474,8 +1478,8 @@ export async function getAnalytics(from: string, to: string): Promise<AnalyticsS
 	const key = `${from}:${to}`;
 	let cached = summaryCache.get(key);
 	if (!cached) {
-		const disk = readDiskCache<AnalyticsSummary>(summaryDiskName(from, to));
-		if (disk) summaryCache.set(key, (cached = { at: disk.at, summary: disk.data }));
+		const managed = await readManagedCache<AnalyticsSummary>(summaryDiskName(from, to));
+		if (managed) summaryCache.set(key, (cached = { at: managed.at, summary: managed.data }));
 	}
 	const age = cached ? Date.now() - cached.at : Infinity;
 	if (cached && age < SUMMARY_FRESH_MS) return cached.summary;
