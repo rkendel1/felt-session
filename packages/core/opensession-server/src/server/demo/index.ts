@@ -116,15 +116,15 @@ export async function startDemo(): Promise<void> {
     console.error("[demo] dataset generation failed:", e);
   }
 
-  // The PR snapshot caches are seeded on disk by the generator, but both
-  // modules read their snapshot at module load — i.e. before this runs. Reseed
-  // so the demo PR is actually in memory: without it the dataset's PR exists
+  // The demo generator still emits legacy snapshot fixtures. Import them after
+  // generation so the live managed cache and detail cache see the synthetic PR.
+  // Without this, the demo PR exists in the generated dataset but not in memory,
   // on disk and nowhere else, and every PR surface (session PR panel, Home's
   // PR-worktree list) renders empty.
   try {
     const [{ loadPrCacheSnapshot }, { loadPrDetailsSnapshot, seedPrDiff }] =
       await Promise.all([import("../sessions"), import("../pr-info")]);
-    loadPrCacheSnapshot();
+    await loadPrCacheSnapshot();
     loadPrDetailsSnapshot();
     // The Review page's Files-changed tab renders GitHub's patch, which no
     // amount of local git can stand in for — pin the synthetic one.

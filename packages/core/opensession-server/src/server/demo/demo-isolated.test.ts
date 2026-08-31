@@ -15,6 +15,7 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createFeltDB } from "@feltdb/core";
 
 const CHILD = process.env.OS_DEMO_TEST_CHILD === "1";
 
@@ -97,7 +98,7 @@ describe.skipIf(!CHILD)("demo dataset generator", () => {
     // The PR bulk cache lives in pr-cache.ts, which the cache-busting query
     // does NOT reload — reseed it from the snapshot the generator just wrote
     // (the same explicit reseed the real demo boot does).
-    loadPrCacheSnapshot();
+    await loadPrCacheSnapshot(createFeltDB({ namespace: crypto.randomUUID(), memory: true }));
     const sessions = getAllSessions();
     const byId = new Map(sessions.map((s: { id: string }) => [s.id, s]));
     for (const id of result.sessionIds) {

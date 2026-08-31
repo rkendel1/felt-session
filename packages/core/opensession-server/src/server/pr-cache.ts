@@ -10,14 +10,15 @@
  * Live state parks on globalThis (same keys as before the extraction) so hot
  * reloads keep it.
  */
-import { chmodSync, readFileSync } from "fs";
+import { existsSync, readFileSync, unlinkSync } from "fs";
+import type { StateFirstDB } from "@feltdb/core";
 import { statePath } from "./paths";
 import { githubLoginToPersonKey, githubLoginFor } from "./shared/user-mappings";
 import { configuredRepos, githubBotLogins } from "./config";
 import { isLockHeld, readPrState, type LastReviewState } from "../agents/github/state";
 import { ghRateLimited } from "./github-limit";
 import { ghJson, hostRepoId, prHostFor, type BulkPr, type PrHostCapabilities } from "./pr-host";
-import { writeJsonAtomic } from "./shared/atomic-write";
+import { managedFeltDb } from "./managed-feltdb";
 import {
   cachedReviewTeamLogins,
   fetchReviewTeamLogins,
@@ -167,8 +168,8 @@ function reviewMutationKey(
 	return `${ghRepo}#${number}#${person}`;
 }
 
-// The cache is also snapshotted to disk after every successful refresh and
-// seeded from there on boot. Without this, a restart during a GitHub outage or
+// The cache is also snapshotted to managed FeltDB after every successful
+// refresh and seeded from there on boot. Without this, a restart during a GitHub outage or
 // rate-limit window boots with an empty cache that no refresh can fill, and the
 // sidebar's PR queue silently vanishes (2026-07-22). ts stays 0 so the first
 // access still refreshes immediately; the snapshot only serves as stale data.
@@ -177,19 +178,33 @@ function reviewMutationKey(
 // is read from the right place by an explicit loadPrCacheSnapshot() call.
 const prCacheFile = () => statePath(".opensession-pr-cache.json");
 const PR_CACHE_VERSION = 5;
+const PR_CACHE_COLLECTION = "opensession_pr_cache";
+const PR_CACHE_ID = "bulk";
+const PR_CACHE_MIGRATION = "pr-cache-json-to-managed-feltdb-v1";
 const DURABLE_CACHE_MAX_AGE_MS = 30 * 60_000;
+type StoredPrCache = {
+  id: string;
+  version: number;
+  repos: Record<string, Record<string, PrInfo>>;
+  recentLimits: Record<string, number>;
+  openLimits: Record<string, number>;
+  probeEtags: Record<string, string>;
+  lastFullRefresh: Record<string, number>;
+};
+let prCacheDb: StateFirstDB | undefined;
+let prCachePersistTail: Promise<void> = Promise.resolve();
 const probeEtags = new Map<string, string>(); // ghRepo → last seen ETag
 const lastFullRefresh = new Map<string, number>(); // repo id → epoch ms
 /**
- * Seed the bulk cache from its on-disk snapshot. Runs once at module load;
- * also exported because a demo instance writes its snapshot at the END of
- * boot (startDemo), long after this module was evaluated — without a reseed
- * the demo PR exists on disk but never in memory, so the PR panel and Home's
- * PR rows stay empty (2026-08-05).
+ * Apply the persisted bulk snapshot to the live cache. Demo generation calls
+ * the initializer again after it creates its synthetic legacy snapshot.
  */
-export function loadPrCacheSnapshot(): void {
+function applyPrCacheSnapshot(value: unknown): void {
 try {
-  const parsed = JSON.parse(readFileSync(prCacheFile(), "utf8"));
+  const parsed = value as any;
+  prCache.ts = 0;
+  probeEtags.clear();
+  lastFullRefresh.clear();
   const raw: Record<string, Record<string, PrInfo>> =
     ([2, 3, 4, PR_CACHE_VERSION].includes(parsed?.version)) && parsed?.repos
       ? parsed.repos
@@ -231,24 +246,76 @@ try {
   }
 } catch {}
 }
-loadPrCacheSnapshot();
 
-function persistPrCache(data: Map<string, Map<string, PrInfo>>) {
-  try {
+function serializePrCache(data: Map<string, Map<string, PrInfo>>): StoredPrCache {
     const obj: Record<string, Record<string, PrInfo>> = {};
     for (const [repo, byBranch] of data) obj[repo] = Object.fromEntries(byBranch);
-    writeJsonAtomic(prCacheFile(), {
+    return {
+      id: PR_CACHE_ID,
       version: PR_CACHE_VERSION,
       repos: obj,
       recentLimits: Object.fromEntries(prRepos().map((repo) => [repo.id, repo.recentLimit])),
       openLimits: Object.fromEntries(prRepos().map((repo) => [repo.id, repo.openLimit])),
       probeEtags: Object.fromEntries(probeEtags),
       lastFullRefresh: Object.fromEntries(lastFullRefresh),
-    }, false);
-    chmodSync(prCacheFile(), 0o600);
-  } catch (e) {
-    console.error("Failed to persist PR cache:", e);
+    };
+}
+
+async function persistPrCacheSnapshot(snapshot: StoredPrCache): Promise<void> {
+  const db = prCacheDb ?? managedFeltDb();
+  await db.transaction((tx) => {
+    tx.collection<StoredPrCache>(PR_CACHE_COLLECTION).set(PR_CACHE_ID, snapshot);
+  }, { transactionId: `opensession:pr-cache:${crypto.randomUUID()}` });
+}
+
+function persistPrCache(data: Map<string, Map<string, PrInfo>>): void {
+  const snapshot = serializePrCache(data);
+  prCachePersistTail = prCachePersistTail
+    .catch(() => {})
+    .then(() => persistPrCacheSnapshot(snapshot))
+    .catch((error) => console.error("Failed to persist PR cache:", error));
+}
+
+export async function initializeManagedPrCache(
+  db: StateFirstDB = prCacheDb ?? managedFeltDb(),
+): Promise<void> {
+  prCacheDb = db;
+  const legacyPath = prCacheFile();
+  const migrations = db.collection<{ id: string }>("opensession_migrations");
+  if (!await migrations.get(PR_CACHE_MIGRATION)) {
+    try {
+      if (existsSync(legacyPath)) {
+        applyPrCacheSnapshot(JSON.parse(readFileSync(legacyPath, "utf8")));
+        await persistPrCacheSnapshot(serializePrCache(prCache.data));
+      }
+      await db.transaction((tx) => {
+        tx.collection("opensession_migrations").set(PR_CACHE_MIGRATION,
+          { id: PR_CACHE_MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
+      }, { transactionId: `opensession:migration:${PR_CACHE_MIGRATION}` });
+      if (existsSync(legacyPath)) unlinkSync(legacyPath);
+    } catch (error) {
+      console.error("Failed to migrate PR cache snapshot:", error);
+    }
+  } else {
+    const stored = await db.collection<StoredPrCache>(PR_CACHE_COLLECTION).get(PR_CACHE_ID);
+    if (stored) applyPrCacheSnapshot(stored);
   }
+}
+
+/** Import a newly generated demo/test legacy fixture into the managed cache. */
+export async function loadPrCacheSnapshot(
+  db: StateFirstDB = prCacheDb ?? managedFeltDb(),
+): Promise<void> {
+  prCacheDb = db;
+  const legacyPath = prCacheFile();
+  if (!existsSync(legacyPath)) {
+    const stored = await db.collection<StoredPrCache>(PR_CACHE_COLLECTION).get(PR_CACHE_ID);
+    if (stored) applyPrCacheSnapshot(stored);
+    return;
+  }
+  applyPrCacheSnapshot(JSON.parse(readFileSync(legacyPath, "utf8")));
+  await persistPrCacheSnapshot(serializePrCache(prCache.data));
+  unlinkSync(legacyPath);
 }
 
 /** Keep the repo-wide PR queue coherent after a human closes a PR in OS1. */
@@ -484,6 +551,15 @@ function schedulePrCachePersist() {
 		prCachePersistTimer = null;
 		persistPrCache(prCache.data);
 	}, 5_000);
+}
+
+export async function flushPrCacheWrites(): Promise<void> {
+	if (prCachePersistTimer) {
+		clearTimeout(prCachePersistTimer);
+		prCachePersistTimer = null;
+		persistPrCache(prCache.data);
+	}
+	await prCachePersistTail;
 }
 
 /**

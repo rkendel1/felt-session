@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { createFeltDB } from "@feltdb/core";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { PrInfo } from "./pr-cache";
@@ -70,6 +71,24 @@ function openRow(number: number, branch: string): PrInfo {
 		assignees: [],
 	};
 }
+
+it("imports the legacy snapshot into managed FeltDB and removes the file", async () => {
+	const path = join(stateRoot, ".opensession-pr-cache.json");
+	writeFileSync(path, JSON.stringify({
+		version: 5,
+		repos: { prcachetest: { main: openRow(776, "main") } },
+		recentLimits: { prcachetest: 500 },
+		openLimits: { prcachetest: 100 },
+		probeEtags: {},
+		lastFullRefresh: {},
+	}));
+	const db = createFeltDB({ namespace: crypto.randomUUID(), memory: true });
+	const { initializeManagedPrCache } = await import("./pr-cache");
+	await initializeManagedPrCache(db);
+	expect(existsSync(path)).toBe(false);
+	const stored = await db.collection<{ repos: Record<string, unknown> }>("opensession_pr_cache").get("bulk");
+	expect(stored?.repos.prcachetest).toBeDefined();
+});
 
 describe("markCachedPrMerged", () => {
 	it("still applies on the next sweep when the cache had no row for the branch", async () => {
