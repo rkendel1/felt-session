@@ -174,6 +174,13 @@ export function encodeKernelSessionMigration(
         transactionId: `opensession:kernel:migrated-change:${sessionId}:${row.change_seq}`,
         createdAt: Number(row.created_at),
       };
+      else if (plan.table === "session_kernel_asks") value = {
+        schemaVersion: 1,
+        sessionId,
+        revision: Number(row.revision),
+        record: value.record,
+        updatedAt: Number(row.updated_at),
+      };
       else if (plan.table === "session_kernel_outbox") value = {
         schemaVersion: 1,
         recordId: id,
