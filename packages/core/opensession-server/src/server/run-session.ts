@@ -1146,7 +1146,7 @@ export async function recordRecoveredRunEvent(osSessionId: string, event: Stream
 			sessionId: osSessionId,
 			isRunning: false,
 		});
-		onHumanAsksSessionIdle(osSessionId);
+		await onHumanAsksSessionIdle(osSessionId);
 		if (event.type === "error") return;
 	}
 
@@ -3175,7 +3175,7 @@ async function runSessionPromptInner(
 	// The session just finished a turn; if nothing's queued it's idle now, so fire
 	// any "when_done" / "on_pr" human asks waiting on this session. Idempotent.
 	if (!promptQueues.get(sessionId)?.length) {
-		onHumanAsksSessionIdle(sessionId);
+		await onHumanAsksSessionIdle(sessionId);
 		// Ephemeral providers can persist an exact, session-private filesystem
 		// image now that the turn is quiescent. This is detached from response
 		// latency; the provider serializes a follow-up restore behind it.

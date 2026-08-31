@@ -520,9 +520,9 @@ export interface RequestCredentialInput {
   mode?: GrantMode;
 }
 
-export function requestCredential(
+export async function requestCredential(
   input: RequestCredentialInput
-): { ask: KeychainAskRecord; transport: HumanAsk } | { error: string } {
+): Promise<{ ask: KeychainAskRecord; transport: HumanAsk } | { error: string }> {
   load();
   const credMeta = findCredential(input.credential);
   if (!credMeta) {
@@ -556,7 +556,7 @@ export function requestCredential(
     createdAt: new Date().toISOString(),
   };
 
-  const transport = registerAsk({
+  const transport = await registerAsk({
     sessionId: input.sessionId,
     createdBy: input.requestedBy,
     person: { slackId: owner.slackId, name: owner.name },

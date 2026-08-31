@@ -294,7 +294,7 @@ let agents: AgentModule[] = (g.__agents as AgentModule[] | undefined) ?? [];
 // request that persists these globalThis-backed maps. Hot reloads reuse the
 // live maps and skip this branch.
 if (!g.__opensessionBooted && !isDevInstance()) {
-	initHumanAsks();
+	await initHumanAsks();
 	await restorePendingAsks();
 	await hydratePersistedQueueState();
 }

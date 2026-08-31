@@ -29,8 +29,9 @@
  * runs — same privilege boundary as opensession-sessions/opensession-admin: untrusted
  * ticket text must not be able to DM the team as the bot.
  */
-import { existsSync, readFileSync } from "node:fs";
-import { writeJsonAtomic } from "./shared/atomic-write";
+import { existsSync, readFileSync, unlinkSync } from "node:fs";
+import type { StateFirstDB } from "@feltdb/core";
+import { managedFeltDb } from "./managed-feltdb";
 import { homeDir, OPENSESSION_SESSIONS_DIR } from "./paths";
 import { audit } from "./audit";
 import { tryGetSessionControl } from "./session-control";
@@ -106,11 +107,17 @@ export interface HumanAsk {
   createdAt: string;
   deliveredAt?: string;
   answeredAt?: string;
+  __version?: number;
 }
 
-interface Stored {
+interface LegacyStored {
   asks: HumanAsk[];
 }
+
+const HUMAN_ASKS_COLLECTION = "opensession_human_asks";
+const HUMAN_ASKS_MIGRATION = "human-asks-file-to-managed-feltdb-v1";
+let humanAsksDb: StateFirstDB | undefined;
+let persistTail: Promise<void> = Promise.resolve();
 
 const g = globalThis as any;
 /** All asks, by id. Persisted to disk. */
@@ -130,13 +137,22 @@ const uiOffers: Map<string, { close: () => void; timer?: ReturnType<typeof setTi
 // Persistence
 // ---------------------------------------------------------------------------
 
-function persist(): void {
-  try {
-    const data: Stored = { asks: [...asks.values()] };
-    writeJsonAtomic(STORE, data, false);
-  } catch (e) {
-    console.error("[human-asks] persist failed:", e);
-  }
+async function persist(ask: HumanAsk): Promise<void> {
+  const snapshot = structuredClone(ask);
+  const write = persistTail.then(async () => {
+    const db = humanAsksDb ?? managedFeltDb();
+    const current = asks.get(snapshot.id);
+    await db.transaction((tx) => {
+      tx.collection<HumanAsk>(HUMAN_ASKS_COLLECTION).set(snapshot.id, snapshot,
+        snapshot.__version ? { ifVersion: snapshot.__version } : { requireAbsent: true });
+    }, { transactionId: `opensession:human-ask:${snapshot.id}:${crypto.randomUUID()}` });
+    const saved = await db.collection<HumanAsk>(HUMAN_ASKS_COLLECTION).get(snapshot.id);
+    if (!saved) throw new Error(`Human ask ${snapshot.id} disappeared after save`);
+    Object.assign(ask, saved);
+    if (current === ask || asks.get(snapshot.id) === current) asks.set(snapshot.id, ask);
+  });
+  persistTail = write.catch(() => {});
+  await write;
 }
 
 function isTerminal(a: HumanAsk): boolean {
@@ -156,29 +172,47 @@ async function enqueueAskDelivery(a: HumanAsk, skipUi = false): Promise<void> {
     `${a.id}:${skipUi || !a.uiFirst ? "slack" : "ui"}`,
   );
 }
-export function initHumanAsks(): void {
-  if (existsSync(STORE)) {
-    try {
-      const data: Stored = JSON.parse(readFileSync(STORE, "utf-8"));
-      const cutoff = Date.now() - TERMINAL_RETENTION_MS;
-      for (const a of data.asks || []) {
-        if (isTerminal(a)) {
-          const t = new Date(a.answeredAt || a.createdAt).getTime();
-          if (t && t < cutoff) continue; // prune
-        }
-        // A delivered block ask can't resume its held turn after a restart.
-        if (a.state === "delivered" && a.mode === "block") a.mode = "async";
-        asks.set(a.id, a);
-      }
-    } catch (e) {
-      console.error("[human-asks] load failed:", e);
+export async function initHumanAsks(db: StateFirstDB = humanAsksDb ?? managedFeltDb()): Promise<void> {
+  humanAsksDb = db;
+  const migrations = db.collection<{ id: string }>("opensession_migrations");
+  if (!await migrations.get(HUMAN_ASKS_MIGRATION)) {
+    let legacy: HumanAsk[] = [];
+    if (existsSync(STORE)) {
+      const data = JSON.parse(readFileSync(STORE, "utf8")) as LegacyStored;
+      legacy = Array.isArray(data.asks) ? data.asks : [];
     }
+    await db.transaction((tx) => {
+      for (const ask of legacy)
+        tx.collection<HumanAsk>(HUMAN_ASKS_COLLECTION).set(ask.id, ask, { requireAbsent: true });
+      tx.collection("opensession_migrations").set(HUMAN_ASKS_MIGRATION,
+        { id: HUMAN_ASKS_MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
+    }, { transactionId: `opensession:migration:${HUMAN_ASKS_MIGRATION}` });
+  }
+  if (existsSync(STORE)) unlinkSync(STORE);
+  asks.clear();
+  const cutoff = Date.now() - TERMINAL_RETENTION_MS;
+  for (const a of await db.collection<HumanAsk>(HUMAN_ASKS_COLLECTION).all()) {
+    if (isTerminal(a)) {
+      const t = new Date(a.answeredAt || a.createdAt).getTime();
+      if (t && t < cutoff) {
+        await db.transaction((tx) => {
+          tx.collection<HumanAsk>(HUMAN_ASKS_COLLECTION)
+            .delete(a.id, { ifVersion: a.__version });
+        }, { transactionId: `opensession:human-ask:prune:${a.id}` });
+        continue;
+      }
+    }
+    if (a.state === "delivered" && a.mode === "block") {
+      a.mode = "async";
+      asks.set(a.id, a);
+      await persist(a);
+    } else asks.set(a.id, a);
   }
   relinkAskThreads();
   for (const a of asks.values()) {
     if (a.state !== "scheduled") continue;
     if (a.deliver === "now") {
-      enqueueAskDelivery(a);
+      await enqueueAskDelivery(a);
     }
     // Re-arm scheduled time deliveries.
     if (typeof a.deliver === "object" && a.deliver.atIso) {
@@ -192,10 +226,9 @@ export function initHumanAsks(): void {
     if (a.uiFirst && a.deliver === "now") {
       const startedAt = new Date(a.uiOfferedAt || a.createdAt).getTime();
       const left = UI_FIRST_WINDOW_MS - (Date.now() - startedAt);
-      if (left > 5_000) offerAskInUi(a, left);
+      if (left > 5_000) await offerAskInUi(a, left);
       else if (a.uiOfferedAt) {
-        enqueueAskDelivery(a, true
-        );
+        await enqueueAskDelivery(a, true);
       }
     }
   }
@@ -325,12 +358,12 @@ function shouldAskInUiFirst(input: CreateAskInput): boolean {
  * DM goes out both channels stay open and whoever answers first wins (asks.ts
  * works the same way).
  */
-function offerAskInUi(a: HumanAsk, windowMs: number): void {
+async function offerAskInUi(a: HumanAsk, windowMs: number): Promise<void> {
   if (uiOffers.has(a.id)) return;
   if (!a.uiOfferedAt) {
     a.uiOfferedAt = new Date().toISOString();
     asks.set(a.id, a);
-    persist();
+    await persist(a);
   }
   audit({
     context: "human_ask",
@@ -375,7 +408,8 @@ function offerAskInUi(a: HumanAsk, windowMs: number): void {
           // isn't — leave the Slack fallback armed rather than stranding it.
           if (!answer) return;
           closeUiOffer(a.id, { retract: false }); // the card retracted itself
-          resolveAskFromUI(a.id, answer, a.person.name);
+          void resolveAskFromUI(a.id, answer, a.person.name).catch((error) =>
+            console.error(`[human-asks] UI answer persistence failed for ${a.id}:`, error));
         },
       );
       if (uiOffers.get(a.id) !== entry) {
@@ -402,7 +436,7 @@ function closeUiOffer(id: string, opts?: { retract?: boolean }): void {
 }
 
 /** Register an ask and trigger its delivery if it's due now / arm its timer. */
-export function registerAsk(input: CreateAskInput): HumanAsk {
+export async function registerAsk(input: CreateAskInput): Promise<HumanAsk> {
   const id = input.id || `ask-${crypto.randomUUID()}`;
   const existing = asks.get(id);
   if (existing) {
@@ -426,7 +460,7 @@ export function registerAsk(input: CreateAskInput): HumanAsk {
     createdAt: new Date().toISOString(),
   };
   asks.set(ask.id, ask);
-  persist();
+  await persist(ask);
   audit({
     context: "human_ask",
     action: "created",
@@ -572,7 +606,7 @@ export async function deliverAsk(id: string, opts?: { skipUi?: boolean },): Prom
   const a = asks.get(id);
   if (!a || a.state !== "scheduled") return false;
   if (a.uiFirst && !opts?.skipUi) {
-    offerAskInUi(a, UI_FIRST_WINDOW_MS);
+    await offerAskInUi(a, UI_FIRST_WINDOW_MS);
     return true;
   }
   const channel = await openDirectMessage(a.person.slackId);
@@ -592,7 +626,7 @@ export async function deliverAsk(id: string, opts?: { skipUi?: boolean },): Prom
   a.slack = { channel, rootTs: res.ts };
   a.deliveredAt = new Date().toISOString();
   asks.set(id, a);
-  persist();
+  await persist(a);
   // The DM thread now belongs to the asking session. While the ask is live,
   // matchReply claims replies first (they're an *answer*); once it's moot —
   // cancelled, answered elsewhere, timed out — this link is what keeps a late
@@ -653,7 +687,8 @@ export function awaitBlockingAnswer(id: string): Promise<string | null> {
       const a = asks.get(id);
       if (a && a.state === "delivered") {
         a.mode = "async"; // a late reply now routes back via deliverToSession
-        persist();
+        void persist(a).catch((error) =>
+          console.error(`[human-asks] timeout persistence failed for ${a.id}:`, error));
       }
       resolve(null);
     }, BLOCK_TIMEOUT_MS);
@@ -675,19 +710,19 @@ function shortQ(a: HumanAsk): string {
 
 /** Mark an ask answered, audit it, and route the answer (block resolver if the
  *  wait is still live in this process, otherwise steer it into the session). */
-function resolveAsk(
+async function resolveAsk(
   a: HumanAsk,
   answer: string,
   answeredBy: string,
   via: "slack" | "ui" = "slack",
-): void {
+): Promise<void> {
   closeUiOffer(a.id); // whichever channel won, take the card down
   a.state = "answered";
   a.answer = answer;
   a.answeredBy = answeredBy;
   a.answeredAt = new Date().toISOString();
   asks.set(a.id, a);
-  persist();
+  await persist(a);
   audit({
     context: "human_ask",
     action: "answered",
@@ -741,12 +776,12 @@ function resolveAsk(
  * it's threaded: an un-threaded DM after a moot ask is indistinguishable from a
  * new request and still takes the normal DM path.
  */
-export function matchReply(input: {
+export async function matchReply(input: {
   channel: string;
   user: string;
   threadTs?: string;
   text: string;
-}): HumanAsk | null {
+}): Promise<HumanAsk | null> {
   const text = (input.text || "").trim();
   if (!text) return null;
   const candidates = [...asks.values()].filter(
@@ -781,7 +816,7 @@ export function matchReply(input: {
     from_user: input.user,
     threaded: !!(input.threadTs && match.slack!.rootTs === input.threadTs),
   });
-  resolveAsk(match, text, match.person.name);
+  await resolveAsk(match, text, match.person.name);
   return match;
 }
 
@@ -817,7 +852,7 @@ export function noteAskThreadReply(input: {
 /** Resolve an ask with an answer given in the session UI. If Slack already
  *  received the ask, replace its card with a read-only answered state so the
  *  teammate cannot answer the same question again. */
-export function resolveAskFromUI(askId: string, answer: string, answeredBy: string,): boolean {
+export async function resolveAskFromUI(askId: string, answer: string, answeredBy: string,): Promise<boolean> {
   const a = asks.get(askId);
   if (!a) return false;
   const inUiWindow = a.state === "scheduled" && !!a.uiOfferedAt;
@@ -831,14 +866,14 @@ export function resolveAskFromUI(askId: string, answer: string, answeredBy: stri
     via: "ui",
     answered_by: answeredBy,
   });
-  resolveAsk(a, answer, answeredBy, "ui");
+  await resolveAsk(a, answer, answeredBy, "ui");
   markSlackAskAnswered(a, answer, answeredBy, productName());
   return true;
 }
 
 /** Resolve an option-button / modal answer by ask id (from the Slack interactivity
  *  endpoint). Returns true if it was an outstanding ask. */
-export function resolveByOption(askId: string, label: string): boolean {
+export async function resolveByOption(askId: string, label: string): Promise<boolean> {
   const a = asks.get(askId);
   if (!a || a.state !== "delivered") return false;
   audit({
@@ -849,7 +884,7 @@ export function resolveByOption(askId: string, label: string): boolean {
     person: a.person.name,
     via: "button",
   });
-  resolveAsk(a, label, a.person.name);
+  await resolveAsk(a, label, a.person.name);
   markSlackAskAnswered(a, label, a.person.name, "Slack");
   return true;
 }
@@ -868,7 +903,7 @@ export function isAwaiting(askId: string): boolean {
  * Fires any scheduled "when_done" asks for it, plus "on_pr" asks once the
  * session has a PR. Idempotent — a delivered ask won't re-fire.
  */
-export function onSessionIdle(sessionId: string): void {
+export async function onSessionIdle(sessionId: string): Promise<void> {
   // A block ask can only hold a turn while its run is alive — the session
   // going idle means the awaiting tool call is gone (interrupt, cancel, or
   // crash). Degrade to async so a late reply steers into the session as a new
@@ -882,7 +917,7 @@ export function onSessionIdle(sessionId: string): void {
     if (resolver) resolver(null); // settles the orphaned await; its tool is dead
     a.mode = "async";
     asks.set(a.id, a);
-    persist();
+    await persist(a);
     audit({
       context: "human_ask",
       action: "degraded_to_async",
@@ -924,7 +959,7 @@ export function getAsk(id: string): HumanAsk | undefined {
   return asks.get(id);
 }
 
-export function cancelAsk(id: string): boolean {
+export async function cancelAsk(id: string): Promise<boolean> {
   const a = asks.get(id);
   if (!a || isTerminal(a)) return false;
   a.state = "cancelled";
@@ -937,7 +972,7 @@ export function cancelAsk(id: string): boolean {
   }
   const resolver = resolvers.get(id);
   if (resolver) resolver(null);
-  persist();
+  await persist(a);
   audit({ context: "human_ask", action: "cancelled", ask_id: id, session_id: a.sessionId, });
   // If it was already delivered, let the teammate know it's moot.
   if (a.slack) {

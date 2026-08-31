@@ -325,7 +325,10 @@ export async function dispatchSlackInteractive(payload: any): Promise<void> {
     if (haOpt?.[1]) {
       const askId = haOpt[1];
       const label = action.value;
-      setImmediate(() => resolveHumanAsk(askId, label));
+      setImmediate(() => {
+        void resolveHumanAsk(askId, label).catch((error) =>
+          console.error(`[slack] Failed to persist human ask ${askId}:`, error));
+      });
       return;
     }
 
@@ -494,7 +497,10 @@ Please address this feedback:
       const askId = haModal[1];
       const answer: string =
         payload.view?.state?.values?.answer_block?.answer_input?.value || "";
-      if (answer.trim()) setImmediate(() => resolveHumanAsk(askId, answer.trim()));
+      if (answer.trim()) setImmediate(() => {
+        void resolveHumanAsk(askId, answer.trim()).catch((error) =>
+          console.error(`[slack] Failed to persist human ask ${askId}:`, error));
+      });
       return;
     }
 

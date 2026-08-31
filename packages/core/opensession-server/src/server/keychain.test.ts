@@ -154,9 +154,9 @@ describe("grant lifecycle", () => {
     expect(kc.revokeGrant("kg-missing", "Alex")).toEqual({ error: "no such grant" });
   });
 
-  test("requesting an unknown credential names what exists", () => {
+  test("requesting an unknown credential names what exists", async () => {
     cred();
-    const r = kc.requestCredential({
+    const r = await kc.requestCredential({
       credential: "stripe",
       sessionId: "bks-1",
       requestedBy: "Alex",
@@ -166,9 +166,9 @@ describe("grant lifecycle", () => {
     expect((r as { error: string }).error).toContain("vercel");
   });
 
-  test("a purpose is required — it is what the owner approves", () => {
+  test("a purpose is required — it is what the owner approves", async () => {
     cred();
-    const r = kc.requestCredential({
+    const r = await kc.requestCredential({
       credential: "vercel",
       sessionId: "bks-1",
       requestedBy: "Alex",

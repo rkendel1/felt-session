@@ -182,7 +182,7 @@ export function createHumansMcpServer(ctx: HumansToolContext) {
             }
           }
 
-          const ask = registerAsk({
+          const ask = await registerAsk({
             sessionId: ctx.sessionId,
             createdBy: ctx.createdBy,
             person,
@@ -215,7 +215,7 @@ export function createHumansMcpServer(ctx: HumansToolContext) {
               (answers) => {
                 if (!answers) return;
                 const v = Object.values(answers).filter(Boolean).join("\n");
-                if (v) resolveAskFromUI(ask.id, v, ctx.createdBy || "the session driver");
+                if (v) void resolveAskFromUI(ask.id, v, ctx.createdBy || "the session driver");
               }
             );
             try {
@@ -248,7 +248,7 @@ export function createHumansMcpServer(ctx: HumansToolContext) {
         "Cancel an outstanding human ask by id (from list_pending_asks). If it was already sent, the teammate gets a quick 'never mind' note.",
         { id: z.string().describe("The ask id, e.g. 'ask-…'.") },
         async (args: { id: string }) => {
-          const ok = cancelAsk(args.id);
+          const ok = await cancelAsk(args.id);
           return text(ok ? `Cancelled \`${args.id}\`.` : `Nothing to cancel for \`${args.id}\`.`);
         }
       )

@@ -1183,7 +1183,7 @@ export async function handleMessageEvent(event: any): Promise<void> {
   // (matchReply only matches the exact person asked, in that ask's DM). Runs
   // before the allow-list gate below for exactly that reason; it's tightly
   // scoped and every accepted reply is audited.
-  const matchedAsk = matchHumanAskReply({ channel, user, threadTs: thread_ts, text });
+  const matchedAsk = await matchHumanAskReply({ channel, user, threadTs: thread_ts, text });
   if (matchedAsk) {
     console.log(`[slack] Routed reply from ${user} into session ${matchedAsk.sessionId} (ask ${matchedAsk.id})`);
     await addReaction(channel, ts, "white_check_mark").catch(() => {});

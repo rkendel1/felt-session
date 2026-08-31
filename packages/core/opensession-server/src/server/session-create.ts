@@ -1640,13 +1640,13 @@ export async function openCreatedSession(
 				watchExternalRunAndDrain(bksId);
 			}
 			if (!promptQueues.get(bksId)?.length) {
-				onHumanAsksSessionIdle(bksId);
+				await onHumanAsksSessionIdle(bksId);
 			}
 		} else {
 			if (promptQueues.get(bksId)?.length)
 				await drainQueue(bksId);
 			else
-				onHumanAsksSessionIdle(bksId);
+				await onHumanAsksSessionIdle(bksId);
 		}
 	} catch (e: any) {
 		if (creationSettled) {

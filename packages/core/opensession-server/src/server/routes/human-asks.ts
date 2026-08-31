@@ -51,7 +51,7 @@ export async function handleHumanAsksRoutes(
 				{ error: "This question was asked of someone else" },
 				{ status: 403 },
 			);
-		return resolveAskFromUI(ask.id, answer, user)
+		return await resolveAskFromUI(ask.id, answer, user)
 			? Response.json({ ok: true })
 			: Response.json(
 					{ error: "That question is no longer awaiting an answer" },
@@ -87,7 +87,7 @@ export async function handleHumanAsksRoutes(
 	);
 	if (askCancelMatch && req.method === "DELETE") {
 		const { cancelAsk } = await import("../../server/human-asks");
-		return cancelAsk(askCancelMatch[1])
+		return await cancelAsk(askCancelMatch[1])
 			? Response.json({ ok: true })
 			: Response.json({ error: "Not found" }, { status: 404 });
 	}

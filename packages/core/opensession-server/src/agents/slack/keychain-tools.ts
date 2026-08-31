@@ -83,7 +83,7 @@ export function createKeychainMcpServer(ctx: KeychainToolContext) {
           ),
       },
       async (args: { credential: string; purpose: string; mode?: "once" | "standing" }) => {
-        const result = requestCredential({
+        const result = await requestCredential({
           credential: args.credential,
           sessionId: ctx.sessionId,
           requestedBy: ctx.user,

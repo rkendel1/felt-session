@@ -224,7 +224,7 @@ async function resolveRestoredAsk(
 	ask.answerReceived = true;
 	ask.earlyAnswer = answers;
 	await pendingAsks.set(sessionId, ask);
-	if (ask.escalatedAskId) cancelAsk(ask.escalatedAskId);
+	if (ask.escalatedAskId) await cancelAsk(ask.escalatedAskId);
 	persistPendingAsks(ask.storePath);
 	broadcastToSession(sessionId, {
 		type: "ask_resolved",
@@ -246,7 +246,7 @@ export async function settleRestoredAskAfterRecovery(sessionId: string): Promise
 	const answers = ask.answerReceived ? (ask.earlyAnswer ?? null) : null;
 	if (!answers) {
 		await retirePendingAsk(sessionId, ask.questionId);
-		if (ask.escalatedAskId) cancelAsk(ask.escalatedAskId);
+		if (ask.escalatedAskId) await cancelAsk(ask.escalatedAskId);
 		broadcastToSession(sessionId, {
 			type: "ask_resolved",
 			sessionId,
@@ -277,7 +277,7 @@ export async function settleRestoredAskAfterRecovery(sessionId: string): Promise
 			// now may the answered card and recovery intent be retired.
 			recordAskAnswer(sessionId, questions, answers);
 			await retirePendingAsk(sessionId, ask.questionId);
-			if (ask.escalatedAskId) cancelAsk(ask.escalatedAskId);
+			if (ask.escalatedAskId) await cancelAsk(ask.escalatedAskId);
 			broadcastToSession(sessionId, {
 				type: "ask_resolved",
 				sessionId,
@@ -512,7 +512,7 @@ async function escalatePendingAsk(
 	);
 	const latest = pendingAsks.get(sessionId);
 	if (!latest || latest.questionId !== questionId || latest.answerReceived) {
-		if (escalated) cancelAsk(escalated.askId);
+		if (escalated) await cancelAsk(escalated.askId);
 		return;
 	}
 	if (!escalated) {
@@ -840,7 +840,7 @@ export function makeAskHandler(sessionId: string) {
 				recordAskAnswer(sessionId, questions, a);
 				// If the web UI answered after we'd already pinged Slack, retract the
 				// Slack ask so the teammate isn't left answering a moot question.
-				if (escalatedAskId) cancelAsk(escalatedAskId);
+				if (escalatedAskId) await cancelAsk(escalatedAskId);
 				resolveAnswers(a);
 			})();
 			finishing = attempt.finally(() => {
@@ -957,7 +957,7 @@ async function escalateAskToSlack(
 		if (!person) return null;
 
 		const { question, options } = askToSlackPrompt(questions);
-		const ask = registerAsk({
+		const ask = await registerAsk({
 			id: `ask-${questionId}`,
 			sessionId,
 			createdBy: session?.startedBy || personaName(),
