@@ -156,7 +156,7 @@ export async function dispatchSlackEvent(payload: any): Promise<void> {
   // Handle message.im events (DMs)
   if (shouldHandleDirectMessage(event)) {
     const eventId = `${event.channel}-${event.ts}`;
-    const result = slackEventInbox.enqueue("direct_message", event);
+    const result = await slackEventInbox.enqueue("direct_message", event);
     if (result === "processed") {
       console.log(`[slack] Duplicate event: ${eventId}`);
     } else if (result === "pending") {
@@ -202,7 +202,7 @@ export async function dispatchSlackEvent(payload: any): Promise<void> {
   // Handle app_mention events
   if (shouldHandleAppMention(event)) {
     const eventId = `${event.channel}-${event.ts}`;
-    const result = slackEventInbox.enqueue("mention", event);
+    const result = await slackEventInbox.enqueue("mention", event);
     if (result === "processed") {
       console.log(`[slack] Duplicate mention event: ${eventId}`);
     } else if (result === "pending") {
@@ -813,6 +813,7 @@ export class SlackAgent implements AgentModule {
       console.warn("[slack] Failed to fetch Slack team info:", e);
     }
 
+    await slackEventInbox.initialize();
     const pendingEvents = slackEventInbox.pendingCount();
     void slackEventInbox.start().catch((error) => {
       console.error("[slack] Failed to start durable event replay:", error);
