@@ -1,18 +1,20 @@
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
+import { createFeltDB } from "@feltdb/core";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { createServer } from "node:net";
 import { listPortalServices, listSandboxPortalServices, readPortalRegistry, reapOrphanedPortalServices, SANDBOX_PORTAL_AGENT_ENTRY, setPortalPath, startPortalService, startSandboxPortalService, stopPortalService, stopSandboxPortalService } from "./portal-supervisor";
-import { sleepingSandboxPortalStatus } from "./sandbox-portals";
+import { initializeManagedSandboxPortals, sleepingSandboxPortalStatus } from "./sandbox-portals";
 import type { Sandbox } from "./sandbox/provider";
 
 let worktree = "";
 const previousStateDir = process.env.OPENSESSION_STATE_DIR;
 
-beforeEach(() => {
+beforeEach(async () => {
 	worktree = mkdtempSync(join(tmpdir(), "os-portals-test-"));
 	process.env.OPENSESSION_STATE_DIR = worktree;
+	await initializeManagedSandboxPortals(createFeltDB({ namespace: crypto.randomUUID(), memory: true }));
 });
 afterAll(() => {
 	if (worktree) rmSync(worktree, { recursive: true, force: true });

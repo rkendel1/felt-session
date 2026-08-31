@@ -527,7 +527,7 @@ function sandboxPortalOps(sandbox: Sandbox, sessionId?: string): PortalOps {
 		readRegistry: async () => (await readSandboxPortalRegistry(sandbox)).records,
 		writeRegistry: async (records) => {
 			await writeSandboxPortalRegistry(sandbox, records);
-			if (sessionId) cacheSandboxPortalRecords(sessionId, sandbox.id, records);
+			if (sessionId) await cacheSandboxPortalRecords(sessionId, sandbox.id, records);
 		},
 		probePort: async (port) => (await sandbox.exec(["timeout", "2", "bash", "-c", `exec 3<>/dev/tcp/127.0.0.1/${port}`])).exitCode === 0,
 		pidAlive: async (pid) => {

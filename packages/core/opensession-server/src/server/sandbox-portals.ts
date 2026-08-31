@@ -5,9 +5,10 @@
  * Keep only presentation metadata here. Live URLs are deliberately discarded
  * from the sleeping view, and reopening requires an explicit wake.
  */
-import { existsSync, readFileSync } from "fs";
+import { existsSync, readFileSync, unlinkSync } from "node:fs";
+import type { StateFirstDB } from "@feltdb/core";
 import { statePath } from "./paths";
-import { writeJsonAtomic } from "./shared/atomic-write";
+import { managedFeltDb } from "./managed-feltdb";
 import type { PreviewService, PreviewStatus } from "./preview";
 
 /** `state` is optional on the wire of this durable store: entries written
@@ -15,18 +16,46 @@ import type { PreviewService, PreviewStatus } from "./preview";
 type CachedPortal = Pick<PreviewService, "name" | "key" | "port" | "description" | "defaultPath" | "managed"> & { state?: PreviewService["state"] };
 type CachedPortalInput = Pick<CachedPortal, "name" | "key" | "port"> & Partial<Pick<CachedPortal, "description" | "defaultPath" | "managed" | "state">>;
 type CachedEntry = { sessionId: string; sandboxId: string; services: CachedPortal[]; updatedAt: string };
-type Store = { portals: CachedEntry[] };
+type Store = { portals: CachedEntry[]; __version?: number };
+const COLLECTION = "opensession_sandbox_portals";
+const STORE_ID = "portals";
+const MIGRATION = "sandbox-portals-json-to-managed-feltdb-v1";
+let portalsDb: StateFirstDB | undefined;
+let portalStore: Store = { portals: [] };
 
 function storePath(): string { return statePath(".opensession-sandbox-portals.json"); }
 function load(): Store {
-	try {
-		const parsed = existsSync(storePath()) ? JSON.parse(readFileSync(storePath(), "utf8")) : null;
-		return Array.isArray(parsed?.portals) ? { portals: parsed.portals } : { portals: [] };
-	} catch { return { portals: [] }; }
+	return structuredClone(portalStore);
 }
-function save(store: Store): void { writeJsonAtomic(storePath(), store); }
+async function save(store: Store): Promise<void> {
+	const db = portalsDb ?? managedFeltDb();
+	const previous = portalStore;
+	delete store.__version;
+	await db.transaction((tx) => {
+		tx.collection<Store>(COLLECTION).set(STORE_ID, store,
+			previous.__version ? { ifVersion: previous.__version } : { requireAbsent: true });
+	}, { transactionId: `opensession:sandbox-portals:put:${crypto.randomUUID()}` });
+	portalStore = { ...store, __version: (previous.__version ?? 0) + 1 };
+}
 
-function cacheSandboxPortalMetadata(sessionId: string, sandboxId: string, services: CachedPortalInput[]): void {
+export async function initializeManagedSandboxPortals(db: StateFirstDB = portalsDb ?? managedFeltDb()): Promise<void> {
+	portalsDb = db;
+	if (!await db.collection<{ id: string }>("opensession_migrations").get(MIGRATION)) {
+		let legacy: Store | null = null;
+		try { if (existsSync(storePath())) legacy = JSON.parse(readFileSync(storePath(), "utf8")); } catch {}
+		if (Array.isArray(legacy?.portals)) await db.transaction((tx) => {
+			tx.collection<Store>(COLLECTION).set(STORE_ID, legacy!);
+		}, { transactionId: "opensession:sandbox-portals:migrate" });
+		await db.transaction((tx) => {
+			tx.collection("opensession_migrations").set(MIGRATION,
+				{ id: MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
+		}, { transactionId: `opensession:migration:${MIGRATION}` });
+	}
+	if (existsSync(storePath())) unlinkSync(storePath());
+	portalStore = await db.collection<Store>(COLLECTION).get(STORE_ID) ?? { portals: [] };
+}
+
+async function cacheSandboxPortalMetadata(sessionId: string, sandboxId: string, services: CachedPortalInput[]): Promise<void> {
 	const entry: CachedEntry = {
 		sessionId,
 		sandboxId,
@@ -36,18 +65,18 @@ function cacheSandboxPortalMetadata(sessionId: string, sandboxId: string, servic
 	const store = load();
 	const index = store.portals.findIndex((item) => item.sessionId === sessionId);
 	if (index < 0) store.portals.push(entry); else store.portals[index] = entry;
-	save(store);
+	await save(store);
 }
 
-export function cacheSandboxPortals(sessionId: string, sandboxId: string, services: PreviewService[]): void {
-	cacheSandboxPortalMetadata(sessionId, sandboxId, services);
+export async function cacheSandboxPortals(sessionId: string, sandboxId: string, services: PreviewService[]): Promise<void> {
+	await cacheSandboxPortalMetadata(sessionId, sandboxId, services);
 }
 
 /** Persist supervisor state at each transition, before a later status probe.
  * This keeps newly starting, failed, and stopped Portals visible even when a
  * remote provider cannot currently be inspected. */
-export function cacheSandboxPortalRecords(sessionId: string, sandboxId: string, records: CachedPortalInput[]): void {
-	cacheSandboxPortalMetadata(sessionId, sandboxId, records.map((record) => ({ ...record, managed: true })));
+export async function cacheSandboxPortalRecords(sessionId: string, sandboxId: string, records: CachedPortalInput[]): Promise<void> {
+	await cacheSandboxPortalMetadata(sessionId, sandboxId, records.map((record) => ({ ...record, managed: true })));
 }
 
 /** A non-waking status for the sidebar. There is intentionally no live URL. */
@@ -91,8 +120,8 @@ export function cachedSandboxPortalOwner(
 	return entry?.sessionId ?? null;
 }
 
-export function dropCachedSandboxPortals(sandboxId: string): void {
+export async function dropCachedSandboxPortals(sandboxId: string): Promise<void> {
 	const store = load();
 	const portals = store.portals.filter((entry) => entry.sandboxId !== sandboxId);
-	if (portals.length !== store.portals.length) save({ portals });
+	if (portals.length !== store.portals.length) await save({ portals });
 }

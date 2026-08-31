@@ -1425,7 +1425,7 @@ export async function getSandboxPreviewStatus(
     services,
     portalRecipes,
   };
-	if (sessionId) cacheSandboxPortals(sessionId, sandbox.id, services);
+	if (sessionId) await cacheSandboxPortals(sessionId, sandbox.id, services);
 	return status;
 }
 
@@ -1690,7 +1690,7 @@ export async function stopSandboxPreview(
 export async function dropSandboxPreviewRoutes(sandboxId: string, options: { preservePortalCache?: boolean } = {}): Promise<void> {
 	revokeSandboxPortalGrants(sandboxId);
 	forgetRemoteSandboxPortalAgents(sandboxId);
-	if (!options.preservePortalCache) dropCachedSandboxPortals(sandboxId);
+	if (!options.preservePortalCache) await dropCachedSandboxPortals(sandboxId);
 	for (const [key, relay] of remotePortalRelays) {
 		if (!key.startsWith(`${sandboxId}:`)) continue;
 		try { relay.server.stop(true); } catch {}
