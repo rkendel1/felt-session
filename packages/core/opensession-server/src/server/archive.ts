@@ -3,7 +3,6 @@
  * owned by their agents (read-only for opensession), so archived-ness lives in
  * a backstage-owned registry keyed by unified session id.
  */
-import { OPENSESSION_SESSIONS_DIR } from "./paths";
 import { ManagedValueRegistry } from "./managed-value-registry";
 import type { StateFirstDB } from "@feltdb/core";
 import { unpinEverywhere } from "./pins";
@@ -23,11 +22,7 @@ interface Entry {
 // treat a bare string as `{ reason: "manual" }` so existing data keeps working.
 type RawEntry = string | Entry;
 
-const registry = new ManagedValueRegistry<RawEntry>(
-  "opensession_archive_registry",
-  "archive-registry-json-to-managed-feltdb-v1",
-  () => `${OPENSESSION_SESSIONS_DIR}/archive-registry.json`,
-);
+const registry = new ManagedValueRegistry<RawEntry>("opensession_archive_registry");
 export function initializeManagedArchive(db?: StateFirstDB): Promise<void> {
   return registry.initialize(db);
 }

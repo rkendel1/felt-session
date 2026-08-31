@@ -5,11 +5,10 @@
  * reviewer's sidebar (plus a push/alert), until the request is cleared.
  *
  * Same shape as the archive / title / status-override registries: a
- * backstage-owned JSON store keyed by unified session id, applied over every
+ * FeltDB collection keyed by unified session id, applied over every
  * session in getAllSessions. Slack/Linear session files are read-only for
  * opensession, so the request can't live in the session file.
  */
-import { OPENSESSION_SESSIONS_DIR } from "./paths";
 import { ManagedValueRegistry } from "./managed-value-registry";
 import type { StateFirstDB } from "@feltdb/core";
 
@@ -28,13 +27,7 @@ export interface ReviewRequest {
 	accepted?: { by: string; at: string };
 }
 
-const REGISTRY_PATH = `${OPENSESSION_SESSIONS_DIR}/review-requests.json`;
-
-const registry = new ManagedValueRegistry<ReviewRequest>(
-	"opensession_review_requests",
-	"review-requests-json-to-managed-feltdb-v1",
-	REGISTRY_PATH,
-);
+const registry = new ManagedValueRegistry<ReviewRequest>("opensession_review_requests");
 export function initializeManagedReviewRequests(db?: StateFirstDB): Promise<void> {
 	return registry.initialize(db);
 }

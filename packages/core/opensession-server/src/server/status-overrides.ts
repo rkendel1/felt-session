@@ -5,12 +5,11 @@
  * pin a session into a chosen lane — e.g. shove an idle session into Backlog, or
  * drop something out of "In review" until later — overriding the derivation.
  *
- * Same shape as the archive / title-override registries: a backstage-owned JSON
+ * Same shape as the archive / title-override registries: a FeltDB collection
  * store keyed by unified session id, applied over the derived value in
  * getAllSessions. Slack/Linear session files are read-only for opensession and the
  * lane is computed at scan time, so the override can't live in the session file.
  */
-import { OPENSESSION_SESSIONS_DIR } from "./paths";
 import { ManagedValueRegistry } from "./managed-value-registry";
 import type { StateFirstDB } from "@feltdb/core";
 
@@ -34,13 +33,7 @@ export function isManualStatus(v: unknown): v is ManualStatus {
 	return typeof v === "string" && VALID.has(v);
 }
 
-const REGISTRY_PATH = `${OPENSESSION_SESSIONS_DIR}/status-overrides.json`;
-
-const registry = new ManagedValueRegistry<ManualStatus>(
-	"opensession_status_overrides",
-	"status-overrides-json-to-managed-feltdb-v1",
-	REGISTRY_PATH,
-);
+const registry = new ManagedValueRegistry<ManualStatus>("opensession_status_overrides");
 export function initializeManagedStatusOverrides(db?: StateFirstDB): Promise<void> {
 	return registry.initialize(db);
 }

@@ -5,16 +5,10 @@
  * lives in a server-owned registry keyed by unified session id, applied over
  * the derived title in getAllSessions — exactly like the archive registry.
  */
-import { OPENSESSION_SESSIONS_DIR } from "./paths";
 import { ManagedValueRegistry } from "./managed-value-registry";
 import type { StateFirstDB } from "@feltdb/core";
 
-const REGISTRY_PATH = `${OPENSESSION_SESSIONS_DIR}/title-overrides.json`;
-const registry = new ManagedValueRegistry<string>(
-	"opensession_title_overrides",
-	"title-overrides-json-to-managed-feltdb-v1",
-	REGISTRY_PATH,
-);
+const registry = new ManagedValueRegistry<string>("opensession_title_overrides");
 
 export function initializeManagedTitleOverrides(db?: StateFirstDB): Promise<void> {
 	return registry.initialize(db);

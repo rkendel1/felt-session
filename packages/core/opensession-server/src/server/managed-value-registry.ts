@@ -1,4 +1,3 @@
-import { existsSync, readFileSync, unlinkSync } from "node:fs";
 import type { StateFirstDB } from "@feltdb/core";
 import { managedFeltDb } from "./managed-feltdb";
 
@@ -14,11 +13,7 @@ export class ManagedValueRegistry<T> {
   private readonly values = new Map<string, T>();
   private db: StateFirstDB | undefined;
 
-  constructor(
-    private readonly collectionName: string,
-    private readonly migrationId: string,
-    private readonly legacyPath: string | (() => string),
-  ) {}
+  constructor(private readonly collectionName: string) {}
 
   get(id: string): T | undefined { return this.values.get(id); }
   has(id: string): boolean { return this.values.has(id); }
@@ -26,25 +21,6 @@ export class ManagedValueRegistry<T> {
 
   async initialize(authority: StateFirstDB = managedFeltDb()): Promise<void> {
     this.db = authority;
-    const legacyPath = typeof this.legacyPath === "function"
-      ? this.legacyPath()
-      : this.legacyPath;
-    const migrations = authority.collection<{ id: string }>("opensession_migrations");
-    if (!await migrations.get(this.migrationId)) {
-      let legacy: Record<string, T> = {};
-      try {
-        if (existsSync(legacyPath)) legacy = JSON.parse(readFileSync(legacyPath, "utf8"));
-      } catch {}
-      for (const [id, value] of Object.entries(legacy)) await this.write(id, value, false);
-      await authority.transaction((tx) => {
-        tx.collection("opensession_migrations").set(
-          this.migrationId,
-          { id: this.migrationId, completedAt: Date.now() },
-          { requireAbsent: true },
-        );
-      }, { transactionId: `opensession:migration:${this.migrationId}` });
-      if (existsSync(legacyPath)) unlinkSync(legacyPath);
-    }
     const records = authority.runtime().runtime === "remote"
       ? await this.queryAll(authority)
       : (await authority.collection<StoredValue<T>>(this.collectionName).all())
