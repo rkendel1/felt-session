@@ -1,5 +1,12 @@
 import { createHash } from "node:crypto";
-import type { DurableTurnOutcomeProjection, DurableTurnState } from "./store";
+import type {
+  DurableDeliveryState,
+  DurableRunState,
+  DurableTurnOutcomeProjection,
+  DurableTurnState,
+} from "./store";
+import { nextRunState, type RunState } from "./run-state-machine";
+import type { QueueItem } from "../queue-state";
 import {
   FeltDbSessionDecisionStore,
   KERNEL_COLLECTIONS,
@@ -22,6 +29,11 @@ type StoredProjection = DurableTurnOutcomeProjection & {
   updatedAt: number;
   __version: number;
 };
+type StoredDelivery = DurableDeliveryState & {
+  schemaVersion: 1;
+  sessionId: string;
+  __version: number;
+};
 
 function digest(value: unknown): string {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
@@ -29,6 +41,10 @@ function digest(value: unknown): string {
 
 function turnId(sessionId: string): string {
   return kernelRecordId("turn", sessionId);
+}
+
+function deliveryId(sessionId: string): string {
+  return kernelRecordId("delivery", sessionId);
 }
 
 function projectionId(sessionId: string, decisionEpoch: number, id: string): string {
@@ -74,6 +90,146 @@ export class FeltDbTurnStore {
 
   async snapshot(sessionId: string): Promise<DurableTurnState> {
     return state(await this.record(sessionId));
+  }
+
+  async prepareCancel(
+    commandId: string,
+    input: {
+      sessionId: string;
+      cancelId: string;
+      expectedRunId: string;
+      expectedGeneration: number;
+      dispatchId: string;
+      requeueIds: string[];
+      source: string;
+      user?: string;
+    },
+    now = Date.now(),
+  ): Promise<{ cancel: Cancel; runState: DurableRunState }> {
+    if (
+      !input.cancelId || input.cancelId.length > 256 ||
+      !input.expectedRunId || input.expectedRunId.length > 256 ||
+      !Number.isSafeInteger(input.expectedGeneration) || input.expectedGeneration < 0 ||
+      !input.dispatchId || input.dispatchId.length > 256 ||
+      input.dispatchId !== input.expectedRunId ||
+      input.requeueIds.length > 256 || input.requeueIds.some((id) => !id || id.length > 256) ||
+      !input.source || input.source.length > 100 ||
+      (input.user !== undefined && (!input.user || input.user.length > 200))
+    ) throw new Error("Invalid turn cancel intent");
+    const [head, priorTurn, priorDelivery] = await Promise.all([
+      this.decisions.head(input.sessionId),
+      this.record(input.sessionId),
+      this.decisions.record<StoredDelivery>(
+        KERNEL_COLLECTIONS.delivery,
+        deliveryId(input.sessionId),
+      ),
+    ]);
+    if (!head) throw new Error(`Session ${input.sessionId} has no FeltDB authority`);
+    if (priorTurn?.cancel?.cancelId === input.cancelId) {
+      const prior = priorTurn.cancel;
+      if (
+        prior.runId !== input.expectedRunId ||
+        prior.runGeneration !== input.expectedGeneration ||
+        JSON.stringify(prior.requeueIds) !== JSON.stringify(input.requeueIds) ||
+        prior.source !== input.source || prior.user !== input.user
+      ) throw new Error("Turn cancel identity was reused with another payload");
+      return { cancel: prior, runState: { ...head.run, changeSeq: head.changeSeq } };
+    }
+    const ownsTarget = head.run.currentRunId === input.expectedRunId ||
+      (!head.run.currentRunId && ["starting", "preparing"].includes(head.run.state) &&
+        input.dispatchId === input.expectedRunId);
+    if (!ownsTarget || head.run.generation !== input.expectedGeneration)
+      throw new Error("The run targeted by this cancel has already changed");
+    const reduced = nextRunState(head.run.state as RunState, "cancel");
+    if (!reduced) throw new Error(`Cannot cancel a run while ${head.run.state}`);
+    const targetState = head.run.state === "preparing" ? "stopped" : reduced;
+    const baseDelivery: DurableDeliveryState = priorDelivery
+      ? (({ schemaVersion: _, sessionId: __, __version: ___, ...value }) => value)(priorDelivery)
+      : { revision: 0, queued: [], steered: [], pendingSteers: [], updatedAt: 0 };
+    const steered = [...baseDelivery.steered] as QueueItem[];
+    const requested = new Set(input.requeueIds);
+    const requeued = steered.filter(
+      (item) => typeof item.id === "string" && requested.has(item.id),
+    );
+    if (requeued.length !== requested.size)
+      throw new Error("A cancel requeue receipt is no longer actor-owned");
+    const duplicateIds = new Set(requeued.map((item) => item.id));
+    const delivery: DurableDeliveryState = {
+      ...baseDelivery,
+      revision: baseDelivery.revision + 1,
+      queued: [
+        ...requeued,
+        ...(baseDelivery.queued as QueueItem[]).filter((item) => !duplicateIds.has(item.id)),
+      ],
+      steered: [],
+      pendingSteers: [...baseDelivery.pendingSteers],
+      updatedAt: now,
+    };
+    const cancel: Cancel = {
+      cancelId: input.cancelId,
+      phase: "prepared",
+      runId: input.expectedRunId,
+      runGeneration: input.expectedGeneration,
+      requeueIds: [...input.requeueIds],
+      source: input.source,
+      ...(input.user ? { user: input.user } : {}),
+    };
+    const nextRun = {
+      ...head.run,
+      state: targetState,
+      since: new Date(now).toISOString(),
+      lastEvent: "cancel",
+      currentRunId: undefined,
+    };
+    const runState: DurableRunState = { ...nextRun, changeSeq: head.changeSeq + 1 };
+    return this.decisions.commitDecision({
+      transactionId: `opensession:kernel:turn:cancel_prepare:${input.sessionId}:${commandId}`,
+      operationId: commandId,
+      operationKind: "turn_cancel_prepare",
+      inputHash: digest(input),
+      observedHead: head,
+      nextRun,
+      changeKind: "turn_cancel_prepared",
+      changePayload: {
+        cancelId: input.cancelId,
+        runId: input.expectedRunId,
+        runGeneration: input.expectedGeneration,
+        deliveryRevision: delivery.revision,
+        source: input.source,
+        ...(input.user ? { user: input.user } : {}),
+      },
+      domainOperations: [
+        {
+          collection: KERNEL_COLLECTIONS.delivery,
+          id: deliveryId(input.sessionId),
+          value: { schemaVersion: 1, sessionId: input.sessionId, ...delivery },
+          ...(priorDelivery ? { ifVersion: priorDelivery.__version } : { requireAbsent: true }),
+        },
+        {
+          collection: KERNEL_COLLECTIONS.turns,
+          id: turnId(input.sessionId),
+          value: {
+            schemaVersion: 1,
+            sessionId: input.sessionId,
+            revision: (priorTurn?.revision ?? 0) + 1,
+            cancel,
+            updatedAt: now,
+          },
+          ...(priorTurn ? { ifVersion: priorTurn.__version } : { requireAbsent: true }),
+        },
+      ],
+      effects: [{
+        effectKey: input.cancelId,
+        kind: "turn_cancel",
+        payload: {
+          cancelId: input.cancelId,
+          dispatchId: input.dispatchId,
+          runGeneration: input.expectedGeneration,
+        },
+      }],
+      result: { cancel, runState },
+      now,
+    });
   }
 
   private commitCancel<Result>(input: {
