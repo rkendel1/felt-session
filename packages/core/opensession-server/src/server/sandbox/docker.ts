@@ -108,9 +108,10 @@
  */
 
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, unlinkSync } from "fs";
+import type { StateFirstDB } from "@feltdb/core";
 import { dirname, resolve as resolvePath } from "path";
 import { homeDir, OPENSESSION_SESSIONS_DIR } from "../paths";
-import { stateDir, } from "../paths";
+import { stateDir } from "../paths";
 import { journalSet, journalClear, journalClearIfLineage, journalRecordAbnormalCompletion, type ActiveRunRecord } from "../run-journal";
 import { shouldPersistModelSwitch, type StreamEvent } from "../run-events";
 import { recoveryKind, restartContinuationPrompt } from "../agent-runner";
@@ -120,6 +121,7 @@ import { piConfigProjection } from "../pi-config";
 import { hostRunBusy, hostSteer, hostInterruptSteer, hostCancel } from "../host-registry";
 import { registerRunToken, unregisterRunToken } from "../run-rpc";
 import { writeJsonAtomic } from "../shared/atomic-write";
+import { managedFeltDb } from "../managed-feltdb";
 import {
   HostHandle,
   HostLaunchNotDispatchedError,
@@ -185,8 +187,7 @@ const SWEEP_INTERVAL_MS = 5 * 60_000;
 /** Cap for a `.agents/setup` lifecycle run (one-shot, per workspace). */
 const SETUP_TIMEOUT_MS = 10 * 60_000;
 
-/** Provider-owned state, one file per sandbox — lets get() reattach (or fully
- *  recreate a removed container with identical mounts) after any restart. */
+/** Legacy provider-owned state directory, imported into FeltDB during boot. */
 const STATE_DIR = `${OPENSESSION_SESSIONS_DIR}/sandboxes`;
 /** Per-session run dirs (spec/meta/journal/socket/log per run), bind-mounted
  *  into the session's container at the identical path. */
@@ -245,29 +246,100 @@ export function snapshotRepoForSandbox(sandboxId: string): string {
   return `${SNAPSHOT_PREFIX}${sessionPart.toLowerCase()}`.slice(0, 100);
 }
 
-function statePath(sandboxId: string): string {
-  return `${STATE_DIR}/${sandboxId}.json`;
+type StoredDockerSandboxState = DockerSandboxState & { id: string };
+const STATE_COLLECTION = "opensession_docker_sandbox_state";
+const STATE_MIGRATION = "docker-sandbox-state-json-to-managed-feltdb-v1";
+let dockerStateDb: StateFirstDB | undefined;
+const dockerManagedState = ((globalThis as typeof globalThis & {
+  __opensessionDockerManagedState?: {
+    states: Map<string, DockerSandboxState>;
+    persistTail: Promise<void>;
+  };
+}).__opensessionDockerManagedState ??= {
+  states: new Map<string, DockerSandboxState>(),
+  persistTail: Promise.resolve(),
+});
+const stateRecordId = (sandboxId: string) => `sandbox_${Buffer.from(sandboxId).toString("base64url")}`;
+
+export async function initializeManagedDockerSandboxState(
+  db: StateFirstDB = dockerStateDb ?? managedFeltDb(),
+  legacyDir = STATE_DIR,
+): Promise<void> {
+  dockerStateDb = db;
+  const legacyFiles = existsSync(legacyDir)
+    ? readdirSync(legacyDir).filter((file) => file.endsWith(".json")).map((file) => `${legacyDir}/${file}`)
+    : [];
+  const legacyStates = legacyFiles.map((path) => JSON.parse(readFileSync(path, "utf8")) as DockerSandboxState)
+    .filter((state) => typeof state.sandboxId === "string" && !!state.sandboxId);
+  const migrations = db.collection<{ id: string }>("opensession_migrations");
+  const migrationComplete = !!await migrations.get(STATE_MIGRATION);
+  const managedStates = await db.collection<StoredDockerSandboxState>(STATE_COLLECTION).all();
+  const managedBySandboxId = new Map(managedStates.map((state) => [state.sandboxId, state]));
+  const statesToImport = legacyStates.filter((legacy) => {
+    if (!migrationComplete) return true;
+    const managed = managedBySandboxId.get(legacy.sandboxId);
+    return !managed || Date.parse(legacy.lastActivityAt) > Date.parse(managed.lastActivityAt);
+  });
+  if (statesToImport.length) {
+    for (let offset = 0; offset < statesToImport.length; offset += 100) {
+      await db.transaction((tx) => {
+        for (const state of statesToImport.slice(offset, offset + 100)) {
+          const id = stateRecordId(state.sandboxId);
+          tx.collection<StoredDockerSandboxState>(STATE_COLLECTION).set(id, { id, ...state });
+        }
+      }, { transactionId: `opensession:docker-sandbox-state:import:${crypto.randomUUID()}` });
+    }
+  }
+  if (!migrationComplete) {
+    await db.transaction((tx) => {
+      tx.collection("opensession_migrations").set(STATE_MIGRATION,
+        { id: STATE_MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
+    }, { transactionId: `opensession:migration:${STATE_MIGRATION}` });
+  }
+  dockerManagedState.states.clear();
+  for (const { id: _, ...state } of await db.collection<StoredDockerSandboxState>(STATE_COLLECTION).all())
+    dockerManagedState.states.set(state.sandboxId, state);
+  for (const path of legacyFiles) if (existsSync(path)) unlinkSync(path);
 }
 
 function readState(sandboxId: string): DockerSandboxState | null {
-  try {
-    if (!existsSync(statePath(sandboxId))) return null;
-    return JSON.parse(readFileSync(statePath(sandboxId), "utf-8"));
-  } catch {
-    return null;
-  }
+  const state = dockerManagedState.states.get(sandboxId);
+  return state ? structuredClone(state) : null;
 }
 
-function writeState(state: DockerSandboxState): void {
-  mkdirSync(STATE_DIR, { recursive: true });
-  writeJsonAtomic(statePath(state.sandboxId), state);
+function writeState(state: DockerSandboxState): Promise<void> {
+  const snapshot = structuredClone(state);
+  dockerManagedState.states.set(state.sandboxId, snapshot);
+  const db = dockerStateDb ?? managedFeltDb();
+  dockerManagedState.persistTail = dockerManagedState.persistTail.catch(() => {}).then(async () => {
+    const id = stateRecordId(snapshot.sandboxId);
+    await db.transaction((tx) => {
+      tx.collection<StoredDockerSandboxState>(STATE_COLLECTION).set(id, { id, ...snapshot });
+    }, { transactionId: `opensession:docker-sandbox-state:write:${crypto.randomUUID()}` });
+  });
+  return dockerManagedState.persistTail;
+}
+
+async function deleteState(sandboxId: string): Promise<void> {
+  dockerManagedState.states.delete(sandboxId);
+  const db = dockerStateDb ?? managedFeltDb();
+  dockerManagedState.persistTail = dockerManagedState.persistTail.catch(() => {}).then(async () => {
+    await db.transaction((tx) => {
+      tx.collection(STATE_COLLECTION).delete(stateRecordId(sandboxId));
+    }, { transactionId: `opensession:docker-sandbox-state:delete:${crypto.randomUUID()}` });
+  });
+  await dockerManagedState.persistTail;
+}
+
+export async function flushDockerSandboxStateWrites(): Promise<void> {
+  await dockerManagedState.persistTail;
 }
 
 function touchStateActivity(sandboxId: string): void {
   const s = readState(sandboxId);
   if (s) {
     s.lastActivityAt = new Date().toISOString();
-    writeState(s);
+    void writeState(s).catch((error) => console.error("[sandbox] Failed to persist activity:", error));
   }
 }
 
@@ -1296,23 +1368,15 @@ function makeDockerSandbox(
 
 // ── Idle-stop sweep ───────────────────────────────────────────────────────────
 
-/** Exported for the verify suite, which backdates a state file and calls it
+/** Exported for the verify suite, which backdates sandbox state and calls it
  *  directly to exercise the real snapshot-then-stop ordering. `onlySandboxId`
  *  scopes the sweep to one sandbox (verify must never snapshot/stop the live
  *  server's sandboxes with its scratch config) and skips the orphan sweep. */
 export async function sweepIdleSandboxes(onlySandboxId?: string): Promise<void> {
   const cfg = sandboxConfig();
   const idleMs = (cfg.idleStopMinutes || DEFAULT_IDLE_STOP_MINUTES) * 60_000;
-  let states: string[] = [];
-  try {
-    states = existsSync(STATE_DIR) ? readdirSync(STATE_DIR) : [];
-  } catch {
-    return;
-  }
-  for (const f of states) {
-    if (!f.endsWith(".json")) continue;
-    const state = readState(f.slice(0, -5));
-    if (!state) continue;
+  const states = [...dockerManagedState.states.values()].map((state) => structuredClone(state));
+  for (const state of states) {
     if (onlySandboxId && state.sandboxId !== onlySandboxId) continue;
     try {
       if ((await containerStatus(state.sandboxId)) !== "running") continue;
@@ -1557,7 +1621,7 @@ export class DockerProvider implements SandboxProvider {
     if (!setupRan) {
       setupRan = await runWorkspaceSetup(name, spec.sessionId, cwd, bootMode, repo, spec.trustProfile);
     }
-    writeState({
+    await writeState({
       sandboxId: name,
       sessionId: spec.sessionId,
       cwd,
@@ -1610,7 +1674,7 @@ export class DockerProvider implements SandboxProvider {
       if (!sessionId) return null;
       const runs = await docker(["inspect", "-f", "{{range .Mounts}}{{.Source}}\n{{end}}", sandboxId]);
       // cwd is unknowable without state; refuse rather than guess.
-      console.warn(`[sandbox] ${sandboxId} has no state file — exec-only reattach (mounts: ${runs.stdout.split("\n")[0] || "?"})`);
+      console.warn(`[sandbox] ${sandboxId} has no managed state — exec-only reattach (mounts: ${runs.stdout.split("\n")[0] || "?"})`);
       return null;
     }
     return makeDockerSandbox(
@@ -1642,9 +1706,7 @@ export class DockerProvider implements SandboxProvider {
     // Release the sandbox's https-port allocations + their Caddy routes.
     await dropSandboxPreviewRoutes(sandboxId).catch(() => {});
     const state = readState(sandboxId);
-    try {
-      unlinkSync(statePath(sandboxId));
-    } catch {}
+    await deleteState(sandboxId);
     if (state) {
       try {
         rmSync(sessionRunsDir(state.sessionId), { recursive: true, force: true });

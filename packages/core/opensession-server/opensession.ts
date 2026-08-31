@@ -62,6 +62,7 @@ import { initializeManagedWorkspaceSecrets } from "./src/server/workspace-secret
 import { initializeManagedSandboxConnections } from "./src/server/sandbox/connections";
 import { initializeManagedSandboxOperations } from "./src/server/sandbox/operations";
 import { initializeManagedSandboxEnvironments } from "./src/server/sandbox/environments";
+import { flushDockerSandboxStateWrites, initializeManagedDockerSandboxState } from "./src/server/sandbox/docker";
 import { initializeManagedWorkloadIdentity } from "./src/server/workload-identity";
 import { initializeManagedPapercuts } from "./src/server/papercuts";
 import { initializeManagedSecurity } from "./src/server/security";
@@ -268,6 +269,7 @@ if (!g.__opensessionBooted) {
 	await initializeManagedSandboxConnections(db);
 	await initializeManagedSandboxOperations(db);
 	await initializeManagedSandboxEnvironments(db);
+	await initializeManagedDockerSandboxState(db);
 	await initializeManagedWorkloadIdentity(db);
 	await initializeManagedPapercuts(db);
 	await initializeManagedSecurity(db);
@@ -1277,6 +1279,7 @@ if (!g.__opensessionBooted) {
 		await flushPrCacheWrites();
 		await flushPrDetailsCacheWrites();
 		await flushPreviewPoolWrites();
+		await flushDockerSandboxStateWrites();
 		// Keep HTTP available while runs drain. Stopping the listener before the
 		// bounded wait made Caddy return 502 for the full drain window on every
 		// deploy. Shutdown-aware intake above already parks new agent work.
