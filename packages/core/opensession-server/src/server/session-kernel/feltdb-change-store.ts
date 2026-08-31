@@ -177,12 +177,17 @@ export class FeltDbKernelChangeStore {
     afterChangeSeq: number,
     limit = 500,
   ): Promise<FeltDbKernelChange[]> {
-    const rows = await this.db.collection<FeltDbKernelChange>(CHANGES)
-      .where((change) => change.sessionId === sessionId && change.changeSeq > afterChangeSeq)
-      .all();
-    return rows
-      .sort((left, right) => left.changeSeq - right.changeSeq)
-      .slice(0, limit);
+    if (limit <= 0) return [];
+    const page = await this.db.query<FeltDbKernelChange>({
+      collection: CHANGES,
+      where: [
+        { field: "sessionId", eq: sessionId },
+        { field: "changeSeq", gt: afterChangeSeq },
+      ],
+      orderBy: [{ field: "changeSeq", direction: "asc" }],
+      limit: Math.min(500, Math.max(1, Math.floor(limit))),
+    });
+    return page.records;
   }
 
   private validateReplay(receipt: AppendReceipt, decision: AppendChangeDecision): number {

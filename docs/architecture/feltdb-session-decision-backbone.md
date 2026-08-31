@@ -3,7 +3,7 @@
 Status: implementation contract. This document changes no runtime authority.
 It is based on the transaction inventory in
 [`session-kernel-sqlite-transaction-map.md`](../session-kernel-sqlite-transaction-map.md)
-at `f2027ac87` and the FeltDB 0.7.1 server transaction API.
+at `f2027ac87` and the FeltDB 0.7.2 server transaction and authority-query APIs.
 
 ## Decision
 
@@ -39,12 +39,10 @@ on multi-record transactions, `ifVersion`, `requireAbsent`, `expectedEpoch`,
 conflicts. It does not require a numeric sequence allocator: new outbox records
 use their already stable effect identity as their key.
 
-The complete live boundary is not yet implementable on FeltDB 0.7.1. Its remote
-collection API has no authority-side filter, ordering, limit, or cursor. A
-remote `where`, `find`, or local collection index first loads the complete
-collection through `HttpJsDb.query` and filters the client cache. Journal pages
-and the global due-outbox worker therefore require a separate FeltDB range-query
-primitive before production cutover. This is a stop condition, detailed below.
+FeltDB 0.7.2 adds the authority-side filter, ordering, bounded limit, and cursor
+required by the complete live boundary. Journal pages and the global due-outbox
+worker use `StateFirstDB.query`; they must not use `Collection.where`, `find`, or
+local collection indexes because those operate on the client collection cache.
 
 ## Collections and records
 
@@ -486,7 +484,7 @@ for a known activated session or a hard-bounded migration/due-work index.
 
 ## FeltDB capability dependencies and proof gate
 
-The implementation depends on these FeltDB 0.7.1 server guarantees:
+The implementation depends on these FeltDB 0.7.2 server guarantees:
 
 1. one durable atomic transaction may write records in multiple collections;
 2. `ifVersion` is checked at the authority and advances `__version` on success;
@@ -501,17 +499,17 @@ The implementation depends on these FeltDB 0.7.1 server guarantees:
 9. indexed queries or maintained projections can page journal and due outbox
    records without a fleet-wide actor scan.
 
-### Blocking FeltDB capability
+### Authority-query capability
 
-Dependency 9 is missing in FeltDB 0.7.1. `Collection.where` accepts a JavaScript
-predicate, `Collection.find` indexes the already loaded client cache, and the
-remote `HttpJsDb.query(collection)` endpoint returns the entire collection.
-Neither API can enforce a server-side equality/range filter, stable order,
-bounded limit, or continuation cursor.
+Dependency 9 is provided by FeltDB 0.7.2 as `StateFirstDB.query`. It accepts an
+authority query containing collection, equality/range predicates, stable order,
+bounded limit, and continuation cursor, and returns records, `nextCursor`, and
+`exhausted`. Embedded runtimes reject this capability instead of imitating it
+with a client scan.
 
-Open Session cannot compensate with a scan, a per-process index, a polling
-mirror, or an application queue allocator. Before implementing the backbone, a
-separate FeltDB PR must add an authority-side query contract with at least:
+Open Session must use the following existing authority-side contract and cannot
+substitute a scan, per-process index, polling mirror, or application queue
+allocator:
 
 ```ts
 type AuthorityQuery = {
@@ -527,8 +525,8 @@ type AuthorityQuery = {
 };
 ```
 
-The authority must return a stable continuation cursor and enforce a maximum
-limit. Open Session needs two proven plans:
+The authority returns a stable continuation cursor and enforces a maximum
+limit. Open Session uses two plans:
 
 - journal: `sessionId = S`, `decisionEpoch = E`, `changeSeq > N`, ordered by
   `changeSeq`, limited;
@@ -538,9 +536,16 @@ limit. Open Session needs two proven plans:
 The server must index these plans durably or maintain an equivalent
 authority-owned projection in the same transaction as source changes. The API
 must not implement filtering by first materializing the entire collection at
-the client. Until this primitive ships and passes restart and concurrent-write
-tests, this design passes review as a contract but production reducer work is
-blocked.
+the client.
+
+The 0.7.2 acceptance probe committed four records to a real packaged Rust
+authority, queried `sessionId = s1`, `decisionEpoch = 1`, and `changeSeq > 1`,
+ordered by ascending `changeSeq` with limit two, then used `nextCursor` to read
+the final record. The first page returned sequences 2 and 3 with
+`exhausted: false`; the second returned sequence 4 with `exhausted: true`.
+Existing real-authority Session Kernel tests also passed transaction replay,
+stale-writer conflict, zero losing writes, actor mailbox ordering, and restart
+hydration against the packaged 0.7.2 server.
 
 Before production reducer changes, a real FeltDB server test must prove:
 
@@ -562,7 +567,7 @@ If any item fails on the server authority, production migration stops and the
 missing primitive belongs in a separate FeltDB PR. Open Session must not replace
 it with a mutex, numeric allocator, mirror, synchronization loop, or fallback.
 
-## Implementation boundary after the FeltDB blocker
+## Implementation boundary
 
 The next implementation PR must migrate, in one authority rollout:
 

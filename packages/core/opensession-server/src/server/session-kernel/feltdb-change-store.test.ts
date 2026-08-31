@@ -105,6 +105,19 @@ authorityTest("FeltDB Session Kernel change authority", () => {
     expect(await recovered.changesSince("session-a", 0)).toHaveLength(2);
   });
 
+  test("pages changes inside the authority", async () => {
+    const store = new FeltDbKernelChangeStore(connect());
+    await store.appendChange("tx-page-other-a", "session-other", "other-first");
+    await store.appendChange("tx-page-other-b", "session-other", "other-second");
+    await store.appendChange("tx-page-a", "session-page", "first");
+    await store.appendChange("tx-page-b", "session-page", "second");
+    await store.appendChange("tx-page-c", "session-page", "third");
+
+    expect(await store.changesSince("session-page", 1, 1)).toMatchObject([
+      { sessionId: "session-page", changeSeq: 2, kind: "second" },
+    ]);
+  });
+
   test("refuses an embedded authority", () => {
     expect(() => new FeltDbKernelChangeStore(createFeltDB({ namespace: "bad", memory: true })))
       .toThrow("remote server authority");
