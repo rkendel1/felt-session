@@ -203,6 +203,17 @@ export function encodeKernelSessionMigration(
         ...(row.cancel === null ? {} : { cancel: value.cancel }),
         updatedAt: Number(row.updated_at),
       };
+      else if (plan.table === "session_kernel_delivery") value = {
+        schemaVersion: 1,
+        sessionId,
+        revision: Number(row.revision),
+        queued: value.queued,
+        ...(row.dispatch === null ? {} : { dispatch: value.dispatch }),
+        ...(row.interrupt === null ? {} : { interrupt: value.interrupt }),
+        steered: value.steered,
+        pendingSteers: value.pending_steers,
+        updatedAt: Number(row.updated_at),
+      };
       else if (plan.table === "session_kernel_turn_projections") value = {
         schemaVersion: 1,
         sessionId,
