@@ -85,6 +85,7 @@ import { ensureCloudflareTunnel } from "./src/server/ingress-settings";
 import { startPrivateAppCertificateRenewal } from "./src/server/private-app-domain";
 import { initializeManagedPrivateAppDomain } from "./src/server/private-app-domain";
 import { initializeManagedModelProviders } from "./src/server/model-providers";
+import { initializeManagedModelDefaults } from "./src/server/models";
 import { initializeManagedPiConfig } from "./src/server/pi-config";
 import { initializeManagedEngineSessionOwners } from "./src/server/transcript-persistence";
 import { creationOwnsPrompt, readActiveShutdownSnapshot, recoverableLocalHostSnapshotRecords, recordRecoveredRunEvent, restorePromptQueues, resumeDrainedSessions, settleRecoveredCreationOpening, snapshotActiveSessions, startLoopTicker } from "./src/server/run-session";
@@ -245,6 +246,7 @@ if (!g.__opensessionBooted) {
 	await initializeManagedSessionList(db);
 	await initializeManagedPrivateAppDomain(db);
 	await initializeManagedModelProviders(db);
+	await initializeManagedModelDefaults(db);
 	await initializeManagedPiConfig(db);
 	await initializeManagedEngineSessionOwners(db);
 	await initializeManagedLiveActivities(db);

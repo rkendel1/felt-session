@@ -3,8 +3,9 @@
  * Native and provider/model ids are normalized to pi/<provider>/<model> at dispatch.
  */
 
-import { existsSync, readFileSync } from "fs";
-import { writeJsonAtomic } from "./shared/atomic-write";
+import { existsSync, readFileSync, unlinkSync } from "fs";
+import type { StateFirstDB } from "@feltdb/core";
+import { managedFeltDb } from "./managed-feltdb";
 import {
   configuredPickerModels,
   modelProviders,
@@ -622,7 +623,7 @@ const FALLBACK_DESTINATIONS = [
  * Persisted override for the global default model, set from the Connections UI
  * (PUT /api/models/default). Lets us switch what new sessions run on without a
  * code change or restart. Resolution order: this override → OPENSESSION_MODEL env
- * → DEFAULT_CLAUDE_MODEL. Stored as { model: "<id>" | null } in this file.
+ * → DEFAULT_CLAUDE_MODEL. The override is stored in managed FeltDB.
  */
 /** Stored as { model, interactiveModel? }: `model` is the GLOBAL default every
  *  consumer of getDefaultModel() sees (Slack/Linear/Plain loops, workflows);
@@ -632,6 +633,20 @@ const FALLBACK_DESTINATIONS = [
  *  session stores `dial/<tier>` and keeps its oracle+effort. */
 const defaultModelStore = () => stateDir("default-model.json");
 const FALLBACK_AUTO_STORE = stateDir("model-fallback.json");
+const MODEL_DEFAULTS_COLLECTION = "opensession_model_defaults";
+const MODEL_DEFAULTS_ID = "global";
+const MODEL_DEFAULTS_MIGRATION = "model-default-files-to-managed-feltdb-v1";
+
+interface StoredModelDefaults {
+  id: string;
+  model: string | null;
+  interactiveModel: string | null;
+  autoFallback: boolean;
+  __version?: number;
+}
+
+let modelDefaultsDb: StateFirstDB | undefined;
+let modelDefaultsVersion: number | undefined;
 
 // undefined = not yet loaded from disk; null = no override set.
 let overrideCache: string | null | undefined;
@@ -647,39 +662,69 @@ export function __resetModelCachesForTest(): void {
   interactiveOverrideCache = undefined;
 }
 
-function loadStoredDefault(field: "model" | "interactiveModel"): string | null {
-  try {
-    if (existsSync(defaultModelStore())) {
-      const raw = JSON.parse(readFileSync(defaultModelStore(), "utf8"));
-      const id = typeof raw?.[field] === "string" ? raw[field].trim() : "";
-      return id && resolveModel(id) ? resolveModel(id)!.id : null;
-    }
-  } catch {}
-  return null;
+export async function initializeManagedModelDefaults(
+  db: StateFirstDB = modelDefaultsDb ?? managedFeltDb(),
+): Promise<void> {
+  modelDefaultsDb = db;
+  const migrations = db.collection<{ id: string }>("opensession_migrations");
+  if (!await migrations.get(MODEL_DEFAULTS_MIGRATION)) {
+    const readDefault = (field: "model" | "interactiveModel"): string | null => {
+      try {
+        const raw = JSON.parse(readFileSync(defaultModelStore(), "utf8"));
+        const value = typeof raw?.[field] === "string" ? raw[field].trim() : "";
+        return value && resolveModel(value) ? resolveModel(value)!.id : null;
+      } catch { return null; }
+    };
+    let autoFallback = true;
+    try { autoFallback = JSON.parse(readFileSync(FALLBACK_AUTO_STORE, "utf8"))?.auto !== false; }
+    catch {}
+    await db.transaction((tx) => {
+      tx.collection<StoredModelDefaults>(MODEL_DEFAULTS_COLLECTION).set(MODEL_DEFAULTS_ID, {
+        id: MODEL_DEFAULTS_ID,
+        model: readDefault("model"),
+        interactiveModel: readDefault("interactiveModel"),
+        autoFallback,
+      }, { requireAbsent: true });
+      tx.collection("opensession_migrations").set(MODEL_DEFAULTS_MIGRATION,
+        { id: MODEL_DEFAULTS_MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
+    }, { transactionId: `opensession:migration:${MODEL_DEFAULTS_MIGRATION}` });
+  }
+  for (const path of [defaultModelStore(), FALLBACK_AUTO_STORE])
+    if (existsSync(path)) unlinkSync(path);
+  const stored = await db.collection<StoredModelDefaults>(MODEL_DEFAULTS_COLLECTION).get(MODEL_DEFAULTS_ID);
+  if (!stored) throw new Error("Managed model defaults record is missing");
+  overrideCache = stored.model;
+  interactiveOverrideCache = stored.interactiveModel;
+  fallbackAutoCache = stored.autoFallback;
+  modelDefaultsVersion = stored.__version;
 }
 
 function loadOverride(): string | null {
-  if (overrideCache === undefined) overrideCache = loadStoredDefault("model");
+  if (overrideCache === undefined) throw new Error("Managed model defaults have not been initialized");
   return overrideCache;
 }
 
 function loadInteractiveOverride(): string | null {
   if (interactiveOverrideCache === undefined) {
-    interactiveOverrideCache = loadStoredDefault("interactiveModel");
+    throw new Error("Managed model defaults have not been initialized");
   }
   return interactiveOverrideCache;
 }
 
 /** Read-modify-write so the two default fields never clobber each other. */
-function patchDefaultModelStore(patch: Record<string, string | null>): void {
-  let raw: Record<string, unknown> = {};
-  try {
-    if (existsSync(defaultModelStore())) {
-      const parsed = JSON.parse(readFileSync(defaultModelStore(), "utf8"));
-      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) raw = parsed;
-    }
-  } catch {}
-  writeJsonAtomic(defaultModelStore(), { ...raw, ...patch });
+async function persistModelDefaults(): Promise<void> {
+  const db = modelDefaultsDb ?? managedFeltDb();
+  await db.transaction((tx) => {
+    tx.collection<StoredModelDefaults>(MODEL_DEFAULTS_COLLECTION).set(MODEL_DEFAULTS_ID, {
+      id: MODEL_DEFAULTS_ID,
+      model: overrideCache ?? null,
+      interactiveModel: interactiveOverrideCache ?? null,
+      autoFallback: fallbackAutoCache ?? true,
+    }, { ifVersion: modelDefaultsVersion });
+  }, { transactionId: `opensession:model-defaults:${crypto.randomUUID()}` });
+  const stored = await db.collection<StoredModelDefaults>(MODEL_DEFAULTS_COLLECTION).get(MODEL_DEFAULTS_ID);
+  if (!stored) throw new Error("Managed model defaults record disappeared after save");
+  modelDefaultsVersion = stored.__version;
 }
 
 /**
@@ -696,18 +741,16 @@ export function getDefaultModel(): string {
  * env/constant). Returns the resolved default after the change; throws on an
  * unknown model id.
  */
-export function setDefaultModel(input: string | null): string {
+export async function setDefaultModel(input: string | null): Promise<string> {
   if (input === null || input.trim() === "") {
     overrideCache = null;
-    try {
-      patchDefaultModelStore({ model: null });
-    } catch {}
+    await persistModelDefaults();
     return getDefaultModel();
   }
   const m = resolveModel(input);
   if (!m) throw new Error(`Unknown model: ${input}`);
   overrideCache = m.id;
-  patchDefaultModelStore({ model: m.id });
+  await persistModelDefaults();
   return m.id;
 }
 
@@ -717,18 +760,16 @@ export function setDefaultModel(input: string | null): string {
  * (Slack/Linear/Plain loops, workflows), stays untouched. Accepts dial preset
  * ids ("dial/medium"); null clears back to the Pi-mapped global default.
  */
-export function setInteractiveDefaultModel(input: string | null): string {
+export async function setInteractiveDefaultModel(input: string | null): Promise<string> {
   if (input === null || input.trim() === "") {
     interactiveOverrideCache = null;
-    try {
-      patchDefaultModelStore({ interactiveModel: null });
-    } catch {}
+    await persistModelDefaults();
     return interactiveDefaultModel();
   }
   const m = resolveModel(input);
   if (!m) throw new Error(`Unknown model: ${input}`);
   interactiveOverrideCache = m.id;
-  patchDefaultModelStore({ interactiveModel: m.id });
+  await persistModelDefaults();
   return m.id;
 }
 
@@ -775,31 +816,20 @@ export function automaticFallbackModel(primaryModel?: string): string | undefine
  * choice survives a restart; read fresh per run so a UI toggle takes effect
  * without one.
  *
- * Stored as { auto: boolean } in FALLBACK_AUTO_STORE. This toggle only governs
+ * Stored in the managed model-defaults record. This toggle only governs
  * interactive sessions; it does not create a fallback model by itself.
  */
-let fallbackAutoCache: boolean | undefined;
+let fallbackAutoCache: boolean | undefined = true;
 
 export function getModelFallbackAuto(): boolean {
-  if (fallbackAutoCache !== undefined) return fallbackAutoCache;
-  try {
-    if (existsSync(FALLBACK_AUTO_STORE)) {
-      const raw = JSON.parse(readFileSync(FALLBACK_AUTO_STORE, "utf8"));
-      fallbackAutoCache = raw?.auto !== false; // default on for anything but explicit false
-    } else {
-      fallbackAutoCache = true;
-    }
-  } catch {
-    fallbackAutoCache = true;
-  }
+  if (fallbackAutoCache === undefined)
+    throw new Error("Managed model defaults have not been initialized");
   return fallbackAutoCache;
 }
 
-export function setModelFallbackAuto(auto: boolean): boolean {
+export async function setModelFallbackAuto(auto: boolean): Promise<boolean> {
   fallbackAutoCache = auto;
-  try {
-    writeJsonAtomic(FALLBACK_AUTO_STORE, { auto });
-  } catch {}
+  await persistModelDefaults();
   return auto;
 }
 
