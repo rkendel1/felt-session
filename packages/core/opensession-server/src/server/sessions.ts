@@ -135,53 +135,31 @@ export function getEngineTranscriptPath(
 
 
 
-/**
- * A session's engine transcript as entries, whatever the engine: claude jsonl
- * and codex rollouts parse from their transcript file; pi reads straight
- * out of Pi's SQLite store. This is the source for cross-engine handoff
- * notes (buildEngineSwitchHandoffNote) in BOTH directions — including the
- * previously-stubbed pi→claude/codex direction.
- */
+/** Resolve an engine id through its unified session and managed transcript. */
 export function readEngineTranscript(
-  worktreeDir: string,
+  _worktreeDir: string,
   engineSessionId: string,
-  provider: "claude" | "codex" | "pi"
+  _provider: "claude" | "codex" | "pi"
 ): TranscriptEntry[] {
-  if (provider === "pi") return engineStoreTranscript(engineSessionId);
-  const path = getEngineTranscriptPath(worktreeDir, engineSessionId, provider);
-  if (!path || !existsSync(path)) return engineStoreTranscript(engineSessionId);
-  return parseTranscript(path);
+  return engineStoreTranscript(engineSessionId);
 }
 
-/** readEngineTranscript with the file parse yielding to the event loop —
- *  identical output. The pi SQLite read stays sync (bounded pages),
- *  and so does the pi store read (same bounded store pages). */
+/** Async managed transcript read for recovery paths. */
 export async function readEngineTranscriptAsync(
-  worktreeDir: string,
+  _worktreeDir: string,
   engineSessionId: string,
-  provider: "claude" | "codex" | "pi"
+  _provider: "claude" | "codex" | "pi"
 ): Promise<TranscriptEntry[]> {
-  if (provider === "pi") return engineStoreTranscriptAsync(engineSessionId);
-  const path = getEngineTranscriptPath(worktreeDir, engineSessionId, provider);
-  if (!path || !existsSync(path)) return engineStoreTranscriptAsync(engineSessionId);
-  return parseTranscriptAsync(path);
+  return engineStoreTranscriptAsync(engineSessionId);
 }
 
-/** Recent engine history for a bounded context handoff. Store-only engines
- * must not hydrate their complete transcript here: the note consumes at most
- * 180 KB, while a long-running session can hold tens of thousands of rows and
- * gigabytes of full tool-result blobs. Engine-native files still parse
- * cooperatively; their parser does not block the gateway thread. */
+/** Recent managed history for a bounded context handoff. */
 export async function readEngineHandoffTranscriptAsync(
-  worktreeDir: string,
+  _worktreeDir: string,
   engineSessionId: string,
-  provider: "claude" | "codex" | "pi"
+  _provider: "claude" | "codex" | "pi"
 ): Promise<TranscriptEntry[]> {
-  if (provider === "pi") return engineStoreHandoffTranscriptAsync(engineSessionId);
-  const path = getEngineTranscriptPath(worktreeDir, engineSessionId, provider);
-  if (!path || !existsSync(path))
-    return engineStoreHandoffTranscriptAsync(engineSessionId);
-  return parseTranscriptAsync(path);
+  return engineStoreHandoffTranscriptAsync(engineSessionId);
 }
 
 /**
@@ -191,7 +169,7 @@ export async function readEngineHandoffTranscriptAsync(
  * engine-owned store to read: no jsonl, no codex rollout, no SQLite. They
  * persist every turn into the owned transcript store under the UNIFIED session
  * id, so this resolves the owning session from the ENGINE id and serves its
- * merged transcript (store-first, legacy merge fallback) — the same read
+ * managed transcript — the same read
  * engine-handoff-transcript.ts uses for fresh-engine recovery. Feeds the
  * cross-engine handoff notes in the store-only→anything direction;
  * unresolvable ids return [] and the handoff degrades to the "partial work may
