@@ -1,16 +1,20 @@
 import { createHash } from "node:crypto";
 import type { AtomicTransactionOperationRequest, StateFirstDB } from "@feltdb/core";
 import type { TranscriptEntry } from "../types";
+import { classifyEntry, dropContextInjections } from "@tellahq/opensession-protocol/notices";
+import type { TranscriptIndexEntry, TranscriptIndexRole } from "@tellahq/opensession-protocol/session";
 import type {
   AppendResult,
   DestinationTranscriptAppendResult,
   SeqEntry,
   TranscriptImportInfo,
   TranscriptPage,
+  TranscriptHydratedPage,
+  TranscriptOutline,
+  TranscriptRangePage,
 } from "../transcript-store";
-import {
-  TranscriptAppendConflictError,
-} from "../transcript-store";
+import { handoffTranscriptEntryWeight, TranscriptAppendConflictError } from "../transcript-store";
+import { v2SnapshotEntryWeight } from "../transcript-wire";
 import type {
   TranscriptActorRequest,
   TranscriptMutationResult,
@@ -307,6 +311,7 @@ export class FeltDbTranscriptStore {
     sessionId: string;
     where?: Array<{ field: string; gt?: number; lt?: number }>;
     direction?: "asc" | "desc";
+    orderField?: "seq" | "changeSeq";
     limit: number;
   }): Promise<TranscriptPage> {
     const head = await this.activeHead(input.sessionId);
@@ -319,7 +324,7 @@ export class FeltDbTranscriptStore {
         { field: "transcriptEpoch", eq: head.transcriptEpoch },
         ...(input.where ?? []),
       ],
-      orderBy: [{ field: "seq", direction: input.direction ?? "asc" }],
+      orderBy: [{ field: input.orderField ?? "seq", direction: input.direction ?? "asc" }],
       limit: Math.min(500, Math.max(1, Math.floor(input.limit))),
     });
     const rows = input.direction === "desc" ? [...result.records].reverse() : result.records;
@@ -340,7 +345,12 @@ export class FeltDbTranscriptStore {
   }
 
   readChangesSince(sessionId: string, changeSeq: number, limit = 200): Promise<TranscriptPage> {
-    return this.page({ sessionId, where: [{ field: "changeSeq", gt: changeSeq }], limit });
+    return this.page({
+      sessionId,
+      where: [{ field: "changeSeq", gt: changeSeq }],
+      orderField: "changeSeq",
+      limit,
+    });
   }
 
   readBefore(sessionId: string, beforeSeq: number, limit = 40): Promise<TranscriptPage> {
@@ -408,5 +418,193 @@ export class FeltDbTranscriptStore {
       }],
     });
     return true;
+  }
+
+  async fullEntry(sessionId: string, entryId: string): Promise<TranscriptEntry | null> {
+    const head = await this.activeHead(sessionId);
+    if (!head) return null;
+    const event = await this.db.collection<StoredTranscriptEvent>(
+      KERNEL_COLLECTIONS.transcriptEvents,
+    ).get(eventId(sessionId, head.decisionEpoch, head.transcriptEpoch, entryId));
+    return event?.entry ? structuredClone(event.entry) : null;
+  }
+
+  async readRange(
+    sessionId: string,
+    fromSeq: number,
+    toSeq: number,
+    afterSeq = fromSeq - 1,
+    limit = 200,
+  ): Promise<TranscriptRangePage> {
+    const bounded = Math.min(500, Math.max(1, Math.floor(limit)));
+    const page = await this.page({
+      sessionId,
+      where: [
+        { field: "seq", gt: Math.max(afterSeq, fromSeq - 1) },
+        { field: "seq", lt: toSeq + 1 },
+      ],
+      limit: bounded + 1,
+    });
+    const complete = page.entries.length <= bounded;
+    const entries = complete ? page.entries : page.entries.slice(0, bounded);
+    return {
+      entries,
+      firstSeq: entries[0]?.seq ?? 0,
+      lastSeq: entries.at(-1)?.seq ?? 0,
+      coveredThroughSeq: entries.at(-1)?.seq ?? Math.max(afterSeq, fromSeq - 1),
+      complete,
+    };
+  }
+
+  async readHydratedSince(
+    sessionId: string,
+    sinceSeq: number,
+    limit = 100,
+    maxBytes = 12 * 1024 * 1024,
+  ): Promise<TranscriptHydratedPage> {
+    const page = await this.readSince(sessionId, sinceSeq, Math.min(500, limit + 1));
+    const candidates = page.entries.slice(0, limit);
+    const entries: SeqEntry[] = [];
+    let bytes = 0;
+    let coveredThroughSeq = sinceSeq;
+    let complete = page.entries.length <= limit;
+    for (const entry of candidates) {
+      const cost = Buffer.byteLength(JSON.stringify(entry));
+      if (entries.length > 0 && bytes + cost > maxBytes) {
+        complete = false;
+        break;
+      }
+      entries.push(entry);
+      bytes += cost;
+      coveredThroughSeq = entry.seq;
+    }
+    return {
+      entries,
+      firstSeq: entries[0]?.seq ?? 0,
+      lastSeq: entries.at(-1)?.seq ?? 0,
+      coveredThroughSeq,
+      complete,
+    };
+  }
+
+  async outline(sessionId: string, afterSeq = 0, limit = 2_000): Promise<TranscriptOutline> {
+    const [head, page] = await Promise.all([
+      this.activeHead(sessionId),
+      this.readSince(sessionId, afterSeq, Math.min(500, limit)),
+    ]);
+    const entries: TranscriptIndexEntry[] = page.entries.map((entry) => {
+      let role: TranscriptIndexRole;
+      let reviewPrNumber: number | undefined;
+      if (dropContextInjections([entry]).length === 0) role = "hidden";
+      else {
+        const classified = classifyEntry(entry);
+        if (classified.notice?.kind === "review-handoff") {
+          role = "review_handoff";
+          const match = classified.notice.title.match(/PR #(\d+)/);
+          if (match) reviewPrNumber = Number(match[1]);
+        } else if (classified.notice) role = "notice";
+        else if (["user", "assistant", "tool_use", "tool_result"].includes(classified.type))
+          role = classified.type as TranscriptIndexRole;
+        else role = "system";
+      }
+      return {
+        id: entry.id,
+        seq: entry.seq,
+        changeSeq: entry.changeSeq,
+        timestampMs: entryTs(entry, 0),
+        role,
+        contentLength: entry.contentLength ?? entry.content?.length ?? 0,
+        ...(reviewPrNumber === undefined ? {} : { reviewPrNumber }),
+      };
+    });
+    return {
+      entries,
+      firstSeq: entries[0]?.seq ?? 0,
+      lastSeq: entries.at(-1)?.seq ?? 0,
+      lastChangeSeq: Math.max(0, (head?.nextChangeSeq ?? 1) - 1),
+      epoch: head?.resetChangeSeq ?? 0,
+    };
+  }
+
+  async readTailWindow(
+    sessionId: string,
+    options: Extract<TranscriptActorRequest, { op: "tail_window" }>["options"],
+  ): Promise<TranscriptPage> {
+    const maxEntries = Math.min(500, Math.max(1, Math.floor(options.maxEntries)));
+    const probe = await this.readTail(sessionId, maxEntries);
+    const newest = [...probe.entries].reverse();
+    const minEntries = Math.max(1, Math.min(Math.floor(options.minEntries), maxEntries));
+    const minMessages = Math.max(0, Math.floor(options.minMessages));
+    const minUsers = Math.max(0, Math.floor(options.minUserMessagesWithToolWork ?? 0));
+    const weigh = options.weightProfile === "v2_snapshot"
+      ? v2SnapshotEntryWeight
+      : options.weightProfile === "handoff"
+        ? handoffTranscriptEntryWeight
+        : (_kind: string, bytes: number) => bytes;
+    let count = 0;
+    let estimatedBytes = 0;
+    let messages = 0;
+    let users = 0;
+    let tools = 0;
+    for (const entry of newest) {
+      if (count >= minEntries && messages >= minMessages && (tools === 0 || users >= minUsers))
+        break;
+      const kind = entry.type ?? "unknown";
+      const cost = weigh(kind, Buffer.byteLength(JSON.stringify(entry)));
+      if (count >= minEntries && estimatedBytes + cost > options.maxEstimatedBytes) break;
+      count++;
+      estimatedBytes += cost;
+      if (kind === "user" || kind === "assistant") messages++;
+      if (kind === "user") users++;
+      if (kind === "tool_use" || kind === "tool_result") tools++;
+    }
+    return {
+      entries: newest.slice(0, count).reverse(),
+      firstSeq: newest[count - 1]?.seq ?? 0,
+      lastSeq: newest[0]?.seq ?? 0,
+    };
+  }
+
+  async applyRequest(request: Exclude<
+    TranscriptActorRequest,
+    { op: "agent_append_destination" | "agent_query_destination_receipt" | "agent_validate_destination_receipt" }
+  >): Promise<unknown> {
+    if ("requestId" in request) return this.applyMutation(request);
+    if (request.op === "needs_import") return !(await this.importInfo(request.sessionId));
+    if (request.op === "import_info") return this.importInfo(request.sessionId);
+    if (request.op === "tail") return this.readTail(request.sessionId, request.limit ?? 50);
+    if (request.op === "tail_window")
+      return this.readTailWindow(request.sessionId, request.options);
+    if (request.op === "since")
+      return this.readSince(request.sessionId, request.sinceSeq, request.limit ?? 200);
+    if (request.op === "changes_since")
+      return this.readChangesSince(request.sessionId, request.changeSeq, request.limit ?? 200);
+    if (request.op === "hydrated_since")
+      return this.readHydratedSince(
+        request.sessionId,
+        request.sinceSeq,
+        request.limit ?? 100,
+        request.maxBytes,
+      );
+    if (request.op === "before")
+      return this.readBefore(request.sessionId, request.beforeSeq, request.limit ?? 40);
+    if (request.op === "range")
+      return this.readRange(
+        request.sessionId,
+        request.fromSeq,
+        request.toSeq,
+        request.afterSeq ?? request.fromSeq - 1,
+        request.limit ?? 200,
+      );
+    if (request.op === "outline")
+      return this.outline(request.sessionId, request.afterSeq ?? 0, request.limit ?? 2_000);
+    if (request.op === "full_entry") return this.fullEntry(request.sessionId, request.entryId);
+    if (request.op === "last_seq") return this.lastSeq(request.sessionId);
+    if (request.op === "last_change_seq") return this.lastChangeSeq(request.sessionId);
+    if (request.op === "last_reset_change_seq") return this.lastResetChangeSeq(request.sessionId);
+    if (request.op === "count") return this.lastSeq(request.sessionId);
+    if (request.op === "summary") return this.summary(request.sessionId);
+    if (request.op === "pending_wake") return this.pendingWake(request.sessionId);
+    return this.acknowledgeWake(request.sessionId, request.cursor);
   }
 }
