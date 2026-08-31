@@ -174,6 +174,19 @@ export function encodeKernelSessionMigration(
         transactionId: `opensession:kernel:migrated-change:${sessionId}:${row.change_seq}`,
         createdAt: Number(row.created_at),
       };
+      else if (plan.table === "session_kernel_creation") value = {
+        schemaVersion: 1,
+        sessionId,
+        identity: String(row.identity),
+        state: String(row.state),
+        generation: Number(row.generation),
+        ...(row.current_effect_id === null ? {} : { currentEffectId: String(row.current_effect_id) }),
+        completedEffectIds: value.completed_effects,
+        ...(row.setup_plan === null ? {} : { setupPlan: value.setup_plan }),
+        ...(row.opening_plan === null ? {} : { openingPlan: value.opening_plan }),
+        changeSeq: Number(row.change_seq),
+        updatedAt: Number(row.updated_at),
+      };
       else if (plan.table === "session_kernel_asks") value = {
         schemaVersion: 1,
         sessionId,
