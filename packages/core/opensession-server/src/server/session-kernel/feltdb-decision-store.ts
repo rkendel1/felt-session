@@ -89,6 +89,24 @@ export type VersionedSessionKernelOutboxRecord = SessionKernelOutboxRecord & {
   __version: number;
 };
 
+export type SessionKernelTimerRecord = {
+  schemaVersion: 1;
+  recordId: string;
+  sessionId: string;
+  decisionEpoch: number;
+  timerId: string;
+  kind: string;
+  dueAt: number;
+  token: string;
+  payload?: unknown;
+  status: "pending" | "dead_letter";
+  attempts: number;
+  nextAttemptAt: number;
+  lastError?: string;
+  deadLetteredAt?: number;
+  createdAt: number;
+};
+
 export type SessionKernelTransactionReceipt<Result = unknown> = {
   schemaVersion: 1;
   transactionId: string;
@@ -753,6 +771,25 @@ export class FeltDbSessionDecisionStore {
       ],
       orderBy: [
         { field: "nextAttemptAt", direction: "asc" },
+        { field: "recordId", direction: "asc" },
+      ],
+      limit: Math.min(500, Math.max(1, Math.floor(limit))),
+    });
+    return page.records;
+  }
+
+  async dueTimers(now = Date.now(), limit = 100): Promise<SessionKernelTimerRecord[]> {
+    if (limit <= 0) return [];
+    const page = await this.db.query<SessionKernelTimerRecord>({
+      collection: KERNEL_COLLECTIONS.timers,
+      where: [
+        { field: "status", eq: "pending" },
+        { field: "dueAt", lte: now },
+        { field: "nextAttemptAt", lte: now },
+      ],
+      orderBy: [
+        { field: "nextAttemptAt", direction: "asc" },
+        { field: "dueAt", direction: "asc" },
         { field: "recordId", direction: "asc" },
       ],
       limit: Math.min(500, Math.max(1, Math.floor(limit))),

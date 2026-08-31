@@ -194,6 +194,25 @@ export function encodeKernelSessionMigration(
         record: value.record,
         updatedAt: Number(row.updated_at),
       };
+      else if (plan.table === "session_kernel_timers") value = {
+        schemaVersion: 1,
+        recordId: id,
+        sessionId,
+        decisionEpoch: 1,
+        timerId: String(row.timer_id),
+        kind: String(row.kind),
+        dueAt: Number(row.due_at),
+        token: String(row.token),
+        payload: value.payload,
+        status: row.dead_lettered_at === null ? "pending" : "dead_letter",
+        attempts: Number(row.attempts),
+        nextAttemptAt: Number(row.next_attempt_at),
+        ...(row.last_error === null ? {} : { lastError: String(row.last_error) }),
+        ...(row.dead_lettered_at === null
+          ? {}
+          : { deadLetteredAt: Number(row.dead_lettered_at) }),
+        createdAt: Number(row.created_at),
+      };
       else if (plan.table === "session_kernel_outbox") value = {
         schemaVersion: 1,
         recordId: id,
