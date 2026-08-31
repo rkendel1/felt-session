@@ -5,18 +5,22 @@
  * transitions are aggregated per authenticated person into one Live Activity,
  * so a burst of workers never floods the Lock Screen with separate cards.
  */
-import { chmodSync, existsSync, readFileSync } from "fs";
+import { existsSync, readFileSync, unlinkSync } from "node:fs";
+import type { StateFirstDB } from "@feltdb/core";
 import { connect } from "node:http2";
 import { importPkcs8Pem } from "./codestorage/auth";
 import { stateDir } from "./paths";
+import { managedFeltDb } from "./managed-feltdb";
 import { getReads, isUnread } from "./reads";
 import { getCachedSessions } from "./session-cache";
 import { onSessionStateChange } from "./session-state-events";
-import { writeJsonAtomic } from "./shared/atomic-write";
 import { userMatchesAny } from "./shared/user-mappings";
 import type { UnifiedSession } from "./types";
 
 const STORE_PATH = `${stateDir("live-activities")}/registrations.json`;
+const COLLECTION = "opensession_live_activity_registrations";
+const STORE_ID = "registrations";
+const MIGRATION = "live-activities-json-to-managed-feltdb-v1";
 const MAX_VISIBLE_SESSIONS = 3;
 const MAX_ACTIVITY_TOKENS = 4;
 const TOKEN_PATTERN = /^[a-f0-9]{32,512}$/i;
@@ -59,6 +63,7 @@ export interface LiveActivityRegistration {
 
 interface RegistrationStore {
   devices: LiveActivityRegistration[];
+  __version?: number;
 }
 
 interface ApnsConfig {
@@ -79,6 +84,8 @@ let jwtCache: { key: string; issuedAt: number; token: string } | null = null;
 let storeQueue: Promise<unknown> = Promise.resolve();
 let syncRunning = false;
 let syncDirty = false;
+let registrationsDb: StateFirstDB | undefined;
+let registrationStore: RegistrationStore = { devices: [] };
 
 function withStoreLock<T>(work: () => Promise<T> | T): Promise<T> {
   const run = storeQueue.then(work, work);
@@ -90,10 +97,9 @@ function withStoreLock<T>(work: () => Promise<T> | T): Promise<T> {
 }
 
 function readStore(): RegistrationStore {
+  const parsed = structuredClone(registrationStore);
   try {
-    if (existsSync(STORE_PATH)) {
-      const parsed = JSON.parse(readFileSync(STORE_PATH, "utf8"));
-      if (Array.isArray(parsed?.devices)) {
+      if (Array.isArray(parsed.devices)) {
         const now = Date.now();
         const before = JSON.stringify(parsed.devices);
         parsed.devices = parsed.devices
@@ -119,19 +125,40 @@ function readStore(): RegistrationStore {
             );
             return device;
           });
-        if (JSON.stringify(parsed.devices) !== before) writeStore(parsed);
         return parsed;
       }
-    }
   } catch (error) {
     console.error("[live-activities] failed to read registrations:", error);
   }
   return { devices: [] };
 }
 
-function writeStore(store: RegistrationStore): void {
-  writeJsonAtomic(STORE_PATH, store);
-  chmodSync(STORE_PATH, 0o600);
+async function writeStore(store: RegistrationStore): Promise<void> {
+  const db = registrationsDb ?? managedFeltDb();
+  const previous = registrationStore;
+  delete store.__version;
+  await db.transaction((tx) => {
+    tx.collection<RegistrationStore>(COLLECTION).set(STORE_ID, store,
+      previous.__version ? { ifVersion: previous.__version } : { requireAbsent: true });
+  }, { transactionId: `opensession:live-activities:put:${crypto.randomUUID()}` });
+  registrationStore = { ...store, __version: (previous.__version ?? 0) + 1 };
+}
+
+export async function initializeManagedLiveActivities(db: StateFirstDB = registrationsDb ?? managedFeltDb()): Promise<void> {
+  registrationsDb = db;
+  if (!await db.collection<{ id: string }>("opensession_migrations").get(MIGRATION)) {
+    let legacy: RegistrationStore | null = null;
+    try { if (existsSync(STORE_PATH)) legacy = JSON.parse(readFileSync(STORE_PATH, "utf8")); } catch {}
+    if (legacy?.devices) await db.transaction((tx) => {
+      tx.collection<RegistrationStore>(COLLECTION).set(STORE_ID, legacy!);
+    }, { transactionId: "opensession:live-activities:migrate" });
+    await db.transaction((tx) => {
+      tx.collection("opensession_migrations").set(MIGRATION,
+        { id: MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
+    }, { transactionId: `opensession:migration:${MIGRATION}` });
+  }
+  if (existsSync(STORE_PATH)) unlinkSync(STORE_PATH);
+  registrationStore = await db.collection<RegistrationStore>(COLLECTION).get(STORE_ID) ?? { devices: [] };
 }
 
 function cleanText(value: unknown, maximum: number): string {
@@ -245,7 +272,7 @@ export async function registerLiveActivityDevice(input: {
     return { error: "invalid push-to-start token" };
 
   let retired: LiveActivityRegistration | undefined;
-  const result = await withStoreLock(() => {
+  const result = await withStoreLock(async () => {
     const store = readStore();
     const previous = store.devices.find(
       (device) => device.deviceId === deviceId,
@@ -279,7 +306,7 @@ export async function registerLiveActivityDevice(input: {
       (device) => device.deviceId !== deviceId,
     );
     store.devices.push(next);
-    writeStore(store);
+    await writeStore(store);
     return { ok: true } as const;
   });
   if (retired) void endRegistrationActivities(retired);
@@ -300,7 +327,7 @@ export async function registerLiveActivityToken(input: {
   if (!deviceId || !activityId)
     return { error: "deviceId and activityId required" };
   if (!validToken(pushToken)) return { error: "invalid activity push token" };
-  const result = await withStoreLock(() => {
+  const result = await withStoreLock(async () => {
     const store = readStore();
     const device = store.devices.find(
       (candidate) => candidate.deviceId === deviceId,
@@ -336,7 +363,7 @@ export async function registerLiveActivityToken(input: {
     device.expiresAt = new Date(
       now.getTime() + REGISTRATION_TTL_MS,
     ).toISOString();
-    writeStore(store);
+    await writeStore(store);
     return { ok: true } as const;
   });
   scheduleLiveActivitySync();
@@ -349,7 +376,7 @@ export async function unregisterLiveActivityDevice(
   login?: string,
 ): Promise<{ ok: true } | { error: string }> {
   let retired: LiveActivityRegistration | undefined;
-  const result = await withStoreLock(() => {
+  const result = await withStoreLock(async () => {
     const store = readStore();
     const device = store.devices.find(
       (candidate) => candidate.deviceId === deviceId,
@@ -361,7 +388,7 @@ export async function unregisterLiveActivityDevice(
     store.devices = store.devices.filter(
       (candidate) => candidate.deviceId !== deviceId,
     );
-    writeStore(store);
+    await writeStore(store);
     return { ok: true } as const;
   });
   if (retired) void endRegistrationActivities(retired);
@@ -691,7 +718,7 @@ async function syncLiveActivitiesOnce(): Promise<void> {
     }
   }
 
-  await withStoreLock(() => {
+  await withStoreLock(async () => {
     const store = readStore();
     let changed = false;
     for (const outcome of outcomes) {
@@ -767,7 +794,7 @@ async function syncLiveActivitiesOnce(): Promise<void> {
       }
       if (deviceChanged) device.updatedAt = new Date().toISOString();
     }
-    if (changed) writeStore(store);
+    if (changed) await writeStore(store);
   });
 }
 

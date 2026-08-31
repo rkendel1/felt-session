@@ -46,6 +46,7 @@ import { initializeManagedMcpOauth } from "./src/server/mcp-oauth";
 import { initializeManagedWorkspaceSecrets } from "./src/server/workspace-secrets";
 import { initializeManagedSandboxConnections } from "./src/server/sandbox/connections";
 import { startLiveActivitySync } from "./src/server/live-activities";
+import { initializeManagedLiveActivities } from "./src/server/live-activities";
 import { startRuntimeInvestigationHandoffConsumer } from "./src/server/runtime-investigation-handoffs";
 import { initializeManagedFeltDb } from "./src/server/managed-feltdb";
 import { initializeManagedWorkspaces } from "./src/server/workspaces";
@@ -221,6 +222,7 @@ if (!g.__opensessionBooted) {
 	await initializeManagedModelProviders(db);
 	await initializeManagedPiConfig(db);
 	await initializeManagedEngineSessionOwners(db);
+	await initializeManagedLiveActivities(db);
 }
 
 // Listeners the server owns. Deliberately started HERE and not as module side
