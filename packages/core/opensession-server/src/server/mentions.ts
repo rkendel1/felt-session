@@ -14,12 +14,16 @@
  * whole-map PUT in reads.ts carries).
  */
 
-import { existsSync, mkdirSync, readFileSync } from "fs";
-import { writeJsonAtomic } from "./shared/atomic-write";
+import { createHash } from "node:crypto";
+import { existsSync, readFileSync, readdirSync, unlinkSync } from "fs";
 import { stateDir } from "./paths";
 import { mentionedUsers } from "./people";
+import { managedFeltDb } from "./managed-feltdb";
+import type { StateFirstDB } from "@feltdb/core";
 
 const MENTIONS_DIR = stateDir("mentions");
+const COLLECTION = "opensession_mentions";
+const MIGRATION = "mentions-json-to-managed-feltdb-v1";
 
 /** Plenty for a badge list, and a hard bound on an unattended file. */
 const MAX_STORED = 200;
@@ -42,32 +46,72 @@ function isValidPerson(name: string): boolean {
 	return /^[A-Za-z0-9._-]{1,64}$/.test(name);
 }
 
-function fileFor(person: string): string {
-	return `${MENTIONS_DIR}/${person.toLowerCase()}.json`;
-}
+type StoredMention = Mention & { id: string; person: string; state: "active" | "deleted"; updatedAt: number };
+const records = new Map<string, StoredMention>();
+let mentionDb: StateFirstDB | undefined;
+const personKey = (person: string) => person.toLocaleLowerCase();
+const recordId = (person: string, sessionId: string) =>
+	`mention_${createHash("sha256").update(`${personKey(person)}:${sessionId}`).digest("hex")}`;
 
 function readAll(person: string): Mention[] {
 	if (!isValidPerson(person)) return [];
-	try {
-		const f = fileFor(person);
-		if (!existsSync(f)) return [];
-		const raw = JSON.parse(readFileSync(f, "utf8"));
-		if (!Array.isArray(raw?.mentions)) return [];
-		return raw.mentions.filter(
-			(m: unknown): m is Mention =>
-				!!m &&
-				typeof (m as any).sessionId === "string" &&
-				typeof (m as any).by === "string" &&
-				typeof (m as any).ts === "number",
-		);
-	} catch {
-		return [];
-	}
+	return [...records.values()]
+		.filter((record) => record.person === personKey(person) && record.state === "active")
+		.sort((a, b) => a.ts - b.ts)
+		.slice(-MAX_STORED);
 }
 
-function write(person: string, mentions: Mention[]): void {
-	if (!existsSync(MENTIONS_DIR)) mkdirSync(MENTIONS_DIR, { recursive: true });
-	writeJsonAtomic(fileFor(person), { mentions: mentions.slice(-MAX_STORED) });
+export async function initializeManagedMentions(
+	authority: StateFirstDB = managedFeltDb(),
+): Promise<void> {
+	mentionDb = authority;
+	const migrations = authority.collection<{ id: string }>("opensession_migrations");
+	if (!await migrations.get(MIGRATION)) {
+		const files = existsSync(MENTIONS_DIR) ? readdirSync(MENTIONS_DIR).filter((file) => file.endsWith(".json")) : [];
+		for (const file of files) {
+			let legacy: unknown[] = [];
+			try {
+				const raw = JSON.parse(readFileSync(`${MENTIONS_DIR}/${file}`, "utf8"));
+				if (Array.isArray(raw?.mentions)) legacy = raw.mentions;
+			} catch { continue; }
+			const person = file.slice(0, -5).toLocaleLowerCase();
+			for (const value of legacy) {
+				const mention = value as Mention;
+				if (!mention?.sessionId || typeof mention.by !== "string" || typeof mention.ts !== "number") continue;
+				const id = recordId(person, mention.sessionId);
+				const stored: StoredMention = { ...mention, id, person, state: "active", updatedAt: Date.now() };
+				await authority.transaction((tx) => {
+					tx.collection<StoredMention>(COLLECTION).set(id, stored);
+				}, { transactionId: `opensession:mention:migrate:${id}` });
+			}
+			unlinkSync(`${MENTIONS_DIR}/${file}`);
+		}
+		await authority.transaction((tx) => {
+			tx.collection("opensession_migrations").set(MIGRATION, { id: MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
+		}, { transactionId: `opensession:migration:${MIGRATION}` });
+	}
+	const loaded = authority.runtime().runtime === "remote"
+		? await queryMentions(authority)
+		: await authority.collection<StoredMention>(COLLECTION).all();
+	records.clear();
+	for (const record of loaded) records.set(record.id, record);
+}
+
+async function queryMentions(authority: StateFirstDB): Promise<StoredMention[]> {
+	const loaded: StoredMention[] = [];
+	let cursor: string | undefined;
+	do {
+		const page = await authority.query<StoredMention>({
+			collection: COLLECTION,
+			orderBy: [{ field: "updatedAt", direction: "desc" }],
+			limit: 500,
+			...(cursor ? { cursor } : {}),
+		});
+		loaded.push(...page.records);
+		cursor = page.exhausted ? undefined : page.nextCursor;
+		if (!page.exhausted && !cursor) throw new Error("FeltDB mentions cursor is missing");
+	} while (cursor);
+	return loaded;
 }
 
 /** This person's outstanding mentions, oldest first. */
@@ -79,10 +123,10 @@ export function listMentions(person: string): Mention[] {
  * Record that `by` mentioned `person` in `sessionId`. Returns the stored
  * record so the caller can broadcast exactly what it wrote.
  */
-export function addMention(
+export async function addMention(
 	person: string,
 	mention: Omit<Mention, "ts"> & { ts?: number },
-): Mention | null {
+): Promise<Mention | null> {
 	if (!isValidPerson(person)) return null;
 	const record: Mention = {
 		sessionId: mention.sessionId,
@@ -91,25 +135,37 @@ export function addMention(
 		preview: mention.preview.trim().slice(0, PREVIEW_LEN),
 		ts: mention.ts ?? Date.now(),
 	};
-	// The newest mention in a session replaces the older one: one row, one badge.
-	const rest = readAll(person).filter((m) => m.sessionId !== record.sessionId);
-	write(person, [...rest, record]);
+	const id = recordId(person, record.sessionId);
+	const stored: StoredMention = { ...record, id, person: personKey(person), state: "active", updatedAt: Date.now() };
+	const authority = mentionDb ?? managedFeltDb();
+	await authority.transaction((tx) => {
+		tx.collection<StoredMention>(COLLECTION).set(id, stored);
+	}, {
+		transactionId: `opensession:mention:${id}:${crypto.randomUUID()}`,
+	});
+	records.set(id, stored);
 	return record;
 }
 
 /** Clear this person's mention for one session — what opening it does. */
-export function clearMention(person: string, sessionId: string): boolean {
-	const all = readAll(person);
-	const rest = all.filter((m) => m.sessionId !== sessionId);
-	if (rest.length === all.length) return false;
-	write(person, rest);
+export async function clearMention(person: string, sessionId: string): Promise<boolean> {
+	const id = recordId(person, sessionId);
+	const current = records.get(id);
+	if (!current || current.state !== "active") return false;
+	const deleted = { ...current, state: "deleted" as const, updatedAt: Date.now() };
+	await (mentionDb ?? managedFeltDb()).transaction((tx) => {
+		tx.collection<StoredMention>(COLLECTION).set(id, deleted);
+	}, {
+		transactionId: `opensession:mention:clear:${id}:${crypto.randomUUID()}`,
+	});
+	records.set(id, deleted);
 	return true;
 }
 
 /** Clear every mention for a person. */
-export function clearAllMentions(person: string): void {
+export async function clearAllMentions(person: string): Promise<void> {
 	if (!isValidPerson(person)) return;
-	write(person, []);
+	for (const mention of readAll(person)) await clearMention(person, mention.sessionId);
 }
 
 /**
@@ -120,17 +176,17 @@ export function clearAllMentions(person: string): void {
  *
  * Returns the people recorded, for the caller's push loop.
  */
-export function recordMentions(
+export async function recordMentions(
 	text: string,
 	sender: string,
 	sessionId: string,
 	source: Mention["source"],
 	onRecorded?: (person: string, mention: Mention) => void,
-): string[] {
+): Promise<string[]> {
 	if (!text.includes("@")) return [];
 	const people = mentionedUsers(text, sender);
 	for (const person of people) {
-		const mention = addMention(person, {
+		const mention = await addMention(person, {
 			sessionId,
 			by: sender || "Someone",
 			source,
@@ -159,7 +215,7 @@ export async function notifyMentions(
 	where: string,
 ): Promise<string[]> {
 	const { broadcastToAll } = await import("./ws-hub");
-	const mentioned = recordMentions(text, sender, sessionId, source, (person, mention) =>
+	const mentioned = await recordMentions(text, sender, sessionId, source, (person, mention) =>
 		broadcastToAll({ type: "mention", user: person, mention }),
 	);
 	if (!mentioned.length) return mentioned;

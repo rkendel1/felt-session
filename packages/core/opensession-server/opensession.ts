@@ -23,6 +23,7 @@ import { initializeManagedTitleOverrides } from "./src/server/title-overrides";
 import { initializeManagedStatusOverrides } from "./src/server/status-overrides";
 import { initializeManagedReviewRequests } from "./src/server/review-requests";
 import { initializeManagedArchive } from "./src/server/archive";
+import { initializeManagedMentions } from "./src/server/mentions";
 import { startLiveActivitySync } from "./src/server/live-activities";
 import { startRuntimeInvestigationHandoffConsumer } from "./src/server/runtime-investigation-handoffs";
 import { initializeManagedFeltDb } from "./src/server/managed-feltdb";
@@ -169,6 +170,7 @@ if (!g.__opensessionBooted) {
 	await initializeManagedStatusOverrides(db);
 	await initializeManagedReviewRequests(db);
 	await initializeManagedArchive(db);
+	await initializeManagedMentions(db);
 }
 
 // Listeners the server owns. Deliberately started HERE and not as module side

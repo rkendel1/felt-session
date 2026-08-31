@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createFeltDB } from "@feltdb/core";
 
 // Same shape as session-notes.test.ts: the store's directory is resolved at
 // module load (stateDir), so the scratch namespace has to be in place before
@@ -18,7 +19,9 @@ const {
 	mentionPreview,
 	notifyMentions,
 	recordMentions,
+	initializeManagedMentions,
 } = await import("./mentions");
+await initializeManagedMentions(createFeltDB({ namespace: crypto.randomUUID(), memory: true }));
 const { teamFirstNames } = await import("./people");
 if (saved === undefined) delete process.env.OPENSESSION_STATE_DIR;
 else process.env.OPENSESSION_STATE_DIR = saved;
@@ -28,54 +31,54 @@ function mention(sessionId: string, by = "Grant") {
 }
 
 describe("mentions", () => {
-	test("records per person and lists them back", () => {
-		addMention("Kent", mention("os-a"));
-		addMention("Michiel", mention("os-b"));
+	test("records per person and lists them back", async () => {
+		await addMention("Kent", mention("os-a"));
+		await addMention("Michiel", mention("os-b"));
 		expect(listMentions("Kent").map((m) => m.sessionId)).toEqual(["os-a"]);
 		expect(listMentions("Michiel").map((m) => m.sessionId)).toEqual(["os-b"]);
 		expect(listMentions("Nobody")).toEqual([]);
 	});
 
-	test("is keyed case-insensitively, so a display name and a key agree", () => {
-		addMention("Kent", mention("os-case"));
+	test("is keyed case-insensitively, so a display name and a key agree", async () => {
+		await addMention("Kent", mention("os-case"));
 		expect(listMentions("kent").map((m) => m.sessionId)).toContain("os-case");
 	});
 
-	test("a second mention in one session replaces the first — one row, one badge", () => {
-		addMention("Ren", { ...mention("os-dup", "Grant"), preview: "first" });
-		addMention("Ren", { ...mention("os-dup", "Kent"), preview: "second" });
+	test("a second mention in one session replaces the first — one row, one badge", async () => {
+		await addMention("Ren", { ...mention("os-dup", "Grant"), preview: "first" });
+		await addMention("Ren", { ...mention("os-dup", "Kent"), preview: "second" });
 		const all = listMentions("Ren").filter((m) => m.sessionId === "os-dup");
 		expect(all).toHaveLength(1);
 		expect(all[0]!.by).toBe("Kent");
 		expect(all[0]!.preview).toBe("second");
 	});
 
-	test("clearing one session leaves the others", () => {
-		addMention("Ada", mention("os-1"));
-		addMention("Ada", mention("os-2"));
-		expect(clearMention("Ada", "os-1")).toBe(true);
+	test("clearing one session leaves the others", async () => {
+		await addMention("Ada", mention("os-1"));
+		await addMention("Ada", mention("os-2"));
+		expect(await clearMention("Ada", "os-1")).toBe(true);
 		expect(listMentions("Ada").map((m) => m.sessionId)).toEqual(["os-2"]);
 		// Clearing what isn't there is a no-op, not an error: opening a session
 		// you were never tagged in takes this path on every mount.
-		expect(clearMention("Ada", "os-1")).toBe(false);
-		clearAllMentions("Ada");
+		expect(await clearMention("Ada", "os-1")).toBe(false);
+		await clearAllMentions("Ada");
 		expect(listMentions("Ada")).toEqual([]);
 	});
 
-	test("a person key that could escape the directory is refused", () => {
-		expect(addMention("../../etc/passwd", mention("os-x"))).toBeNull();
+	test("a person key that could escape the directory is refused", async () => {
+		expect(await addMention("../../etc/passwd", mention("os-x"))).toBeNull();
 		expect(listMentions("../../etc/passwd")).toEqual([]);
 	});
 
-	test("recordMentions never records the sender's own name", () => {
+	test("recordMentions never records the sender's own name", async () => {
 		// The roster comes from the instance identity config, so assert the
 		// shape rather than specific teammates: a sender's own name is dropped,
 		// and text with no "@" does no work at all.
 		const sender = "Kent";
-		expect(recordMentions(`@${sender} look`, sender, "os-self", "note")).toEqual(
+		expect(await recordMentions(`@${sender} look`, sender, "os-self", "note")).toEqual(
 			[],
 		);
-		expect(recordMentions("nobody tagged", sender, "os-none", "prompt")).toEqual(
+		expect(await recordMentions("nobody tagged", sender, "os-none", "prompt")).toEqual(
 			[],
 		);
 		expect(listMentions(sender).map((m) => m.sessionId)).not.toContain(
