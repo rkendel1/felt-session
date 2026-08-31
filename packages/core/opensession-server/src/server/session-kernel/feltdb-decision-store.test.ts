@@ -126,6 +126,60 @@ authorityTest("FeltDB Session Kernel decision authority", () => {
     })).migrationId).toBe("migration-activated");
   });
 
+  test("imports bounded migration batches before atomic activation", async () => {
+    const store = new FeltDbSessionDecisionStore(db);
+    let manifest = await store.beginMigration({
+      sessionId: "session-migrated",
+      migrationId: "migration-bounded",
+      now: 100,
+    });
+    manifest = await store.importMigrationBatch({
+      sessionId: "session-migrated",
+      migrationId: "migration-bounded",
+      batchId: "creation-1",
+      recordCount: 1,
+      contentHash: "creation-hash",
+      observedManifest: manifest,
+      operations: [{
+        collection: KERNEL_COLLECTIONS.creation,
+        id: "session-migrated",
+        value: { schemaVersion: 1, sessionId: "session-migrated", state: "ready" },
+        requireAbsent: true,
+      }],
+      now: 101,
+    });
+    const replay = await store.importMigrationBatch({
+      sessionId: "session-migrated",
+      migrationId: "migration-bounded",
+      batchId: "creation-1",
+      recordCount: 1,
+      contentHash: "creation-hash",
+      observedManifest: manifest,
+      operations: [],
+      now: 102,
+    });
+    expect(replay.importedRecords).toBe(1);
+    expect(replay.importedBatches).toBe(1);
+    manifest = await store.verifyMigration({
+      observedManifest: replay,
+      expectedRecords: 1,
+      expectedBatches: 1,
+      expectedContentHash: replay.contentHash,
+      now: 103,
+    });
+    const activated = await store.activateSession({
+      sessionId: "session-migrated",
+      migrationId: "migration-bounded",
+      owner: "worker-a",
+      leaseId: "lease-a",
+      leaseDurationMs: 60_000,
+      migrationManifestVersion: manifest.__version,
+      now: 104,
+    });
+    expect(activated.migrationId).toBe("migration-bounded");
+    expect((await store.migrationManifest("session-migrated"))?.phase).toBe("activated");
+  });
+
   test("commits head, domain, journal, effect, and receipt atomically", async () => {
     await createHead("session-a");
     const store = new FeltDbSessionDecisionStore(db);

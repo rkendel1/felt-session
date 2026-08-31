@@ -18,6 +18,7 @@ export const KERNEL_COLLECTIONS = {
   turnProjectionGenerations: "opensession_kernel_turn_projection_generations",
   commands: "opensession_kernel_commands",
   migrations: "opensession_kernel_migrations",
+  migrationBatches: "opensession_kernel_migration_batches",
 } as const;
 
 export type SessionDecisionHead = {
@@ -125,13 +126,37 @@ export type ActivateSessionInput = {
   now?: number;
 };
 
-type MigrationManifest = {
+export type MigrationManifest = {
   schemaVersion: 1;
   sessionId: string;
   migrationId: string;
   phase: "importing" | "verified" | "activated";
+  importedRecords: number;
+  importedBatches: number;
+  contentHash: string;
   updatedAt: number;
   __version?: number;
+};
+
+export type MigrationBatchInput = {
+  sessionId: string;
+  migrationId: string;
+  batchId: string;
+  recordCount: number;
+  contentHash: string;
+  observedManifest: MigrationManifest & { __version: number };
+  operations: readonly AtomicTransactionOperationRequest[];
+  now?: number;
+};
+
+type MigrationBatchReceipt = {
+  schemaVersion: 1;
+  sessionId: string;
+  migrationId: string;
+  batchId: string;
+  recordCount: number;
+  contentHash: string;
+  committedAt: number;
 };
 
 export type ClearSessionInput = {
@@ -180,6 +205,157 @@ export class FeltDbSessionDecisionStore {
     if (head.sessionId !== sessionId || head.schemaVersion !== 1)
       throw new Error(`FeltDB session head ${sessionId} is invalid`);
     return head;
+  }
+
+  async migrationManifest(
+    sessionId: string,
+  ): Promise<(MigrationManifest & { __version: number }) | undefined> {
+    const manifest = await this.db
+      .collection<MigrationManifest & { __version: number }>(KERNEL_COLLECTIONS.migrations)
+      .get(sessionId);
+    if (!manifest) return undefined;
+    if (!Number.isSafeInteger(manifest.__version) || manifest.__version < 1)
+      throw new Error(`FeltDB migration manifest ${sessionId} has no authority version`);
+    return manifest;
+  }
+
+  async beginMigration(input: {
+    sessionId: string;
+    migrationId: string;
+    now?: number;
+  }): Promise<MigrationManifest & { __version: number }> {
+    if (!input.sessionId || !input.migrationId)
+      throw new Error("Session migration identities are required");
+    const existing = await this.migrationManifest(input.sessionId);
+    if (existing) {
+      if (existing.migrationId !== input.migrationId)
+        throw new Error(`Session ${input.sessionId} is already owned by another migration`);
+      return existing;
+    }
+    const now = input.now ?? Date.now();
+    await this.db.transaction({
+      transactionId: `opensession:kernel:migration:begin:${input.migrationId}`,
+      preconditions: [
+        { collection: KERNEL_COLLECTIONS.sessions, id: input.sessionId, requireAbsent: true },
+        { collection: KERNEL_COLLECTIONS.tombstones, id: input.sessionId, requireAbsent: true },
+      ],
+      operations: [{
+        collection: KERNEL_COLLECTIONS.migrations,
+        id: input.sessionId,
+        value: {
+          schemaVersion: 1,
+          sessionId: input.sessionId,
+          migrationId: input.migrationId,
+          phase: "importing",
+          importedRecords: 0,
+          importedBatches: 0,
+          contentHash: "",
+          updatedAt: now,
+        } satisfies MigrationManifest,
+        requireAbsent: true,
+      }],
+    });
+    const created = await this.migrationManifest(input.sessionId);
+    if (!created) throw new Error(`FeltDB migration manifest ${input.sessionId} is missing`);
+    return created;
+  }
+
+  async importMigrationBatch(
+    input: MigrationBatchInput,
+  ): Promise<MigrationManifest & { __version: number }> {
+    const manifest = input.observedManifest;
+    if (
+      manifest.sessionId !== input.sessionId ||
+      manifest.migrationId !== input.migrationId ||
+      manifest.phase !== "importing"
+    ) throw new Error(`Session ${input.sessionId} migration is not importing`);
+    if (!input.batchId || !Number.isSafeInteger(input.recordCount) || input.recordCount < 0)
+      throw new Error("Migration batch identity and record count are required");
+    const receiptId = kernelRecordId("migration_batch", `${input.migrationId}:${input.batchId}`);
+    const receipts = this.db.collection<MigrationBatchReceipt>(KERNEL_COLLECTIONS.migrationBatches);
+    const replay = await receipts.get(receiptId);
+    if (replay) {
+      this.validateMigrationBatchReplay(replay, input);
+      const current = await this.migrationManifest(input.sessionId);
+      if (!current) throw new Error(`FeltDB migration manifest ${input.sessionId} is missing`);
+      return current;
+    }
+    const now = input.now ?? Date.now();
+    const next: MigrationManifest = {
+      ...manifest,
+      importedRecords: manifest.importedRecords + input.recordCount,
+      importedBatches: manifest.importedBatches + 1,
+      contentHash: sha256(`${manifest.contentHash}:${input.batchId}:${input.contentHash}`),
+      updatedAt: now,
+    };
+    delete next.__version;
+    await this.db.transaction({
+      transactionId: `opensession:kernel:migration:batch:${input.migrationId}:${input.batchId}`,
+      preconditions: [
+        { collection: KERNEL_COLLECTIONS.sessions, id: input.sessionId, requireAbsent: true },
+        { collection: KERNEL_COLLECTIONS.tombstones, id: input.sessionId, requireAbsent: true },
+        { collection: KERNEL_COLLECTIONS.migrationBatches, id: receiptId, requireAbsent: true },
+      ],
+      operations: [
+        ...input.operations,
+        {
+          collection: KERNEL_COLLECTIONS.migrations,
+          id: input.sessionId,
+          value: next,
+          ifVersion: manifest.__version,
+        },
+        {
+          collection: KERNEL_COLLECTIONS.migrationBatches,
+          id: receiptId,
+          value: {
+            schemaVersion: 1,
+            sessionId: input.sessionId,
+            migrationId: input.migrationId,
+            batchId: input.batchId,
+            recordCount: input.recordCount,
+            contentHash: input.contentHash,
+            committedAt: now,
+          } satisfies MigrationBatchReceipt,
+          requireAbsent: true,
+        },
+      ],
+    });
+    const advanced = await this.migrationManifest(input.sessionId);
+    if (!advanced) throw new Error(`FeltDB migration manifest ${input.sessionId} is missing`);
+    return advanced;
+  }
+
+  async verifyMigration(input: {
+    observedManifest: MigrationManifest & { __version: number };
+    expectedRecords: number;
+    expectedBatches: number;
+    expectedContentHash: string;
+    now?: number;
+  }): Promise<MigrationManifest & { __version: number }> {
+    const manifest = input.observedManifest;
+    if (
+      manifest.phase !== "importing" ||
+      manifest.importedRecords !== input.expectedRecords ||
+      manifest.importedBatches !== input.expectedBatches ||
+      manifest.contentHash !== input.expectedContentHash
+    ) throw new Error(`Session ${manifest.sessionId} migration verification failed`);
+    const { __version: _, ...record } = manifest;
+    await this.db.transaction({
+      transactionId: `opensession:kernel:migration:verify:${manifest.migrationId}`,
+      preconditions: [
+        { collection: KERNEL_COLLECTIONS.sessions, id: manifest.sessionId, requireAbsent: true },
+        { collection: KERNEL_COLLECTIONS.tombstones, id: manifest.sessionId, requireAbsent: true },
+      ],
+      operations: [{
+        collection: KERNEL_COLLECTIONS.migrations,
+        id: manifest.sessionId,
+        value: { ...record, phase: "verified", updatedAt: input.now ?? Date.now() },
+        ifVersion: manifest.__version,
+      }],
+    });
+    const verified = await this.migrationManifest(manifest.sessionId);
+    if (!verified) throw new Error(`FeltDB migration manifest ${manifest.sessionId} is missing`);
+    return verified;
   }
 
   async activateSession(input: ActivateSessionInput): Promise<VersionedSessionDecisionHead> {
@@ -237,8 +413,11 @@ export class FeltDbSessionDecisionStore {
             sessionId: input.sessionId,
             migrationId: input.migrationId,
             phase: "activated",
+            importedRecords: manifest?.importedRecords ?? 0,
+            importedBatches: manifest?.importedBatches ?? 0,
+            contentHash: manifest?.contentHash ?? "",
             updatedAt: now,
-          },
+          } satisfies MigrationManifest,
           ...(manifest
             ? { ifVersion: manifest.__version! }
             : { requireAbsent: true as const }),
@@ -597,5 +776,18 @@ export class FeltDbSessionDecisionStore {
       receipt.inputHash !== input.inputHash
     ) throw new Error(`FeltDB transaction ${input.transactionId} was reused`);
     return receipt.result;
+  }
+
+  private validateMigrationBatchReplay(
+    receipt: MigrationBatchReceipt,
+    input: MigrationBatchInput,
+  ): void {
+    if (
+      receipt.sessionId !== input.sessionId ||
+      receipt.migrationId !== input.migrationId ||
+      receipt.batchId !== input.batchId ||
+      receipt.recordCount !== input.recordCount ||
+      receipt.contentHash !== input.contentHash
+    ) throw new Error(`FeltDB migration batch ${input.batchId} was reused`);
   }
 }
