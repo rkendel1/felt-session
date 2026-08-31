@@ -3,6 +3,7 @@ import type {
   AtomicTransactionOperationRequest,
   StateFirstDB,
 } from "@feltdb/core";
+import { createFeltDB } from "@feltdb/core";
 
 export const KERNEL_COLLECTIONS = {
   sessions: "opensession_kernel_sessions",
@@ -24,6 +25,9 @@ export const KERNEL_COLLECTIONS = {
   agentOperations: "opensession_kernel_agent_operations",
   agentOperationCancellations: "opensession_kernel_agent_operation_cancellations",
   agentOperationHighWater: "opensession_kernel_agent_operation_high_water",
+  transcriptHeads: "opensession_transcript_heads",
+  transcriptEvents: "opensession_transcript_events",
+  transcriptReceipts: "opensession_transcript_receipts",
   migrations: "opensession_kernel_migrations",
   migrationBatches: "opensession_kernel_migration_batches",
 } as const;
@@ -241,6 +245,10 @@ export class FeltDbSessionDecisionStore {
 
   async record<T>(collection: string, id: string): Promise<T | undefined> {
     return (await this.db.collection<T>(collection).get(id)) ?? undefined;
+  }
+
+  runtime(): StateFirstDB {
+    return this.db;
   }
 
   async migrationManifest(
@@ -995,4 +1003,18 @@ export class FeltDbSessionDecisionStore {
       receipt.contentHash !== input.contentHash
     ) throw new Error(`FeltDB migration batch ${input.batchId} was reused`);
   }
+}
+
+export function openFeltDbSessionDecisionStore(
+  env: Record<string, string | undefined> = process.env,
+): FeltDbSessionDecisionStore {
+  const url = env.OPENSESSION_FELTDB_SERVER_URL?.trim().replace(/\/$/, "");
+  const namespace = env.OPENSESSION_FELTDB_SERVER_NAMESPACE?.trim();
+  if (!url) throw new Error("Session Kernel requires OPENSESSION_FELTDB_SERVER_URL");
+  if (!namespace)
+    throw new Error("Session Kernel requires OPENSESSION_FELTDB_SERVER_NAMESPACE");
+  return new FeltDbSessionDecisionStore(createFeltDB({
+    namespace,
+    server: { url, token: env.OPENSESSION_FELTDB_SERVER_TOKEN?.trim() ?? "" },
+  }));
 }
