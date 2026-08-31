@@ -5,7 +5,7 @@
  * All other entities (repositories, agents, tasks, etc.) are scoped to a project.
  */
 
-import { createFeltDB, getTelemetryClient } from "@feltdb/core";
+import type { StateFirstDB } from "@feltdb/core";
 import type {
   MissionControlProject,
   ProjectStatus,
@@ -19,9 +19,9 @@ interface StoredProjectRow {
   name: string;
   slug: string;
   description?: string;
-  repository: string; // JSON
-  local: string; // JSON
-  slack: string; // JSON
+  repository: RepositoryConfig;
+  local: LocalConfig;
+  slack: SlackConfig;
   status: ProjectStatus;
   createdAt: string;
   updatedAt: string;
@@ -72,14 +72,7 @@ export interface DurableProjectRegistry {
   ): Promise<MissionControlProject>;
 }
 
-export function openDurableProjectRegistry(path: string): DurableProjectRegistry {
-  const telemetry = getTelemetryClient();
-  telemetry.disable();
-
-  const db = createFeltDB({
-    path,
-    namespace: "mission-control-projects",
-  });
+export function openDurableProjectRegistry(db: StateFirstDB): DurableProjectRegistry {
 
   return {
     async createProject(project: MissionControlProject): Promise<void> {
@@ -88,9 +81,9 @@ export function openDurableProjectRegistry(path: string): DurableProjectRegistry
         name: project.name,
         slug: project.slug,
         description: project.description,
-        repository: JSON.stringify(project.repository),
-        local: JSON.stringify(project.local),
-        slack: JSON.stringify(project.slack),
+        repository: project.repository,
+        local: project.local,
+        slack: project.slack,
         status: project.status,
         createdAt: project.createdAt,
         updatedAt: project.updatedAt,
@@ -134,9 +127,9 @@ export function openDurableProjectRegistry(path: string): DurableProjectRegistry
         name: project.name,
         slug: project.slug,
         description: project.description,
-        repository: JSON.stringify(project.repository),
-        local: JSON.stringify(project.local),
-        slack: JSON.stringify(project.slack),
+        repository: project.repository,
+        local: project.local,
+        slack: project.slack,
         status: project.status,
         createdAt: project.createdAt,
         updatedAt: project.updatedAt,
@@ -200,9 +193,9 @@ function deserializeProject(row: StoredProjectRow): MissionControlProject {
     name: row.name,
     slug: row.slug,
     description: row.description,
-    repository: JSON.parse(row.repository),
-    local: JSON.parse(row.local),
-    slack: JSON.parse(row.slack),
+    repository: row.repository,
+    local: row.local,
+    slack: row.slack,
     status: row.status,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,

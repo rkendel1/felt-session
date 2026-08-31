@@ -15,10 +15,13 @@ import {
 } from "./durable-repository-registry";
 import type { MissionControlProject } from "./mission-control-project";
 import type { MissionControlRepository } from "./mission-control-repository";
+import { createFeltDB, type StateFirstDB } from "@feltdb/core";
 
 let testDir: string;
 let projectRegistryPath: string;
 let repositoryRegistryPath: string;
+let db: StateFirstDB;
+let testCounter = 0;
 
 beforeEach(() => {
   testDir = `/tmp/mission-control-test-${Date.now()}`;
@@ -27,6 +30,10 @@ beforeEach(() => {
   fs.mkdirSync(testDir, { recursive: true });
   fs.mkdirSync(projectRegistryPath, { recursive: true });
   fs.mkdirSync(repositoryRegistryPath, { recursive: true });
+  db = createFeltDB({
+    namespace: `mission-control-project-test-${testCounter++}`,
+    memory: true,
+  });
 });
 
 afterEach(() => {
@@ -37,7 +44,7 @@ afterEach(() => {
 
 describe("DurableProjectRegistry", () => {
   it("should create and retrieve a project", async () => {
-    const registry = openDurableProjectRegistry(projectRegistryPath);
+    const registry = openDurableProjectRegistry(db);
 
     const project = createStandardProject(
       "proj-1",
@@ -70,7 +77,7 @@ describe("DurableProjectRegistry", () => {
   });
 
   it("should retrieve project by slug", async () => {
-    const registry = openDurableProjectRegistry(projectRegistryPath);
+    const registry = openDurableProjectRegistry(db);
 
     const project = createStandardProject(
       "proj-2",
@@ -101,7 +108,7 @@ describe("DurableProjectRegistry", () => {
   });
 
   it("should list all projects", async () => {
-    const registry = openDurableProjectRegistry(projectRegistryPath);
+    const registry = openDurableProjectRegistry(db);
 
     const proj1 = createStandardProject(
       "proj-1",
@@ -142,7 +149,7 @@ describe("DurableProjectRegistry", () => {
   });
 
   it("should update a project", async () => {
-    const registry = openDurableProjectRegistry(projectRegistryPath);
+    const registry = openDurableProjectRegistry(db);
 
     let project = createStandardProject(
       "proj-1",
@@ -173,7 +180,7 @@ describe("DurableProjectRegistry", () => {
   });
 
   it("should delete a project", async () => {
-    const registry = openDurableProjectRegistry(projectRegistryPath);
+    const registry = openDurableProjectRegistry(db);
 
     const project = createStandardProject(
       "proj-1",
@@ -198,7 +205,7 @@ describe("DurableProjectRegistry", () => {
   });
 
   it("should create or return general project", async () => {
-    const registry = openDurableProjectRegistry(projectRegistryPath);
+    const registry = openDurableProjectRegistry(db);
 
     const general1 = await registry.getOrCreateGeneralProject(
       "W123",
@@ -225,7 +232,7 @@ describe("DurableProjectRegistry", () => {
 
 describe("DurableRepositoryRegistry", () => {
   it("should create and retrieve a repository", async () => {
-    const registry = openDurableRepositoryRegistry(repositoryRegistryPath);
+    const registry = openDurableRepositoryRegistry(db);
 
     const repo = createStandardRepository(
       "repo-1",
@@ -246,7 +253,7 @@ describe("DurableRepositoryRegistry", () => {
   });
 
   it("should list repositories by project", async () => {
-    const registry = openDurableRepositoryRegistry(repositoryRegistryPath);
+    const registry = openDurableRepositoryRegistry(db);
 
     const repo1 = createStandardRepository(
       "repo-1",
@@ -291,7 +298,7 @@ describe("DurableRepositoryRegistry", () => {
   });
 
   it("should record sync success", async () => {
-    const registry = openDurableRepositoryRegistry(repositoryRegistryPath);
+    const registry = openDurableRepositoryRegistry(db);
 
     const repo = createStandardRepository(
       "repo-1",
@@ -315,7 +322,7 @@ describe("DurableRepositoryRegistry", () => {
   });
 
   it("should record sync error", async () => {
-    const registry = openDurableRepositoryRegistry(repositoryRegistryPath);
+    const registry = openDurableRepositoryRegistry(db);
 
     const repo = createStandardRepository(
       "repo-1",
@@ -337,7 +344,7 @@ describe("DurableRepositoryRegistry", () => {
   });
 
   it("should list all repositories", async () => {
-    const registry = openDurableRepositoryRegistry(repositoryRegistryPath);
+    const registry = openDurableRepositoryRegistry(db);
 
     const repo1 = createStandardRepository(
       "repo-1",
@@ -367,7 +374,7 @@ describe("DurableRepositoryRegistry", () => {
   });
 
   it("should delete a repository", async () => {
-    const registry = openDurableRepositoryRegistry(repositoryRegistryPath);
+    const registry = openDurableRepositoryRegistry(db);
 
     const repo = createStandardRepository(
       "repo-1",

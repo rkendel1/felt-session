@@ -4,9 +4,8 @@
  * Handles project lifecycle: creation, configuration, discovery, and cleanup.
  */
 
-import * as path from "path";
-import * as fs from "fs";
 import { randomUUIDv7 } from "bun";
+import type { StateFirstDB } from "@feltdb/core";
 import type { MissionControlProject } from "./mission-control-project";
 import type { MissionControlRepository } from "./mission-control-repository";
 import {
@@ -37,32 +36,21 @@ export interface ProjectCreationConfig {
  * ProjectInitializer manages project creation and configuration.
  */
 export class ProjectInitializer {
-  private projectRegistryPath: string;
-  private repositoryRegistryPath: string;
   private projectRegistry: ReturnType<typeof openDurableProjectRegistry> | null = null;
   private repositoryRegistry: ReturnType<typeof openDurableRepositoryRegistry> | null = null;
 
-  constructor(dataDir: string) {
-    this.projectRegistryPath = path.join(dataDir, "projects");
-    this.repositoryRegistryPath = path.join(dataDir, "repositories");
-
-    // Ensure directories exist
-    fs.mkdirSync(this.projectRegistryPath, { recursive: true });
-    fs.mkdirSync(this.repositoryRegistryPath, { recursive: true });
-  }
+  constructor(private readonly db: StateFirstDB) {}
 
   private getProjectRegistry() {
     if (!this.projectRegistry) {
-      this.projectRegistry = openDurableProjectRegistry(this.projectRegistryPath);
+      this.projectRegistry = openDurableProjectRegistry(this.db);
     }
     return this.projectRegistry;
   }
 
   private getRepositoryRegistry() {
     if (!this.repositoryRegistry) {
-      this.repositoryRegistry = openDurableRepositoryRegistry(
-        this.repositoryRegistryPath,
-      );
+      this.repositoryRegistry = openDurableRepositoryRegistry(this.db);
     }
     return this.repositoryRegistry;
   }
@@ -248,6 +236,6 @@ export class ProjectInitializer {
 /**
  * Create a project initializer instance.
  */
-export function createProjectInitializer(dataDir: string): ProjectInitializer {
-  return new ProjectInitializer(dataDir);
+export function createProjectInitializer(db: StateFirstDB): ProjectInitializer {
+  return new ProjectInitializer(db);
 }

@@ -4,7 +4,7 @@
  * Repositories are scoped to projects and represent configured GitHub repositories.
  */
 
-import { createFeltDB, getTelemetryClient } from "@feltdb/core";
+import type { StateFirstDB } from "@feltdb/core";
 import type {
   MissionControlRepository,
   RepositoryStatus,
@@ -73,14 +73,7 @@ export interface DurableRepositoryRegistry {
   recordSyncError(repositoryId: string, error: string): Promise<void>;
 }
 
-export function openDurableRepositoryRegistry(path: string): DurableRepositoryRegistry {
-  const telemetry = getTelemetryClient();
-  telemetry.disable();
-
-  const db = createFeltDB({
-    path,
-    namespace: "mission-control-repositories",
-  });
+export function openDurableRepositoryRegistry(db: StateFirstDB): DurableRepositoryRegistry {
 
   return {
     async createRepository(repository: MissionControlRepository): Promise<void> {

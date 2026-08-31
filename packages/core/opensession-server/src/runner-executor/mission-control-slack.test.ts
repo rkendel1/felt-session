@@ -25,6 +25,7 @@ import {
   type MissionControlSlackOrchestratorInterface,
 } from "./mission-control-slack-orchestrator";
 import type { AgentIdentity } from "./mission-control-agent-identity";
+import { createFeltDB } from "@feltdb/core";
 
 let testCounter = 0;
 let testDir: string;
@@ -41,7 +42,10 @@ beforeEach(() => {
   fs.mkdirSync(testDir, { recursive: true });
 
   projectRegistry = openDurableProjectRegistry(
-    path.join(testDir, "projects.db"),
+    createFeltDB({
+      namespace: `mission-control-slack-project-test-${testCounter}`,
+      memory: true,
+    }),
   );
   agentRegistry = openDurableAgentIdentityRegistry(
     path.join(testDir, "agents.db"),

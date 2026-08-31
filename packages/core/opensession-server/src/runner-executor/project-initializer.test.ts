@@ -6,9 +6,17 @@ import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import * as fs from "fs";
 import * as path from "path";
 import { createProjectInitializer } from "./project-initializer";
+import { createFeltDB } from "@feltdb/core";
 
 let testDir: string;
 let testCounter = 0;
+
+function testDb() {
+  return createFeltDB({
+    namespace: `project-initializer-test-${testCounter++}`,
+    memory: true,
+  });
+}
 
 beforeEach(() => {
   testDir = `/tmp/project-initializer-test-${Date.now()}-${testCounter++}`;
@@ -23,7 +31,7 @@ afterEach(() => {
 
 describe("ProjectInitializer", () => {
   it("should create a project with repository", async () => {
-    const initializer = createProjectInitializer(testDir);
+    const initializer = createProjectInitializer(testDb());
 
     const project = await initializer.createProject({
       name: "My Project",
@@ -47,7 +55,7 @@ describe("ProjectInitializer", () => {
   });
 
   it("should initialize workspace project", async () => {
-    const initializer = createProjectInitializer(testDir);
+    const initializer = createProjectInitializer(testDb());
 
     const project = await initializer.initializeWorkspaceProject("W123", "C123");
 
@@ -56,7 +64,7 @@ describe("ProjectInitializer", () => {
   });
 
   it("should list all projects", async () => {
-    const initializer = createProjectInitializer(testDir);
+    const initializer = createProjectInitializer(testDb());
 
     const proj1 = await initializer.createProject({
       name: "Project 1",
@@ -86,7 +94,7 @@ describe("ProjectInitializer", () => {
   });
 
   it("should get project by slug", async () => {
-    const initializer = createProjectInitializer(testDir);
+    const initializer = createProjectInitializer(testDb());
 
     await initializer.createProject({
       name: "My Project",
@@ -103,7 +111,7 @@ describe("ProjectInitializer", () => {
   });
 
   it("should list repositories for project", async () => {
-    const initializer = createProjectInitializer(testDir);
+    const initializer = createProjectInitializer(testDb());
 
     const project = await initializer.createProject({
       name: "My Project",
@@ -121,7 +129,7 @@ describe("ProjectInitializer", () => {
   });
 
   it("should record repository sync", async () => {
-    const initializer = createProjectInitializer(testDir);
+    const initializer = createProjectInitializer(testDb());
 
     const project = await initializer.createProject({
       name: "My Project",
@@ -146,7 +154,7 @@ describe("ProjectInitializer", () => {
   });
 
   it("should record repository sync error", async () => {
-    const initializer = createProjectInitializer(testDir);
+    const initializer = createProjectInitializer(testDb());
 
     const project = await initializer.createProject({
       name: "My Project",
@@ -170,7 +178,7 @@ describe("ProjectInitializer", () => {
   });
 
   it("should delete a project", async () => {
-    const initializer = createProjectInitializer(testDir);
+    const initializer = createProjectInitializer(testDb());
 
     const project = await initializer.createProject({
       name: "My Project",
@@ -192,7 +200,7 @@ describe("ProjectInitializer", () => {
   });
 
   it("should parse HTTPS repository URLs", () => {
-    const initializer = createProjectInitializer(testDir);
+    const initializer = createProjectInitializer(testDb());
 
     const tests = [
       {
