@@ -52,6 +52,10 @@ import type {
   TranscriptEntry,
 } from "./types";
 import { removeIndexedSession } from "./session-list-store";
+import {
+  deleteSession as deleteSlackSession,
+  persistedSlackSessions,
+} from "../agents/slack/state";
 
 // The GitHub PR bulk cache lives in pr-cache.ts (extracted from this module);
 // re-export its public surface so existing consumers keep importing from here.
@@ -79,7 +83,6 @@ export {
 // dev/demo instance listed the operator's real Slack/Linear history next to
 // its own — 159 live threads showed up in a demo instance meant to hold 9
 // synthetic sessions (2026-08-05).
-const SLACK_SESSIONS_DIR = statePath(".slack-sessions");
 const LINEAR_SESSIONS_DIR = statePath(".linear-sessions");
 const CLI_SESSIONS_DIR = statePath(".claude/sessions");
 const SESSIONS_DIR = OPENSESSION_SESSIONS_DIR;
@@ -730,22 +733,13 @@ function overlaySidecarExtras(session: UnifiedSession): UnifiedSession {
 }
 
 function* slackSessionRows(): Generator<UnifiedSession> {
-  if (!existsSync(SLACK_SESSIONS_DIR)) return [];
-
-  for (const file of readdirSync(SLACK_SESSIONS_DIR)) {
-    if (!file.endsWith(".json") || SKIP_FILES.has(file)) continue;
-    const data = readJsonSafe<SlackSessionFile>(
-      `${SLACK_SESSIONS_DIR}/${file}`
-    );
-    if (!data) continue;
-
-    const branch = data.branch || file.replace(".json", "");
+  for (const [key, data] of persistedSlackSessions) {
+    const branch = data.branch || key;
     const startedBy = data.userId
       ? resolveSlackUser(data.userId)
       : null;
 
-    // Use a stable ID based on filename
-    const id = `slack-${file.replace(".json", "")}`;
+    const id = `slack-${key}`;
     const archived = isArchivedId(id);
 
     yield overlaySidecarExtras({
@@ -760,12 +754,8 @@ function* slackSessionRows(): Generator<UnifiedSession> {
       // `branch` is the last resort: for a thread/DM session it is the raw
       // `<channel>-<threadTs>` key, which is not a name anyone can read.
       title: data.title?.trim() || branch,
-      lastActivity:
-        data.lastActivity ||
-        data.createdAt ||
-        getFileMtime(`${SLACK_SESSIONS_DIR}/${file}`),
-      createdAt:
-        data.createdAt || getFileMtime(`${SLACK_SESSIONS_DIR}/${file}`),
+      lastActivity: data.lastActivity || data.createdAt || new Date(0).toISOString(),
+      createdAt: data.createdAt || data.lastActivity || new Date(0).toISOString(),
       isRunning: false,
       transcriptPath: null,
       slackThread: data.channel
@@ -1372,14 +1362,10 @@ export async function getAllSessionsAsync(
   );
 }
 
-function removeSessionArtifacts(session: UnifiedSession): void {
-  // Delete the session JSON file based on source.
+async function removeSessionArtifacts(session: UnifiedSession): Promise<void> {
   switch (session.source) {
     case "slack": {
-      // ID format: slack-{filename}
-      const filename = session.id.replace(/^slack-/, "") + ".json";
-      const path = `${SLACK_SESSIONS_DIR}/${filename}`;
-      if (existsSync(path)) unlinkSync(path);
+      await deleteSlackSession(session.id.replace(/^slack-/, ""));
       break;
     }
     case "linear": {
@@ -1405,9 +1391,7 @@ function removeSessionArtifacts(session: UnifiedSession): void {
 }
 
 export async function deleteSession(session: UnifiedSession): Promise<void> {
-  await executeSessionProjection(session.id, "session_delete", () => {
-    removeSessionArtifacts(session);
-  });
+  await executeSessionProjection(session.id, "session_delete", () => removeSessionArtifacts(session));
 }
 
 /**
@@ -1416,6 +1400,6 @@ export async function deleteSession(session: UnifiedSession): Promise<void> {
  * the mailbox is both impossible and unnecessary. Callers must verify the
  * tombstone before using this recovery path.
  */
-export function removeTombstonedSessionArtifacts(session: UnifiedSession): void {
-  removeSessionArtifacts(session);
+export async function removeTombstonedSessionArtifacts(session: UnifiedSession): Promise<void> {
+  await removeSessionArtifacts(session);
 }

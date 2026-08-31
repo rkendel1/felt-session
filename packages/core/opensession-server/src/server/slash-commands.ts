@@ -30,11 +30,11 @@ import type { UnifiedSession } from "./types";
  * Open Session-native slash commands. Returns a notice string when the message
  * was consumed as a command, or null to send it to Claude as a normal prompt.
  */
-export function handleSlashCommand(
+export async function handleSlashCommand(
 	session: UnifiedSession,
 	text: string,
 	user?: string,
-): string | null {
+): Promise<string | null> {
 	const accountCommand =
 		text === "/account" ||
 		text.startsWith("/account ") ||
@@ -53,8 +53,8 @@ export function handleSlashCommand(
 	}
 	if (session.source !== "opensession") {
 		// /model works on slack-source sessions too: persistence goes through
-		// syncAgentSessionEngine — the one sanctioned writer into
-		// ~/.slack-sessions (patches the file AND the loop's in-memory copy) —
+		// syncAgentSessionEngine is the sanctioned managed-store writer and also
+		// patches the loop's in-memory copy,
 		// so the UI picker/composer can switch a Slack thread's model without
 		// racing the owning loop. Everything else stays agent-owned.
 		if (!(session.source === "slack" && text.startsWith("/model"))) {
@@ -117,8 +117,8 @@ export function handleSlashCommand(
 			}
 			// Slack session files don't carry modelHistory; the sync writer
 			// patches the model field only (existing files, atomic).
-			if (!syncAgentSessionEngine(session, { model: resolved.id })) {
-				return "Couldn't update the Slack session file — send /model <name> in the Slack thread instead.";
+			if (!await syncAgentSessionEngine(session, { model: resolved.id })) {
+				return "Couldn't update the Slack session. Send /model <name> in the Slack thread instead.";
 			}
 		} else {
 			const switchedProvider =

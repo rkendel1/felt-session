@@ -8,7 +8,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync, statSync, unlinkSync } from "node:fs";
 import { managedFeltDb } from "../../server/managed-feltdb";
-import { writeJsonAtomic } from "../../server/shared/atomic-write";
+import type { StateFirstDB } from "@feltdb/core";
 import { configuredPaths, defaultRepo } from "../../server/config";
 import { statePath } from "../../server/paths";
 import type { SlackSessionFile } from "../../server/types";
@@ -67,6 +67,8 @@ export const GITHUB_REPO = defaultRepo().ghRepo;
 // fork the loop's copy from the writer's.
 export const activeSessions: Map<string, SlackSession> = ((globalThis as any)
 	.__slackActiveSessions ??= new Map());
+export const persistedSlackSessions: Map<string, SlackSession> = ((globalThis as any)
+  .__slackPersistedSessions ??= new Map());
 export const pendingAnswers = new Map<string, PendingAnswer>();
 
 // Inbound Slack event dedup, persisted across restarts. Slack retries a delivery
@@ -195,36 +197,77 @@ export function getSessionKey(channel: string, threadTs?: string): string {
 // Session persistence
 // ---------------------------------------------------------------------------
 
-/** Read-modify-write, not a projection. This file has writers outside the loop
- *  (agent-session-sync's piSessionId, `wt new-slack`'s branch-file fields), and
- *  a full-file replace built from a hand-listed set of fields silently dropped
- *  every key the loop doesn't carry. Undefined in-memory fields don't overwrite
- *  what's on disk; an explicit null does (resetting claudeSessionId). */
-export async function saveSession(session: SlackSession): Promise<void> {
+const SLACK_SESSIONS_COLLECTION = "opensession_slack_sessions";
+const SLACK_SESSIONS_MIGRATION = "slack-session-json-to-managed-feltdb-v1";
+type StoredSlackSession = {
+  id: string;
+  sessionKey: string;
+  payload: SlackSession;
+  state: "active" | "deleted";
+  lastActivityMs: number;
+  updatedAt: number;
+  __version?: number;
+};
+
+function slackSessionId(key: string): string { return feltId("slack_session", key); }
+
+/** Read-modify-write, not a projection. Writers outside the loop add fields
+ *  such as agent-session-sync's piSessionId. Undefined in-memory fields do not
+ *  overwrite durable values; an explicit null does. */
+export async function saveSession(
+  session: SlackSession,
+  db: StateFirstDB = managedFeltDb(),
+): Promise<void> {
   const key = getSessionKey(session.channel, session.threadTs);
-  const sessionFile = `${SESSION_DIR}/${key}.json`;
-  const existing: SlackSessionFile = (await loadSession(key)) ?? {};
-  const patch = Object.fromEntries(
-    Object.entries(session).filter(([, v]) => v !== undefined)
-  );
-  writeJsonAtomic(sessionFile, {
-    ...existing,
-    ...patch,
-    codexThreadId: session.codexThreadId ?? existing.codexThreadId ?? null,
-    lastActivity: new Date().toISOString(),
-  });
+  const id = slackSessionId(key);
+  const collection = db.collection<StoredSlackSession>(SLACK_SESSIONS_COLLECTION);
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const current = await collection.get(id);
+    const existing: SlackSessionFile = current?.payload ?? {};
+    const patch = Object.fromEntries(Object.entries(session).filter(([, value]) => value !== undefined));
+    const lastActivity = new Date().toISOString();
+    const payload = {
+      ...existing,
+      ...patch,
+      codexThreadId: session.codexThreadId ?? existing.codexThreadId ?? null,
+      lastActivity,
+    } as SlackSession;
+    const record: StoredSlackSession = {
+      id, sessionKey: key, payload, state: "active",
+      lastActivityMs: Date.parse(lastActivity), updatedAt: Date.now(),
+    };
+    if (!current) {
+      try {
+        await db.transaction((tx) => {
+          tx.collection<StoredSlackSession>(SLACK_SESSIONS_COLLECTION)
+            .set(id, record, { requireAbsent: true });
+        }, { transactionId: `opensession:slack-session:create:${id}` });
+        persistedSlackSessions.set(key, payload);
+        return;
+      } catch (error) {
+        if (!await collection.get(id)) throw error;
+        continue;
+      }
+    }
+    if (!Number.isSafeInteger(current.__version))
+      throw new Error(`Slack session ${key} has no FeltDB authority version`);
+    const result = await collection.updateIfVersion(id, current.__version!, record);
+    if (result.updated) {
+      persistedSlackSessions.set(key, payload);
+      return;
+    }
+    if (attempt === 4) throw new Error(`Slack session ${key} remained contended`);
+  }
 }
 
 export async function loadSession(
-  key: string
+  key: string,
+  db: StateFirstDB = managedFeltDb(),
 ): Promise<SlackSession | null> {
   try {
-    const sessionFile = `${SESSION_DIR}/${key}.json`;
-    const file = Bun.file(sessionFile);
-    if (await file.exists()) {
-      return JSON.parse(await file.text()) as SlackSession;
-    }
-    return null;
+    const stored = await db.collection<StoredSlackSession>(SLACK_SESSIONS_COLLECTION)
+      .get(slackSessionId(key));
+    return stored?.state === "active" ? stored.payload : null;
   } catch {
     return null;
   }
@@ -235,42 +278,98 @@ export async function loadSession(
  *  loadSession(sessionKey) when the key isn't in activeSessions. */
 const STALE_SESSION_MS = 7 * 24 * 60 * 60 * 1000;
 
-export async function loadActiveSessionsOnStartup(): Promise<void> {
-  console.log("[slack] Loading active sessions from disk...");
-
-  try {
-    const files = readdirSync(SESSION_DIR).filter((f: string) =>
-      f.endsWith(".json")
-    );
-
-    let skippedStale = 0;
-    for (const file of files) {
-      try {
-        const key = file.replace(".json", "");
-        const session = await loadSession(key);
-
-        if (session && session.claudeSessionId) {
-          let lastActive = Date.parse(session.lastActivity || session.createdAt || "");
-          if (!lastActive) {
-            try {
-              lastActive = statSync(`${SESSION_DIR}/${file}`).mtimeMs;
-            } catch {}
-          }
-          if (!lastActive || Date.now() - lastActive > STALE_SESSION_MS) {
-            skippedStale++;
-            continue;
-          }
-          activeSessions.set(key, session);
-          console.log(`[slack] Restored session: ${key}`);
-        }
-      } catch (e) {
-        console.error(`[slack] Error loading session ${file}:`, e);
-      }
-    }
-    if (skippedStale > 0) {
-      console.log(`[slack] Skipped ${skippedStale} stale session file(s) (idle > 7 days)`);
-    }
-  } catch {
-    console.log("[slack] No active sessions to load");
+export async function loadActiveSessionsOnStartup(
+  db: StateFirstDB = managedFeltDb(),
+): Promise<void> {
+  console.log("[slack] Loading active sessions from managed FeltDB...");
+  await migrateLegacySlackSessions(db);
+  const cutoff = Date.now() - STALE_SESSION_MS;
+  const records: StoredSlackSession[] = [];
+  if (db.runtime().runtime === "remote") {
+    let cursor: string | undefined;
+    do {
+      const page = await db.query<StoredSlackSession>({
+        collection: SLACK_SESSIONS_COLLECTION,
+        where: [{ field: "state", eq: "active" }],
+        orderBy: [{ field: "lastActivityMs", direction: "desc" }],
+        limit: 500,
+        ...(cursor ? { cursor } : {}),
+      });
+      records.push(...page.records);
+      cursor = page.exhausted ? undefined : page.nextCursor;
+      if (!page.exhausted && !cursor) throw new Error("FeltDB Slack session cursor is missing");
+    } while (cursor);
+  } else {
+    records.push(...(await db.collection<StoredSlackSession>(SLACK_SESSIONS_COLLECTION).all())
+      .filter((record) => record.state === "active"));
   }
+  for (const record of records) {
+    persistedSlackSessions.set(record.sessionKey, record.payload);
+    if (record.lastActivityMs > cutoff && record.payload.claudeSessionId) {
+      activeSessions.set(record.sessionKey, record.payload);
+      console.log(`[slack] Restored session: ${record.sessionKey}`);
+    }
+  }
+}
+
+async function migrateLegacySlackSessions(db: StateFirstDB): Promise<void> {
+  const migrations = db.collection<{ id: string }>("opensession_migrations");
+  if (await migrations.get(SLACK_SESSIONS_MIGRATION)) return;
+  const files = existsSync(SESSION_DIR)
+    ? readdirSync(SESSION_DIR).filter((file) => file.endsWith(".json"))
+    : [];
+  for (const file of files) {
+    const path = `${SESSION_DIR}/${file}`;
+    let value: Partial<SlackSession>;
+    try { value = JSON.parse(readFileSync(path, "utf8")); }
+    catch { continue; }
+    if (!value.channel || !value.threadTs || !value.userId) continue;
+    const key = getSessionKey(value.channel, value.threadTs);
+    const id = slackSessionId(key);
+    let lastActivityMs = Date.parse(value.lastActivity || value.createdAt || "");
+    if (!lastActivityMs) lastActivityMs = statSync(path).mtimeMs;
+    const payload = {
+      ...value,
+      createdAt: value.createdAt || new Date(lastActivityMs).toISOString(),
+      lastActivity: value.lastActivity || new Date(lastActivityMs).toISOString(),
+    } as SlackSession;
+    const record: StoredSlackSession = {
+      id, sessionKey: key, payload, state: "active",
+      lastActivityMs, updatedAt: Date.now(),
+    };
+    try {
+      await db.transaction((tx) => {
+        tx.collection<StoredSlackSession>(SLACK_SESSIONS_COLLECTION)
+          .set(id, record, { requireAbsent: true });
+      }, { transactionId: `opensession:slack-session:migrate:${id}` });
+    } catch (error) {
+      if (!await db.collection(SLACK_SESSIONS_COLLECTION).get(id)) throw error;
+    }
+    unlinkSync(path);
+  }
+  await db.transaction((tx) => {
+    tx.collection("opensession_migrations").set(SLACK_SESSIONS_MIGRATION, {
+      id: SLACK_SESSIONS_MIGRATION, completedAt: Date.now(),
+    }, { requireAbsent: true });
+  }, { transactionId: `opensession:migration:${SLACK_SESSIONS_MIGRATION}` });
+}
+
+export async function deleteSession(
+  key: string,
+  db: StateFirstDB = managedFeltDb(),
+): Promise<boolean> {
+  const id = slackSessionId(key);
+  const collection = db.collection<StoredSlackSession>(SLACK_SESSIONS_COLLECTION);
+  const current = await collection.get(id);
+  if (!current || current.state === "deleted") return false;
+  if (!Number.isSafeInteger(current.__version))
+    throw new Error(`Slack session ${key} has no FeltDB authority version`);
+  const result = await collection.updateIfVersion(id, current.__version!, {
+    state: "deleted",
+    updatedAt: Date.now(),
+  });
+  if (!result.updated) throw new Error(`Slack session ${key} changed during deletion`);
+  persistedSlackSessions.delete(key);
+  activeSessions.delete(key);
+  return true;
 }

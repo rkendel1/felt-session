@@ -1,6 +1,5 @@
 /**
- * Engine-session sync for agent-owned session stores (~/.slack-sessions,
- * ~/.linear-sessions).
+ * Engine-session sync for agent-owned Slack and Linear session stores.
  *
  * Those stores belong to the Slack/Linear loops and the server treats them as
  * read-only — with this one deliberate exception. When an interactive run on a
@@ -33,7 +32,8 @@ import { statePath } from "./paths";
 import {
 	activeSessions as slackActiveSessions,
 	getSessionKey as slackSessionKey,
-	SESSION_DIR as SLACK_SESSION_DIR,
+	loadSession as loadSlackSession,
+	saveSession as saveSlackSession,
 } from "../agents/slack/state";
 import type { UnifiedSession } from "./types";
 
@@ -88,25 +88,31 @@ function patchFile(path: string, patch: EngineSessionPatch, activityField: strin
  * session. No-op for other sources and for empty patches. Returns true when
  * anything was actually written.
  */
-export function syncAgentSessionEngine(
+export async function syncAgentSessionEngine(
 	session: Pick<UnifiedSession, "id" | "source" | "branch" | "slackThread">,
 	patch: EngineSessionPatch,
-): boolean {
+): Promise<boolean> {
 	if (!patch.engineSessionId && !patch.piSessionId && !patch.model) return false;
 
 	if (session.source === "slack") {
-		// Both file shapes exist: the key-named file the loop owns
-		// (<channel>-<threadTs>.json) and the branch-named mirror written by
-		// `wt new-slack` — the sessions scan ids off either, so patch both.
-		const files = new Set<string>();
-		files.add(`${SLACK_SESSION_DIR}/${session.id.replace(/^slack-/, "")}.json`);
-		if (session.slackThread?.channel)
-			files.add(
-				`${SLACK_SESSION_DIR}/${slackSessionKey(session.slackThread.channel, session.slackThread.threadTs || undefined)}.json`,
-			);
-		if (session.branch) files.add(`${SLACK_SESSION_DIR}/${session.branch}.json`);
-		let wrote = false;
-		for (const f of files) wrote = patchFile(f, patch, "lastActivity") || wrote;
+		const key = session.slackThread?.channel
+			? slackSessionKey(session.slackThread.channel, session.slackThread.threadTs || undefined)
+			: session.id.replace(/^slack-/, "");
+		const stored = await loadSlackSession(key);
+		if (!stored) return false;
+		const nextEngineId = patch.piSessionId || patch.engineSessionId;
+		const changed =
+			(!!nextEngineId && stored.claudeSessionId !== nextEngineId) ||
+			(!!patch.piSessionId && stored.piSessionId !== patch.piSessionId) ||
+			(!!patch.model && stored.model !== patch.model);
+		if (!changed) return false;
+		if (patch.engineSessionId) stored.claudeSessionId = patch.engineSessionId;
+		if (patch.piSessionId) {
+			stored.piSessionId = patch.piSessionId;
+			stored.claudeSessionId = patch.piSessionId;
+		}
+		if (patch.model) stored.model = patch.model;
+		await saveSlackSession(stored);
 
 		// The loop's live copy, so an in-flight thread doesn't fork the old id.
 		if (session.slackThread?.channel) {
@@ -121,7 +127,7 @@ export function syncAgentSessionEngine(
 				if (patch.model) live.model = patch.model;
 			}
 		}
-		return wrote;
+		return true;
 	}
 
 	if (session.source === "linear") {

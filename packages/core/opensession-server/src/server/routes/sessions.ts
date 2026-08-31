@@ -1903,7 +1903,7 @@ export async function handleSessionsRoutes(
 		// to re-enter its permanently closed mailbox.
 		const recoverTombstonedDeletion = async () => {
 			try {
-				removeTombstonedSessionArtifacts(session);
+				await removeTombstonedSessionArtifacts(session);
 				await finishDeletion();
 				return Response.json({ ok: true });
 			} catch (e: any) {

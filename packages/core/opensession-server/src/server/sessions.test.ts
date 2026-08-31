@@ -125,7 +125,7 @@ describe("removeTombstonedSessionArtifacts", () => {
 		const { removeTombstonedSessionArtifacts } = await import(
 			`./sessions.ts?tombstoned=${crypto.randomUUID()}`
 		);
-		removeTombstonedSessionArtifacts({
+		await removeTombstonedSessionArtifacts({
 			id,
 			source: "opensession",
 		} as UnifiedSession);

@@ -309,7 +309,7 @@ registerSessionControl({
 			// steered into its running turn as literal prompt text. This is what
 			// lets a monitor session manage loops (its own and others') via the
 			// opensession-sessions send_to_session tool.
-			const notice = handleSlashCommand(session, String(content || "").trim(), user);
+			const notice = await handleSlashCommand(session, String(content || "").trim(), user);
 			if (notice !== null) {
 				invalidateSessionsCache();
 				return { status: "handled" as const, message: notice, deliveryId };

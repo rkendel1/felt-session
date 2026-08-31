@@ -15,6 +15,7 @@ import { startWorktreeReaper } from "./src/server/worktree-reaper";
 import { startPortalReaper } from "./src/server/portal-supervisor";
 import { startRunnerPortalReaper } from "./src/server/runner-portals";
 import { initializeManagedTodos, startTodoReminderTicker } from "./src/server/todos";
+import { loadActiveSessionsOnStartup as initializeManagedSlackSessions } from "./src/agents/slack/state";
 import { startGeneratedTitleSweep } from "./src/server/generated-titles";
 import { startLiveActivitySync } from "./src/server/live-activities";
 import { startRuntimeInvestigationHandoffConsumer } from "./src/server/runtime-investigation-handoffs";
@@ -153,6 +154,7 @@ if (!g.__opensessionBooted) {
 	const db = await initializeManagedFeltDb();
 	await initializeManagedWorkspaces(db);
 	await initializeManagedTodos(db);
+	await initializeManagedSlackSessions(db);
 }
 
 // Listeners the server owns. Deliberately started HERE and not as module side

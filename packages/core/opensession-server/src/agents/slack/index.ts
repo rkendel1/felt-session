@@ -9,7 +9,7 @@ import { configuredIntegration, defaultRepo, personaName } from "../../server/co
 import {
   githubConfiguredCredential,
 } from "../../server/github-app";
-import { mkdirSync, existsSync, unlinkSync } from "fs";
+import { mkdirSync, existsSync } from "fs";
 import { timingSafeEqual } from "crypto";
 import type { AgentModule } from "../types";
 import { fetchWithTimeout } from "../../server/shared/fetch-with-timeout";
@@ -87,6 +87,7 @@ import {
   setSlackTeamId,
   setSlackBotUserId,
   loadActiveSessionsOnStartup,
+  deleteSession,
 } from "./state";
 
 const SLACK_BOT_TOKEN = process.env.SLACK_BOT_TOKEN;
@@ -760,10 +761,7 @@ export class SlackAgent implements AgentModule {
         const sessionKey = channelId;
         const session = activeSessions.get(sessionKey);
         if (session) {
-          activeSessions.delete(sessionKey);
-          try {
-            unlinkSync(`${SESSION_DIR}/${sessionKey}.json`);
-          } catch {}
+          await deleteSession(sessionKey);
         }
 
         console.log(

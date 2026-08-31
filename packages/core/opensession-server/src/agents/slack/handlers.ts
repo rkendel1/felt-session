@@ -77,7 +77,6 @@ import {
   unregisterSessionMcpServers,
 } from "../../server/run-rpc";
 import { createAskUserMcpServer, type AskUserHandler } from "./ask-tools";
-import { writeJsonAtomic } from "../../server/shared/atomic-write";
 import { ensureGeneratedTitle } from "../../server/generated-titles";
 import { invalidateSessionsCache } from "../../server/session-cache";
 import {
@@ -100,7 +99,6 @@ import {
   saveSession,
   loadSession,
   DEFAULT_CWD,
-  SESSION_DIR,
   GITHUB_REPO,
   slackBotUserId,
   CANCELLED_ANSWER,
@@ -231,22 +229,8 @@ function mergeFileRefs(
   return merged.length ? merged : undefined;
 }
 
-// Save the session and mirror claudeSessionId/lastActivity into the
-// branch-named session file (written by `wt new-slack`), so opensession can
-// dedupe the two into one session as soon as the id exists.
 async function persistSession(session: SlackSession): Promise<void> {
   await saveSession(session);
-  if (!session.branch) return;
-  const branchFile = `${SESSION_DIR}/${session.branch}.json`;
-  try {
-    const bf = Bun.file(branchFile);
-    if (await bf.exists()) {
-      const branchData = JSON.parse(await bf.text());
-      branchData.claudeSessionId = session.claudeSessionId;
-      branchData.lastActivity = session.lastActivity;
-      writeJsonAtomic(branchFile, branchData);
-    }
-  } catch {}
 }
 
 // ---------------------------------------------------------------------------
@@ -694,13 +678,9 @@ export async function processMessage(
     return;
   }
 
-  // A worktree minted upstream for a message that landed in an EXISTING
-  // conversational session must be adopted, not dropped: without this the
-  // branch-named file `wt new-slack` wrote never gets the engine id mirrored
-  // (persistSession keys on session.branch), so it surfaces in the UI as a
-  // dead "No engine session to resume" row — while the run itself executes in
-  // the repo's main checkout (2026-07-25, screen-export-mixed-dims). Never
-  // switch an existing worktree — adopt only when the session has none.
+  // A worktree minted upstream for a message that landed in an existing
+  // conversational session must be adopted, not dropped. Never switch an
+  // existing worktree; adopt only when the session has none.
   if (!createdSession && !session.worktreeDir && msg.worktreeDir) {
     session.worktreeDir = msg.worktreeDir;
     session.branch = msg.branch || session.branch;

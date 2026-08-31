@@ -26,6 +26,7 @@ import type { FeedbackRecord } from "../agents/github/feedback-gates";
 import { gitIdentityFor } from "./shared/user-mappings";
 import { delegatedActorParent, isMachineActor, machineActorLabel } from "./session-actors";
 import { PI_USAGE_CUTOVER_MS, piUsageForDates } from "./pi-usage";
+import { persistedSlackSessions } from "../agents/slack/state";
 
 const AUDIT_DIR = stateDir("audit");
 const CACHE_DIR = stateDir("analytics-cache");
@@ -489,26 +490,16 @@ function loadSessionMeta(): Map<string, SessionMeta> {
 // The Slack agent keeps its threads in its own store, so they never reach
 // loadSessionMeta and used to land in an anonymous "Slack" row. They do record
 // who wrote the message: read that (read-only, per AGENTS.md) and credit them.
-const SLACK_SESSIONS_DIR = statePath(".slack-sessions");
-// GitHub delivery replay state remains in this legacy directory so upgrades
-// preserve accepted delivery IDs after webhook ownership moved to GithubAgent.
-const SLACK_STORE_SKIP = new Set(["processed-events.json", "github-deliveries.json"]);
 let slackOwnerCache: { at: number; map: Map<string, string> } | null = null;
 
 /** Audit session id (`slack-<thread key>`) to the raw user the thread names. */
 function loadSlackSessionOwners(): Map<string, string> {
 	if (slackOwnerCache && Date.now() - slackOwnerCache.at < 60_000) return slackOwnerCache.map;
 	const map = new Map<string, string>();
-	try {
-		for (const file of readdirSync(SLACK_SESSIONS_DIR)) {
-			if (!file.endsWith(".json") || SLACK_STORE_SKIP.has(file)) continue;
-			try {
-				const s = JSON.parse(readFileSync(`${SLACK_SESSIONS_DIR}/${file}`, "utf-8"));
-				const user = String(s?.userId || "").trim();
-				if (user) map.set(`slack-${file.slice(0, -5)}`, user);
-			} catch {}
-		}
-	} catch {}
+	for (const [key, session] of persistedSlackSessions) {
+		const user = String(session.userId || "").trim();
+		if (user) map.set(`slack-${key}`, user);
+	}
 	slackOwnerCache = { at: Date.now(), map };
 	return map;
 }

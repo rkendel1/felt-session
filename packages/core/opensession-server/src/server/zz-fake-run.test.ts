@@ -398,7 +398,7 @@ describe("fake-engine session runs (consumer loop end-to-end)", () => {
 		const session = sessionCache.findSession(sid);
 		expect(session).toBeDefined();
 
-		const notice = slashCommands.handleSlashCommand(session!, "/model dial/high", "Test");
+		const notice = await slashCommands.handleSlashCommand(session!, "/model dial/high", "Test");
 		expect(notice).toContain("Model set to");
 
 		let data = sessionJson(sid);
