@@ -46,7 +46,7 @@ const TABLES: readonly TablePlan[] = [
 
 const JSON_COLUMNS = new Set([
   "completed_effects", "setup_plan", "opening_plan", "record", "queued",
-  "dispatch", "interrupt", "steered", "pending_steers", "payload", "result",
+  "dispatch", "interrupt", "steered", "pending_steers", "cancel", "payload", "result",
   "terminal_entry_ids", "terminal_request", "receipt", "identity", "intent",
   "envelope", "authority", "authority_bytes",
 ]);

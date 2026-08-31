@@ -215,6 +215,10 @@ export class FeltDbSessionDecisionStore {
     return head;
   }
 
+  async record<T>(collection: string, id: string): Promise<T | undefined> {
+    return (await this.db.collection<T>(collection).get(id)) ?? undefined;
+  }
+
   async migrationManifest(
     sessionId: string,
   ): Promise<(MigrationManifest & { __version: number }) | undefined> {
