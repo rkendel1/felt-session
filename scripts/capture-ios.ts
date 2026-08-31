@@ -283,7 +283,7 @@ if (PLATFORM === "ios" && MAX_LOAD > 0) {
   }
 }
 
-const token = localAutomationToken();
+const token = await localAutomationToken();
 if (!token)
   throw new Error(
     "no Automation web identity to authenticate the app with — restart the server",

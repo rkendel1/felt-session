@@ -73,6 +73,7 @@ export async function initializeManagedSessionNotes(
 						id,
 						sessionId,
 						notes: Array.isArray(raw.notes) ? raw.notes.slice(-MAX_STORED) : [],
+						__version: 1,
 					});
 				}, { transactionId: `opensession:session-notes:migrate:${id}` });
 				unlinkSync(path);

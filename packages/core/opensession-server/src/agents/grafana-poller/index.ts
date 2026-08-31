@@ -175,7 +175,7 @@ export async function initializeManagedGrafanaPollDedup(
         const legacy = JSON.parse(readFileSync(path, "utf8")) as Omit<DedupRecord, "id" | "automationId">;
         const id = dedupId(automationId, legacy.dedupValue);
         await db.transaction((tx) => {
-          tx.collection<DedupRecord>(DEDUP_COLLECTION).set(id, { ...legacy, id, automationId });
+          tx.collection<DedupRecord>(DEDUP_COLLECTION).set(id, { ...legacy, id, automationId, __version: 1 });
         }, { transactionId: `opensession:grafana-dedup:migrate:${id}` });
         unlinkSync(path);
       }

@@ -435,7 +435,7 @@ const evaluate = async (expression: string) => {
 };
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-const token = localAutomationToken();
+const token = await localAutomationToken();
 
 await send("Page.enable");
 await send("Runtime.enable");

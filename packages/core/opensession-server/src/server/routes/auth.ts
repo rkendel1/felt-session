@@ -136,7 +136,7 @@ export async function handleAuthRoutes(
 				error: `GitHub account @${result.login} is not a workspace member. Add it in Settings > Members before enabling sign-in.`,
 			});
 		}
-		const session = createWebSession(result.login);
+		const session = await createWebSession(result.login);
 		if (!session)
 			return Response.json(
 				{ status: "error", error: "Could not create a session" },
@@ -165,7 +165,7 @@ export async function handleAuthRoutes(
 
 	if (path === "/api/auth/logout" && req.method === "POST") {
 		const token = webAuthToken(req);
-		if (token) destroyWebSession(token);
+		if (token) await destroyWebSession(token);
 		return Response.json(
 			{ ok: true },
 			{ headers: { "Set-Cookie": webAuthClearCookie() } },

@@ -15,7 +15,7 @@
  * (identity.team[].github) may sign in — an arbitrary GitHub account bounces
  * even if it completed the OAuth flow (its token is also discarded).
  *
- * Sessions: ~/.opensession-web-sessions.json (0600), sliding 90-day expiry,
+ * Sessions: managed FeltDB records with sliding 90-day expiry,
  * loaded into a globalThis map so hot reloads keep everyone signed in. Human
  * sessions re-resolve their roster row on every request, so a rename follows
  * them immediately and removing the row revokes access. The same store carries
@@ -27,8 +27,10 @@
  * recipes reach it), and the origin is tailnet-only.
  */
 
-import { chmodSync, existsSync, readdirSync, readFileSync } from "fs";
-import { randomBytes, timingSafeEqual } from "crypto";
+import { existsSync, readdirSync, readFileSync, unlinkSync } from "fs";
+import { createHash, randomBytes, timingSafeEqual } from "crypto";
+import type { StateFirstDB } from "@feltdb/core";
+import { managedFeltDb } from "./managed-feltdb";
 import { audit } from "./audit";
 import { configuredIdentity } from "./config";
 import { githubUserAuthActive } from "./github-auth";
@@ -44,6 +46,8 @@ const COOKIE_NAME = "opensession_auth";
 const TTL_MS = 90 * 24 * 60 * 60 * 1000; // sliding
 /** lastSeenAt writes are throttled to this so per-request auth stays cheap. */
 const TOUCH_INTERVAL_MS = 60 * 60 * 1000;
+const WEB_SESSIONS_COLLECTION = "opensession_web_sessions";
+const WEB_SESSIONS_MIGRATION = "web-sessions-json-to-managed-feltdb-v1";
 
 export interface WebSession {
   token: string;
@@ -55,6 +59,11 @@ export interface WebSession {
   lastSeenAt: number;
   /** Omitted for human GitHub sessions; machine auth is explicit and auditable. */
   kind?: "automation";
+}
+
+interface StoredWebSession extends WebSession {
+  id: string;
+  __version?: number;
 }
 
 export interface WebIdentity {
@@ -71,36 +80,75 @@ export function webAuthUsesBearer(req: Request): boolean {
 }
 
 const g = globalThis as any;
+let webSessionsDb: StateFirstDB | undefined;
+let webSessionWrites = Promise.resolve();
+const sessionId = (token: string) => `web_session_${createHash("sha256").update(token).digest("hex")}`;
+
+function queueWebSessionWrite(work: () => Promise<void>, label: string): void {
+  webSessionWrites = webSessionWrites.then(work).catch((error) => {
+    console.error(`[web-auth] ${label} failed:`, error);
+  });
+}
+
+export async function flushWebAuthSessionWrites(): Promise<void> {
+  await webSessionWrites;
+}
 
 function sessions(): Map<string, WebSession> {
-  if (!g.__webAuthSessions) {
-    const map = new Map<string, WebSession>();
-    try {
-      const raw = JSON.parse(readFileSync(sessionsPath(), "utf-8"));
-      for (const s of raw?.sessions || []) {
-        if (s?.token && s?.login && s?.name) map.set(s.token, s);
-      }
-    } catch {}
-    g.__webAuthSessions = map;
-  }
+  if (!g.__webAuthSessions) g.__webAuthSessions = new Map<string, WebSession>();
   return g.__webAuthSessions;
 }
 
-function persist(): void {
+export async function initializeManagedWebAuthSessions(
+  db: StateFirstDB = webSessionsDb ?? managedFeltDb(),
+): Promise<void> {
+  webSessionsDb = db;
+  const migrations = db.collection<{ id: string }>("opensession_migrations");
+  if (!await migrations.get(WEB_SESSIONS_MIGRATION)) {
+    let legacy: WebSession[] = [];
+    if (existsSync(sessionsPath())) {
+      const raw = JSON.parse(readFileSync(sessionsPath(), "utf8"));
+      legacy = Array.isArray(raw?.sessions) ? raw.sessions : [];
+    }
+    for (const session of legacy) {
+      if (!session?.token || !session.login || !session.name) continue;
+      const id = sessionId(session.token);
+      await db.transaction((tx) => {
+        tx.collection<StoredWebSession>(WEB_SESSIONS_COLLECTION).set(id, { ...session, id, __version: 1 });
+      }, { transactionId: `opensession:web-session:migrate:${id}` });
+    }
+    await db.transaction((tx) => {
+      tx.collection("opensession_migrations").set(WEB_SESSIONS_MIGRATION, { id: WEB_SESSIONS_MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
+    }, { transactionId: `opensession:migration:${WEB_SESSIONS_MIGRATION}` });
+    if (existsSync(sessionsPath())) unlinkSync(sessionsPath());
+  }
   const now = Date.now();
   const map = sessions();
-  for (const [token, s] of map) {
-    if (now - s.lastSeenAt > TTL_MS) map.delete(token);
-  }
-  // Keep the machine identity first as a safety net for old local recipes that
-  // naively read sessions[0]. New code selects kind=automation explicitly.
-  const ordered = [...map.values()].sort(
-    (a, b) => Number(b.kind === "automation") - Number(a.kind === "automation"),
-  );
-  writeJsonAtomic(sessionsPath(), { sessions: ordered });
-  try {
-    chmodSync(sessionsPath(), 0o600);
-  } catch {}
+  map.clear();
+  for (const session of await db.collection<StoredWebSession>(WEB_SESSIONS_COLLECTION).all())
+    if (now - session.lastSeenAt <= TTL_MS) map.set(session.token, session);
+}
+
+async function upsertWebSession(session: WebSession): Promise<void> {
+  const db = webSessionsDb ?? managedFeltDb();
+  const id = sessionId(session.token);
+  const current = await db.collection<StoredWebSession>(WEB_SESSIONS_COLLECTION).get(id);
+  if (current && !Number.isSafeInteger(current.__version))
+    throw new Error(`Web session ${id} has no FeltDB authority version`);
+  await db.transaction((tx) => {
+    tx.collection<StoredWebSession>(WEB_SESSIONS_COLLECTION).set(id, { ...session, id },
+      current ? { ifVersion: current.__version } : { requireAbsent: true });
+  }, { transactionId: `opensession:web-session:upsert:${id}:${crypto.randomUUID()}` });
+}
+
+async function deleteWebSessionRecord(token: string): Promise<void> {
+  const db = webSessionsDb ?? managedFeltDb();
+  const id = sessionId(token);
+  const current = await db.collection<StoredWebSession>(WEB_SESSIONS_COLLECTION).get(id);
+  if (!current || !Number.isSafeInteger(current.__version)) return;
+  await db.transaction((tx) => {
+    tx.collection<StoredWebSession>(WEB_SESSIONS_COLLECTION).delete(id, { ifVersion: current.__version });
+  }, { transactionId: `opensession:web-session:delete:${id}:${current.__version}` });
 }
 
 /** Sign-in is required exactly when per-user GitHub auth is opted in. */
@@ -117,7 +165,7 @@ export function webAuthRequired(): boolean {
  * and attribution says Automation. Hosted loopback requests enforce this kind
  * in opensession.ts; possessing a human cookie is not enough there.
  */
-export function ensureAutomationWebSession(): { token: string } | null {
+export async function ensureAutomationWebSession(): Promise<{ token: string } | null> {
   if (!webAuthRequired()) return null;
   const map = sessions();
   const now = Date.now();
@@ -125,21 +173,23 @@ export function ensureAutomationWebSession(): { token: string } | null {
     if (session.kind !== "automation") continue;
     if (now - session.lastSeenAt <= TTL_MS) {
       session.lastSeenAt = now;
-      persist();
+      await upsertWebSession(session);
       return { token };
     }
     map.delete(token);
+    await deleteWebSessionRecord(token);
   }
   const token = randomBytes(32).toString("hex");
-  map.set(token, {
+  const session: WebSession = {
     token,
     login: "opensession-automation",
     name: "Automation",
     createdAt: now,
     lastSeenAt: now,
     kind: "automation",
-  });
-  persist();
+  };
+  await upsertWebSession(session);
+  map.set(token, session);
   return { token };
 }
 
@@ -175,28 +225,30 @@ export function refreshWebIdentity(identity: WebIdentity): WebIdentity | null {
 
 /** Mint a session for a VERIFIED login. Returns null for non-team logins
  *  (fail-closed — the caller should also discard the OAuth token). */
-export function createWebSession(login: string): { token: string; name: string } | null {
+export async function createWebSession(login: string): Promise<{ token: string; name: string } | null> {
   const member = teamMemberForLogin(login);
   if (!member) return null;
   const token = randomBytes(32).toString("hex");
   const now = Date.now();
-  sessions().set(token, {
+  const session: WebSession = {
     token,
     login,
     name: member.name,
     createdAt: now,
     lastSeenAt: now,
-  });
-  persist();
+  };
+  await upsertWebSession(session);
+  sessions().set(token, session);
   audit({ kind: "web_auth_signin", login, user: member.name });
   return { token, name: member.name };
 }
 
-export function destroyWebSession(token: string): void {
+export async function destroyWebSession(token: string): Promise<void> {
   const s = sessions().get(token);
   if (!s) return;
   sessions().delete(token);
-  persist();
+  await flushWebAuthSessionWrites();
+  await deleteWebSessionRecord(token);
   audit({ kind: "web_auth_signout", login: s.login, user: s.name });
 }
 
@@ -222,7 +274,7 @@ export function resolveWebAuth(req: Request): WebIdentity | null {
   const now = Date.now();
   if (now - s.lastSeenAt > TTL_MS) {
     sessions().delete(token);
-    persist();
+    queueWebSessionWrite(() => deleteWebSessionRecord(token), "expiry cleanup");
     return null;
   }
   let changed = false;
@@ -233,7 +285,7 @@ export function resolveWebAuth(req: Request): WebIdentity | null {
   });
   if (!refreshed) {
     sessions().delete(token);
-    persist();
+    queueWebSessionWrite(() => deleteWebSessionRecord(token), "revocation cleanup");
     audit({
       kind: "web_auth_signout",
       login: s.login,
@@ -257,7 +309,7 @@ export function resolveWebAuth(req: Request): WebIdentity | null {
     s.lastSeenAt = now;
     changed = true;
   }
-  if (changed) persist();
+  if (changed) queueWebSessionWrite(() => upsertWebSession(s), "session touch");
   return {
     ...refreshed,
     name: s.name,
@@ -340,13 +392,23 @@ export function crossSiteViolation(req: Request): string | null {
  * `createdBy` (historical picker first names) through the SAME
  * identity table the sign-in uses — so sessions created before GitHub auth
  * belong to the same verified person afterwards. Runs once at boot when
- * sign-in is active (marker file), atomic per-file, and only ADDS the login
+ * sign-in is active (FeltDB migration receipt), atomic per-file, and only ADDS the login
  * field: automation sessions and unresolvable creators are left untouched.
  */
-export function migrateSessionsToGithubUser(): void {
+export async function migrateSessionsToGithubUser(): Promise<void> {
   if (!webAuthRequired()) return;
+  const db = webSessionsDb ?? managedFeltDb();
+  const migrationId = "session-created-by-github-login-v1";
+  const migrations = db.collection<{ id: string }>("opensession_migrations");
+  if (await migrations.get(migrationId)) return;
   const marker = `${OPENSESSION_SESSIONS_DIR}/.github-user-migration.json`;
-  if (existsSync(marker)) return;
+  if (existsSync(marker)) {
+    await db.transaction((tx) => {
+      tx.collection("opensession_migrations").set(migrationId, { id: migrationId, completedAt: Date.now() }, { requireAbsent: true });
+    }, { transactionId: `opensession:migration:${migrationId}` });
+    unlinkSync(marker);
+    return;
+  }
   let scanned = 0;
   let stamped = 0;
   try {
@@ -371,13 +433,16 @@ export function migrateSessionsToGithubUser(): void {
     }
   } catch (e) {
     console.error("[web-auth] session→github-user migration failed:", e);
-    return; // no marker — retry next boot
+    return; // no migration receipt, so retry next boot
   }
-  writeJsonAtomic(marker, {
-    migratedAt: new Date().toISOString(),
-    scanned,
-    stamped,
-  });
+  await db.transaction((tx) => {
+    tx.collection("opensession_migrations").set(migrationId, {
+      id: migrationId,
+      completedAt: Date.now(),
+      scanned,
+      stamped,
+    }, { requireAbsent: true });
+  }, { transactionId: `opensession:migration:${migrationId}` });
   // Lazy: session-cache statically imports runner internals, which test
   // processes must never load (the bun-test rpc-socket trap).
   import("./session-cache")

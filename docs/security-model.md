@@ -196,8 +196,8 @@ Enabling `userPrAuth` activates both halves below:
   needs a real restart.
 - **GitHub web sign-in** (packages/core/opensession-server/src/server/web-auth.ts + routes/auth.ts): when
   active, the UI's name picker is replaced by a real sign-in (UserGate →
-  device flow → HttpOnly `opensession_auth` cookie; sessions in
-  `~/.opensession/web-sessions.json`, sliding 90d). Ordinary `/api/*` requests
+  device flow → HttpOnly `opensession_auth` cookie; sessions in managed
+  FeltDB, sliding 90d). Ordinary `/api/*` requests
   and the UI `/ws` require that web session. Exceptions are `/api/auth/*`;
   health/readiness endpoints; client update feeds and artifacts; runner
   registration/heartbeat; the scoped keychain broker; the separately
@@ -208,10 +208,10 @@ Enabling `userPrAuth` activates both halves below:
   Only logins on identity.team may sign in. The verified identity OVERRIDES
   client-claimed `user` on every WS message and stamps `createdByLogin` on
   new sessions; a one-time boot migration backfills `createdByLogin` onto
-  existing sessions from `createdBy` (marker:
-  `~/.opensession/sessions/.github-user-migration.json`). Non-browser callers
+  existing sessions from `createdBy` (with its completion receipt in FeltDB).
+  Non-browser callers
   (curl/CDP recipes) authenticate with `Authorization: Bearer <token>` using a
-  token from the web-sessions file.
+  token selected from FeltDB by the server-local tooling.
 
 One sign-in flow, for every client: the **device flow** (`POST
 /api/auth/device` → the person enters the code on github.com →

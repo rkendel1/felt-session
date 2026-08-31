@@ -79,7 +79,7 @@ export async function initializeManagedShippedChangeAnnouncements(
       const digest = basename(name, ".json");
       const id = `shipped_change_${digest}`;
       await db.transaction((tx) => {
-        tx.collection<AnnouncementReceipt>(ANNOUNCEMENT_COLLECTION).set(id, { ...legacy, id });
+        tx.collection<AnnouncementReceipt>(ANNOUNCEMENT_COLLECTION).set(id, { ...legacy, id, __version: 1 });
       }, { transactionId: `opensession:shipped-change:migrate:${id}` });
       unlinkSync(path);
     }

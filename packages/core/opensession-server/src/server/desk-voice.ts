@@ -80,6 +80,7 @@ export async function initializeManagedDeskVoice(
 			tx.collection<VoiceKeyFile>(VOICE_CONFIG_COLLECTION).set(VOICE_CONFIG_ID, {
 				...legacyKey,
 				id: VOICE_CONFIG_ID,
+				__version: 1,
 			});
 		}, { transactionId: "opensession:desk-voice:migrate:key" });
 
@@ -91,7 +92,7 @@ export async function initializeManagedDeskVoice(
 				const entries = JSON.parse(readFileSync(path, "utf8")) as HandoffEntry[];
 				const id = handoffId(sessionId);
 				await db.transaction((tx) => {
-					tx.collection<StoredHandoff>(VOICE_HANDOFF_COLLECTION).set(id, { id, sessionId, entries });
+					tx.collection<StoredHandoff>(VOICE_HANDOFF_COLLECTION).set(id, { id, sessionId, entries, __version: 1 });
 				}, { transactionId: `opensession:desk-voice:migrate:handoff:${id}` });
 				unlinkSync(path);
 			}

@@ -85,7 +85,7 @@ try {
   await send("Emulation.setEmulatedMedia", {
     features: [{ name: "prefers-reduced-motion", value: "reduce" }],
   });
-  const token = localAutomationToken();
+  const token = await localAutomationToken();
   if (token) {
     await send("Network.setCookie", {
       name: "opensession_auth",

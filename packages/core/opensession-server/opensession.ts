@@ -36,6 +36,7 @@ import { initializeManagedPlainRouterConfig } from "./src/agents/plain/ticket-ro
 import { initializeManagedDeskVoice } from "./src/server/desk-voice";
 import { initializeManagedGoals } from "./src/server/goals";
 import { initializeManagedSessionNotes } from "./src/server/session-notes";
+import { initializeManagedWebAuthSessions } from "./src/server/web-auth";
 import { startLiveActivitySync } from "./src/server/live-activities";
 import { startRuntimeInvestigationHandoffConsumer } from "./src/server/runtime-investigation-handoffs";
 import { initializeManagedFeltDb } from "./src/server/managed-feltdb";
@@ -195,6 +196,7 @@ if (!g.__opensessionBooted) {
 	await initializeManagedDeskVoice(db);
 	await initializeManagedGoals(db);
 	await initializeManagedSessionNotes(db);
+	await initializeManagedWebAuthSessions(db);
 }
 
 // Listeners the server owns. Deliberately started HERE and not as module side
@@ -1233,8 +1235,8 @@ if (!g.__opensessionBooted) {
 	// re-decide the migration over its (or worse, shared) session files.
 	try {
 		if (!devInstance) {
-			ensureAutomationWebSession();
-			migrateSessionsToGithubUser();
+			await ensureAutomationWebSession();
+			await migrateSessionsToGithubUser();
 		}
 	} catch (e) {
 		console.error("[web-auth] session migration failed:", e);

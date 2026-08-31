@@ -259,8 +259,8 @@ What turns on (`packages/core/opensession-server/src/server/github-auth.ts`, `we
   device flow, the one sign-in every client uses; only logins on
   `identity.team[].github` may sign in. Ordinary `/api/*` calls and the UI
   WebSocket are 401-gated on the HttpOnly session cookie; non-browser callers
-  use `Authorization: Bearer <token>` with a token from
-  `~/.opensession/web-sessions.json`. Auth routes, `/api/health`, `/live`,
+  use `Authorization: Bearer <token>` selected from managed FeltDB by
+  server-local tooling. Auth routes, `/api/health`, `/live`,
   `/ready`, client update feeds, and machine routes protected by their own
   credentials are exceptions. The verified identity overrides client-claimed
   user names (WS and HTTP), stamps `createdByLogin` on new sessions, and a

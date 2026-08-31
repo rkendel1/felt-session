@@ -1107,12 +1107,12 @@ async function localApi(): Promise<string> {
  *
  * With sign-in on, every /api/* call needs a session — including this CLI, which
  * runs on the server box and has no browser. Non-browser callers authenticate
- * with a token from the web-sessions store, which is the documented mechanism.
+ * with an automation token selected from managed FeltDB, which is the documented mechanism.
  * Absent (sign-in off) we send nothing and the request is allowed as before.
  */
 async function operatorToken(): Promise<string | undefined> {
   try {
-    return localAutomationToken() || undefined;
+    return await localAutomationToken() || undefined;
   } catch {
     // The request below reports the ordinary signed-out error without leaking
     // or borrowing a teammate's credential.

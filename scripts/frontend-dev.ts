@@ -82,28 +82,21 @@ async function loadToken(): Promise<string> {
 
 function fetchTokenViaSsh(): string {
 	if (!SSH_HOST) throw new Error("Set OS1_SSH_HOST or OS1_TOKEN for an authenticated upstream");
+	const quotedLogin = `'${LOGIN.replaceAll("'", `'\\''`)}'`;
 	const proc = Bun.spawnSync([
 		"ssh",
 		"-o",
 		"BatchMode=yes",
 		SSH_HOST,
-		"cat ~/.opensession/web-sessions.json 2>/dev/null || cat ~/.opensession-web-sessions.json",
+		`set -a; . ~/.opensession.env; set +a; cd ~/.opensession/deploy/current && bun scripts/print-web-session-token.ts --login ${quotedLogin}`,
 	]);
 	if (proc.exitCode !== 0) {
 		console.error(proc.stderr.toString());
 		throw new Error(`ssh ${SSH_HOST} failed — token fetch requires SSH access to the server`);
 	}
-	const rows: { token: string; login: string; lastSeenAt: number }[] =
-		JSON.parse(proc.stdout.toString()).sessions;
-	const mine = rows
-		.filter((s) => s.login === LOGIN)
-		.sort((a, b) => b.lastSeenAt - a.lastSeenAt)[0];
-	if (!mine) {
-		throw new Error(
-			`no web session for login "${LOGIN}" on the server — sign in at ${UPSTREAM} once, or set OS1_LOGIN`,
-		);
-	}
-	return mine.token;
+	const token = proc.stdout.toString().trim();
+	if (!token) throw new Error(`no web session for login "${LOGIN}" on the server — sign in at ${UPSTREAM} once, or set OS1_LOGIN`);
+	return token;
 }
 
 const token = await loadToken();

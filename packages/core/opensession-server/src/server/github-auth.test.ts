@@ -11,6 +11,7 @@ import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
+import { createFeltDB, type StateFirstDB } from "@feltdb/core";
 import {
   connectedGithubAccounts,
   GITHUB_RUN_AUTH_FILE_ENV,
@@ -35,6 +36,9 @@ import {
 import { botGhToken } from "./github-limit";
 import {
 	ensureAutomationWebSession,
+  destroyWebSession,
+  flushWebAuthSessionWrites,
+  initializeManagedWebAuthSessions,
   keypadBearerAuthorized,
   refreshWebIdentity,
   resolveWebAuth,
@@ -56,6 +60,7 @@ const saved: Record<string, string | undefined> = {};
 for (const k of ENV_KEYS) saved[k] = process.env[k];
 
 let dir: string;
+let webSessionsDb: StateFirstDB;
 
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), "bks-github-auth-test-"));
@@ -65,6 +70,7 @@ beforeEach(() => {
   process.env.OPENSESSION_CONFIG = join(dir, "no-config.json");
   process.env.OPENSESSION_GITHUB_AUTH_STORE = join(dir, "github-auth.json");
   process.env.OPENSESSION_WEB_SESSIONS_STORE = join(dir, "web-sessions.json");
+  webSessionsDb = createFeltDB({ namespace: crypto.randomUUID(), memory: true });
 });
 
 afterEach(() => {
@@ -480,7 +486,7 @@ describe("starting the device flow", () => {
 });
 
 describe("web sign-in resolution", () => {
-	test("local automation gets a distinct machine identity, ordered before humans", () => {
+	test("local automation gets a distinct machine identity from humans", async () => {
 		enableFeature();
 		const now = Date.now();
 		writeFileSync(
@@ -497,7 +503,8 @@ describe("web sign-in resolution", () => {
 				],
 			}),
 		);
-		const machine = ensureAutomationWebSession();
+		await initializeManagedWebAuthSessions(webSessionsDb);
+		const machine = await ensureAutomationWebSession();
 		expect(machine?.token).toBeString();
 		expect(
 			resolveWebAuth(
@@ -510,11 +517,9 @@ describe("web sign-in resolution", () => {
 			name: "Automation",
 			automation: true,
 		});
-		const stored = JSON.parse(
-			readFileSync(process.env.OPENSESSION_WEB_SESSIONS_STORE!, "utf8"),
-		);
-		expect(stored.sessions[0].kind).toBe("automation");
-		expect(stored.sessions[1].login).toBe("alice");
+		expect(resolveWebAuth(new Request("http://x/", {
+			headers: { authorization: "Bearer human-token" },
+		}))).toEqual({ login: "alice", name: "Alice Example" });
 	});
 
   test("team gate: only configured github logins may sign in", () => {
@@ -525,7 +530,7 @@ describe("web sign-in resolution", () => {
     expect(teamMemberForLogin("some-rando")).toBeNull();
   });
 
-  test("resolves the session cookie and Bearer token from a seeded store", () => {
+  test("resolves the session cookie and Bearer token from a migrated store", async () => {
     enableFeature();
     const now = Date.now();
     writeFileSync(
@@ -542,6 +547,7 @@ describe("web sign-in resolution", () => {
         ],
       }),
     );
+    await initializeManagedWebAuthSessions(webSessionsDb);
     const byCookie = resolveWebAuth(
       new Request("http://x/", { headers: { cookie: "foo=1; opensession_auth=tok-abc" } }),
     );
@@ -570,7 +576,7 @@ describe("web sign-in resolution", () => {
     ).toBeNull();
   });
 
-  test("refreshes a session name from the current roster row", () => {
+  test("refreshes a session name from the current roster row", async () => {
     enableFeature();
     const now = Date.now();
     writeFileSync(
@@ -587,6 +593,7 @@ describe("web sign-in resolution", () => {
         ],
       }),
     );
+    await initializeManagedWebAuthSessions(webSessionsDb);
 
     const identity = resolveWebAuth(
       new Request("http://x/", {
@@ -602,14 +609,15 @@ describe("web sign-in resolution", () => {
       }),
     );
     expect(renamed).toEqual({ login: "alice", name: "Alice Newly Renamed" });
-    expect(
-      JSON.parse(
-        readFileSync(process.env.OPENSESSION_WEB_SESSIONS_STORE!, "utf8"),
-      ).sessions[0].name,
-    ).toBe("Alice Newly Renamed");
+    await flushWebAuthSessionWrites();
+    delete (globalThis as any).__webAuthSessions;
+    await initializeManagedWebAuthSessions(webSessionsDb);
+    expect(resolveWebAuth(new Request("http://x/", {
+      headers: { authorization: "Bearer renamed-token" },
+    }))).toEqual({ login: "alice", name: "Alice Newly Renamed" });
   });
 
-  test("revokes a human session when its roster row is removed", () => {
+  test("revokes a human session when its roster row is removed", async () => {
     enableFeature();
     const now = Date.now();
     writeFileSync(
@@ -626,6 +634,7 @@ describe("web sign-in resolution", () => {
         ],
       }),
     );
+    await initializeManagedWebAuthSessions(webSessionsDb);
 
     expect(
       resolveWebAuth(
@@ -643,11 +652,37 @@ describe("web sign-in resolution", () => {
         }),
       ),
     ).toBeNull();
-    expect(
-      JSON.parse(
-        readFileSync(process.env.OPENSESSION_WEB_SESSIONS_STORE!, "utf8"),
-      ).sessions,
-    ).toEqual([]);
+    await flushWebAuthSessionWrites();
+    delete (globalThis as any).__webAuthSessions;
+    await initializeManagedWebAuthSessions(webSessionsDb);
+    expect(resolveWebAuth(new Request("http://x/", {
+      headers: { authorization: "Bearer removed-token" },
+    }))).toBeNull();
+  });
+
+  test("logout cannot be undone by an earlier queued identity touch", async () => {
+    enableFeature();
+    const now = Date.now();
+    writeFileSync(process.env.OPENSESSION_WEB_SESSIONS_STORE!, JSON.stringify({
+      sessions: [{
+        token: "logout-token",
+        login: "alice",
+        name: "Old Alice",
+        createdAt: now,
+        lastSeenAt: now,
+      }],
+    }));
+    await initializeManagedWebAuthSessions(webSessionsDb);
+    expect(resolveWebAuth(new Request("http://x/", {
+      headers: { authorization: "Bearer logout-token" },
+    }))).toEqual({ login: "alice", name: "Alice Example" });
+
+    await destroyWebSession("logout-token");
+    delete (globalThis as any).__webAuthSessions;
+    await initializeManagedWebAuthSessions(webSessionsDb);
+    expect(resolveWebAuth(new Request("http://x/", {
+      headers: { authorization: "Bearer logout-token" },
+    }))).toBeNull();
   });
 
   test("refreshes identities used by long-lived transports", () => {

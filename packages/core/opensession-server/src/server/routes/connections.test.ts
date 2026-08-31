@@ -3,12 +3,14 @@ import { generateKeyPairSync } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
+import { createFeltDB } from "@feltdb/core";
 import { bootstrapUserAuthOnConnect, handleConnectionsRoutes } from "./connections";
 import {
   __setGithubAppKeyPathForTest,
   commitGithubAppKeyMutation,
 } from "../github-app";
 import type { RouteContext } from "./context";
+import { initializeManagedWebAuthSessions, resolveWebAuth } from "../web-auth";
 
 // The GitHub connect routes behave differently by mode: operator mode (web
 // sign-in on) gates on the signed-in identity; simple mode (no sign-in) drives
@@ -30,7 +32,7 @@ for (const k of ENV_KEYS) saved[k] = process.env[k];
 
 let dir: string;
 
-beforeEach(() => {
+beforeEach(async () => {
   dir = mkdtempSync(join(tmpdir(), "os-connections-test-"));
   for (const k of ENV_KEYS) delete process.env[k];
   // Missing config = simple mode (sign-in off, feature off, no client id).
@@ -39,6 +41,7 @@ beforeEach(() => {
   process.env.OPENSESSION_WEB_SESSIONS_STORE = join(dir, "web-sessions.json");
   process.env.OPENSESSION_MODEL_PROVIDERS_CONFIG = join(dir, "model-providers.json");
   __setGithubAppKeyPathForTest(join(dir, "github-app.pem"));
+  await initializeManagedWebAuthSessions(createFeltDB({ namespace: crypto.randomUUID(), memory: true }));
 });
 
 afterEach(() => {
@@ -510,11 +513,9 @@ describe("connect-time auth bootstrap", () => {
       expect(written.integrations.github.installationOwner).toBe("octocat");
       expect(written.integrations.github.oauthClientId).toBe("cid");
 
-      // A web session exists for the just-connected login.
-      const store = JSON.parse(
-        readFileSync(process.env.OPENSESSION_WEB_SESSIONS_STORE!, "utf-8"),
-      );
-      expect(store.sessions.some((s: any) => s.login === "octocat")).toBe(true);
+      // A managed web session exists for the just-connected login.
+      const cookie = res?.headers.get("set-cookie")?.split(";", 1)[0] || "";
+      expect(resolveWebAuth(new Request("http://x/", { headers: { cookie } }))?.login).toBe("octocat");
     } finally {
       restore();
     }

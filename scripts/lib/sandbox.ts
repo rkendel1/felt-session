@@ -41,7 +41,7 @@ function updateSandboxConfig(patch: Record<string, unknown>): void {
 }
 
 async function qualifyRemoteThroughServer(provider: "daytona" | "box" | "modal"): Promise<number> {
-  const token = localAutomationToken();
+  const token = await localAutomationToken();
   if (!token) {
     fail(
       "no local Open Session web session is available",

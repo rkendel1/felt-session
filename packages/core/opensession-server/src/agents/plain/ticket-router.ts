@@ -77,7 +77,7 @@ export async function initializeManagedPlainRouterConfig(
     let legacy: Omit<StoredRouterConfig, "id"> = {};
     if (existsSync(CONFIG_PATH)) legacy = JSON.parse(readFileSync(CONFIG_PATH, "utf8"));
     await db.transaction((tx) => {
-      tx.collection<StoredRouterConfig>(CONFIG_COLLECTION).set(CONFIG_ID, { ...legacy, id: CONFIG_ID });
+      tx.collection<StoredRouterConfig>(CONFIG_COLLECTION).set(CONFIG_ID, { ...legacy, id: CONFIG_ID, __version: 1 });
       tx.collection("opensession_migrations").set(CONFIG_MIGRATION, { id: CONFIG_MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
     }, { transactionId: `opensession:migration:${CONFIG_MIGRATION}` });
     if (existsSync(CONFIG_PATH)) unlinkSync(CONFIG_PATH);

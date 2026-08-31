@@ -107,7 +107,7 @@ ws = new WebSocket(target.webSocketDebuggerUrl);
 await new Promise((r) => (ws.onopen = r));
 const send = cdpSender(ws);
 
-const token = localAutomationToken();
+const token = await localAutomationToken();
 
 await send("Page.enable");
 await send("Network.enable");

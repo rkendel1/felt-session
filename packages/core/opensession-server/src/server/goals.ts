@@ -101,11 +101,12 @@ export async function initializeManagedGoals(
         const ledgerPath = `${GOALS_DIR}/${goal.id}.ledger.md`;
         const ledgerText = existsSync(ledgerPath) ? readFileSync(ledgerPath, "utf8") : "";
         await db.transaction((tx) => {
-          tx.collection<Goal>(GOALS_COLLECTION).set(goal.id, goal);
+          tx.collection<Goal>(GOALS_COLLECTION).set(goal.id, { ...goal, __version: 1 });
           tx.collection<GoalLedger>(LEDGERS_COLLECTION).set(goal.id, {
             id: goal.id,
             goalId: goal.id,
             text: ledgerText,
+            __version: 1,
           });
         }, { transactionId: `opensession:goals:migrate:${goal.id}` });
         unlinkSync(path);
