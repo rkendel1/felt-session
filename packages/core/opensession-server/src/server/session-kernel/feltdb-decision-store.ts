@@ -9,6 +9,7 @@ export const KERNEL_COLLECTIONS = {
   changes: "opensession_kernel_changes",
   transactions: "opensession_kernel_transactions",
   tombstones: "opensession_kernel_tombstones",
+  quarantine: "opensession_kernel_quarantine",
   outbox: "opensession_kernel_outbox",
   creation: "opensession_kernel_creation",
   asks: "opensession_kernel_asks",
@@ -17,6 +18,12 @@ export const KERNEL_COLLECTIONS = {
   turnProjections: "opensession_kernel_turn_projections",
   turnProjectionGenerations: "opensession_kernel_turn_projection_generations",
   commands: "opensession_kernel_commands",
+  timers: "opensession_kernel_timers",
+  agentHostPlans: "opensession_kernel_agent_host_plans",
+  agentHostSupervision: "opensession_kernel_agent_host_supervision",
+  agentOperations: "opensession_kernel_agent_operations",
+  agentOperationCancellations: "opensession_kernel_agent_operation_cancellations",
+  agentOperationHighWater: "opensession_kernel_agent_operation_high_water",
   migrations: "opensession_kernel_migrations",
   migrationBatches: "opensession_kernel_migration_batches",
 } as const;
@@ -122,6 +129,7 @@ export type ActivateSessionInput = {
   leaseDurationMs: number;
   migrationManifestVersion?: number;
   run?: SessionDecisionHead["run"];
+  changeSeq?: number;
   domainOperations?: readonly AtomicTransactionOperationRequest[];
   now?: number;
 };
@@ -363,6 +371,10 @@ export class FeltDbSessionDecisionStore {
       throw new Error("Session activation identities are required");
     if (!Number.isSafeInteger(input.leaseDurationMs) || input.leaseDurationMs <= 0)
       throw new Error("Session activation requires a positive lease duration");
+    if (
+      input.changeSeq !== undefined &&
+      (!Number.isSafeInteger(input.changeSeq) || input.changeSeq < 0)
+    ) throw new Error("Session activation requires a non-negative change sequence");
     const existing = await this.head(input.sessionId);
     if (existing) {
       if (existing.migrationId !== input.migrationId)
@@ -388,7 +400,7 @@ export class FeltDbSessionDecisionStore {
       authority: { owner: input.owner, epoch: 1, lifecycle: "active" },
       lease: { leaseId: input.leaseId, epoch: 1, expiresAt: now + input.leaseDurationMs },
       decisionEpoch: 1,
-      changeSeq: 0,
+      changeSeq: input.changeSeq ?? 0,
       run: input.run ?? {
         state: "idle",
         since: new Date(now).toISOString(),
