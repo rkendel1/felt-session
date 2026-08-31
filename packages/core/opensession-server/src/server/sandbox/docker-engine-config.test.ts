@@ -1,8 +1,7 @@
 /**
  * The engine-config projection seam for docker sandboxes: engineConfigMounts
- * mounts the Pi engine config at the exact legacy in-container path the guest
- * runner-host reads. Model-provider settings travel as a FeltDB-derived runtime
- * projection instead of a host JSON mount. A missing host file is omitted (a
+ * no longer mounts engine JSON. Pi and model-provider settings travel as
+ * FeltDB-derived runtime projections instead of host JSON mounts. A missing
  * docker bind of a missing path creates a directory in its place).
  */
 
@@ -11,10 +10,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { engineConfigMounts } from "./docker";
-import {
-  REMOTE_HOME,
-  REMOTE_PI_CONFIG,
-} from "./adapters/bootstrap";
+import { REMOTE_HOME } from "./adapters/bootstrap";
 
 const scratch = mkdtempSync(join(tmpdir(), "engine-config-mounts-"));
 const providerPath = join(scratch, "model-providers.json");
@@ -37,19 +33,17 @@ afterAll(() => {
 });
 
 describe("engineConfigMounts", () => {
-  test("projects only the file-backed Pi engine config", () => {
+  test("does not mount engine JSON", () => {
     process.env.OPENSESSION_MODEL_PROVIDERS_CONFIG = providerPath;
     process.env.OPENSESSION_PI_CONFIG = piPath;
-    expect(engineConfigMounts("/home/ubuntu")).toEqual([
-      [piPath, "/home/ubuntu/.opensession-pi.json"],
-    ]);
+    expect(engineConfigMounts("/home/ubuntu")).toEqual([]);
   });
 
   test("destinations match the remote adapters' upload paths (one contract)", () => {
     process.env.OPENSESSION_MODEL_PROVIDERS_CONFIG = providerPath;
     process.env.OPENSESSION_PI_CONFIG = piPath;
     const dests = engineConfigMounts(REMOTE_HOME).map(([, dest]) => dest);
-    expect(dests).toEqual([REMOTE_PI_CONFIG]);
+    expect(dests).toEqual([]);
   });
 
   test("omits a missing source instead of mounting it", () => {

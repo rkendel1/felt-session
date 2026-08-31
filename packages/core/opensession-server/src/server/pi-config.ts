@@ -1,7 +1,7 @@
 /**
  * Config for the pi engine (pi.dev's coding agent, served by pi-runner.ts).
  *
- * File: ~/.opensession-pi.json — missing or `enabled: false` means the pi
+ * Managed FeltDB config — missing or `enabled: false` means the pi
  * engine is OFF everywhere at once: the Engine choice is hidden and the
  * runner refuses to start a turn with a clear config error. Deliberately
  * config-driven, never an env flag; the
@@ -32,9 +32,16 @@
  * invariant if the file ever grows one).
  */
 
-import { chmodSync, existsSync, readFileSync } from "fs";
+import { existsSync, readFileSync, unlinkSync } from "node:fs";
+import type { StateFirstDB } from "@feltdb/core";
 import { stateDir } from "./paths";
-import { writeJsonAtomic } from "./shared/atomic-write";
+import { managedFeltDb } from "./managed-feltdb";
+
+const COLLECTION = "opensession_pi_engine_settings";
+const CONFIG_ID = "settings";
+const MIGRATION = "pi-engine-json-to-managed-feltdb-v1";
+let piDb: StateFirstDB | undefined;
+let rawConfig: (Record<string, unknown> & { __version?: number }) | null = null;
 
 /** Pi-config file path (env override is a test seam, not the feature flag). */
 export function piConfigPath(): string {
@@ -91,14 +98,40 @@ export function normalizePiConfig(raw: unknown): PiEngineConfig {
 }
 
 export function readPiEngineConfig(): PiEngineConfig | null {
-  const path = piConfigPath();
-  if (!existsSync(path)) return null;
-  try {
-    return normalizePiConfig(JSON.parse(readFileSync(path, "utf-8")));
-  } catch (e) {
-    console.warn(`[pi-config] Failed to parse ${path}:`, e);
-    return null;
+  const projected = process.env.OPENSESSION_PI_CONFIG_JSON;
+  if (projected) {
+    try { return normalizePiConfig(JSON.parse(projected)); }
+    catch { return null; }
   }
+  return rawConfig ? normalizePiConfig(rawConfig) : null;
+}
+
+export function piConfigProjection(): string | undefined {
+  if (!rawConfig) return undefined;
+  const { __version: _version, ...raw } = rawConfig;
+  return JSON.stringify(raw);
+}
+
+export async function initializeManagedPiConfig(db: StateFirstDB = piDb ?? managedFeltDb()): Promise<void> {
+  piDb = db;
+  if (!await db.collection<{ id: string }>("opensession_migrations").get(MIGRATION)) {
+    let legacy: Record<string, unknown> | null = null;
+    try {
+      if (existsSync(piConfigPath())) {
+        const parsed = JSON.parse(readFileSync(piConfigPath(), "utf8"));
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) legacy = parsed;
+      }
+    } catch (error) { throw new Error(`Cannot migrate ${piConfigPath()}: ${String(error)}`); }
+    if (legacy) await db.transaction((tx) => {
+      tx.collection<Record<string, unknown>>(COLLECTION).set(CONFIG_ID, legacy!);
+    }, { transactionId: "opensession:pi-config:migrate" });
+    await db.transaction((tx) => {
+      tx.collection("opensession_migrations").set(MIGRATION,
+        { id: MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
+    }, { transactionId: `opensession:migration:${MIGRATION}` });
+  }
+  if (existsSync(piConfigPath())) unlinkSync(piConfigPath());
+  rawConfig = await db.collection<Record<string, unknown> & { __version?: number }>(COLLECTION).get(CONFIG_ID);
 }
 
 /** Whether the pi engine may run at all. */
@@ -129,21 +162,18 @@ export function piAnthropicTransport(): PiAnthropicTransport {
 // everything we don't own. Atomic rename + 0600.
 
 function readRawPiConfig(): Record<string, unknown> {
-  const path = piConfigPath();
-  if (!existsSync(path)) return {};
-  // Unlike the read path (fail-soft null), a write built on `{}` would clobber
-  // a config that's merely unparseable — fail loudly instead.
-  const raw = JSON.parse(readFileSync(path, "utf-8"));
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-    throw new Error(`Cannot update ${path}: existing content is not a JSON object`);
-  }
-  return raw as Record<string, unknown>;
+  return rawConfig ? structuredClone(rawConfig) : {};
 }
 
-function writeRawPiConfig(raw: Record<string, unknown>): void {
-  const path = piConfigPath();
-  writeJsonAtomic(path, raw);
-  chmodSync(path, 0o600);
+async function writeRawPiConfig(raw: Record<string, unknown>): Promise<void> {
+  delete raw.__version;
+  const db = piDb ?? managedFeltDb();
+  const previous = rawConfig;
+  await db.transaction((tx) => {
+    tx.collection<Record<string, unknown>>(COLLECTION).set(CONFIG_ID, raw,
+      previous ? { ifVersion: previous.__version } : { requireAbsent: true });
+  }, { transactionId: `opensession:pi-config:put:${crypto.randomUUID()}` });
+  rawConfig = { ...raw, __version: (previous?.__version ?? 0) + 1 };
 }
 
 function rawPiPickerModels(raw: Record<string, unknown>): string[] {
@@ -153,16 +183,16 @@ function rawPiPickerModels(raw: Record<string, unknown>): string[] {
 }
 
 /** Turn the pi engine on or off. */
-export function setPiEnabled(enabled: boolean): void {
+export async function setPiEnabled(enabled: boolean): Promise<void> {
   const raw = readRawPiConfig();
   raw.enabled = enabled;
-  writeRawPiConfig(raw);
+  await writeRawPiConfig(raw);
 }
 
 /** Add a `pi/<provider>/<model>` id to pickerModels (idempotent). Throws on a
  *  malformed id — matching normalizePiConfig's drop rule, so a UI add can't
  *  write an id the reader would silently discard. Returns the stored list. */
-export function addPiPickerModel(id: string): string[] {
+export async function addPiPickerModel(id: string): Promise<string[]> {
   if (!isPiModelId(id)) {
     throw new Error(`Invalid pi model id "${id}" (expected pi/<provider>/<model>)`);
   }
@@ -170,16 +200,16 @@ export function addPiPickerModel(id: string): string[] {
   const list = rawPiPickerModels(raw);
   if (!list.includes(id)) list.push(id);
   raw.pickerModels = list;
-  writeRawPiConfig(raw);
+  await writeRawPiConfig(raw);
   return list;
 }
 
 /** Remove an id from pickerModels. Returns the stored list. */
-export function removePiPickerModel(id: string): string[] {
+export async function removePiPickerModel(id: string): Promise<string[]> {
   const raw = readRawPiConfig();
   const list = rawPiPickerModels(raw).filter((x) => x !== id);
   raw.pickerModels = list;
-  writeRawPiConfig(raw);
+  await writeRawPiConfig(raw);
   return list;
 }
 
@@ -188,7 +218,7 @@ export function removePiPickerModel(id: string): string[] {
  *  remove-then-add loop over the NORMALIZED view — assigns the raw field
  *  directly, so malformed entries hand-written into the file are swept out
  *  by a save instead of surviving invisibly. */
-export function setPiPickerModels(ids: string[]): string[] {
+export async function setPiPickerModels(ids: string[]): Promise<string[]> {
   for (const id of ids) {
     if (!isPiModelId(id)) {
       throw new Error(`Invalid pi model id "${id}" (expected pi/<provider>/<model>)`);
@@ -196,6 +226,6 @@ export function setPiPickerModels(ids: string[]): string[] {
   }
   const raw = readRawPiConfig();
   raw.pickerModels = [...new Set(ids)];
-  writeRawPiConfig(raw);
+  await writeRawPiConfig(raw);
   return raw.pickerModels as string[];
 }

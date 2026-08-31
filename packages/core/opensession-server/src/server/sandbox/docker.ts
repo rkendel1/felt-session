@@ -118,6 +118,7 @@ import { shouldPersistModelSwitch, type StreamEvent } from "../run-events";
 import { recoveryKind, restartContinuationPrompt } from "../agent-runner";
 import { modelSupportsSteer, providerFor } from "../models";
 import { modelProviderConfigProjection } from "../model-providers";
+import { piConfigProjection } from "../pi-config";
 import { hostRunBusy, hostSteer, hostInterruptSteer, hostCancel } from "../host-registry";
 import { registerRunToken, unregisterRunToken } from "../run-rpc";
 import { writeJsonAtomic } from "../shared/atomic-write";
@@ -522,10 +523,8 @@ async function repoOriginUrl(repoDir: string): Promise<string> {
  * config error in-container. Exported for the sandbox engine-config tests.
  */
 export function engineConfigMounts(home = HOME): Array<[src: string, dest: string]> {
-  const out: Array<[string, string]> = [];
-  const piSrc = process.env.OPENSESSION_PI_CONFIG || stateDir("pi.json");
-  if (existsSync(piSrc)) out.push([piSrc, `${home}/.opensession-pi.json`]);
-  return out;
+  void home;
+  return [];
 }
 
 interface CreateContainerOpts {
@@ -704,6 +703,7 @@ async function createContainer(
     ...portArgs,
     ...mounts,
     ...(modelProviderConfigProjection() ? ["-e", `OPENSESSION_MODEL_PROVIDERS_JSON=${modelProviderConfigProjection()}`] : []),
+    ...(piConfigProjection() ? ["-e", `OPENSESSION_PI_CONFIG_JSON=${piConfigProjection()}`] : []),
     image,
   ]);
   if (r.exitCode !== 0) {

@@ -71,6 +71,7 @@ import { ensureCloudflareTunnel } from "./src/server/ingress-settings";
 import { startPrivateAppCertificateRenewal } from "./src/server/private-app-domain";
 import { initializeManagedPrivateAppDomain } from "./src/server/private-app-domain";
 import { initializeManagedModelProviders } from "./src/server/model-providers";
+import { initializeManagedPiConfig } from "./src/server/pi-config";
 import { creationOwnsPrompt, readActiveShutdownSnapshot, recoverableLocalHostSnapshotRecords, recordRecoveredRunEvent, restorePromptQueues, resumeDrainedSessions, settleRecoveredCreationOpening, snapshotActiveSessions, startLoopTicker } from "./src/server/run-session";
 import { startMcpHttpServer, startRunRpcServer } from "./src/server/run-rpc";
 import { handleSandboxWsUpgrade, startTimerPoisonHeartbeat, timerPoisonRequestCheck } from "./src/server/run-ws";
@@ -217,6 +218,7 @@ if (!g.__opensessionBooted) {
 	await initializeManagedSandboxConnections(db);
 	await initializeManagedPrivateAppDomain(db);
 	await initializeManagedModelProviders(db);
+	await initializeManagedPiConfig(db);
 }
 
 // Listeners the server owns. Deliberately started HERE and not as module side

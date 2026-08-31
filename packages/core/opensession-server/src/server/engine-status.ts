@@ -4,13 +4,10 @@ import { listCodexAccountsPublic } from "./codex-accounts";
 import { accountProviderForModel } from "./models";
 import { configuredInteractiveDefaultModel } from "./model-catalog";
 import { modelProviders } from "./model-providers";
-import { piConfigPath, piEngineEnabled } from "./pi-config";
-import { homeDir } from "./paths";
+import { piEngineEnabled } from "./pi-config";
 
 function engineConfigLabel(): string {
-  const home = homeDir();
-  const path = piConfigPath();
-  return path.startsWith(home) ? `~${path.slice(home.length)}` : path;
+  return "managed FeltDB settings";
 }
 
 export interface EngineStatus {

@@ -718,10 +718,10 @@ export async function handleConnectionsRoutes(
 			}
 		}
 		try {
-			if (typeof body.enabled === "boolean") setPiEnabled(body.enabled);
+			if (typeof body.enabled === "boolean") await setPiEnabled(body.enabled);
 			// pickerModels is vestigial (the model list is engine-agnostic; every
 			// entry routes to pi by prefix) but the write path stays tolerant.
-			if (pickerModels) setPiPickerModels(pickerModels);
+			if (pickerModels) await setPiPickerModels(pickerModels);
 			return Response.json(
 				readPiEngineConfig() ?? { enabled: false, pickerModels: [] },
 			);
