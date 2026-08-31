@@ -162,7 +162,9 @@ export function encodeKernelSessionMigration(
       `SELECT * FROM ${plan.table} WHERE session_id = ? ORDER BY ${plan.orderBy}`,
     ).all(sessionId) as SqlRow[];
     for (const row of rows) {
-      const id = recordId(plan, row);
+      const id = plan.table === "session_kernel_turn_projections"
+        ? kernelRecordId("turn_projections", `${sessionId}:1:${row.projection_id}`)
+        : recordId(plan, row);
       let value: Record<string, unknown> = decodeRow(row);
       if (plan.table === "session_kernel_changes") value = {
         schemaVersion: 1,
@@ -204,6 +206,7 @@ export function encodeKernelSessionMigration(
       else if (plan.table === "session_kernel_turn_projections") value = {
         schemaVersion: 1,
         sessionId,
+        decisionEpoch: 1,
         projectionId: String(row.projection_id),
         generation: Number(row.generation),
         phase: String(row.phase),
@@ -255,6 +258,11 @@ export function encodeKernelSessionMigration(
         sessionId,
         decisionEpoch: 1,
         kind: String(row.kind),
+        ...(row.kind === "turn_outcome_project" &&
+          value.payload && typeof value.payload === "object" &&
+          Number.isSafeInteger((value.payload as Record<string, unknown>).runGeneration)
+          ? { orderingKey: Number((value.payload as Record<string, unknown>).runGeneration) }
+          : {}),
         payload: value.payload,
         status: row.dead_lettered_at === null ? "pending" : "dead_letter",
         attempts: Number(row.attempts),
@@ -269,6 +277,21 @@ export function encodeKernelSessionMigration(
         collection: plan.collection,
         id,
         value,
+        requireAbsent: true,
+      });
+      if (plan.table === "session_kernel_turn_projections") operations.push({
+        collection: KERNEL_COLLECTIONS.turnProjectionGenerations,
+        id: kernelRecordId(
+          "turn_projection_generation",
+          `${sessionId}:1:${row.generation}`,
+        ),
+        value: {
+          schemaVersion: 1,
+          sessionId,
+          decisionEpoch: 1,
+          generation: Number(row.generation),
+          projectionId: String(row.projection_id),
+        },
         requireAbsent: true,
       });
     }

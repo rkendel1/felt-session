@@ -76,6 +76,7 @@ export type SessionKernelOutboxRecord = {
   sessionId: string;
   decisionEpoch: number;
   kind: string;
+  orderingKey?: number;
   payload?: unknown;
   status: "pending" | "dead_letter";
   attempts: number;
@@ -124,6 +125,7 @@ export type SessionKernelTransactionReceipt<Result = unknown> = {
 export type DecisionEffect = {
   effectKey: string;
   kind: string;
+  orderingKey?: number;
   payload?: unknown;
   nextAttemptAt?: number;
 };
@@ -653,6 +655,7 @@ export class FeltDbSessionDecisionStore {
         sessionId: head.sessionId,
         decisionEpoch: head.decisionEpoch,
         kind: effect.kind,
+        ...(effect.orderingKey === undefined ? {} : { orderingKey: effect.orderingKey }),
         payload: effect.payload,
         status: "pending",
         attempts: 0,
@@ -795,6 +798,52 @@ export class FeltDbSessionDecisionStore {
       limit: Math.min(500, Math.max(1, Math.floor(limit))),
     });
     return page.records;
+  }
+
+  async completedTurnProjectionAfter(
+    sessionId: string,
+    decisionEpoch: number,
+    generation: number,
+  ): Promise<Record<string, unknown> | undefined> {
+    const page = await this.db.query<Record<string, unknown>>({
+      collection: KERNEL_COLLECTIONS.turnProjections,
+      where: [
+        { field: "sessionId", eq: sessionId },
+        { field: "decisionEpoch", eq: decisionEpoch },
+        { field: "phase", eq: "completed" },
+        { field: "generation", gt: generation },
+      ],
+      orderBy: [
+        { field: "generation", direction: "asc" },
+        { field: "projectionId", direction: "asc" },
+      ],
+      limit: 1,
+    });
+    return page.records[0];
+  }
+
+  async pendingOutboxBefore(
+    sessionId: string,
+    decisionEpoch: number,
+    kind: string,
+    orderingKey: number,
+  ): Promise<SessionKernelOutboxRecord | undefined> {
+    const page = await this.db.query<SessionKernelOutboxRecord>({
+      collection: KERNEL_COLLECTIONS.outbox,
+      where: [
+        { field: "sessionId", eq: sessionId },
+        { field: "decisionEpoch", eq: decisionEpoch },
+        { field: "kind", eq: kind },
+        { field: "status", eq: "pending" },
+        { field: "orderingKey", lt: orderingKey },
+      ],
+      orderBy: [
+        { field: "orderingKey", direction: "asc" },
+        { field: "recordId", direction: "asc" },
+      ],
+      limit: 1,
+    });
+    return page.records[0];
   }
 
   async outboxRecord(recordId: string): Promise<VersionedSessionKernelOutboxRecord | undefined> {
