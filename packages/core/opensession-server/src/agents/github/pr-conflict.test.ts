@@ -1,25 +1,19 @@
-import { afterAll, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "fs";
+import { beforeEach, describe, expect, test } from "bun:test";
+import { createFeltDB, type StateFirstDB } from "@feltdb/core";
 import { tmpdir } from "os";
 import { join } from "path";
 import { classifyEntry } from "@tellahq/opensession-protocol/notices";
 import type { TranscriptEntry } from "@tellahq/opensession-protocol/session";
 import type { PrInfo } from "../../server/pr-cache";
 import {
-  __setConflictIntentPathForTest,
   conflictMessage,
+  initializeManagedGithubConflictIntents,
   isCurrentConflictIntent,
+  persistConflictIntents,
   resetConflictWatch,
   settleConflictIntent,
   scanConflictTransitions,
 } from "./pr-conflict";
-
-const scratch = mkdtempSync(join(tmpdir(), "pr-conflicts-"));
-__setConflictIntentPathForTest(join(scratch, "pending.json"));
-afterAll(() => {
-  __setConflictIntentPathForTest(undefined);
-  rmSync(scratch, { recursive: true, force: true });
-});
 
 function pr(overrides: Partial<PrInfo> = {}): PrInfo {
   return {
@@ -52,8 +46,14 @@ function sweep(mergeable: string, overrides: Partial<PrInfo> = {}) {
   );
 }
 
+let conflictDb: StateFirstDB;
+
 describe("scanConflictTransitions", () => {
-  beforeEach(() => resetConflictWatch());
+  beforeEach(async () => {
+    resetConflictWatch();
+    conflictDb = createFeltDB({ namespace: crypto.randomUUID(), memory: true });
+    await initializeManagedGithubConflictIntents(conflictDb);
+  });
 
   test("fires on MERGEABLE → CONFLICTING", () => {
     expect(sweep("MERGEABLE")).toEqual([]);
@@ -73,11 +73,11 @@ describe("scanConflictTransitions", () => {
     expect(sweep("CONFLICTING")).toEqual([]);
   });
 
-  test("fires once, not on every following sweep", () => {
+  test("fires once, not on every following sweep", async () => {
     sweep("MERGEABLE");
     const [event] = sweep("CONFLICTING");
     expect(event).toBeDefined();
-    settleConflictIntent(event!);
+    await settleConflictIntent(event!);
     expect(sweep("CONFLICTING")).toEqual([]);
     expect(sweep("CONFLICTING")).toEqual([]);
   });
@@ -89,14 +89,25 @@ describe("scanConflictTransitions", () => {
     expect(retry?.conflictId).toBe(first?.conflictId);
   });
 
-  test("a delayed old settlement cannot delete a newer transition", () => {
+  test("restores an undelivered intent from managed FeltDB", async () => {
+    sweep("MERGEABLE");
+    const [event] = sweep("CONFLICTING");
+    await persistConflictIntents();
+    resetConflictWatch();
+    await initializeManagedGithubConflictIntents(conflictDb);
+
+    expect(isCurrentConflictIntent(event!)).toBe(true);
+    expect(sweep("CONFLICTING")[0]?.conflictId).toBe(event?.conflictId);
+  });
+
+  test("a delayed old settlement cannot delete a newer transition", async () => {
     sweep("MERGEABLE");
     const [first] = sweep("CONFLICTING");
     expect(isCurrentConflictIntent(first!)).toBe(true);
     sweep("MERGEABLE");
     expect(isCurrentConflictIntent(first!)).toBe(false);
     const [second] = sweep("CONFLICTING");
-    settleConflictIntent(first!);
+    await settleConflictIntent(first!);
     const [retry] = sweep("CONFLICTING");
     expect(retry?.conflictId).toBe(second?.conflictId);
   });

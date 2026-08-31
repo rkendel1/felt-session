@@ -24,8 +24,10 @@
  */
 import type { PrInfo } from "../../server/pr-cache";
 import { stateDir } from "../../server/paths";
-import { writeJsonAtomic } from "../../server/shared/atomic-write";
-import { existsSync, readFileSync, rmSync } from "fs";
+import { existsSync, readFileSync, unlinkSync } from "node:fs";
+import { createHash } from "node:crypto";
+import type { StateFirstDB } from "@feltdb/core";
+import { managedFeltDb } from "../../server/managed-feltdb";
 
 export interface PrConflictEvent {
   repoId: string;
@@ -41,45 +43,90 @@ export interface PrConflictEvent {
 
 const lastKnown = new Map<string, string>();
 const delivering = new Set<string>();
+const pending = new Map<string, PrConflictEvent>();
 let conflictSequence = 0;
-let pendingPathOverride: string | undefined;
+let persistenceSequence = 0;
+let pendingGeneration = 0;
+let persistedGeneration = 0;
+let conflictDb: StateFirstDB | undefined;
+let persistenceChain = Promise.resolve();
+const COLLECTION = "opensession_github_conflict_intents";
+const MIGRATION = "github-conflict-intents-json-to-managed-feltdb-v1";
 
 function prKeyOf(repoId: string, number: number): string {
   return `${repoId}#${number}`;
 }
 
 function pendingPath(): string {
-  return pendingPathOverride || `${stateDir("github")}/conflict-intents.json`;
+  return `${stateDir("github")}/conflict-intents.json`;
 }
 
-function readPending(): Map<string, PrConflictEvent> {
-  try {
-    if (!existsSync(pendingPath())) return new Map();
-    const stored = JSON.parse(readFileSync(pendingPath(), "utf8")) as {
-      intents?: PrConflictEvent[];
-    };
-    return new Map(
-      (stored.intents || []).map((event) => [prKeyOf(event.repoId, event.number), event]),
-    );
-  } catch {
-    return new Map();
+type StoredConflictIntent = PrConflictEvent & { id: string; prKey: string };
+const recordId = (key: string) => `github_conflict_${createHash("sha256").update(key).digest("hex")}`;
+
+export async function initializeManagedGithubConflictIntents(
+  db: StateFirstDB = conflictDb ?? managedFeltDb(),
+): Promise<void> {
+  conflictDb = db;
+  const migrations = db.collection<{ id: string }>("opensession_migrations");
+  if (!await migrations.get(MIGRATION)) {
+    let intents: PrConflictEvent[] = [];
+    try {
+      if (existsSync(pendingPath())) {
+        const stored = JSON.parse(readFileSync(pendingPath(), "utf8")) as { intents?: PrConflictEvent[] };
+        intents = stored.intents || [];
+      }
+    } catch {}
+    for (const event of intents) {
+      const prKey = prKeyOf(event.repoId, event.number);
+      const id = recordId(prKey);
+      await db.transaction((tx) => {
+        tx.collection<StoredConflictIntent>(COLLECTION).set(id, { ...event, id, prKey });
+      }, { transactionId: `opensession:github-conflict:migrate:${id}` });
+    }
+    await db.transaction((tx) => {
+      tx.collection("opensession_migrations").set(MIGRATION, { id: MIGRATION, completedAt: Date.now() }, { requireAbsent: true });
+    }, { transactionId: `opensession:migration:${MIGRATION}` });
+    if (existsSync(pendingPath())) unlinkSync(pendingPath());
   }
+  pending.clear();
+  for (const record of await db.collection<StoredConflictIntent>(COLLECTION).all())
+    pending.set(record.prKey, record);
+  pendingGeneration = 0;
+  persistedGeneration = 0;
 }
 
-function writePending(pending: Map<string, PrConflictEvent>): void {
-  writeJsonAtomic(pendingPath(), { version: 1, intents: [...pending.values()] });
-}
-
-export function __setConflictIntentPathForTest(path?: string): void {
-  pendingPathOverride = path;
-}
-
-/** Test seam: forget remembered state and pending test intents. */
+/** Test seam: forget remembered transition state. */
 export function resetConflictWatch(): void {
   lastKnown.clear();
   delivering.clear();
+  pending.clear();
   conflictSequence = 0;
-  try { rmSync(pendingPath(), { force: true }); } catch {}
+  pendingGeneration = 0;
+  persistedGeneration = 0;
+}
+
+/** Flush the current intent snapshot before attempting any delivery. */
+export function persistConflictIntents(): Promise<void> {
+  if (pendingGeneration === persistedGeneration) return persistenceChain;
+  const snapshot = new Map(pending);
+  const generation = pendingGeneration;
+  const db = conflictDb ?? managedFeltDb();
+  persistenceChain = persistenceChain.then(async () => {
+    const stored = await db.collection<StoredConflictIntent>(COLLECTION).all();
+    if (stored.length !== 0 || snapshot.size !== 0) {
+      await db.transaction((tx) => {
+        const collection = tx.collection<StoredConflictIntent>(COLLECTION);
+        for (const record of stored) if (!snapshot.has(record.prKey)) collection.delete(record.id);
+        for (const [prKey, event] of snapshot) {
+          const id = recordId(prKey);
+          collection.set(id, { ...event, id, prKey });
+        }
+      }, { transactionId: `opensession:github-conflict:persist:${Date.now()}:${++persistenceSequence}` });
+    }
+    persistedGeneration = Math.max(persistedGeneration, generation);
+  });
+  return persistenceChain;
 }
 
 export function scanConflictTransitions(
@@ -87,7 +134,6 @@ export function scanConflictTransitions(
   freshRepos: Set<string>,
 ): PrConflictEvent[] {
   const events: PrConflictEvent[] = [];
-  const pending = readPending();
   let pendingChanged = false;
   const seen = new Set<string>();
   for (const repoId of freshRepos) {
@@ -132,7 +178,7 @@ export function scanConflictTransitions(
     )
       events.push(event);
   }
-  if (pendingChanged) writePending(pending);
+  if (pendingChanged) pendingGeneration++;
   return events;
 }
 
@@ -142,17 +188,17 @@ export function conflictMessage(event: PrConflictEvent): string {
 
 export function isCurrentConflictIntent(event: PrConflictEvent): boolean {
   return (
-    readPending().get(prKeyOf(event.repoId, event.number))?.conflictId ===
+    pending.get(prKeyOf(event.repoId, event.number))?.conflictId ===
     event.conflictId
   );
 }
 
-export function settleConflictIntent(event: PrConflictEvent): void {
-  const pending = readPending();
+export async function settleConflictIntent(event: PrConflictEvent): Promise<void> {
   const key = prKeyOf(event.repoId, event.number);
   if (pending.get(key)?.conflictId !== event.conflictId) return;
   pending.delete(key);
-  writePending(pending);
+  pendingGeneration++;
+  await persistConflictIntents();
 }
 
 export async function notifyConflictedPrSession(event: PrConflictEvent): Promise<void> {
@@ -197,7 +243,7 @@ export async function notifyConflictedPrSession(event: PrConflictEvent): Promise
       matched_by: event.sessionRef === target.id ? "pr_footer" : "head_branch",
       delivery: res.status,
     });
-    if (res.status !== "error") settleConflictIntent(event);
+    if (res.status !== "error") await settleConflictIntent(event);
   } catch (error) {
     console.error(`[github] conflict notification failed for PR #${event.number}:`, error);
   } finally {
