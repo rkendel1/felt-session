@@ -112,6 +112,8 @@ describe("managed transcript search", () => {
     const route = readFileSync(join(import.meta.dir, "routes/sessions.ts"), "utf8");
     expect(route).toContain("searchManagedTranscripts(q, recentIds, req.signal)");
     expect(route).not.toContain("transcriptSearchWorkerArgv");
+    expect(route).not.toContain("ripgrepFiles");
+    expect(route).not.toContain("transcriptMatchSnippet");
     const managed = readFileSync(join(import.meta.dir, "managed-transcript-search.ts"), "utf8");
     expect(managed).not.toContain("bun:sqlite");
     expect(managed).toContain("KERNEL_COLLECTIONS.transcriptEvents");

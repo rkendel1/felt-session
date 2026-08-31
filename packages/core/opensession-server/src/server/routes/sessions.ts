@@ -23,7 +23,6 @@ import {
 	pendingAskAwaitingAnswerSync,
 	pendingAskIdsAwaitingAnswer,
 } from "../asks";
-import { transcriptMatchSnippet } from "../jsonl-parser";
 import {
 	classifyEntries,
 	classifyEntry,
@@ -694,28 +693,6 @@ export function archivedIndexRow(
  * when nothing matches, which we treat as "no hits", not an error. Chunked so a
  * very long file list can't overflow the argv limit.
  */
-async function ripgrepFiles(
-	query: string,
-	files: string[]
-): Promise<string[]> {
-	const hits = new Set<string>();
-	const CHUNK = 1000;
-	for (let i = 0; i < files.length; i += CHUNK) {
-		const chunk = files.slice(i, i + CHUNK);
-		const proc = Bun.spawn(
-			["rg", "-l", "-i", "-F", "--no-messages", "--", query, ...chunk],
-			{ stdout: "pipe", stderr: "ignore" },
-		);
-		const out = await new Response(proc.stdout).text();
-		await proc.exited;
-		for (const line of out.split("\n")) {
-			const p = line.trim();
-			if (p) hits.add(p);
-		}
-	}
-	return [...hits];
-}
-
 function refreshSidebarSessionsResponse(
 	scope: SidebarSessionScope,
 ): Promise<SessionsResponseSnapshot> {
@@ -1327,8 +1304,7 @@ export async function handleSessionsRoutes(
 	// "search in conversations"). Owned sessions live in transcript v2 and no
 	// longer have mirror files, so their bounded rows are searched directly in
 	// managed FeltDB. The most recent 1,000 sessions cover interactive recall;
-	// `truncated` keeps that ceiling explicit for a future FTS cutover. Legacy
-	// transcripts retain the ripgrep pre-pass and clean-snippet validation.
+	// `truncated` keeps that ceiling explicit for a future indexed search.
 	if (path === "/api/sessions/search" && req.method === "GET") {
 		const q = (url.searchParams.get("q") || "").trim();
 		if (q.length < 2) return Response.json({ matches: [] });
@@ -1344,29 +1320,6 @@ export async function handleSessionsRoutes(
 			.map((session) => session.id);
 		const stored = await searchManagedTranscripts(q, recentIds, req.signal);
 		const matches = stored.matches.slice(0, 50);
-		const matchedIds = new Set(matches.map((match) => match.id));
-
-		const byPath = new Map<string, string>(); // transcriptPath → sessionId
-		for (const session of sessions) {
-			if (
-				session.transcriptPath &&
-				!byPath.has(session.transcriptPath) &&
-				existsSync(session.transcriptPath)
-			)
-				byPath.set(session.transcriptPath, session.id);
-		}
-		if (matches.length < 50) {
-			for (const file of await ripgrepFiles(q, [...byPath.keys()])) {
-				const id = byPath.get(file);
-				if (!id || matchedIds.has(id)) continue;
-				const snippet = transcriptMatchSnippet(file, q);
-				if (snippet) {
-					matches.push({ id, snippet });
-					matchedIds.add(id);
-				}
-				if (matches.length >= 50) break;
-			}
-		}
 		return Response.json({
 			matches,
 			truncated:
