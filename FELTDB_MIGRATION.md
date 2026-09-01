@@ -1,5 +1,30 @@
 # FeltDB Storage Authority Migration - Implementation Status
 
+> **Superseded. Do not rely on the status claims below.**
+>
+> A file-and-line re-audit on 2026-09-01 found this document materially
+> inaccurate. See **`docs/architecture/storage-authority-audit.md`** for the
+> verified state. Specifically:
+>
+> - **Phase 4 is not "in progress".** `src/server/memory-v2/` contains no SQLite
+>   at all — it is `managed-store.ts`, FeltDB-backed.
+> - **`ENABLE_FELTDB_RUN_RECORDS` does not exist in the code.** It appears only
+>   in this file and the `PHASE2_*.md` notes. `run-journal.ts` is FeltDB-only
+>   with a verify-then-unlink migration; it never writes JSON. The dual-write
+>   design described below was never the shipped behaviour.
+> - **"SQLite runtime access: 0" is wrong.** `session-kernel.sqlite` is still
+>   opened in production for central kernel bookkeeping (quarantine records,
+>   dead letters, outbox id allocation, stats, maintenance).
+> - **Phase 6 is overstated.** `durability-crash-recovery.test.ts` is 47 lines
+>   and 3 tests, not "8 test suites, 18 individual tests, 15,427 bytes".
+>
+> What the audit confirms: session and transcript data really are on FeltDB, and
+> the actor worker throws rather than falling back when a managed FeltDB head is
+> absent. The SQLite compatibility store is reachable only under
+> `NODE_ENV === "test"`.
+>
+> Retained below as a record of the migration plan.
+
 ## Overview
 
 Complete migration of felt-session from multi-backend storage (SQLite + JSON) to **FeltDB as the sole durable application-state authority**. This document tracks progress through all 6 phases of the migration.
