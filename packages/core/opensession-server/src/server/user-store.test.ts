@@ -1,7 +1,4 @@
-import { afterAll, beforeEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync } from "fs";
-import { tmpdir } from "os";
-import { writeJsonAtomic } from "./shared/atomic-write";
+import { beforeEach, describe, expect, test } from "bun:test";
 import { createFeltDB } from "@feltdb/core";
 import { initializeManagedUserStores, NAME_KEYED_STORES, renameUserState } from "./shared/user-store";
 import { getPins, setPins } from "./pins";
@@ -13,35 +10,8 @@ import {
 } from "./personal-output-style";
 import { getPersonalPrompt, setPersonalPrompt } from "./personal-prompts";
 
-// Every per-user store resolves its dir per call, so pointing the state root
-// at a scratch dir keeps these off the real ~/.opensession-* state.
-const root = mkdtempSync(`${tmpdir()}/user-store-test-`);
-const previousRoot = process.env.OPENSESSION_STATE_DIR;
-process.env.OPENSESSION_STATE_DIR = root;
-
-afterAll(() => {
-	if (previousRoot === undefined) delete process.env.OPENSESSION_STATE_DIR;
-	else process.env.OPENSESSION_STATE_DIR = previousRoot;
-	rmSync(root, { recursive: true, force: true });
-});
-
-/** Write a file under the spelling a store used before the shared filename. */
-function seedLegacy(store: string, stem: string, value: unknown): void {
-	const dir = `${root}/.opensession-${store}`;
-	mkdirSync(dir, { recursive: true });
-	writeJsonAtomic(`${dir}/${stem}.json`, value);
-}
-
-describe("per-user flat-file stores", () => {
+describe("per-user FeltDB stores", () => {
 	beforeEach(async () => {
-		for (const store of [
-			"pins",
-			"lanes",
-			"personal-prompts",
-			"personal-output-styles",
-		]) {
-			rmSync(`${root}/.opensession-${store}`, { recursive: true, force: true });
-		}
 		await initializeManagedUserStores(createFeltDB({ namespace: crypto.randomUUID(), memory: true }));
 	});
 
@@ -51,44 +21,11 @@ describe("per-user flat-file stores", () => {
 		expect(getPins("Michiel")).toEqual([]);
 	});
 
-	// The reason the filename carries a hash: these two are different people.
-	test("lossy filename characters cannot merge two users", async () => {
+	test("lossy key characters cannot merge two users", async () => {
 		await setPins("a/b", ["os-1"]);
 		await setPins("a_b", ["os-2"]);
 		expect(getPins("a/b")).toEqual(["os-1"]);
 		expect(getPins("a_b")).toEqual(["os-2"]);
-	});
-
-	// Live state was written under the plain slug; it must still resolve.
-	test("reads state left under the legacy plain-slug filename", async () => {
-		seedLegacy("pins", "Michiel", { pins: ["os-legacy"] });
-		seedLegacy("lanes", "Michiel", { lanes: { "os-legacy": "review" } });
-		await initializeManagedUserStores(createFeltDB({ namespace: crypto.randomUUID(), memory: true }));
-		expect(getPins("Michiel")).toEqual(["os-legacy"]);
-		expect(getLanes("Michiel")).toEqual({ "os-legacy": "review" });
-	});
-
-	test("the first write moves a legacy user onto the shared filename", async () => {
-		seedLegacy("pins", "Michiel", { pins: ["os-legacy"] });
-		await initializeManagedUserStores(createFeltDB({ namespace: crypto.randomUUID(), memory: true }));
-		await setPins("Michiel", ["os-legacy", "os-new"]);
-		expect(getPins("Michiel")).toEqual(["os-legacy", "os-new"]);
-	});
-
-	// A legacy file must never resurrect state the user has since cleared.
-	test("clearing wins over the legacy copy", async () => {
-		seedLegacy("pins", "Michiel", { pins: ["os-legacy"] });
-		await initializeManagedUserStores(createFeltDB({ namespace: crypto.randomUUID(), memory: true }));
-		await setPins("Michiel", []);
-		expect(getPins("Michiel")).toEqual([]);
-	});
-
-	test("personal prompts still read their identity-keyed legacy file", async () => {
-		seedLegacy("personal-prompts", "user-kentaro", { prompt: "be terse" });
-		await initializeManagedUserStores(createFeltDB({ namespace: crypto.randomUUID(), memory: true }));
-		expect(getPersonalPrompt("Kentaro")).toBe("be terse");
-		await setPersonalPrompt("Kentaro", "be terser");
-		expect(getPersonalPrompt("Kentaro")).toBe("be terser");
 	});
 
 	test("personal output styles are identity-keyed and fail closed", async () => {
@@ -120,13 +57,6 @@ describe("per-user flat-file stores", () => {
 // these stores file people under, so the state has to travel with the person.
 describe("renameUserState", () => {
 	beforeEach(async () => {
-		for (const store of [
-			...NAME_KEYED_STORES,
-			"personal-prompts",
-			"personal-output-styles",
-		]) {
-			rmSync(`${root}/.opensession-${store}`, { recursive: true, force: true });
-		}
 		await initializeManagedUserStores(createFeltDB({ namespace: crypto.randomUUID(), memory: true }));
 	});
 
@@ -140,7 +70,7 @@ describe("renameUserState", () => {
 		expect(getLanes("Kentaro")).toEqual({ "os-1": "review" });
 	});
 
-	// A copy, not a move: the old file is the rollback if the rename was wrong.
+	// A copy, not a move: the old FeltDB record remains if the rename was wrong.
 	test("leaves the old name's state in place", async () => {
 		await setPins("Kent", ["os-1"]);
 		await renameUserState("Kent", "Kentaro");
@@ -154,9 +84,8 @@ describe("renameUserState", () => {
 		expect(getPins("Kentaro")).toEqual(["os-existing"]);
 	});
 
-	// canonicalName hashes the LOWERCASED name but keeps the original case in
-	// the filename stem, so a capitalization fix is still a different file and
-	// still has to carry. This is the case that would otherwise look harmless.
+	// canonicalName hashes the lowercased name but keeps the original case in
+	// the key, so a capitalization fix still has to carry.
 	test("carries a capitalization fix", async () => {
 		await setPins("kent", ["os-1"]);
 		expect(await renameUserState("kent", "Kent")).toContain("pins");
@@ -166,13 +95,6 @@ describe("renameUserState", () => {
 	test("renaming to the same name does nothing", async () => {
 		await setPins("Kent", ["os-1"]);
 		expect(await renameUserState("Kent", "Kent ")).toEqual([]);
-	});
-
-	test("carries state left under a legacy filename", async () => {
-		seedLegacy("pins", "Kent", { pins: ["os-legacy"] });
-		await initializeManagedUserStores(createFeltDB({ namespace: crypto.randomUUID(), memory: true }));
-		expect(await renameUserState("Kent", "Kentaro")).toContain("pins");
-		expect(getPins("Kentaro")).toEqual(["os-legacy"]);
 	});
 
 	// Personal run preferences key on the resolved teammate, so they already
